@@ -1,6 +1,6 @@
 # fdaPDE_dev
 
-This repository contains the development version of fdaPDE package (future 1.0 version).
+This repository contains the development version of fdaPDE package.
 
 New features wrt CRAN: smooth regression for manifold and volumetric domains, also with areal data. Smooth fPCA over 2D, 2.5D and 3D domains, also with areal data.
 
@@ -13,7 +13,6 @@ Compiled in both Win RStudio and Ubuntu 18.04 using g++ compiler. If using a Lin
 ## Subfolder structure:
 /src contains all C++ code and a special file named Makevars necessary to build and install the R package,
 /R contains the R functions that wrap the C++ calls,
-/tests contains a script to test the package,
 /data contains the data to run the tests in /tests.
 
 ## Remarks:
