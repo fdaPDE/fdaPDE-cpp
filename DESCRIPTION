@@ -1,0 +1,34 @@
+Package: fdaPDE
+Version: 1.1-0
+Date: 2020-04-30
+Title: Functional Data Analysis and Partial Differential Equations (PDE); Statistical Analysis of Functional and Spatial Data, Based on Regression with PDE Regularization
+Authors@R: c(person("Eardi", "Lila", role = c("aut"),
+		     email = "elila@uw.edu"),
+	      person("Laura M.", "Sangalli", role = c("aut"),
+		     email = "laura.sangalli@polimi.it"),
+		    person("Eleonora", "Arnone", role = c("aut", "cre"),
+		     email = "eleonora.arnone@polimi.it"),
+	      person("Jim", "Ramsay", role = "aut",
+		     email = " ramsay@psych.mcgill.ca"),
+		    person("Luca", "Formaggia", role = "aut",
+		     email = " luca.formaggia@polimi.it"),
+		    person("Alessandra", "Colli", role = "ctb"),
+		    person("Luca", "Colombo", role = "ctb"),
+		    person("Carlo", "de Falco", role = "ctb"))
+Maintainer: Eleonora Arnone <eleonora.arnone@polimi.it>
+Depends: 
+    R (>= 3.5.0),
+    stats, grDevices, graphics, geometry,
+    rgl, Matrix, plot3D, plot3Drgl
+LinkingTo: 
+	RcppEigen
+Suggests: 
+    MASS,
+    testthat
+Description: An implementation of regression models with partial differential regularizations, making use of the Finite Element Method. The models efficiently handle data distributed over irregularly shaped domains and can comply with various conditions at the boundaries of the domain. A priori information about the spatial structure of the phenomenon under study can be incorporated in the model via the differential regularization.
+License: CC BY-NC-SA 4.0
+Copyright: See the individual source files for copyrights information
+NeedsCompilation: yes
+SystemRequirements: C++11
+RoxygenNote: 7.1.0
+Encoding: UTF-8
