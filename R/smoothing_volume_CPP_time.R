@@ -91,6 +91,7 @@ CPP_smooth.volume.FEM.time<-function(locations, bary.locations, time_locations, 
 
   storage.mode(nrealizations) <- "integer"
   storage.mode(GCVMETHOD) <- "integer"
+  storage.mode(search) <- "integer"
 
   ## IC estimation for parabolic smoothing from the first column of observations
   ICsol=NA
