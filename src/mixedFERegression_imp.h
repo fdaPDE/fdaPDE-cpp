@@ -185,17 +185,35 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 template<typename InputHandler, typename IntegratorSpace, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
 MatrixXr MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim>::LeftMultiplybyQ(const MatrixXr& u)
 {
+	VectorXr P = this->regressionData_.getWeightsMatrix();
+
 	if (regressionData_.getCovariates().rows() == 0){
-		return u;
+		if(P.size()==0)
+			return u;
+		else
+			return P.asDiagonal()*u;
 	}
 	else{
 		MatrixXr W(this->regressionData_.getCovariates());
 		if (isWTWfactorized_ == false ){
-			WTW_.compute(W.transpose()*W);
+			if(P.size()==0){
+				WTW_.compute(W.transpose()*W);
+			}else{
+				WTW_.compute(W.transpose()*P.asDiagonal()*W);
+			}
 			isWTWfactorized_=true;
 		}
-		MatrixXr Pu= W*WTW_.solve(W.transpose()*u);
-		return u-Pu;
+
+		MatrixXr Pu;
+		if(P.size()==0){
+			Pu = W*WTW_.solve(W.transpose()*u);
+		}else{
+			Pu= W*WTW_.solve(W.transpose()*P.asDiagonal()*u);
+		}
+		if(P.size()==0)
+			return u-Pu;
+		else
+			return P.asDiagonal()*(u - Pu);
 	}
 
 }
@@ -206,8 +224,11 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 
 	UInt nnodes = N_*M_;
 
+
+
 	std::vector<coeff> tripletAll;
 	tripletAll.reserve(DMat.nonZeros() + 2*R1.nonZeros() + R0.nonZeros());
+
 
 	for (int k=0; k<DMat.outerSize(); ++k)
 		for (SpMat::InnerIterator it(DMat,k); it; ++it)
@@ -240,9 +261,12 @@ template<typename InputHandler, typename IntegratorSpace, UInt ORDER, typename I
 void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim>::system_factorize() {
 
 	UInt nnodes = N_*M_;
+	printer::milestone("system_factorize_1.txt");
+	VectorXr P = regressionData_.getWeightsMatrix(); // matrix of weights
 
 	// First phase: Factorization of matrixNoCov
 	matrixNoCovdec_.compute(matrixNoCov_);
+	printer::milestone("system_factorize_2.txt");
 
 	if (regressionData_.getCovariates().rows() != 0) {
 		// Second phase: factorization of matrix  G =  C + [V * matrixNoCov^-1 * U]= C + D
@@ -250,26 +274,47 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 		// Definition of matrix U = [ psi^T * A * W | 0 ]^T and V= [ W^T*psi| 0]
 
 		MatrixXr W(this->regressionData_.getCovariates());
+		printer::milestone("system_factorize_3.txt");
 
 		U_ = MatrixXr::Zero(2*nnodes, W.cols());
+		V_ = MatrixXr::Zero(W.cols(),2*nnodes);
 
-		V_=MatrixXr::Zero(W.cols(),2*nnodes);
-		V_.leftCols(nnodes)=W.transpose()*psi_;
+		if(P.size()==0){
+			V_.leftCols(nnodes) = W.transpose()*psi_;
+		}else{
+			printer::milestone("system_factorize_3.1.1.txt");
+			V_.leftCols(nnodes) = W.transpose()*P.asDiagonal()*psi_;
+		}
+		printer::milestone("system_factorize_3.1.txt");
+		// build "right side" of U_
+		if(P.size() == 0)
+			U_.topRows(nnodes) = W;
+		else
+			U_.topRows(nnodes) = P.asDiagonal()*W;
+		printer::milestone("system_factorize_3.2.txt");
 
+		// build "left side" of U_
 		if(regressionData_.getNumberOfRegions()==0){ // pointwise data
-		  U_.topRows(nnodes) = psi_.transpose()*W;
+		  U_.topRows(nnodes) = psi_.transpose()*U_.topRows(nnodes);
 		}
 		else{                                          //areal data
-		  U_.topRows(nnodes) = psi_.transpose()*A_.asDiagonal()*W;
-        }
-
+		  U_.topRows(nnodes) = psi_.transpose()*A_.asDiagonal()*U_.topRows(nnodes);
+    	}
+    	printer::milestone("system_factorize_3.3.txt");
 		MatrixXr D = V_*matrixNoCovdec_.solve(U_);
-
+		printer::milestone("system_factorize_3.4.txt");
 		// G = C + D
-		MatrixXr G = -W.transpose()*W + D;
+		MatrixXr G;
+		if(P.size()==0){
+			G = -W.transpose()*W + D;
+		}else{
+			G = -W.transpose()*P.asDiagonal()*W + D;
+		}
+		printer::milestone("system_factorize_3.5.txt");
 		Gdec_.compute(G);
 
 	}
+	printer::milestone("system_factorize_4.txt");
 }
 
 template<typename InputHandler, typename IntegratorSpace, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
@@ -279,16 +324,16 @@ MatrixXr MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTim
 
 	// Resolution of the system matrixNoCov * x1 = b
 	MatrixXr x1 = matrixNoCovdec_.solve(b);
-
+	printer::milestone("system_solve_1.txt");
 	if (regressionData_.getCovariates().rows() != 0) {
 		// Resolution of G * x2 = V * x1
-
+		printer::milestone("system_solve_2.txt");
 		MatrixXr x2 = Gdec_.solve(V_*x1);
-
+		printer::milestone("system_solve_2_1.txt");
 		// Resolution of the system matrixNoCov * x3 = U * x2
 		x1 -= matrixNoCovdec_.solve(U_*x2);
 	}
-
+	printer::milestone("system_solve_3.txt");
 	return x1;
 }
 
@@ -298,19 +343,23 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 {
 	UInt nRegions = regressionData_.getNumberOfRegions();
 	UInt m = regressionData_.isSpaceTime() ? regressionData_.getNumberofTimeObservations():1;
-	A_=VectorXr::Zero(m*nRegions);
-	for (int i=0; i<nRegions; i++)
-	{
-		for (int j=0; j<regressionData_.getIncidenceMatrix().cols(); j++)
+	if(this->regressionData_.getWeightsMatrix().size() != 0){//areal data for FPIRLS
+		A_ = VectorXr::Ones(m*nRegions);  
+	}else{
+		A_=VectorXr::Zero(m*nRegions);
+		for (int i=0; i<nRegions; i++)
 		{
-			if (regressionData_.getIncidenceMatrix()(i,j) == 1)
+			for (int j=0; j<regressionData_.getIncidenceMatrix().cols(); j++)
 			{
-				A_(i)+=mesh_.elementMeasure(j);
+				if (regressionData_.getIncidenceMatrix()(i,j) == 1)
+				{
+					A_(i)+=mesh_.elementMeasure(j);
+				}
 			}
-		}
-		for(int k=1; k<m; k++)
-		{
-			A_(i+k*nRegions)=A_(i);
+			for(int k=1; k<m; k++)
+			{
+				A_(i+k*nRegions)=A_(i);
+			}
 		}
 	}
 }
@@ -326,10 +375,11 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 	{
 		if (regressionData_.isLocationsByNodes() && !regressionData_.isSpaceTime())
 		{
+				VectorXr tmp = LeftMultiplybyQ(regressionData_.getObservations());
 				for (auto i=0; i<nlocations;++i)
 				{
 					auto index_i = regressionData_.getObservationsIndices()[i];
-					rightHandData(index_i) = regressionData_.getObservations()[i];
+					rightHandData(index_i) = tmp(i);
 				}
 		}
 		else if (regressionData_.isLocationsByNodes() && regressionData_.isSpaceTime() && regressionData_.getFlagParabolic())
@@ -393,7 +443,6 @@ void MixedFERegressionBase<InputHandler, IntegratorSpace, ORDER, IntegratorTime,
 			}
 			n-=observations_na.size();
 		}
-
 //! GCV computation
 	_GCV(output_indexS,output_indexT) = (n / ((n-_dof(output_indexS,output_indexT)) * (n-_dof(output_indexS,output_indexT)))) * (z-dataHat).dot(z-dataHat);
 	if (_GCV(output_indexS,output_indexT) < _bestGCV)
@@ -403,13 +452,108 @@ void MixedFERegressionBase<InputHandler, IntegratorSpace, ORDER, IntegratorTime,
 		_bestGCV = _GCV(output_indexS,output_indexT);
 	}
 }
+/*
+template<typename InputHandler, typename IntegratorSpace, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
+template<typename A>
+void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim>::computeDegreesOfFreedom(EOExpr<A> oper){
+
+	UInt nnodes = N_*M_;
+	FiniteElement<IntegratorSpace, ORDER, mydim, ndim> fe;
+
+	std::vector<UInt> test_boi(1,1);
+	std::string saving_filename = "HIDDEN";
+	saving_filename = saving_filename + ".txt";
+	printer::SaveDimension(saving_filename,test_boi);
+
+	saving_filename = "prova_cdof_1";
+ 	saving_filename = saving_filename + ".txt";
+ 	printer::SaveDimension(saving_filename,test_boi);
+	
+	if(regressionData_.getNumberOfRegions()>0 && !isAComputed){
+		setA();
+		isAComputed = true;
+	}
+
+	if(!isPsiComputed){
+		setPsi();
+		isPsiComputed = true;
+		printer::milestone("asdPSI.txt");
+	}
+
+	typedef EOExpr<Mass> ETMass; Mass EMass; ETMass mass(EMass);
+	if(!isR1Computed){
+		Assembler::operKernel(oper, mesh_, fe, R1_);
+		isR1Computed = true;
+		printer::milestone("asdR1.txt");
+	}
+	if(!isR0Computed){
+		Assembler::operKernel(mass, mesh_, fe, R0_);
+		isR0Computed = true;
+		printer::milestone("asdR0.txt");
+	}
+
+	if (regressionData_.isSpaceTime())
+	{
+		buildSpaceTimeMatrices();
+	}
+
+	this->_dof.resize(regressionData_.getLambdaS().size(),regressionData_.getLambdaT().size());
+
+	for(UInt s = 0; s<regressionData_.getLambdaS().size(); s++)
+	{
+		for(UInt t = 0; t<regressionData_.getLambdaT().size(); t++)
+		{
+			Real lambdaS = regressionData_.getLambdaS()[s];
+			Real lambdaT = regressionData_.getLambdaT()[t];
+
+			SpMat R1_lambda = (-lambdaS)*R1_;
+			SpMat R0_lambda = (-lambdaS)*R0_;
+			if(regressionData_.isSpaceTime() && regressionData_.getFlagParabolic())
+				R1_lambda -= lambdaS*(lambdaT*LR0k_); // build the SouthWest block of the matrix (also the NorthEast block transposed)
+			
+			saving_filename = "prova_cdof_3";
+		 	saving_filename = saving_filename + ".txt";
+		 	printer::SaveDimension(saving_filename,test_boi);
+
+		 	SpMat NWblock;
+
+			// build right side of NWblock
+			if(regressionData_.getWeightsMatrix().size() == 0) // no weights
+				NWblock = psi_;
+			else
+				NWblock = regressionData_.getWeightsMatrix().asDiagonal()*psi_;
+
+			// build left side of NWblock
+			if(regressionData_.getNumberOfRegions()==0) // pointwise data
+			    NWblock=psi_.transpose()*NWblock;
+			else                                        // areal data: need to add the diag(|D_1|,...,|D_N|)
+			    NWblock=psi_.transpose()*A_.asDiagonal()*NWblock;
+
+			if(regressionData_.isSpaceTime() && !regressionData_.getFlagParabolic())
+				NWblock+=lambdaT*Ptk_;
+
+			this->buildMatrixNoCov(NWblock, R1_lambda, R0_lambda);
+
+			if(regressionData_.getGCVmethod() == 2){// Stochastic GCV
+				this->system_factorize();
+			}
+
+			saving_filename = "prova_cdof_4";
+		 	saving_filename = saving_filename + ".txt";
+		 	printer::SaveDimension(saving_filename,test_boi);
+
+			computeDegreesOfFreedom(s, t, lambdaS, lambdaT);
+		}
+	}
+}
+*/
 
 
 template<typename InputHandler, typename IntegratorSpace, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
 void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim>::computeDegreesOfFreedomExact(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT)
 {
 
-	UInt nnodes =N_*M_;
+	UInt nnodes = N_*M_;
 	UInt nlocations = regressionData_.getNumberofObservations();
 	Real degrees=0;
 
@@ -638,17 +782,44 @@ template<typename InputHandler, typename IntegratorSpace, UInt ORDER, typename I
 template<typename A>
 void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim>::apply(EOExpr<A> oper, const ForcingTerm & u)
 {
+		std::string saving_filename = "mixFEreg_obs.txt";
+    	printer::saveVectorXr(saving_filename, this->regressionData_.getObservations());
+
+    	saving_filename = "mixFEreg_WeightMat.txt";
+    	printer::saveVectorXr(saving_filename, this->regressionData_.getWeightsMatrix());
+
 	UInt nnodes = N_*M_;
 	FiniteElement<IntegratorSpace, ORDER, mydim, ndim> fe;
 
-	if(regressionData_.getNumberOfRegions()>0)
-		setA();
+	printer::milestone("asd1.txt");
 
-	setPsi();
+	if(regressionData_.getNumberOfRegions()>0 && !isAComputed){
+		setA();
+		isAComputed = true;
+	}
+
+	if(!isPsiComputed){
+		setPsi();
+		isPsiComputed = true;
+		printer::milestone("asdPSI.txt");
+	}
 
 	typedef EOExpr<Mass> ETMass; Mass EMass; ETMass mass(EMass);
-	Assembler::operKernel(oper, mesh_, fe, R1_);
-	Assembler::operKernel(mass, mesh_, fe, R0_);
+	if(!isR1Computed){
+		Assembler::operKernel(oper, mesh_, fe, R1_);
+		isR1Computed = true;
+		printer::milestone("asdR1.txt");
+	}
+	if(!isR0Computed){
+		Assembler::operKernel(mass, mesh_, fe, R0_);
+		isR0Computed = true;
+		printer::milestone("asdR0.txt");
+	}
+
+	//reset wtw for pirls iteration
+	if(this->regressionData_.getWeightsMatrix().size() != 0){
+		isWTWfactorized_ = false;
+	}
 
 	if(this->isSpaceVarying)
 	{
@@ -672,6 +843,7 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 	this->_GCV.resize(regressionData_.getLambdaS().size(),regressionData_.getLambdaT().size());
 	if(regressionData_.getCovariates().rows()!=0)
 	{
+		printer::milestone("asd2.txt");
 		this->_beta.resize(regressionData_.getLambdaS().size(),regressionData_.getLambdaT().size());
 	}
 
@@ -690,10 +862,24 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 				R1_lambda -= lambdaS*(lambdaT*LR0k_); // build the SouthWest block of the matrix (also the NorthEast block transposed)
 
 			SpMat NWblock;
+			/*
 			if(regressionData_.getNumberOfRegions()==0) // pointwise data
 				NWblock=psi_.transpose()*psi_;
 			else                                        // areal data: need to add the diag(|D_1|,...,|D_N|)
 			  NWblock=psi_.transpose()*A_.asDiagonal()*psi_;
+			*/
+
+			// build right side of NWblock
+			if(regressionData_.getWeightsMatrix().size() == 0) // no weights
+				NWblock = psi_;
+			else
+				NWblock = regressionData_.getWeightsMatrix().asDiagonal()*psi_;
+
+			// build left side of NWblock
+			if(regressionData_.getNumberOfRegions()==0) // pointwise data
+			    NWblock=psi_.transpose()*NWblock;
+			else                                        // areal data: need to add the diag(|D_1|,...,|D_N|)
+			    NWblock=psi_.transpose()*A_.asDiagonal()*NWblock;
 
 			if(regressionData_.isSpaceTime() && !regressionData_.getFlagParabolic())
 				NWblock+=lambdaT*Ptk_;
@@ -738,9 +924,19 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 			// covariates computation
 			if(regressionData_.getCovariates().rows()!=0)
 			{
+				printer::milestone("asd3.txt");
 				MatrixXr W(this->regressionData_.getCovariates());
-				VectorXr beta_rhs = W.transpose()*(regressionData_.getObservations() - psi_*_solution(s,t).topRows(psi_.cols()));
+				printer::milestone("asd3_1.txt");
+				VectorXr P(this->regressionData_.getWeightsMatrix());
+				VectorXr beta_rhs;
+				if( P.size() !=0){
+					beta_rhs = W.transpose()*P.asDiagonal()*(regressionData_.getObservations() - psi_*_solution(s,t).topRows(psi_.cols()));
+				}else{
+					beta_rhs = W.transpose()*(regressionData_.getObservations() - psi_*_solution(s,t).topRows(psi_.cols()));
+				}
+				printer::milestone("asd4.txt");
 				_beta(s,t) = WTW_.solve(beta_rhs);
+				printer::milestone("asd5.txt");
 			}
 		}
 	}
@@ -903,5 +1099,147 @@ void MixedFDRegression<InputHandler>::setDerOperator(){
 	derOpL_.makeCompressed();
 
 }
+
+
+// template specification for GAMData
+
+template<typename IntegratorSpace, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
+class MixedFERegression<GAMDataLaplace, IntegratorSpace, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> : public MixedFERegressionBase<RegressionData, IntegratorSpace, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> 
+{
+public:
+	MixedFERegression(const MeshHandler<ORDER, mydim, ndim>& mesh, const RegressionData& regressionData):MixedFERegressionBase<RegressionData, IntegratorSpace, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> (mesh, regressionData){};
+
+	void apply()
+	{
+		typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
+	    MixedFERegressionBase<RegressionData, IntegratorSpace, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> ::apply(stiff, ForcingTerm(std::vector<Real>(1)));
+	}
+
+	/*void computeDegreesOfFreedom()
+	{
+		typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
+			MixedFERegressionBase<RegressionData, IntegratorSpace, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> ::computeDegreesOfFreedom(stiff);
+	}*/
+
+
+};
+
+
+template<typename IntegratorSpace, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
+class MixedFERegression<GAMDataElliptic, IntegratorSpace, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> : public MixedFERegressionBase<RegressionDataElliptic, IntegratorSpace, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> 
+{
+public:
+	MixedFERegression(const MeshHandler<ORDER, mydim, ndim>& mesh, const RegressionDataElliptic& regressionData):MixedFERegressionBase<RegressionDataElliptic, IntegratorSpace, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> (mesh, regressionData){};
+
+	void apply()
+	{
+		if(mydim!=2 || ndim !=2){
+
+		#ifdef R_VERSION_
+			Rprintf("ERROR: these dimensions are not yet implemented, for the moment smoothEllipticPDE is available for mydim=ndim=2");
+		#else
+			std::cout << "ERROR: these dimensions are not yet implemented, for the moment smoothEllipticPDE is available for mydim=ndim=2\n";
+		#endif
+
+		}else{
+			typedef EOExpr<Mass> ETMass;   Mass EMass;   ETMass mass(EMass);
+			typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
+			typedef EOExpr<Grad> ETGrad;   Grad EGrad;   ETGrad grad(EGrad);
+
+		    const Real& c = this->regressionData_.getC();
+		    const Eigen::Matrix<Real,2,2>& K = this->regressionData_.getK();
+		    const Eigen::Matrix<Real,2,1>& b = this->regressionData_.getBeta();
+
+		    MixedFERegressionBase<RegressionDataElliptic, IntegratorSpace, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> ::apply(c*mass+stiff[K]+dot(b,grad), ForcingTerm(std::vector<Real>(1)));
+		}
+	}
+
+	/*void computeDegreesOfFreedom(){
+
+		if(mydim!=2 || ndim !=2){
+
+		#ifdef R_VERSION_
+			Rprintf("ERROR: these dimensions are not yet implemented, for the moment smoothEllipticPDE is available for mydim=ndim=2");
+		#else
+			std::cout << "ERROR: these dimensions are not yet implemented, for the moment smoothEllipticPDE is available for mydim=ndim=2\n";
+		#endif
+
+		}else{
+			typedef EOExpr<Mass> ETMass;   Mass EMass;   ETMass mass(EMass);
+			typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
+			typedef EOExpr<Grad> ETGrad;   Grad EGrad;   ETGrad grad(EGrad);
+
+				const Real& c = this->regressionData_.getC();
+				const Eigen::Matrix<Real,2,2>& K = this->regressionData_.getK();
+				const Eigen::Matrix<Real,2,1>& b = this->regressionData_.getBeta();
+
+				MixedFERegressionBase<RegressionDataElliptic, IntegratorSpace, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> ::computeDegreesOfFreedom(c*mass+stiff[K]+dot(b,grad));
+		}
+
+	}*/
+
+};
+
+template<typename IntegratorSpace, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
+class MixedFERegression<GAMDataEllipticSpaceVarying, IntegratorSpace, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> : public MixedFERegressionBase<RegressionDataEllipticSpaceVarying, IntegratorSpace, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> 
+{
+public:
+	MixedFERegression(const MeshHandler<ORDER, mydim, ndim>& mesh, const RegressionDataEllipticSpaceVarying& regressionData):MixedFERegressionBase<RegressionDataEllipticSpaceVarying, IntegratorSpace, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> (mesh, regressionData){};
+
+	void apply()
+	{
+		if(mydim!=2 || ndim !=2){
+
+		#ifdef R_VERSION_
+			Rprintf("ERROR: these dimensions are not yet implemented, for the moment smoothEllipticPDE is available for mydim=ndim=2");
+		#else
+			std::cout << "ERROR: these dimensions are not yet implemented, for the moment smoothEllipticPDE is available for mydim=ndim=2\n";
+		#endif
+
+		}else{
+			typedef EOExpr<Mass> ETMass;   Mass EMass;   ETMass mass(EMass);
+			typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
+			typedef EOExpr<Grad> ETGrad;   Grad EGrad;   ETGrad grad(EGrad);
+
+			const Reaction& c = this->regressionData_.getC();
+			const Diffusivity& K = this->regressionData_.getK();
+			const Advection& b = this->regressionData_.getBeta();
+			const ForcingTerm& u= this->regressionData_.getU();
+
+			this->isSpaceVarying=TRUE;
+
+			MixedFERegressionBase<RegressionDataEllipticSpaceVarying, IntegratorSpace, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> ::apply(c*mass+stiff[K]+dot(b,grad), u);
+		}
+	}
+
+	/*void computeDegreesOfFreedom(){
+
+		if(mydim!=2 || ndim !=2){
+
+		#ifdef R_VERSION_
+			Rprintf("ERROR: these dimensions are not yet implemented, for the moment smoothEllipticPDE is available for mydim=ndim=2");
+		#else
+			std::cout << "ERROR: these dimensions are not yet implemented, for the moment smoothEllipticPDE is available for mydim=ndim=2\n";
+		#endif
+
+		}else{
+			typedef EOExpr<Mass> ETMass;   Mass EMass;   ETMass mass(EMass);
+			typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
+			typedef EOExpr<Grad> ETGrad;   Grad EGrad;   ETGrad grad(EGrad);
+
+			const Reaction& c = this->regressionData_.getC();
+			const Diffusivity& K = this->regressionData_.getK();
+			const Advection& b = this->regressionData_.getBeta();
+			//const ForcingTerm& u= this->regressionData_.getU();
+
+			this->isSpaceVarying=TRUE;
+
+			MixedFERegressionBase<RegressionDataEllipticSpaceVarying, IntegratorSpace, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> ::computeDegreesOfFreedom(c*mass+stiff[K]+dot(b,grad));
+		}
+	}*/
+
+};
+
+
 
 #endif

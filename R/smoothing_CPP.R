@@ -16,7 +16,6 @@ CPP_smooth.FEM.basis<-function(locations, bary.locations, observations, FEMbasis
     DOF_matrix<-matrix(nrow = 0, ncol = 1)
   }
 
-
   if(is.null(locations))
   {
     locations<-matrix(nrow = 0, ncol = 2)

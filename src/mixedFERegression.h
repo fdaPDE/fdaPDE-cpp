@@ -12,6 +12,9 @@
 #include "kronecker_product.h"
 #include <memory>
 
+// to remove:
+#include "printer.h"
+
 /*! A base class for the smooth regression.
 */
 template<typename InputHandler, typename IntegratorSpace, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
@@ -77,7 +80,13 @@ class MixedFERegressionBase
 	Real _bestGCV=10e20;	//!Stores the value of the best GCV
 	MatrixXv _beta;		//! A Eigen::MatrixXv storing the computed beta coefficients
 
-	bool isSpaceVarying=false; // used to distinguish whether to use the forcing term u in apply() or not
+	//Flag to avoid the computation of R0,R1,Psi_
+	bool isAComputed = false;
+	bool isPsiComputed = false;
+	bool isR0Computed = false;
+	bool isR1Computed = false;
+
+	bool isSpaceVarying = false; // used to distinguish whether to use the forcing term u in apply() or not
 
 	//! A member function computing the Psi matrix
 	void setPsi();
@@ -95,8 +104,6 @@ class MixedFERegressionBase
 	void getRightHandData(VectorXr& rightHandData);
 	//! A method which builds all the matrices needed for assembling matrixNoCov_
 	void buildSpaceTimeMatrices();
-	//! A method computing the dofs
-	void computeDegreesOfFreedom(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT);
 	//! A method computing dofs in case of exact GCV, it is called by computeDegreesOfFreedom
 	void computeDegreesOfFreedomExact(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT);
 	//! A method computing dofs in case of stochastic GCV, it is called by computeDegreesOfFreedom
@@ -126,6 +133,12 @@ class MixedFERegressionBase
 	template<typename A>
 	void apply(EOExpr<A> oper,const ForcingTerm & u);
 
+	//! A member function computing the dofs for external calls
+	//template<typename A>
+	//void computeDegreesOfFreedom(EOExpr<A> oper);
+
+	//! A method computing the dofs
+	void computeDegreesOfFreedom(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT);
 	//! A function returning the computed barycenters of the locationss
 	inline MatrixXr const & getBarycenters() const{return barycenters_;};
 	//! A function returning the element ids of the locations
@@ -142,6 +155,14 @@ class MixedFERegressionBase
 	inline UInt getBestLambdaS(){return bestLambdaS_;}
 	//! A method returning the index of the best lambdaT according to GCV
 	inline UInt getBestLambdaT(){return bestLambdaT_;}
+	//! A method returning the psi matrix
+	inline SpMat const getPsi()const{return psi_;}
+	//! A method returning the R0 matrix
+	inline SpMat const getR0()const{return R0_;}
+	//! A method returning the R1 matrix
+	inline SpMat const getR1()const{return R1_;}
+
+
 };
 
 template<typename InputHandler, typename IntegratorSpace, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>

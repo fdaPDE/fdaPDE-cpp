@@ -27,6 +27,10 @@ extern SEXP regression_PDE_space_varying_time(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP
 extern SEXP regression_PDE_time(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP Smooth_FPCA(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP tree_mesh_construction(SEXP, SEXP, SEXP, SEXP);
+extern SEXP gam_Laplace(SEXP, SEXP, SEXP, SEXP,SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP gam_PDE(SEXP, SEXP, SEXP, SEXP,SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP gam_PDE_space_varying( SEXP, SEXP, SEXP, SEXP,SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+
 
 static const R_CallMethodDef CallEntries[] = {
     {"Density_Estimation",                (DL_FUNC) &Density_Estimation,                19},
@@ -48,6 +52,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"regression_PDE_time",               (DL_FUNC) &regression_PDE_time,               27},
     {"Smooth_FPCA",                       (DL_FUNC) &Smooth_FPCA,                       15},
     {"tree_mesh_construction",            (DL_FUNC) &tree_mesh_construction,             4},
+    {"gam_Laplace",                       (DL_FUNC) &gam_Laplace,                       24},
+    {"gam_PDE",                           (DL_FUNC) &gam_PDE,                           27},
+    {"gam_PDE_space_varying",             (DL_FUNC) &gam_PDE_space_varying,             28},
     {NULL, NULL, 0}
 };
 
