@@ -106,6 +106,7 @@ void DEData::setStepProposals(SEXP RstepProposals)
 
 void DEData::setNewData(const std::vector<Point>& p)
 {
+  data_.resize(p.size());
   for(UInt i = 0; i < p.size(); i++){
     data_[i] = p[i];
   }
@@ -114,6 +115,10 @@ void DEData::setNewData(const std::vector<Point>& p)
 void DEData::setDatum(const Point& p, UInt i)
 {
   data_[i] = p;
+}
+
+void DEData::updateN(UInt n){
+  n_ = n;
 }
 
 void DEData::printData(std::ostream & out) const
