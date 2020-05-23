@@ -1,4 +1,4 @@
-checkSmoothingParameters<-function(locations = NULL, observations, FEMbasis, lambda, covariates = NULL, incidence_matrix = NULL, BC = NULL, GCV = FALSE, PDE_parameters=NULL, GCVmethod = 2, nrealizations = 100, search, bary.locations=bary.locations)
+checkSmoothingParameters<-function(locations = NULL, observations, FEMbasis, lambda, covariates = NULL, incidence_matrix = NULL, BC = NULL, GCV = FALSE, PDE_parameters=NULL, GCVmethod = 2, nrealizations = 100, search, bary.locations=bary.locations, areal.data.avg = TRUE)
 {
   #################### Parameter Check #########################
 
@@ -24,6 +24,8 @@ checkSmoothingParameters<-function(locations = NULL, observations, FEMbasis, lam
       stop("Missing values not admitted in 'observations' when 'locations' are specified.")
   }
 
+  if(any(is.na(observations)))
+      stop("Missing values not admitted in 'observations'")
   if (is.null(observations))
     stop("observations required;  is NULL.")
 
@@ -107,6 +109,11 @@ checkSmoothingParameters<-function(locations = NULL, observations, FEMbasis, lam
 
   if( !is.numeric(nrealizations) || nrealizations < 1)
     stop("nrealizations must be a positive integer")
+
+  if (is.null(areal.data.avg))
+    stop("'areal.data.avg' required;  is NULL.")
+  if(!is.logical(areal.data.avg))
+    stop("'areal.data.avg' is not logical")
 
   ans=space_varying
 

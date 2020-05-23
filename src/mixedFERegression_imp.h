@@ -343,7 +343,7 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 {
 	UInt nRegions = regressionData_.getNumberOfRegions();
 	UInt m = regressionData_.isSpaceTime() ? regressionData_.getNumberofTimeObservations():1;
-	if(this->regressionData_.getWeightsMatrix().size() != 0){//areal data for FPIRLS
+	if( !this->regressionData_.isArealDataAvg() ){//areal data for FPIRLS
 		A_ = VectorXr::Ones(m*nRegions);  
 	}else{
 		A_=VectorXr::Zero(m*nRegions);
@@ -552,7 +552,7 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 template<typename InputHandler, typename IntegratorSpace, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
 void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim>::computeDegreesOfFreedomExact(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT)
 {
-
+	std::string file_name;
 	UInt nnodes = N_*M_;
 	UInt nlocations = regressionData_.getNumberofObservations();
 	Real degrees=0;
@@ -564,12 +564,18 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 	}else{ //areal data
 		X1 = psi_.transpose() * A_.asDiagonal() * LeftMultiplybyQ(psi_);
 	}
+	
+	file_name = "X1_computeDoFExact.txt";
+	printer::SaveMatrixXr(file_name,X1);
 
 	if (isRcomputed_ == false)
 	{
 		isRcomputed_ = true;
 		//take R0 from the final matrix since it has already applied the dirichlet boundary conditions
 		SpMat R0 = matrixNoCov_.bottomRightCorner(nnodes,nnodes)/lambdaS;
+
+		file_name = "R0_computeDoFExact.txt";
+		printer::SaveMatrixXr(file_name,R0);
 		R0dec_.compute(R0);
 		if(!regressionData_.isSpaceTime() || !regressionData_.getFlagParabolic())
 		{
@@ -593,6 +599,9 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 		P = lambdaS*R_;
 	}
 
+	file_name = "P_computeDoFExact.txt";
+	printer::SaveMatrixXr(file_name,P);
+
 	if(regressionData_.isSpaceTime() && !regressionData_.getFlagParabolic())
 		X3 += lambdaT*Ptk_;
 
@@ -601,6 +610,8 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 	{
 		const std::vector<UInt>& bc_indices = regressionData_.getDirichletIndices();
 		UInt nbc_indices = bc_indices.size();
+
+		printer::milestone("DoFExact_in_getDIdx.txt");
 
 		Real pen=10e20;
 		for(UInt i=0; i<nbc_indices; i++)
@@ -615,8 +626,9 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 
 	auto k = regressionData_.getObservationsIndices();
 
-	if(!regressionData_.isSpaceTime() && regressionData_.isLocationsByNodes() && regressionData_.getCovariates().rows() != 0) {
-		degrees += regressionData_.getCovariates().cols();
+	if(!regressionData_.isSpaceTime() && regressionData_.isLocationsByNodes()) {
+		if(regressionData_.getCovariates().rows() != 0)
+			degrees += regressionData_.getCovariates().cols();
 
 		// Setup rhs B
 		MatrixXr B;

@@ -5,7 +5,7 @@
 
 template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
 FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::FPIRLS_Base(const MeshHandler<ORDER,mydim,ndim>& mesh, InputHandler& inputData, VectorXr mu0):
-  mesh_(mesh), inputData_(inputData), regression_(mesh, inputData)
+  mesh_(mesh), inputData_(inputData), regression_(mesh, inputData_)
 {
   Rprintf("Hello I'm FPIRLS_Base constructor \n");
 
@@ -37,11 +37,11 @@ void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::apply( const Forci
   saving_filename = "FPIRLS_applyInit_WeightMat.txt";
   printer::saveVectorXr(saving_filename, this->inputData_.getWeightsMatrix());
 
-
+/*
   this->inputData_.copyInitialObservations();
   this->inputData_.copyLambdaVector();
   this->inputData_.setDOFflag();
-
+*/
   const UInt LambdaS_len = mu_.size();
   // STEP 0: initialization
   //  if(mu_.size()==0) //mu can be initialized or not by the user
@@ -158,7 +158,7 @@ for(UInt i=0 ; i < LambdaS_len ; i++){
   _J_minima.push_back(current_J_values[i][0]+current_J_values[i][1]);
 
 
-  if(this->inputData_.getDOF_GAM()){
+  if(this->inputData_.getGCV_GAM()){
     saving_filename = "TEST_GCV";
     saving_filename = saving_filename + ".txt";
     printer::saveVectorXr(saving_filename,mu_[0]);
@@ -452,7 +452,12 @@ template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UI
 void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::compute_GCV(UInt& lambda_index){
 
   //GCV COMPUTATION
-  regression_.computeDegreesOfFreedom(0, 0, this->inputData_.getGlobalLambda()[lambda_index], 0);
+  Rprintf("DOF FLAG: %d \n", inputData_.computeDOF());
+  if ( inputData_.computeDOF() ){ // is DOF_matrix to be computed?
+    Rprintf("IM COMPUTING DOF!!!! \n");
+    regression_.computeDegreesOfFreedom(0, 0, this->inputData_.getGlobalLambda()[lambda_index], 0);
+  }
+  
   _dof(lambda_index,0) = regression_.getDOF()(0,0);
 
   VectorXr y = inputData_.getInitialObservations();
@@ -470,7 +475,7 @@ void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::compute_GCV(UInt& 
   //best lambda
   if ( GCV_value < _bestGCV)
   {
-    bestLambdaS_ = inputData_.getGlobalLambda()[lambda_index];
+    bestLambdaS_ = lambda_index;
     _bestGCV = GCV_value;
   }
 

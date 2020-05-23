@@ -18,7 +18,7 @@ class FPIRLS_Base {
   protected:
 
   const MeshHandler<ORDER, mydim, ndim> &mesh_;
-  InputHandler& inputData_; // it contains the original data of the problem
+  InputHandler inputData_; // it contains the original data of the problem
   MixedFERegression<InputHandler, Integrator,ORDER, IntegratorGaussP3, 0, 0, mydim, ndim>  regression_;
 
   //RegressionData& pseudoData_; // contains data used to perform step (2) of f-PIRLS algo
@@ -109,7 +109,7 @@ class FPIRLS_Base {
    //! A method returning the index of the best lambdaS according to GCV
    inline UInt getBestLambdaS(){return bestLambdaS_;}
    
-   
+
     //! A function returning the computed barycenters of the locationss
    inline MatrixXr const & getBarycenters() const{return regression_.getBarycenters();}
    //! A function returning the element ids of the locations
