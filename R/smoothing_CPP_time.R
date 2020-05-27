@@ -1,4 +1,4 @@
-CPP_smooth.FEM.time<-function(locations, bary.locations, time_locations, observations, FEMbasis, time_mesh, lambdaS, lambdaT, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, FLAG_MASS, FLAG_PARABOLIC, IC, GCV ,GCVMETHOD = 2, nrealizations = 100, DOF=TRUE,DOF_matrix=NULL, search, areal.data.avg = TRUE)
+CPP_smooth.FEM.time<-function(locations, bary.locations, time_locations, observations, FEMbasis, time_mesh, lambdaS, lambdaT, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, FLAG_MASS, FLAG_PARABOLIC, IC, GCV ,GCVMETHOD = 2, nrealizations = 100, DOF=TRUE,DOF_matrix=NULL, search, tune = 1, areal.data.avg = TRUE)
 {
   # Indexes in C++ starts from 0, in R from 1, opportune transformation
 
@@ -91,6 +91,7 @@ CPP_smooth.FEM.time<-function(locations, bary.locations, time_locations, observa
   IC <- as.matrix(IC)
   storage.mode(IC) <- "double"
 
+  storage.mode(tune) <- "double"
   areal.data.avg <- as.integer(areal.data.avg)
   storage.mode(areal.data.avg) <-"integer"
 
@@ -127,7 +128,7 @@ CPP_smooth.FEM.time<-function(locations, bary.locations, time_locations, observa
     ICsol <- .Call("regression_Laplace", locationsIC, bary.locations, observationsIC,
                   FEMbasis$mesh, FEMbasis$order, mydim, ndim, lambdaSIC, covariatesIC,
                   incidence_matrix, BC$BC_indices, BC$BC_values,
-                  T, as.integer(1), nrealizations, T, DOF_matrix, search, areal.data.avg, PACKAGE = "fdaPDE")
+                  T, as.integer(1), nrealizations, T, DOF_matrix, search, tune, areal.data.avg, PACKAGE = "fdaPDE")
 
     ## shifting the lambdas interval if the best lambda is the smaller one and retry smoothing
     if((ICsol[[4]][1]+1)==1)
@@ -138,7 +139,7 @@ CPP_smooth.FEM.time<-function(locations, bary.locations, time_locations, observa
       ICsol <- .Call("regression_Laplace", locationsIC, bary.locations, observationsIC,
                     FEMbasis$mesh, FEMbasis$order, mydim, ndim, lambdaSIC, covariatesIC,
                     incidence_matrix, BC$BC_indices, BC$BC_values,
-                    T, as.integer(1), nrealizations, T, DOF_matrix, search, areal.data.avg, PACKAGE = "fdaPDE")
+                    T, as.integer(1), nrealizations, T, DOF_matrix, search, tune, areal.data.avg, PACKAGE = "fdaPDE")
     }
     else
     {
@@ -151,7 +152,7 @@ CPP_smooth.FEM.time<-function(locations, bary.locations, time_locations, observa
         ICsol <- .Call("regression_Laplace", locationsIC, bary.locations, observationsIC,
                       FEMbasis$mesh, FEMbasis$order, mydim, ndim, lambdaSIC, covariatesIC,
                       incidence_matrix, BC$BC_indices, BC$BC_values,
-                      T, as.integer(1), nrealizations, T, DOF_matrix, search, areal.data.avg, PACKAGE = "fdaPDE")
+                      T, as.integer(1), nrealizations, T, DOF_matrix, search, tune, areal.data.avg, PACKAGE = "fdaPDE")
       }
     }
 
@@ -185,11 +186,11 @@ CPP_smooth.FEM.time<-function(locations, bary.locations, time_locations, observa
   ## Call C++ function
   bigsol <- .Call("regression_Laplace_time", locations, bary.locations, time_locations, observations, FEMbasis$mesh, time_mesh, FEMbasis$order,
                   mydim, ndim, lambdaS, lambdaT, covariates, incidence_matrix, BC$BC_indices, BC$BC_values, FLAG_MASS, FLAG_PARABOLIC,
-                  IC, GCV, GCVMETHOD, nrealizations, DOF, DOF_matrix, search, areal.data.avg, PACKAGE = "fdaPDE")
+                  IC, GCV, GCVMETHOD, nrealizations, DOF, DOF_matrix, search, tune, areal.data.avg, PACKAGE = "fdaPDE")
   return(c(bigsol,ICsol))
 }
 
-CPP_smooth.FEM.PDE.time<-function(locations, bary.locations, time_locations, observations, FEMbasis, time_mesh, lambdaS, lambdaT, PDE_parameters, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, FLAG_MASS, FLAG_PARABOLIC, IC, GCV,GCVMETHOD = 2, nrealizations = 100, search, DOF=TRUE,DOF_matrix=NULL, areal.data.avg = TRUE)
+CPP_smooth.FEM.PDE.time<-function(locations, bary.locations, time_locations, observations, FEMbasis, time_mesh, lambdaS, lambdaT, PDE_parameters, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, FLAG_MASS, FLAG_PARABOLIC, IC, GCV,GCVMETHOD = 2, nrealizations = 100, search, DOF=TRUE,DOF_matrix=NULL, tune=1 , areal.data.avg = TRUE)
 {
 
   # Indexes in C++ starts from 0, in R from 1, opportune transformation
@@ -287,6 +288,7 @@ CPP_smooth.FEM.PDE.time<-function(locations, bary.locations, time_locations, obs
   storage.mode(nrealizations) <- "integer"
   storage.mode(GCVMETHOD) <- "integer"
 
+  storage.mode(tune) <- "double"
   areal.data.avg <- as.integer(areal.data.avg)
   storage.mode(areal.data.avg) <-"integer"
 
@@ -311,7 +313,7 @@ CPP_smooth.FEM.PDE.time<-function(locations, bary.locations, time_locations, obs
                   FEMbasis$mesh, FEMbasis$order, mydim, ndim, lambdaSIC,
                   PDE_parameters$K, PDE_parameters$b, PDE_parameters$c,
                   covariatesIC, incidence_matrix, BC$BC_indices, BC$BC_values,
-                  T, as.integer(1), nrealizations, T, DOF_matrix, search, areal.data.avg,PACKAGE = "fdaPDE")
+                  T, as.integer(1), nrealizations, T, DOF_matrix, search, tune, areal.data.avg,PACKAGE = "fdaPDE")
 
     if((ICsol[[4]][1]+1)==1)
     {
@@ -322,7 +324,7 @@ CPP_smooth.FEM.PDE.time<-function(locations, bary.locations, time_locations, obs
                     FEMbasis$mesh, FEMbasis$order, mydim, ndim, lambdaSIC,
                     PDE_parameters$K, PDE_parameters$b, PDE_parameters$c,
                     covariatesIC, incidence_matrix, BC$BC_indices, BC$BC_values,
-                    T, as.integer(1), nrealizations, T, DOF_matrix, search, areal.data.avg, PACKAGE = "fdaPDE")
+                    T, as.integer(1), nrealizations, T, DOF_matrix, search, tune, areal.data.avg, PACKAGE = "fdaPDE")
     }
     else
     {
@@ -335,7 +337,7 @@ CPP_smooth.FEM.PDE.time<-function(locations, bary.locations, time_locations, obs
                       FEMbasis$mesh, FEMbasis$order, mydim, ndim, lambdaSIC,
                       PDE_parameters$K, PDE_parameters$b, PDE_parameters$c,
                       covariatesIC, incidence_matrix, BC$BC_indices, BC$BC_values,
-                      T, as.integer(1), nrealizations, T, DOF_matrix, search, areal.data.avg, PACKAGE = "fdaPDE")
+                      T, as.integer(1), nrealizations, T, DOF_matrix, search, tune, areal.data.avg, PACKAGE = "fdaPDE")
       }
     }
 
@@ -376,7 +378,7 @@ CPP_smooth.FEM.PDE.time<-function(locations, bary.locations, time_locations, obs
   return(c(bigsol,ICsol))
 }
 
-CPP_smooth.FEM.PDE.sv.time<-function(locations, bary.locations, time_locations, observations, FEMbasis, time_mesh, lambdaS, lambdaT, PDE_parameters, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, FLAG_MASS, FLAG_PARABOLIC, IC, GCV,GCVMETHOD = 2, nrealizations = 100, search, DOF=TRUE,DOF_matrix=NULL, areal.data.avg = TRUE)
+CPP_smooth.FEM.PDE.sv.time<-function(locations, bary.locations, time_locations, observations, FEMbasis, time_mesh, lambdaS, lambdaT, PDE_parameters, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, FLAG_MASS, FLAG_PARABOLIC, IC, GCV,GCVMETHOD = 2, nrealizations = 100, search, DOF=TRUE,DOF_matrix=NULL, tune = 1, areal.data.avg = TRUE)
 {
 
   # Indexes in C++ starts from 0, in R from 1, opportune transformation
@@ -481,6 +483,7 @@ CPP_smooth.FEM.PDE.sv.time<-function(locations, bary.locations, time_locations, 
   storage.mode(nrealizations) <- "integer"
   storage.mode(GCVMETHOD) <- "integer"
 
+  storage.mode(tune) <- "double"
   areal.data.avg <- as.integer(areal.data.avg)
   storage.mode(areal.data.avg) <-"integer"
 
@@ -506,7 +509,7 @@ CPP_smooth.FEM.PDE.sv.time<-function(locations, bary.locations, time_locations, 
                   FEMbasis$mesh, FEMbasis$order, mydim, ndim, lambdaSIC,
                   PDE_param_eval$K, PDE_param_eval$b, PDE_param_eval$c, PDE_param_eval$u,
                   covariatesIC, incidence_matrix, BC$BC_indices, BC$BC_values,
-                  T, as.integer(1), nrealizations, T, DOF_matrix, search, areal.data.avg,PACKAGE = "fdaPDE")
+                  T, as.integer(1), nrealizations, T, DOF_matrix, search, tune, areal.data.avg,PACKAGE = "fdaPDE")
 
     if((ICsol[[4]][1]+1)==1)
     {
@@ -517,7 +520,7 @@ CPP_smooth.FEM.PDE.sv.time<-function(locations, bary.locations, time_locations, 
                     FEMbasis$mesh, FEMbasis$order, mydim, ndim, lambdaSIC,
                     PDE_param_eval$K, PDE_param_eval$b, PDE_param_eval$c, PDE_param_eval$u,
                     covariatesIC, incidence_matrix, BC$BC_indices, BC$BC_values,
-                    T, as.integer(1), nrealizations, T, DOF_matrix, search, areal.data.avg, PACKAGE = "fdaPDE")
+                    T, as.integer(1), nrealizations, T, DOF_matrix, search, tune, areal.data.avg, PACKAGE = "fdaPDE")
     }
     else
     {
@@ -530,7 +533,7 @@ CPP_smooth.FEM.PDE.sv.time<-function(locations, bary.locations, time_locations, 
                       FEMbasis$mesh, FEMbasis$order, mydim, ndim, lambdaSIC,
                       PDE_param_eval$K, PDE_param_eval$b, PDE_param_eval$c, PDE_param_eval$u,
                       covariatesIC, incidence_matrix, BC$BC_indices, BC$BC_values,
-                      T, as.integer(1), nrealizations, T, DOF_matrix, search, areal.data.avg, PACKAGE = "fdaPDE")
+                      T, as.integer(1), nrealizations, T, DOF_matrix, search, tune, areal.data.avg, PACKAGE = "fdaPDE")
       }
     }
 
@@ -565,7 +568,7 @@ CPP_smooth.FEM.PDE.sv.time<-function(locations, bary.locations, time_locations, 
   bigsol <- .Call("regression_PDE_space_varying_time", locations, bary.locations, time_locations, observations, FEMbasis$mesh, time_mesh, FEMbasis$order,
                   mydim, ndim, lambdaS, lambdaT,  PDE_param_eval$K, PDE_param_eval$b, PDE_param_eval$c, PDE_param_eval$u, covariates,
                   incidence_matrix, BC$BC_indices, BC$BC_values, FLAG_MASS, FLAG_PARABOLIC,
-                  IC, GCV, GCVMETHOD, nrealizations, DOF, DOF_matrix, search, areal.data.avg, PACKAGE = "fdaPDE")
+                  IC, GCV, GCVMETHOD, nrealizations, DOF, DOF_matrix, search, tune, areal.data.avg, PACKAGE = "fdaPDE")
   return(c(bigsol,ICsol))
 }
 

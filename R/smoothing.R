@@ -70,12 +70,12 @@
 #' Default is set to observation for non binary distribution while equal to \code{0.5(observations + 0.5)} for binary data.
 #' @param scale.param Dispersion parameter of the chosen distribution. This is only required for "gamma", "gaussian", "invgaussian".
 #' User may specify the parameter as a positive real number. If the parameter is not supplied, it is estimated from data according to Wilhelm Sangalli 2016. 
-#' @param tune Tuning parameter used for the estimation of GCV. Default value \code{tune = 1.8}.
-#' It is advised to set it grather than 1 to avoid overfitting.
 #' @param threshold This parameter is used for arresting algorithm iterations. Algorithm stops when two successive iterations lead to improvement in penalized log-likelihood smaller than threshold.
 #' Default value \code{threshold = 0.0002020}.
 #' @param max.steps This parameter is used to limit the maximum number of iteration.
 #' Default value \code{max.steps=15}.
+#' @param tune Tuning parameter used for the estimation of GCV. Default value \code{tune = 1.8}.
+#' It is advised to set it grather than 1 to avoid overfitting.
 #' @param areal.data.avg Boolean. It involve the computation of Areal Data. If \code{TRUE} the areal data are averaged, otherwise not.
 #' @return A list with the following variables:
 #' @return A list with the following variables:
@@ -278,7 +278,7 @@
 smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
                      covariates = NULL, PDE_parameters=NULL, incidence_matrix = NULL,
                      BC = NULL, GCV = FALSE, GCVmethod = "Stochastic", nrealizations = 100, DOF_matrix=NULL, search = "tree", bary.locations = NULL,
-                     fam="gaussian", mu0 = NULL, scale.param=NULL, tune=1, threshold=0.0002020, max.steps=15, areal.data.avg = TRUE)
+                     fam="gaussian", mu0 = NULL, scale.param=NULL, threshold=0.0002020, max.steps=15, tune=1, areal.data.avg = TRUE)
 {
   if(class(FEMbasis$mesh) == "mesh.2D"){
     ndim = 2
@@ -310,6 +310,9 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
     stop("search must be either tree or naive.")
   }
 
+  if(any(lambda==0))
+  	stop("'lambda' can not be equal to 0")
+
   DOF=TRUE
   if(!is.null(DOF_matrix))
     DOF=FALSE
@@ -340,7 +343,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
   }
 
   space_varying=checkSmoothingParameters(locations=locations, observations=observations, FEMbasis=FEMbasis, lambda=lambda, covariates=covariates, incidence_matrix=incidence_matrix, 
-    BC=BC, GCV=GCV, PDE_parameters=PDE_parameters, GCVmethod=GCVMETHOD , nrealizations=nrealizations, search=search, bary.locations=bary.locations, areal.data.avg = areal.data.avg)
+    BC=BC, GCV=GCV, PDE_parameters=PDE_parameters, GCVmethod=GCVMETHOD , nrealizations=nrealizations, search=search, bary.locations=bary.locations, tune = tune, areal.data.avg = areal.data.avg)
 
   # if I have PDE non-sv case I need (constant) matrices as parameters
 
@@ -375,7 +378,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
   # FAMILY CHECK
   family_admit = c("binomial", "probit", "cloglog", "exponential", "gamma", "poisson", "invgaussian", "gaussian")
   if(sum(fam==family_admit)==0 ){
-   stop("'family' parameter required.\nCheck if it is one of the following: binomial, probit, cloglog, exponential, gamma, poisson, gaussian")
+   stop("'family' parameter required.\nCheck if it is one of the following: binomial, probit, cloglog, exponential, gamma, poisson, gaussian, invgaussian")
   }
 
 
@@ -388,7 +391,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
       print('C++ Code Execution')
       bigsol = CPP_smooth.FEM.basis(locations=locations, observations=observations, FEMbasis=FEMbasis, lambda=lambda,
                                     covariates=covariates, incidence_matrix=incidence_matrix, ndim=ndim, mydim=mydim,
-                                    BC=BC, GCV=GCV,GCVMETHOD=GCVMETHOD, nrealizations=nrealizations,DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations, areal.data.avg = areal.data.avg)
+                                    BC=BC, GCV=GCV,GCVMETHOD=GCVMETHOD, nrealizations=nrealizations,DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations, tune = tune, areal.data.avg = areal.data.avg)
 
       numnodes = nrow(FEMbasis$mesh$nodes)
 
@@ -399,7 +402,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
       bigsol = CPP_smooth.FEM.PDE.basis(locations=locations, observations=observations, FEMbasis=FEMbasis, lambda=lambda,
                                         PDE_parameters = PDE_parameters,
                                         covariates=covariates, incidence_matrix=incidence_matrix, ndim=ndim, mydim=mydim,
-                                        BC=BC, GCV=GCV,GCVMETHOD=GCVMETHOD, nrealizations=nrealizations,DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations, areal.data.avg = areal.data.avg)
+                                        BC=BC, GCV=GCV,GCVMETHOD=GCVMETHOD, nrealizations=nrealizations,DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations, tune = tune, areal.data.avg = areal.data.avg)
 
       numnodes = nrow(FEMbasis$mesh$nodes)
 
@@ -410,7 +413,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
       bigsol = CPP_smooth.FEM.PDE.sv.basis(locations=locations, observations=observations, FEMbasis=FEMbasis, lambda=lambda,
                                            PDE_parameters = PDE_parameters,
                                            covariates=covariates, incidence_matrix=incidence_matrix, ndim=ndim, mydim=mydim,
-                                           BC=BC, GCV=GCV,GCVMETHOD=GCVMETHOD, nrealizations=nrealizations,DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations, areal.data.avg = areal.data.avg)
+                                           BC=BC, GCV=GCV,GCVMETHOD=GCVMETHOD, nrealizations=nrealizations,DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations, tune = tune, areal.data.avg = areal.data.avg)
 
       numnodes = nrow(FEMbasis$mesh$nodes)
 
@@ -422,7 +425,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
       #   stop("The option locations!=NULL for manifold domains is currently not implemented")
       bigsol = CPP_smooth.manifold.FEM.basis(locations=locations, observations=observations, FEMbasis=FEMbasis, lambda=lambda, 
                                             covariates=covariates, incidence_matrix=incidence_matrix, ndim=ndim, mydim=mydim, 
-                                            BC=BC, GCV=GCV, GCVMETHOD=GCVMETHOD, nrealizations=nrealizations, DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations, areal.data.avg = areal.data.avg)
+                                            BC=BC, GCV=GCV, GCVMETHOD=GCVMETHOD, nrealizations=nrealizations, DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations, tune = tune, areal.data.avg = areal.data.avg)
 
       numnodes = FEMbasis$mesh$nnodes
 
@@ -432,7 +435,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
       print('C++ Code Execution')
       bigsol = CPP_smooth.volume.FEM.basis(locations=locations, observations=observations, FEMbasis=FEMbasis, lambda=lambda, 
                                           covariates=covariates, incidence_matrix=incidence_matrix, ndim=ndim, mydim=mydim, 
-                                          BC=BC, GCV=GCV, GCVMETHOD=GCVMETHOD, nrealizations=nrealizations, DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations, areal.data.avg = areal.data.avg)
+                                          BC=BC, GCV=GCV, GCVMETHOD=GCVMETHOD, nrealizations=nrealizations, DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations, tune = tune, areal.data.avg = areal.data.avg)
 
       numnodes = FEMbasis$mesh$nnodes
     }
@@ -440,7 +443,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
     ###################################
     ############# GAM #################
     ###################################
-    checkGAMParameters(max.steps = max.steps, mu0 = mu0, observations.len = length(observations), scale.param = scale.param, tune = tune, threshold = threshold, fam = fam)
+    checkGAMParameters(max.steps = max.steps, mu0 = mu0, observations.len = length(observations), scale.param = scale.param, threshold = threshold, fam = fam)
 
     if(class(FEMbasis$mesh) == 'mesh.2D' & is.null(PDE_parameters)){
 
@@ -547,12 +550,13 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
   class(bary.locations) = "bary.locations"
 
   # Make Functional objects object
+  fit.FEM  = FEM(f, FEMbasis)
   if(sum(fam==c("binomial", "probit", "cloglog", "exponential", "gamma", "poisson", "invgaussian")) == 1 ){  
-    fit.FEM = bigsol[[13]]
+    fn.eval = bigsol[[13]]
     J_minima = bigsol[[14]]
     scale.param.est = bigsol[[15]]
   }else{
-    fit.FEM  = FEM(f, FEMbasis)
+  	fn.eval = NULL
     J_minima = NULL
     scale.param.est = NULL
   }
@@ -572,7 +576,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
     reslist=list(fit.FEM = fit.FEM, PDEmisfit.FEM = PDEmisfit.FEM, beta = beta, bary.locations = bary.locations)
   }
 
-  reslist=c(reslist, list( J_minima = J_minima, scale.param.est = scale.param.est) )
+  reslist=c(reslist, list(fn.eval = fn.eval, J_minima = J_minima, scale.param.est = scale.param.est) )
 
   return(reslist)
 }

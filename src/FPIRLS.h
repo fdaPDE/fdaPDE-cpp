@@ -298,7 +298,7 @@ template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UI
 
       inline Real var_function(const Real& mu)const{ return mu*mu ;}
 
-      inline Real dev_function(const Real&mu, const Real& x)const{ return 2*(((x-mu)/mu)*log(x/mu)); }
+      inline Real dev_function(const Real&mu, const Real& x)const{ return 2*(((x-mu)/mu)-log(x/mu)); }
 
     public:
 
@@ -323,7 +323,7 @@ template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UI
 
       inline Real var_function(const Real& mu)const{ return mu*mu ;}
 
-      inline Real dev_function(const Real&mu, const Real& x)const{ return 2*(((x-mu)/mu)*log(x/mu)); }
+      inline Real dev_function(const Real&mu, const Real& x)const{ return 2*(((x-mu)/mu)-log(x/mu)); }
 
     /*  void initialize_mu(const VectorXr & y) {
       this->mu_ = y;} // It is different for binary or non-binary outcomes

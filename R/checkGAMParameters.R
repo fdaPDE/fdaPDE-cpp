@@ -1,4 +1,4 @@
-checkGAMParameters<-function(max.steps, mu0, observations.len, scale.param, tune, threshold, fam)
+checkGAMParameters<-function(max.steps, mu0, observations.len, scale.param, threshold, fam)
 {
 	  #################### Parameter Check #########################
 	# Check max.steps 
@@ -21,7 +21,7 @@ checkGAMParameters<-function(max.steps, mu0, observations.len, scale.param, tune
 
   		fam_positive = c("exponential", "gamma", "poisson", "cloglog")
   		if(sum(fam==fam_positive)==1){
-  			if(any(mu0)<0)
+  			if(any(mu0<0))
   				stop("mu0 must be composed by real positive number for your distribution")
   		}
   	}
@@ -30,15 +30,7 @@ checkGAMParameters<-function(max.steps, mu0, observations.len, scale.param, tune
 	if(!is.null(scale.param)){
 		if( !is.numeric(scale.param) || scale.param <= 0 )
     		stop("The dispersion parameter of your distribution ('scale.param') must be a positive real number")
-	}
-
-	# check tune
-	if (is.null(tune)){ 
-		stop("'tune' required;  is NULL.")
-	}else if( !is.numeric(tune) || tune < 0){
-    	stop("'tune' must be a real positive")
-	}
-	
+	}	
 
 	# check threshold
 	if (is.null(threshold)){ 

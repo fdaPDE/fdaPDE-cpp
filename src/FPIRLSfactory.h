@@ -38,10 +38,16 @@ class FPIRLSfactory
 		    for(UInt i = 0; i < y.size(); i++){
 		        mu0[i] = 0.5 * (y[i] + 0.5);
 		    }//end for-i
-		  }else{ // not-binary outcomes
+		  }else{ // not-binary outcome
 		    mu0 = y;
 		  }
 		}//end if
+
+		if(family=="poisson"){
+      		for(UInt i = 0; i < mu0.size(); i++){
+        		if(mu0[i]<=0) mu0[i] = 1;
+			}
+      	}
 
 	// Manage scale_parameter
 		bool scale_parameter_flag = false;
@@ -61,8 +67,6 @@ class FPIRLSfactory
 		    return make_unique<FPIRLS_Exponential<InputHandler, Integrator, ORDER,  mydim, ndim>>(mesh,inputData,mu0);
 		}else if(family=="gamma"){
 		    return make_unique<FPIRLS_Gamma<InputHandler, Integrator, ORDER,  mydim, ndim>>(mesh,inputData,mu0,scale_parameter, scale_parameter_flag);
-		}else if(family=="gaussian"){
-		    return make_unique<FPIRLS_Gaussian<InputHandler, Integrator, ORDER,  mydim, ndim>>(mesh,inputData,mu0,scale_parameter, scale_parameter_flag);
 		}else if(family=="invgaussian"){
 		    return make_unique<FPIRLS_InvGaussian<InputHandler, Integrator, ORDER,  mydim, ndim>>(mesh,inputData,mu0,scale_parameter, scale_parameter_flag);
 		}

@@ -392,11 +392,11 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 		}
 		else if (regressionData_.getNumberOfRegions() == 0) //pointwise data
 		{
-			rightHandData=psi_.transpose()*regressionData_.getObservations();
+			rightHandData=psi_.transpose()*LeftMultiplybyQ(regressionData_.getObservations())*regressionData_.getObservations();
 		}
 		else //areal data
 		{
-			rightHandData=psi_.transpose()*A_.asDiagonal()*regressionData_.getObservations();
+			rightHandData=psi_.transpose()*A_.asDiagonal()*LeftMultiplybyQ(regressionData_.getObservations());
 		}
 	}
 	else if (regressionData_.getNumberOfRegions() == 0) //with covariates, pointwise data
@@ -444,7 +444,7 @@ void MixedFERegressionBase<InputHandler, IntegratorSpace, ORDER, IntegratorTime,
 			n-=observations_na.size();
 		}
 //! GCV computation
-	_GCV(output_indexS,output_indexT) = (n / ((n-_dof(output_indexS,output_indexT)) * (n-_dof(output_indexS,output_indexT)))) * (z-dataHat).dot(z-dataHat);
+	_GCV(output_indexS,output_indexT) = (n / ((n - regressionData_.getTuneParam()*_dof(output_indexS, output_indexT)) * (n - regressionData_.getTuneParam()*_dof(output_indexS, output_indexT)))) * (z-dataHat).dot(z-dataHat);
 	if (_GCV(output_indexS,output_indexT) < _bestGCV)
 	{
 		bestLambdaS_ = output_indexS;
@@ -1127,11 +1127,6 @@ public:
 	    MixedFERegressionBase<RegressionData, IntegratorSpace, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> ::apply(stiff, ForcingTerm(std::vector<Real>(1)));
 	}
 
-	/*void computeDegreesOfFreedom()
-	{
-		typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
-			MixedFERegressionBase<RegressionData, IntegratorSpace, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> ::computeDegreesOfFreedom(stiff);
-	}*/
 
 
 };
@@ -1166,29 +1161,6 @@ public:
 		}
 	}
 
-	/*void computeDegreesOfFreedom(){
-
-		if(mydim!=2 || ndim !=2){
-
-		#ifdef R_VERSION_
-			Rprintf("ERROR: these dimensions are not yet implemented, for the moment smoothEllipticPDE is available for mydim=ndim=2");
-		#else
-			std::cout << "ERROR: these dimensions are not yet implemented, for the moment smoothEllipticPDE is available for mydim=ndim=2\n";
-		#endif
-
-		}else{
-			typedef EOExpr<Mass> ETMass;   Mass EMass;   ETMass mass(EMass);
-			typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
-			typedef EOExpr<Grad> ETGrad;   Grad EGrad;   ETGrad grad(EGrad);
-
-				const Real& c = this->regressionData_.getC();
-				const Eigen::Matrix<Real,2,2>& K = this->regressionData_.getK();
-				const Eigen::Matrix<Real,2,1>& b = this->regressionData_.getBeta();
-
-				MixedFERegressionBase<RegressionDataElliptic, IntegratorSpace, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> ::computeDegreesOfFreedom(c*mass+stiff[K]+dot(b,grad));
-		}
-
-	}*/
 
 };
 
@@ -1224,31 +1196,7 @@ public:
 		}
 	}
 
-	/*void computeDegreesOfFreedom(){
 
-		if(mydim!=2 || ndim !=2){
-
-		#ifdef R_VERSION_
-			Rprintf("ERROR: these dimensions are not yet implemented, for the moment smoothEllipticPDE is available for mydim=ndim=2");
-		#else
-			std::cout << "ERROR: these dimensions are not yet implemented, for the moment smoothEllipticPDE is available for mydim=ndim=2\n";
-		#endif
-
-		}else{
-			typedef EOExpr<Mass> ETMass;   Mass EMass;   ETMass mass(EMass);
-			typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
-			typedef EOExpr<Grad> ETGrad;   Grad EGrad;   ETGrad grad(EGrad);
-
-			const Reaction& c = this->regressionData_.getC();
-			const Diffusivity& K = this->regressionData_.getK();
-			const Advection& b = this->regressionData_.getBeta();
-			//const ForcingTerm& u= this->regressionData_.getU();
-
-			this->isSpaceVarying=TRUE;
-
-			MixedFERegressionBase<RegressionDataEllipticSpaceVarying, IntegratorSpace, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> ::computeDegreesOfFreedom(c*mass+stiff[K]+dot(b,grad));
-		}
-	}*/
 
 };
 

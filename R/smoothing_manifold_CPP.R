@@ -1,4 +1,4 @@
-CPP_smooth.manifold.FEM.basis<-function(locations, bary.locations, observations, FEMbasis, lambda, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, GCV, GCVMETHOD = 2, nrealizations = 100, DOF=TRUE, DOF_matrix=NULL, search, areal.data.avg = TRUE)
+CPP_smooth.manifold.FEM.basis<-function(locations, bary.locations, observations, FEMbasis, lambda, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, GCV, GCVMETHOD = 2, nrealizations = 100, DOF=TRUE, DOF_matrix=NULL, search, tune = tune, areal.data.avg = TRUE)
 {
 
   # C++ function for manifold works with vectors not with matrices
@@ -76,12 +76,13 @@ CPP_smooth.manifold.FEM.basis<-function(locations, bary.locations, observations,
   storage.mode(GCVMETHOD) <- "integer"
   storage.mode(search) <- "integer"
 
+  storage.mode(tune) <- "double"
   areal.data.avg <- as.integer(areal.data.avg)
   storage.mode(areal.data.avg) <-"integer"
 
   ## Call C++ function
   bigsol <- .Call("regression_Laplace", locations, bary.locations, data, FEMbasis$mesh, FEMbasis$mesh$order, mydim, ndim, lambda, covariates,
-                  incidence_matrix, BC$BC_indices, BC$BC_values, GCV, GCVMETHOD, nrealizations, DOF, DOF_matrix, search, areal.data.avg, PACKAGE = "fdaPDE")
+                  incidence_matrix, BC$BC_indices, BC$BC_values, GCV, GCVMETHOD, nrealizations, DOF, DOF_matrix, search, tune, areal.data.avg, PACKAGE = "fdaPDE")
 
   return(bigsol)
 }
