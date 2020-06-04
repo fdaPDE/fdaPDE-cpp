@@ -1,7 +1,9 @@
 #ifndef _DENSITY_INITIALIZATION_HPP_
 #define _DENSITY_INITIALIZATION_HPP_
 
-// This file contains the initialization procedure for the Density Estimation problem 
+#include "KfoldCV_L2_error.h"
+
+// This file contains the initialization procedure for the Density Estimation problem
 
 /*!  @brief An abstract base class dealing with the density initialization feature.
 */
@@ -40,7 +42,7 @@ class UserInitialization : public DensityInitialization<Integrator, Integrator_n
 */
 template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
 class HeatProcess : public DensityInitialization<Integrator, Integrator_noPoly, ORDER, mydim, ndim>{
-  private:
+protected:
     // A member to access functional methods
     const FunctionalProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim>& funcProblem_;
     // A vector of vectors containing all the possibile initial densities given by the heat diffusion process
@@ -64,12 +66,34 @@ class HeatProcess : public DensityInitialization<Integrator, Integrator_noPoly, 
     //! A method that provides a set of starting densities.
     void computeStartingDensities();
 
+    std::vector<UInt>  data_index_;
+
   public:
     //! A Constructor.
     HeatProcess(const DataProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim>& dp,
       const FunctionalProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim>& fp);
     //! An overridden method to compute density initialization when it needes to be choosen among the proposals given by a discretized heat diffusion process.
     const VectorXr* chooseInitialization(Real lambda) const override;
+};
+
+
+template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+class Heat_CV : public HeatProcess<Integrator, Integrator_noPoly, ORDER, mydim, ndim>{
+
+private:
+  KfoldCV_L2_error<Integrator, Integrator_noPoly, ORDER, mydim, ndim> error_;
+
+  UInt nFolds_;
+  std::vector<Real> cv_errors_;
+  std::vector<UInt> K_folds_;
+  UInt init_best_;
+
+  void perform_init_cv();
+public:
+  //! A Constructor.
+  Heat_CV(const DataProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim>& dp,  const FunctionalProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim>& fp, UInt K);
+
+  const VectorXr* chooseInitialization(Real lambda) const override;
 };
 
 #include "DensityInitialization_imp.h"
