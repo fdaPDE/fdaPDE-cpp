@@ -90,7 +90,7 @@ RegressionDataEllipticSpaceVarying::RegressionDataEllipticSpaceVarying(std::vect
 
 
 
-//! create GAM constructors with right template inheritances
+// create GAM constructors with right template inheritances
 
 // Laplace
 template<typename RegressionHandler>
@@ -163,7 +163,7 @@ RegressionData::RegressionData(SEXP Rlocations, SEXP RbaryLocations, SEXP Robser
   	for (UInt i = 0; i<length_lambda; ++i)  lambdaS_.push_back(REAL(RlambdaS)[i]);
 		lambdaT_.push_back(0);
 
-	tune_ = INTEGER(Rtune)[0];
+	tune_ = REAL(Rtune)[0];
 	arealDataAvg_ = INTEGER(RarealDataAvg)[0];
 }
 
@@ -207,7 +207,7 @@ RegressionData::RegressionData(SEXP Rlocations, SEXP RbaryLocations, SEXP Rtime_
 	ic_.resize(length_ic);
 	for (UInt i = 0; i<length_ic; ++i)  ic_(i)=REAL(Ric)[i];
 
-	tune_ = INTEGER(Rtune)[0];
+	tune_ = REAL(Rtune)[0];
 	arealDataAvg_ = INTEGER(RarealDataAvg)[0];
 
 }
@@ -270,7 +270,7 @@ RegressionDataEllipticSpaceVarying::RegressionDataEllipticSpaceVarying(SEXP Rloc
 					 K_(RK), beta_(Rbeta), c_(Rc), u_(Ru)
 {;}
 
-//! GAM constructors
+// GAM constructors
 
 // Laplace
 template<typename RegressionHandler>
@@ -284,11 +284,8 @@ RegressionDataGAM<RegressionHandler>::RegressionDataGAM(SEXP Rlocations, SEXP Rb
 {
 
 	max_num_iterations_ = INTEGER(Rmax_num_iteration)[0];
-	Rprintf("max iter: %d \n", max_num_iterations_);
 	threshold_ =  REAL(Rthreshold)[0];
-	Rprintf("threshold_: %f \n", threshold_);
-	//initialObservations_(observations_);
-	// setInitialObservations(Robservations);
+
     initialObservations_ = this->observations_;
     global_lambda_ = this->lambdaS_;
     GCV_GAM_ = this->GCV_; 
@@ -306,12 +303,7 @@ RegressionDataGAM<RegressionHandler>::RegressionDataGAM(SEXP Rlocations, SEXP Rb
 {
 	max_num_iterations_ = INTEGER(Rmax_num_iteration)[0];
 	threshold_ =  REAL(Rthreshold)[0];
-	/*initialObservations_(observations_);
-	setInitialObservations(Robservations);
-	this->copyInitialObservations();
-    this->copyLambdaVector();
-    this->setDOFflag();
-    */
+
     initialObservations_ = this->observations_;
     global_lambda_ = this->lambdaS_;
     GCV_GAM_ = this->GCV_; 
@@ -330,8 +322,6 @@ RegressionDataGAM<RegressionHandler>::RegressionDataGAM(SEXP Rlocations, SEXP Rb
 {
 	max_num_iterations_ = INTEGER(Rmax_num_iteration)[0];
 	threshold_ =  REAL(Rthreshold)[0];
-	//initialObservations_(observations_);
-	//setInitialObservations(Robservations);
     initialObservations_ = this->observations_;
     global_lambda_ = this->lambdaS_;
     GCV_GAM_ = this->GCV_; 

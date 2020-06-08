@@ -24,7 +24,6 @@
 #include "FEDensityEstimation.h"
 
 // GAM 
-#include "printer.h"
 #include "FPIRLS.h"
 #include "FPIRLSfactory.h"
 
@@ -589,7 +588,7 @@ SEXP GAM_skeleton(InputHandler &GAMData, SEXP Rmesh, SEXP Rmu0, std::string fami
 {
   MeshHandler<ORDER, mydim, ndim> mesh(Rmesh);
 
-// read Rmu0
+	// read Rmu0
 	VectorXr mu0;
 	UInt n_obs_ = Rf_length(Rmu0);
 	mu0.resize(n_obs_);
@@ -598,33 +597,27 @@ SEXP GAM_skeleton(InputHandler &GAMData, SEXP Rmesh, SEXP Rmu0, std::string fami
 	for(UInt i=0;i<n_obs_;++i)
 		 mu0[i] = REAL(Rmu0)[i];
 
- // read scale param
-
+ 	// read scale param
 	Real scale_parameter = REAL(RscaleParam)[0];
+	// Factory:
+	std::unique_ptr<FPIRLS<InputHandler, Integrator, ORDER, mydim, ndim>> fpirls = FPIRLSfactory<InputHandler, Integrator, ORDER, mydim, ndim>::createFPIRLSsolver(family, mesh, GAMData, mu0, scale_parameter);
 
 
-// Factory:
-  std::unique_ptr<FPIRLS<InputHandler, Integrator, ORDER, mydim, ndim>> fpirls = FPIRLSfactory<InputHandler, Integrator, ORDER, mydim, ndim>::createFPIRLSsolver(family, mesh, GAMData, mu0, scale_parameter);
+  	fpirls->apply();
 
 
-  fpirls->apply();
-	std::string saving_filename = "TEST_APPLY";
-  saving_filename = saving_filename + ".txt";
-  printer::saveVectorXr(saving_filename,mu0);
+  	const MatrixXv& solution = fpirls->getSolution();
+  	const MatrixXr& dof = fpirls->getDOF();
+  	const std::vector<Real>& J_value = fpirls->get_J();
+  	const MatrixXv& fn_hat = fpirls->getFunctionEst();
+  	const std::vector<Real> variance_est = fpirls->getVarianceEst();
+  	const std::vector<Real>& GCV = fpirls->getGCV();
 
+  	const UInt bestLambda = fpirls->getBestLambdaS();
 
-  const MatrixXv& solution = fpirls->getSolution();
-  const MatrixXr& dof = fpirls->getDOF();
-  const std::vector<Real>& J_value = fpirls->get_J();
-  const MatrixXv& fn_hat = fpirls->getFunctionEst();
-  const std::vector<Real> scale_parameter_est = fpirls->getScaleParamEst();
-  const std::vector<Real>& GCV = fpirls->getGCV();
-
-  const UInt bestLambda = fpirls->getBestLambdaS();;// to do 
-
-  MatrixXv beta;
-  if(GAMData.getCovariates().rows()==0)
-   {
+  	MatrixXv beta;
+  	if(GAMData.getCovariates().rows()==0)
+   	{
 		beta.resize(1,1);
 		beta(0,0).resize(1);
 		beta(0,0)(0) = 10e20;
@@ -632,27 +625,10 @@ SEXP GAM_skeleton(InputHandler &GAMData, SEXP Rmesh, SEXP Rmu0, std::string fami
 	else
 		 beta = fpirls->getBetaEst();
 
-
-	saving_filename = "final_beta_hat";
-    saving_filename = saving_filename + std::to_string(0) + ".txt";
-    printer::saveVectorXr(saving_filename,beta(0,0));
-
 	const MatrixXr & barycenters = fpirls->getBarycenters();
 	const VectorXi & elementIds = fpirls->getElementIds();
 
-  // COMPOSIZIONE SEXP result FOR RETURN
-
-
-
-	saving_filename = "DIMESIONE_Jvalue";
-  saving_filename = saving_filename + ".txt";
-  printer::SaveDimension(saving_filename,J_value);
-
-
-	saving_filename = "DIMENSIONE_scale_param";
-	saving_filename = saving_filename + ".txt";
-	printer::SaveDimension(saving_filename,scale_parameter_est);
-
+  	// COMPOSIZIONE SEXP result FOR RETURN
 
 	//Copy result in R memory
 	SEXP result = R_NilValue;
@@ -663,12 +639,6 @@ SEXP GAM_skeleton(InputHandler &GAMData, SEXP Rmesh, SEXP Rmu0, std::string fami
   	SET_VECTOR_ELT(result, 3, Rf_allocVector(INTSXP, 1));
   	SET_VECTOR_ELT(result, 4, Rf_allocMatrix(REALSXP, beta(0).size(), beta.size()));
 
-		printer::variableInt("solution_size.txt", solution.size());
-		printer::variableInt("solution0_size.txt", solution(0).size());
-
-		printer::variableInt("fn_hat_size.txt", fn_hat.size());
-		printer::variableInt("fn_hat0_size.txt", fn_hat(0).size());
-
 	//return solution
 	Real *rans = REAL(VECTOR_ELT(result, 0));
 	for(UInt j = 0; j < solution.size(); j++)
@@ -677,19 +647,12 @@ SEXP GAM_skeleton(InputHandler &GAMData, SEXP Rmesh, SEXP Rmu0, std::string fami
 			rans[i + solution(0).size()*j] = solution(j)(i);
 	}
 
-	saving_filename = "TEST_SOLUTION";
-	saving_filename = saving_filename + ".txt";
-	printer::saveVectorXr(saving_filename,mu0);
-
-	//return dof
+	//return DoF
 	Real *rans1 = REAL(VECTOR_ELT(result, 1));
 	for(UInt i = 0; i < dof.size(); i++)
 	{
 		rans1[i] = dof(i);
 	}
-	saving_filename = "TEST_DOF";
-	saving_filename = saving_filename + ".txt";
-	printer::saveVectorXr(saving_filename,mu0);
 
 	//return GCV values
   	Real *rans2 = REAL(VECTOR_ELT(result, 2));
@@ -698,7 +661,7 @@ SEXP GAM_skeleton(InputHandler &GAMData, SEXP Rmesh, SEXP Rmu0, std::string fami
 		rans2[i] = GCV[i];
 	}
 
-	//! Copy best lambda
+	// Copy best lambda
 	UInt *rans3 = INTEGER(VECTOR_ELT(result, 3));
 	rans3[0] = bestLambda;
 
@@ -710,15 +673,8 @@ SEXP GAM_skeleton(InputHandler &GAMData, SEXP Rmesh, SEXP Rmu0, std::string fami
 			rans4[i + beta(0).size()*j] = beta(j)(i);
 	}
 
-	saving_filename = "TEST_beta_hat";
-	saving_filename = saving_filename + ".txt";
-	printer::saveVectorXr(saving_filename,mu0);
-
-	saving_filename = "TEST_RETURN_CPP";
-	saving_filename = saving_filename + ".txt";
-	printer::saveVectorXr(saving_filename,mu0);
-
-//SEND TREE INFORMATION TO R
+	
+	//SEND TREE INFORMATION TO R
 	SET_VECTOR_ELT(result, 5, Rf_allocVector(INTSXP, 1)); //tree_header information
 	int *rans5 = INTEGER(VECTOR_ELT(result, 5));
 	rans5[0] = mesh.getTree().gettreeheader().gettreelev();
@@ -772,7 +728,7 @@ SEXP GAM_skeleton(InputHandler &GAMData, SEXP Rmesh, SEXP Rmu0, std::string fami
 	// GAM PARAMETER ESTIMATIONS
 	SET_VECTOR_ELT(result, 12, Rf_allocMatrix(REALSXP, fn_hat(0).size(), fn_hat.size()));
 	SET_VECTOR_ELT(result, 13, Rf_allocVector(REALSXP, J_value.size()));
-	SET_VECTOR_ELT(result, 14, Rf_allocVector(REALSXP, scale_parameter_est.size()));
+	SET_VECTOR_ELT(result, 14, Rf_allocVector(REALSXP, variance_est.size()));
 
 	//return fn hat
 	Real *rans12 = REAL(VECTOR_ELT(result, 12));
@@ -781,7 +737,7 @@ SEXP GAM_skeleton(InputHandler &GAMData, SEXP Rmesh, SEXP Rmu0, std::string fami
 		for(UInt i = 0; i < fn_hat(0).size(); i++)
 			rans12[i + fn_hat(0).size()*j] = fn_hat(j)(i);
 	}
-	printer::milestone("before_jvalue.txt");
+	
 	//return J_value
   	Real *rans13 = REAL(VECTOR_ELT(result, 13));
   	for(UInt i = 0; i < J_value.size(); i++)
@@ -789,27 +745,16 @@ SEXP GAM_skeleton(InputHandler &GAMData, SEXP Rmesh, SEXP Rmu0, std::string fami
 		rans13[i] = J_value[i];
 	}
 
-	saving_filename = "TEST_MU0";
-	saving_filename = saving_filename + ".txt";
-	printer::saveVectorXr(saving_filename,mu0);
-
-	saving_filename = "TEST_SCALEPARAM";
-	saving_filename = saving_filename + ".txt";
-	printer::saveVectorXr(saving_filename,mu0);
 	//return scale parameter
 	Real *rans14 = REAL(VECTOR_ELT(result, 14));
-	for(UInt j = 0; j < scale_parameter_est.size(); j++){
-		rans14[j] = scale_parameter_est[j];
+	for(UInt j = 0; j < variance_est.size(); j++){
+		rans14[j] = variance_est[j];
 	}
   	
-
-
-
 	UNPROTECT(1);
 
 	return(result);
 
-	//return R_NilValue;
 }
 
 
@@ -1315,8 +1260,8 @@ SEXP Density_Estimation(SEXP Rdata, SEXP Rmesh, SEXP Rorder, SEXP Rmydim, SEXP R
 
 /*!
 	This function is then called from R code.
+	\param Rlocations an R-matrix containing the location of the observations.
 	\param Robservations an R-vector containing the values of the observations.
-	\param Rdesmat an R-matrix containing the design matrix for the regression.
 	\param Rmesh an R-object containg the output mesh from Trilibrary.
 	\param Rorder an R-integer containing the order of the approximating basis.
 	\param Rlambda an R-double containing the penalization term of the empirical evidence respect to the prior one.
@@ -1326,14 +1271,19 @@ SEXP Density_Estimation(SEXP Rdata, SEXP Rmesh, SEXP Rorder, SEXP Rmydim, SEXP R
 			the other are automatically considered in Neumann Condition.
 	\param RBCValues an R-double containing the value to impose for the Dirichlet condition, on the indexes specified in RBCIndices.
 	\param DOF an R boolean indicating whether dofs of the model have to be computed or not.
+	\param GCV an R boolean indicating whether GCV of the model have to be computed or not.
 	\param RGCVmethod an R-integer indicating the method to use to compute the dofs when DOF is TRUE, can be either 1 (exact) or 2 (stochastic).
 	\param Rnrealizations the number of random points used in the stochastic computation of the dofs.
 	\param Rfamily Denotes the distribution of the data, within the exponential family.
-	\param RmaxSteps Maximum number of steps run in the PIRLS algorithm, set to 15 by default.
+	\param Rmax_num_iteration Maximum number of steps run in the PIRLS algorithm, set to 15 by default.
+	\param Rtreshold an R-double used for arresting FPIRLS algorithm. Algorithm stops when two successive iterations lead to improvement in penalized log-likelihood smaller than threshold.
 	\param Rtune It is usually set to 1, but may be higher. It gives more weight to the equivalent degrees of freedom in the computation of the value of the GCV.
 	\param Rmu0 Initial value of the mean (natural parameter). There exists a default value for each familiy
 	\param RscaleParam If necessary and not supplied, the scale parameter \phi is estimated. See method.phi for details.
-	\return R-vector containg the coefficients of the solution.
+	\param Rsearch an R-integer to decide the search algorithm type (tree or naive search algorithm).
+	\param RarealDataAvg an R boolean indicating whether the areal data are averaged or not.
+
+	\return R-vector containg the outputs.
 */
 
 
@@ -1341,13 +1291,11 @@ SEXP Density_Estimation(SEXP Rdata, SEXP Rmesh, SEXP Rorder, SEXP Rmydim, SEXP R
   					SEXP Rlambda, SEXP Rcovariates, SEXP RincidenceMatrix, SEXP RBCIndices, SEXP RBCValues,
   					SEXP GCV, SEXP RGCVmethod, SEXP Rnrealizations , SEXP Rfamily, SEXP Rmax_num_iteration, SEXP Rtreshold, SEXP Rtune, SEXP Rmu0, SEXP RscaleParam, SEXP DOF, SEXP RDOF_matrix, SEXP Rsearch, SEXP RarealDataAvg )
 {
-    //Set input data: can I re-use this fdapde class? FPCA actually implement it's own class for the datastructure
+    // set up the GAMdata structure for the laplacian case
 	GAMDataLaplace regressionData(Rlocations, RbaryLocations, Robservations, Rorder, Rlambda, Rcovariates, RincidenceMatrix, RBCIndices, RBCValues, GCV, RGCVmethod, Rnrealizations, DOF, RDOF_matrix, Rsearch, Rmax_num_iteration, Rtreshold, Rtune, RarealDataAvg);
 
- // mydim e ndim sono entrambi 2 nei nostri casi (mesh 2D)
- // ndim si riferisce allo spazio in cui la mesh è embedded, mydim è la dimensione della mesh (in caso Rimannian manifold si ha 2d immerso in 3d)
-	UInt mydim=INTEGER(Rmydim)[0];
-	UInt ndim=INTEGER(Rndim)[0];
+ 	UInt mydim=INTEGER(Rmydim)[0];// set the mesh dimension form R to C++
+	UInt ndim=INTEGER(Rndim)[0];// set the mesh space dimension form R to C++
 
 
   	std::string family = CHAR(STRING_ELT(Rfamily,0));
@@ -1365,15 +1313,45 @@ SEXP Density_Estimation(SEXP Rdata, SEXP Rmesh, SEXP Rorder, SEXP Rmydim, SEXP R
     return(R_NilValue);
 }
 
+
+/*!
+	This function is then called from R code.
+	\param Rlocations an R-matrix containing the location of the observations.
+	\param Robservations an R-vector containing the values of the observations.
+	\param Rmesh an R-object containg the output mesh from Trilibrary.
+	\param Rorder an R-integer containing the order of the approximating basis.
+	\param Rlambda an R-double containing the penalization term of the empirical evidence respect to the prior one.
+	\param RK an R object representing the diffusivity tensor of the model
+	\param Rbeta an R object representing the advection function of the model
+	\param Rc an R object representing the reaction function of the model
+	\param Rcovariates an R-matrix of covariates for the regression model.
+	\param RincidenceMatrix an R-matrix containing the incidence matrix defining the regions for the smooth regression with areal data.
+	\param RBCIndices an R-integer containing the indexes of the nodes the user want to apply a Dirichlet Condition,
+			the other are automatically considered in Neumann Condition.
+	\param RBCValues an R-double containing the value to impose for the Dirichlet condition, on the indexes specified in RBCIndices.
+	\param DOF an R boolean indicating whether dofs of the model have to be computed or not.
+	\param GCV an R boolean indicating whether GCV of the model have to be computed or not.
+	\param RGCVmethod an R-integer indicating the method to use to compute the dofs when DOF is TRUE, can be either 1 (exact) or 2 (stochastic).
+	\param Rnrealizations the number of random points used in the stochastic computation of the dofs.
+	\param Rfamily Denotes the distribution of the data, within the exponential family.
+	\param Rmax_num_iteration Maximum number of steps run in the PIRLS algorithm, set to 15 by default.
+	\param Rtreshold an R-double used for arresting FPIRLS algorithm. Algorithm stops when two successive iterations lead to improvement in penalized log-likelihood smaller than threshold.
+	\param Rtune It is usually set to 1, but may be higher. It gives more weight to the equivalent degrees of freedom in the computation of the value of the GCV.
+	\param Rmu0 Initial value of the mean (natural parameter). There exists a default value for each familiy
+	\param RscaleParam If necessary and not supplied, the scale parameter \phi is estimated. See method.phi for details.
+	\param Rsearch an R-integer to decide the search algorithm type (tree or naive search algorithm).
+	\param RarealDataAvg an R boolean indicating whether the areal data are averaged or not.
+
+	\return R-vector containg the outputs.
+*/
+
   SEXP gam_PDE(SEXP Rlocations, SEXP RbaryLocations ,SEXP Robservations, SEXP Rmesh, SEXP Rorder,SEXP Rmydim, SEXP Rndim,
   					SEXP Rlambda, SEXP RK, SEXP Rbeta, SEXP Rc, SEXP Rcovariates, SEXP RincidenceMatrix, SEXP RBCIndices, SEXP RBCValues,
   					SEXP GCV, SEXP RGCVmethod, SEXP Rnrealizations , SEXP Rfamily, SEXP Rmax_num_iteration, SEXP Rtreshold, SEXP Rtune, SEXP Rmu0, SEXP RscaleParam, SEXP DOF, SEXP RDOF_matrix, SEXP Rsearch, SEXP RarealDataAvg)
 {
-    //Set input data: can I re-use this fdapde class? FPCA actually implement it's own class for the datastructure
+    
 	GAMDataElliptic regressionData(Rlocations, RbaryLocations, Robservations, Rorder, Rlambda, RK, Rbeta, Rc, Rcovariates, RincidenceMatrix, RBCIndices, RBCValues, GCV, RGCVmethod, Rnrealizations, DOF, RDOF_matrix, Rsearch, Rmax_num_iteration, Rtreshold, Rtune, RarealDataAvg);
 
- // mydim e ndim sono entrambi 2 nei nostri casi (mesh 2D)
- // ndim si riferisce allo spazio in cui la mesh è embedded, mydim è la dimensione della mesh (in caso Rimannian manifold si ha 2d immerso in 3d)
 	UInt mydim=INTEGER(Rmydim)[0];
 	UInt ndim=INTEGER(Rndim)[0];
 
@@ -1384,28 +1362,49 @@ SEXP Density_Estimation(SEXP Rdata, SEXP Rmesh, SEXP Rorder, SEXP Rmydim, SEXP R
     	return(GAM_skeleton<GAMDataElliptic,IntegratorTriangleP2, 1, 2, 2>(regressionData, Rmesh, Rmu0 , family, RscaleParam));
     else if(regressionData.getOrder()==2 && mydim==2 && ndim==2)
 		return(GAM_skeleton<GAMDataElliptic,IntegratorTriangleP4, 2, 2, 2>(regressionData, Rmesh, Rmu0, family, RscaleParam));
-	/*
-    else if(regressionData.getOrder()==1 && mydim==2 && ndim==3)
-    	return(GAM_skeleton<GAMDataElliptic,IntegratorTriangleP2, 1, 2, 3>(regressionData, Rmesh, Rmu0, family, RscaleParam));
-   	else if(regressionData.getOrder()==2 && mydim==2 && ndim==3)
-   		return(GAM_skeleton<GAMDataElliptic,IntegratorTriangleP4, 2, 2, 3>(regressionData, Rmesh, Rmu0, family, RscaleParam));
-	else if(regressionData.getOrder()==1 && mydim==3 && ndim==3)
-		return(GAM_skeleton<GAMDataElliptic,IntegratorTetrahedronP2, 1, 3, 3>(regressionData, Rmesh, Rmu0, family, RscaleParam));
-	*/
+
     return(R_NilValue);
 }
 
+/*!
+	This function is then called from R code.
+	\param Rlocations an R-matrix containing the location of the observations.
+	\param Robservations an R-vector containing the values of the observations.
+	\param Rmesh an R-object containg the output mesh from Trilibrary.
+	\param Rorder an R-integer containing the order of the approximating basis.
+	\param Rlambda an R-double containing the penalization term of the empirical evidence respect to the prior one.
+	\param RK an R object representing the diffusivity tensor of the model
+	\param Rbeta an R object representing the advection function of the model
+	\param Rc an R object representing the reaction function of the model
+	\param Ru an R object representing the forcing function of the model
+	\param Rcovariates an R-matrix of covariates for the regression model.
+	\param RincidenceMatrix an R-matrix containing the incidence matrix defining the regions for the smooth regression with areal data.
+	\param RBCIndices an R-integer containing the indexes of the nodes the user want to apply a Dirichlet Condition,
+			the other are automatically considered in Neumann Condition.
+	\param RBCValues an R-double containing the value to impose for the Dirichlet condition, on the indexes specified in RBCIndices.
+	\param DOF an R boolean indicating whether dofs of the model have to be computed or not.
+	\param GCV an R boolean indicating whether GCV of the model have to be computed or not.
+	\param RGCVmethod an R-integer indicating the method to use to compute the dofs when DOF is TRUE, can be either 1 (exact) or 2 (stochastic).
+	\param Rnrealizations the number of random points used in the stochastic computation of the dofs.
+	\param Rfamily Denotes the distribution of the data, within the exponential family.
+	\param Rmax_num_iteration Maximum number of steps run in the PIRLS algorithm, set to 15 by default.
+	\param Rtreshold an R-double used for arresting FPIRLS algorithm. Algorithm stops when two successive iterations lead to improvement in penalized log-likelihood smaller than threshold.
+	\param Rtune It is usually set to 1, but may be higher. It gives more weight to the equivalent degrees of freedom in the computation of the value of the GCV.
+	\param Rmu0 Initial value of the mean (natural parameter). There exists a default value for each familiy
+	\param RscaleParam If necessary and not supplied, the scale parameter \phi is estimated. See method.phi for details.
+	\param Rsearch an R-integer to decide the search algorithm type (tree or naive search algorithm).
+	\param RarealDataAvg an R boolean indicating whether the areal data are averaged or not.
 
+	\return R-vector containg the outputs.
+*/
 
   SEXP gam_PDE_space_varying(SEXP Rlocations, SEXP RbaryLocations, SEXP Robservations, SEXP Rmesh, SEXP Rorder,SEXP Rmydim, SEXP Rndim,
   					SEXP Rlambda,SEXP RK, SEXP Rbeta, SEXP Rc, SEXP Ru, SEXP Rcovariates, SEXP RincidenceMatrix, SEXP RBCIndices, SEXP RBCValues,
   					SEXP GCV, SEXP RGCVmethod, SEXP Rnrealizations , SEXP Rfamily, SEXP Rmax_num_iteration, SEXP Rtreshold, SEXP Rtune, SEXP Rmu0, SEXP RscaleParam, SEXP DOF, SEXP RDOF_matrix, SEXP Rsearch, SEXP RarealDataAvg )
 {
-    //Set input data: can I re-use this fdapde class? FPCA actually implement it's own class for the datastructure
+    
 	GAMDataEllipticSpaceVarying regressionData(Rlocations, RbaryLocations, Robservations, Rorder, Rlambda, RK, Rbeta, Rc, Ru, Rcovariates, RincidenceMatrix, RBCIndices, RBCValues, GCV,  RGCVmethod, Rnrealizations, DOF, RDOF_matrix, Rsearch, Rmax_num_iteration, Rtreshold, Rtune, RarealDataAvg);
 
- // mydim e ndim sono entrambi 2 nei nostri casi (mesh 2D)
- // ndim si riferisce allo spazio in cui la mesh è embedded, mydim è la dimensione della mesh (in caso Rimannian manifold si ha 2d immerso in 3d)
 	UInt mydim=INTEGER(Rmydim)[0];
 	UInt ndim=INTEGER(Rndim)[0];
 
@@ -1416,14 +1415,6 @@ SEXP Density_Estimation(SEXP Rdata, SEXP Rmesh, SEXP Rorder, SEXP Rmydim, SEXP R
     	return(GAM_skeleton<GAMDataEllipticSpaceVarying,IntegratorTriangleP2, 1, 2, 2>(regressionData, Rmesh, Rmu0 , family, RscaleParam));
     else if(regressionData.getOrder()==2 && mydim==2 && ndim==2)
 		return(GAM_skeleton<GAMDataEllipticSpaceVarying,IntegratorTriangleP4, 2, 2, 2>(regressionData, Rmesh, Rmu0, family, RscaleParam));
-    /*
-    else if(regressionData.getOrder()==1 && mydim==2 && ndim==3)
-    	return(regression_skeleton<RegressionData,IntegratorTriangleP2, 1, 2, 3>(regressionData, Rmesh));
-   	else if(regressionData.getOrder()==2 && mydim==2 && ndim==3)
-    	return(regression_skeleton<RegressionData,IntegratorTriangleP4, 2, 2, 3>(regressionData, Rmesh));
-	else if(regressionData.getOrder()==1 && mydim==3 && ndim==3)
-    	return(regression_skeleton<RegressionData,IntegratorTetrahedronP2, 1, 3, 3>(regressionData, Rmesh));
-    */
     return(R_NilValue);
 }
 

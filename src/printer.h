@@ -72,7 +72,7 @@ static void STDvector(std::string& name_txt, const std::vector<T> & vec){
 }
 
 
-static void saveVectorXr(std::string& name_txt, const VectorXr & vect){
+static void SaveVectorXr(std::string& name_txt, const VectorXr & vect){
    	const UInt size = vect.size();
 		constexpr UInt CONSTPREC = 16;
 

@@ -76,8 +76,7 @@
 #' Default value \code{max.steps=15}.
 #' @param tune Tuning parameter used for the estimation of GCV. Default value \code{tune = 1.8}.
 #' It is advised to set it grather than 1 to avoid overfitting.
-#' @param areal.data.avg Boolean. It involve the computation of Areal Data. If \code{TRUE} the areal data are averaged, otherwise not.
-#' @return A list with the following variables:
+#' @param areal.data.avg Boolean. It involves the computation of Areal Data. If \code{TRUE} the areal data are averaged, otherwise not.
 #' @return A list with the following variables:
 #' \itemize{
 #'    \item{\code{fit.FEM}}{A \code{FEM} object that represents the fitted spatial field.}
@@ -90,6 +89,7 @@
 #'    \item{\code{bary.locations}}{A barycenter information of the given locations if the locations are not mesh nodes.}
 #'    \item{\code{fn_hat}}{ A matrix with number of rows equal to number of locations and number of columns equal to length of lambda. Each column contain the evaluaton of the spatial field in the location points.}
 #'    \item{\code{J_minima}}{A vector of the same length of lambda, containing the reached minima for each value of the smoothing parameter.}
+#'    \item {\code{\variance.est}}{ A vector which return the variance estimates for the Generative Additive Models}
 #' }
 #' @description This function implements a spatial regression model with differential regularization.
 #'  The regularizing term involves a Partial Differential Equation (PDE). In the simplest case the PDE involves only the
@@ -317,8 +317,6 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
   if(!is.null(DOF_matrix))
     DOF=FALSE
 
-  # space_varying=checkSmoothingParameters(locations, observations, FEMbasis, lambda, covariates, incidence_matrix, BC, GCV, PDE_parameters, GCVMETHOD , nrealizations)
-
   #if locations is null but bary.locations is not null, use the locations in bary.locations
   if(is.null(locations) & !is.null(bary.locations)) {
     locations = bary.locations$locations
@@ -385,6 +383,8 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
 
   ################## End checking parameters, sizes and conversion #############################
   if(fam == "gaussian"){
+    
+    ############# Standard Smooth method #################
     if(class(FEMbasis$mesh) == 'mesh.2D' & is.null(PDE_parameters)){
 
       bigsol = NULL
@@ -440,9 +440,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
       numnodes = FEMbasis$mesh$nnodes
     }
   }else{
-    ###################################
-    ############# GAM #################
-    ###################################
+    ############# GAMs: FPIRLS algorithm #################
     checkGAMParameters(max.steps = max.steps, mu0 = mu0, observations.len = length(observations), scale.param = scale.param, threshold = threshold, fam = fam)
 
     if(class(FEMbasis$mesh) == 'mesh.2D' & is.null(PDE_parameters)){
@@ -519,11 +517,9 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
 
   if(!is.null(covariates)){
     beta = matrix(data=bigsol[[5]],nrow=ncol(covariates),ncol=length(lambda))
-    print("beta init")
 	}
   else{
     beta = NULL
-    print("NOT beta init")
 }
 
    # Save information of Tree Mesh
@@ -551,15 +547,6 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
 
   # Make Functional objects object
   fit.FEM  = FEM(f, FEMbasis)
-  if(sum(fam==c("binomial", "probit", "cloglog", "exponential", "gamma", "poisson", "invgaussian")) == 1 ){  
-    fn.eval = bigsol[[13]]
-    J_minima = bigsol[[14]]
-    scale.param.est = bigsol[[15]]
-  }else{
-  	fn.eval = NULL
-    J_minima = NULL
-    scale.param.est = NULL
-  }
   PDEmisfit.FEM = FEM(g, FEMbasis)
 
   # Prepare return list
@@ -576,7 +563,14 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
     reslist=list(fit.FEM = fit.FEM, PDEmisfit.FEM = PDEmisfit.FEM, beta = beta, bary.locations = bary.locations)
   }
 
-  reslist=c(reslist, list(fn.eval = fn.eval, J_minima = J_minima, scale.param.est = scale.param.est) )
+  # GAM outputs
+ if(sum(fam==c("binomial", "probit", "cloglog", "exponential", "gamma", "poisson", "invgaussian")) == 1 ){  
+    fn.eval = bigsol[[13]]
+    J_minima = bigsol[[14]]   
+    variance.est=bigsol[[15]] 
+    if( variance.est[1]<0 ) variance.est = NULL
+    reslist=c(reslist, list(fn.eval = fn.eval, J_minima = J_minima, variance.est = variance.est) )
+}
 
   return(reslist)
 }

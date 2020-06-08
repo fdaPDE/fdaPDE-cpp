@@ -13,30 +13,29 @@
 */
 class  RegressionData{
 	protected:
-		// Design matrix pointer and dimensions
-		std::vector<Point> locations_;
 
-		VectorXr observations_;
+		std::vector<Point> locations_; //!< Design matrix pointer and dimensions.
+
+		VectorXr observations_; //!< Observations data
 		
-		bool locations_by_nodes_; // if location is on the mesh nodes or not
+		bool locations_by_nodes_; //!< If location is on the mesh nodes or not.
 
-		UInt nRegions_; //for areal data
+		UInt nRegions_; //!< For areal data.
 
-		VectorXr WeightsMatrix_; //Weighted regression
+		VectorXr WeightsMatrix_; //!< Weighted regression.
 
-		std::vector<Real> lambdaS_; //space penalization
+		std::vector<Real> lambdaS_; //!< Space penalization.
 
-		bool DOF_; // do we need to compute DoF ?
+		bool DOF_; //!< Do we need to compute DoF ?
 
-		bool GCV_;
+		bool GCV_; //!< Do we need to compute GCV ?
 
-		bool arealDataAvg_;// is areal data averaged ?
+		bool arealDataAvg_; //!< Is areal data averaged ?
 
-		Real tune_;// tune parameter
+		Real tune_; //!< Tune parameter. It is involved in the GCV computation.
 	private:
 
-		//Vector of the time locations
-		std::vector<Real> time_locations_;
+		std::vector<Real> time_locations_;//!< Vector of the time locations
 
 		std::vector<UInt> observations_indices_;
 		std::vector<UInt> observations_na_;
@@ -111,6 +110,8 @@ class  RegressionData{
 	        \param RGCVmethod an R-integer indicating the method to use to compute the dofs when DOF is TRUE, can be either 1 (exact) or 2 (stochastic)
 	        \param Rnrealizations the number of random points used in the stochastic computation of the dofs
 	        \param Rsearch an R-integer to decide the search algorithm type (tree or naive or walking search algorithm).
+	        \param Rtune an R-double parameter used in the computation of the GCV. The default value is 1.
+	        \param RarealDataAvg an R boolean indicating whether the areal data are averaged or not.
 		*/
 
 
@@ -323,25 +324,24 @@ class RegressionDataEllipticSpaceVarying:public RegressionData
 
 
 
-/* parent template can be :
 
-		- RegressionData
-		- RegressionDataElliptic
-		- RegressionDataEllipticSpaceVarying
 
-*/
 
+/*! @brief A class that stores the data for the Generalized Additive Models.
+ * 
+ *	It is a derived class of the RegressionHandler data type. It can be : RegressionData, RegressionDataElliptic, or RegressionDataEllipticSpaceVarying
+ */
 template<typename RegressionHandler>
 class  RegressionDataGAM : public RegressionHandler
 {
 	private:
 		
-		VectorXr initialObservations_; // A copy of the true observations, which will not be overriden during PIRLS
-	    std::vector<Real> global_lambda_; // A copy of labda vector for FPIRLS with multiple lambdas
-		std::vector<UInt> initial_observations_indeces_;
-	    UInt max_num_iterations_; // max n° of iterations allowed
-	    Real threshold_; // limit in difference among J_k and J_k+1 for which we stop PIRLS
-	    bool GCV_GAM_; // flag for dof computation
+		VectorXr initialObservations_; //!< A copy of the true observations, which will not be overriden during FPIRLS algorithm.
+	    std::vector<Real> global_lambda_; //!< A copy of lambda vector for FPIRLS with multiple lambdas.
+		std::vector<UInt> initial_observations_indeces_; 
+	    UInt max_num_iterations_; //!< Max number of iterations allowed.
+	    Real threshold_; //!< Limit in difference among J_k and J_k+1 for which we stop FPIRLS.
+	    bool GCV_GAM_; //!< Flag for GCV computation.
 
 	public:
 		//! A complete version of the constructor.
@@ -350,7 +350,7 @@ class  RegressionDataGAM : public RegressionHandler
 			\param Rlocations an R-matrix containing the location of the observations.
 			\param Robservations an R-vector containing the values of the observations.
 			\param Rorder an R-integer containing the order of the approximating basis.
-			\param Rlambda an R-double containing the penalization term of the empirical evidence respect to the prior one.
+			\param RlambdaS an R-double containing the penalization term of the empirical evidence respect to the prior one.
 			\param RK an R-double 2X2 matrix containing the coefficients for a anisotropic DIFFUSION term.
 			\param Rbeta an R-double 2-dim vector that contains the coefficients for the TRANSPORT coefficients.
 			\param Rc an R-double that contains the coefficient of the REACTION term
@@ -362,6 +362,10 @@ class  RegressionDataGAM : public RegressionHandler
 			\param DOF an R boolean indicating whether dofs of the model have to be computed or not
 	        \param RGCVmethod an R-integer indicating the method to use to compute the dofs when DOF is TRUE, can be either 1 (exact) or 2 (stochastic)
 	        \param Rnrealizations the number of random points used in the stochastic computation of the dofs
+	        \param Rmax_num_iteration an R-integer indicating the max number of steps for the FPIRLS algorithm
+	        \param Rthreshold an R-double used for arresting FPIRLS algorithm. Algorithm stops when two successive iterations lead to improvement in penalized log-likelihood smaller than threshold.
+	        \param Rtune an R-double parameter used in the computation of the GCV. The default value is 1.
+	        \param RarealDataAvg an R boolean indicating whether the areal data are averaged or not.
 		*/
 		#ifdef R_VERSION_
 
@@ -385,13 +389,13 @@ class  RegressionDataGAM : public RegressionHandler
 
 		#endif
 
-		// Laplace
+		//! A costructor for the Laplacian case
 		explicit RegressionDataGAM(std::vector<Point>& locations, VectorXr& observations, UInt order, 
 									std::vector<Real> lambdaS, MatrixXr& covariates, MatrixXi& incidenceMatrix, 
 									std::vector<UInt>& bc_indices, std::vector<Real>& bc_values, bool DOF, bool GCV, UInt search, 
 									UInt max_num_iterations, Real threshold, Real tune, bool arealDataAvg);
 
-		// PDE
+		//! A costructor for the PDE case
 		explicit RegressionDataGAM(std::vector<Point>& locations, VectorXr& observations, UInt order,
 												std::vector<Real> lambdaS, Eigen::Matrix<Real,2,2>& K,
 												Eigen::Matrix<Real,2,1>& beta, Real c, MatrixXr& covariates,
@@ -399,7 +403,7 @@ class  RegressionDataGAM : public RegressionHandler
 												std::vector<Real>& bc_values, bool DOF, bool GCV, UInt search, 
 												UInt max_num_iterations, Real threshold, Real tune, bool arealDataAvg);
 
-		// PDE SpaceVarying
+		//! A costructor for the PDE SpaceVarying case
 		explicit RegressionDataGAM(std::vector<Point>& locations,
 									VectorXr& observations, UInt order, std::vector<Real> lambdaS,
 									const std::vector<Eigen::Matrix<Real,2,2>, Eigen::aligned_allocator<Eigen::Matrix<Real,2,2> > >& K,
@@ -419,7 +423,7 @@ class  RegressionDataGAM : public RegressionHandler
     	inline std::vector<Real> const & getGlobalLambda() const {return global_lambda_;}  
 		//! A method that return the initial observations
 		inline UInt const getNumberofInitialObservations() const {return initial_observations_indeces_.size();}
-    	//! return if the GCV computation is required
+    	//! A method returning whether GCV computation is required or not.
     	inline bool const getGCV_GAM() const {return GCV_GAM_;}
 
 		//! Update Pseudodata (observations and weights)
@@ -429,11 +433,14 @@ class  RegressionDataGAM : public RegressionHandler
 
 };
 
-//! GAMDataLaplace type definition
+
+// Type definitions for the GAMdata Structure
+
+/** GAMDataLaplace type definition */
 typedef RegressionDataGAM<RegressionData> GAMDataLaplace;
-//! GAMDataElliptic type definition
+/** GAMDataElliptic type definition */
 typedef RegressionDataGAM<RegressionDataElliptic> GAMDataElliptic;
-//! GAMDataEllipticSpaceVarying type definition
+/**  GAMDataEllipticSpaceVarying type definition */
 typedef RegressionDataGAM<RegressionDataEllipticSpaceVarying> GAMDataEllipticSpaceVarying;
 
 

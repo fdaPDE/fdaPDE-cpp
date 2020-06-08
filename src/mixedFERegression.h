@@ -12,8 +12,6 @@
 #include "kronecker_product.h"
 #include <memory>
 
-// to remove:
-#include "printer.h"
 
 /*! A base class for the smooth regression.
 */
@@ -24,7 +22,7 @@ class MixedFERegressionBase
 
 	const MeshHandler<ORDER, mydim, ndim> &mesh_;
 	const std::vector<Real> mesh_time_;
-	const UInt N_; //! Number of spatial basis functions.
+	const UInt N_; //!< Number of spatial basis functions.
 	const UInt M_;
 
 	const InputHandler& regressionData_;
@@ -42,43 +40,43 @@ class MixedFERegressionBase
 	//  system matrix= 	|          B^T * Ak *B           | -lambdaS*(R1k^T+lambdaT*LR0k)  |   +  |B^T * Ak * (-H) * B |  O |   =  matrixNoCov + matrixOnlyCov
 	//	                | -lambdaS*(R1k^T+lambdaT*LR0k)  |        -lambdaS*R0k	          |      |         O          |  O |
 
-	SpMat matrixNoCov_;	//! System matrix without
+	SpMat matrixNoCov_;	//!< System matrix without
 
-	SpMat R1_;	 //! R1 matrix of the model
-	SpMat R0_;	 //! Mass matrix in space
-	SpMat psi_;  //! Psi matrix of the model
-	MatrixXr R_; //! R1 ^T * R0^-1 * R1
-
-
-	SpMat Ptk_; 	//! kron(Pt,IN) (separable version)
-	SpMat LR0k_; 	//! kron(L,R0) (parabolic version)
-	VectorXr A_; 		//! A_.asDiagonal() areal matrix
+	SpMat R1_;	 //!< R1 matrix of the model
+	SpMat R0_;	 //!< Mass matrix in space
+	SpMat psi_;  //!< Psi matrix of the model
+	MatrixXr R_; //!< R1 ^T * R0^-1 * R1
 
 
-	MatrixXr U_;	//! psi^T * W or psi^T * A * W padded with zeros, needed for Woodbury decomposition
-	MatrixXr V_;   //! W^T*psi, if pointwise data is U^T, needed for Woodbury decomposition
+	SpMat Ptk_; 	//!< kron(Pt,IN) (separable version)
+	SpMat LR0k_; 	//!< kron(L,R0) (parabolic version)
+	VectorXr A_; 	//!< A_.asDiagonal() areal matrix
 
-	MatrixXr barycenters_; //barycenter information
-	VectorXi element_ids_; //elements id information
 
-	Eigen::SparseLU<SpMat> matrixNoCovdec_; // Stores the factorization of matrixNoCov_
-	Eigen::PartialPivLU<MatrixXr> Gdec_;	// Stores factorization of G =  C + [V * matrixNoCov^-1 * U]
-	Eigen::PartialPivLU<MatrixXr> WTW_;	// Stores the factorization of W^T * W
-	bool isWTWfactorized_ = false;
+	MatrixXr U_;	//!< psi^T * W or psi^T * A * W padded with zeros, needed for Woodbury decomposition
+	MatrixXr V_;   //!< W^T*psi, if pointwise data is U^T, needed for Woodbury decomposition
+
+	MatrixXr barycenters_; //!< barycenter information
+	VectorXi element_ids_; //!< elements id information
+
+	Eigen::SparseLU<SpMat> matrixNoCovdec_; //!< Stores the factorization of matrixNoCov_
+	Eigen::PartialPivLU<MatrixXr> Gdec_;	//!< Stores factorization of G =  C + [V * matrixNoCov^-1 * U]
+	Eigen::PartialPivLU<MatrixXr> WTW_;	//!< Stores the factorization of W^T * W
+	bool isWTWfactorized_ = false; 
 	bool isRcomputed_ = false;
-	Eigen::SparseLU<SpMat> R0dec_; //! Stores the factorization of R0_
+	Eigen::SparseLU<SpMat> R0dec_; //!< Stores the factorization of R0_
 
 
-	VectorXr rhs_ft_correction_;	//! right hand side correction for the forcing term:
-	VectorXr rhs_ic_correction_;	//! Initial condition correction (parabolic case)
-	VectorXr _rightHandSide;      //! A Eigen::VectorXr: Stores the system right hand side.
-	MatrixXv _solution; 					//! A Eigen::MatrixXv: Stores the system solution.
-	MatrixXr _dof;          			//! A Eigen::MatrixXr storing the computed dofs
-	MatrixXr _GCV;	 //! A Eigen::MatrixXr storing the computed GCV
-	UInt bestLambdaS_=0;	//!Stores the index of the best lambdaS according to GCV
-	UInt bestLambdaT_=0;	//!Stores the index of the best lambdaT according to GCV
-	Real _bestGCV=10e20;	//!Stores the value of the best GCV
-	MatrixXv _beta;		//! A Eigen::MatrixXv storing the computed beta coefficients
+	VectorXr rhs_ft_correction_;	//!< right hand side correction for the forcing term:
+	VectorXr rhs_ic_correction_;	//!< Initial condition correction (parabolic case)
+	VectorXr _rightHandSide;      //!< A Eigen::VectorXr: Stores the system right hand side.
+	MatrixXv _solution; 		//!< A Eigen::MatrixXv: Stores the system solution.
+	MatrixXr _dof;       //!< A Eigen::MatrixXr storing the computed dofs
+	MatrixXr _GCV;	 //!< A Eigen::MatrixXr storing the computed GCV
+	UInt bestLambdaS_=0;	//!< Stores the index of the best lambdaS according to GCV
+	UInt bestLambdaT_=0;	//!< Stores the index of the best lambdaT according to GCV
+	Real _bestGCV=10e20;	//!< Stores the value of the best GCV
+	MatrixXv _beta;		//!< A Eigen::MatrixXv storing the computed beta coefficients
 
 	//Flag to avoid the computation of R0,R1,Psi_
 	bool isAComputed = false;
@@ -86,7 +84,7 @@ class MixedFERegressionBase
 	bool isR0Computed = false;
 	bool isR1Computed = false;
 
-	bool isSpaceVarying = false; // used to distinguish whether to use the forcing term u in apply() or not
+	bool isSpaceVarying = false; //!< used to distinguish whether to use the forcing term u in apply() or not
 
 	//! A member function computing the Psi matrix
 	void setPsi();
@@ -111,7 +109,7 @@ class MixedFERegressionBase
 	//! A method computing GCV from the dofs
 	void computeGeneralizedCrossValidation(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT);
 
-  //! A function to factorize the system, using Woodbury decomposition when there are covariates
+  	//! A function to factorize the system, using Woodbury decomposition when there are covariates
 	void system_factorize();
 	//! A function which solves the factorized system
 	template<typename Derived>
@@ -139,6 +137,8 @@ class MixedFERegressionBase
 
 	//! A method computing the dofs
 	void computeDegreesOfFreedom(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT);
+	//! A method that set WTW flag to false, in order to recompute the matrix WTW.
+	inline void recomputeWTW(){ this->isWTWfactorized_ = false;}
 	//! A function returning the computed barycenters of the locationss
 	inline MatrixXr const & getBarycenters() const{return barycenters_;};
 	//! A function returning the element ids of the locations
@@ -161,6 +161,7 @@ class MixedFERegressionBase
 	inline SpMat const getR0()const{return R0_;}
 	//! A method returning the R1 matrix
 	inline SpMat const getR1()const{return R1_;}
+	
 
 
 };

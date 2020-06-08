@@ -23,14 +23,16 @@ std::unique_ptr<T> make_unique(Args&&... args)
 */
 
 
-//! A Factory class: A class for the choice of the exponential family distribution for the f-PIRLS.
+//! A Factory class. It is used for the choice of the exponential family distribution for the f-PIRLS.
 template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
 class FPIRLSfactory
 {
 	public:
 	//! A method that takes as parameter a string and builds a pointer to the right object for the data distribution
-	static std::unique_ptr<FPIRLS<InputHandler, Integrator, ORDER,  mydim,  ndim>> createFPIRLSsolver(const std::string &family, const MeshHandler<ORDER,mydim,ndim>& mesh, InputHandler& inputData, VectorXr& mu0, Real scale_parameter){
-
+	static std::unique_ptr<FPIRLS<InputHandler, Integrator, ORDER,  mydim,  ndim>> createFPIRLSsolver(const std::string &family, const MeshHandler<ORDER,mydim,ndim>& mesh, InputHandler& inputData, VectorXr& mu0, Real scale_parameter)
+	{
+		//initial checks: m0 must be initialized correctly for the different distributions 
+		
 		if(mu0.size() == 0){
 		  VectorXr y = inputData.getObservations();
 		  if( family == "binomial" || family== "probit" || family=="cloglog" ){ //binary outcomes
@@ -49,9 +51,9 @@ class FPIRLSfactory
 			}
       	}
 
-	// Manage scale_parameter
+		// Manage scale_parameter
 		bool scale_parameter_flag = false;
-		if( (family=="gamma" || family=="gaussian" || family=="invgaussian") && scale_parameter<0){
+		if( (family=="gamma" || family=="invgaussian") && scale_parameter<0){
 			scale_parameter_flag = true;
 		}
 
@@ -66,15 +68,13 @@ class FPIRLSfactory
 		}else if(family=="exponential"){
 		    return make_unique<FPIRLS_Exponential<InputHandler, Integrator, ORDER,  mydim, ndim>>(mesh,inputData,mu0);
 		}else if(family=="gamma"){
-		    return make_unique<FPIRLS_Gamma<InputHandler, Integrator, ORDER,  mydim, ndim>>(mesh,inputData,mu0,scale_parameter, scale_parameter_flag);
+		    return make_unique<FPIRLS_Gamma<InputHandler, Integrator, ORDER,  mydim, ndim>>(mesh,inputData,mu0, scale_parameter, scale_parameter_flag);
 		}else if(family=="invgaussian"){
-		    return make_unique<FPIRLS_InvGaussian<InputHandler, Integrator, ORDER,  mydim, ndim>>(mesh,inputData,mu0,scale_parameter, scale_parameter_flag);
+		    return make_unique<FPIRLS_InvGaussian<InputHandler, Integrator, ORDER,  mydim, ndim>>(mesh,inputData,mu0, scale_parameter, scale_parameter_flag);
 		}
 
 		return std::unique_ptr<FPIRLS<InputHandler, Integrator, ORDER,  mydim,  ndim>>(nullptr);
-
 	}
-
 
 
 };

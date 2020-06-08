@@ -261,12 +261,12 @@ template<typename InputHandler, typename IntegratorSpace, UInt ORDER, typename I
 void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim>::system_factorize() {
 
 	UInt nnodes = N_*M_;
-	printer::milestone("system_factorize_1.txt");
+
 	VectorXr P = regressionData_.getWeightsMatrix(); // matrix of weights
 
 	// First phase: Factorization of matrixNoCov
 	matrixNoCovdec_.compute(matrixNoCov_);
-	printer::milestone("system_factorize_2.txt");
+
 
 	if (regressionData_.getCovariates().rows() != 0) {
 		// Second phase: factorization of matrix  G =  C + [V * matrixNoCov^-1 * U]= C + D
@@ -274,7 +274,6 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 		// Definition of matrix U = [ psi^T * A * W | 0 ]^T and V= [ W^T*psi| 0]
 
 		MatrixXr W(this->regressionData_.getCovariates());
-		printer::milestone("system_factorize_3.txt");
 
 		U_ = MatrixXr::Zero(2*nnodes, W.cols());
 		V_ = MatrixXr::Zero(W.cols(),2*nnodes);
@@ -282,16 +281,13 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 		if(P.size()==0){
 			V_.leftCols(nnodes) = W.transpose()*psi_;
 		}else{
-			printer::milestone("system_factorize_3.1.1.txt");
 			V_.leftCols(nnodes) = W.transpose()*P.asDiagonal()*psi_;
 		}
-		printer::milestone("system_factorize_3.1.txt");
 		// build "right side" of U_
 		if(P.size() == 0)
 			U_.topRows(nnodes) = W;
 		else
 			U_.topRows(nnodes) = P.asDiagonal()*W;
-		printer::milestone("system_factorize_3.2.txt");
 
 		// build "left side" of U_
 		if(regressionData_.getNumberOfRegions()==0){ // pointwise data
@@ -300,9 +296,7 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 		else{                                          //areal data
 		  U_.topRows(nnodes) = psi_.transpose()*A_.asDiagonal()*U_.topRows(nnodes);
     	}
-    	printer::milestone("system_factorize_3.3.txt");
 		MatrixXr D = V_*matrixNoCovdec_.solve(U_);
-		printer::milestone("system_factorize_3.4.txt");
 		// G = C + D
 		MatrixXr G;
 		if(P.size()==0){
@@ -310,11 +304,9 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 		}else{
 			G = -W.transpose()*P.asDiagonal()*W + D;
 		}
-		printer::milestone("system_factorize_3.5.txt");
 		Gdec_.compute(G);
 
 	}
-	printer::milestone("system_factorize_4.txt");
 }
 
 template<typename InputHandler, typename IntegratorSpace, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
@@ -324,16 +316,12 @@ MatrixXr MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTim
 
 	// Resolution of the system matrixNoCov * x1 = b
 	MatrixXr x1 = matrixNoCovdec_.solve(b);
-	printer::milestone("system_solve_1.txt");
 	if (regressionData_.getCovariates().rows() != 0) {
 		// Resolution of G * x2 = V * x1
-		printer::milestone("system_solve_2.txt");
 		MatrixXr x2 = Gdec_.solve(V_*x1);
-		printer::milestone("system_solve_2_1.txt");
 		// Resolution of the system matrixNoCov * x3 = U * x2
 		x1 -= matrixNoCovdec_.solve(U_*x2);
 	}
-	printer::milestone("system_solve_3.txt");
 	return x1;
 }
 
@@ -392,7 +380,7 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 		}
 		else if (regressionData_.getNumberOfRegions() == 0) //pointwise data
 		{
-			rightHandData=psi_.transpose()*LeftMultiplybyQ(regressionData_.getObservations())*regressionData_.getObservations();
+			rightHandData=psi_.transpose()*LeftMultiplybyQ(regressionData_.getObservations());
 		}
 		else //areal data
 		{
@@ -452,101 +440,6 @@ void MixedFERegressionBase<InputHandler, IntegratorSpace, ORDER, IntegratorTime,
 		_bestGCV = _GCV(output_indexS,output_indexT);
 	}
 }
-/*
-template<typename InputHandler, typename IntegratorSpace, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
-template<typename A>
-void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim>::computeDegreesOfFreedom(EOExpr<A> oper){
-
-	UInt nnodes = N_*M_;
-	FiniteElement<IntegratorSpace, ORDER, mydim, ndim> fe;
-
-	std::vector<UInt> test_boi(1,1);
-	std::string saving_filename = "HIDDEN";
-	saving_filename = saving_filename + ".txt";
-	printer::SaveDimension(saving_filename,test_boi);
-
-	saving_filename = "prova_cdof_1";
- 	saving_filename = saving_filename + ".txt";
- 	printer::SaveDimension(saving_filename,test_boi);
-	
-	if(regressionData_.getNumberOfRegions()>0 && !isAComputed){
-		setA();
-		isAComputed = true;
-	}
-
-	if(!isPsiComputed){
-		setPsi();
-		isPsiComputed = true;
-		printer::milestone("asdPSI.txt");
-	}
-
-	typedef EOExpr<Mass> ETMass; Mass EMass; ETMass mass(EMass);
-	if(!isR1Computed){
-		Assembler::operKernel(oper, mesh_, fe, R1_);
-		isR1Computed = true;
-		printer::milestone("asdR1.txt");
-	}
-	if(!isR0Computed){
-		Assembler::operKernel(mass, mesh_, fe, R0_);
-		isR0Computed = true;
-		printer::milestone("asdR0.txt");
-	}
-
-	if (regressionData_.isSpaceTime())
-	{
-		buildSpaceTimeMatrices();
-	}
-
-	this->_dof.resize(regressionData_.getLambdaS().size(),regressionData_.getLambdaT().size());
-
-	for(UInt s = 0; s<regressionData_.getLambdaS().size(); s++)
-	{
-		for(UInt t = 0; t<regressionData_.getLambdaT().size(); t++)
-		{
-			Real lambdaS = regressionData_.getLambdaS()[s];
-			Real lambdaT = regressionData_.getLambdaT()[t];
-
-			SpMat R1_lambda = (-lambdaS)*R1_;
-			SpMat R0_lambda = (-lambdaS)*R0_;
-			if(regressionData_.isSpaceTime() && regressionData_.getFlagParabolic())
-				R1_lambda -= lambdaS*(lambdaT*LR0k_); // build the SouthWest block of the matrix (also the NorthEast block transposed)
-			
-			saving_filename = "prova_cdof_3";
-		 	saving_filename = saving_filename + ".txt";
-		 	printer::SaveDimension(saving_filename,test_boi);
-
-		 	SpMat NWblock;
-
-			// build right side of NWblock
-			if(regressionData_.getWeightsMatrix().size() == 0) // no weights
-				NWblock = psi_;
-			else
-				NWblock = regressionData_.getWeightsMatrix().asDiagonal()*psi_;
-
-			// build left side of NWblock
-			if(regressionData_.getNumberOfRegions()==0) // pointwise data
-			    NWblock=psi_.transpose()*NWblock;
-			else                                        // areal data: need to add the diag(|D_1|,...,|D_N|)
-			    NWblock=psi_.transpose()*A_.asDiagonal()*NWblock;
-
-			if(regressionData_.isSpaceTime() && !regressionData_.getFlagParabolic())
-				NWblock+=lambdaT*Ptk_;
-
-			this->buildMatrixNoCov(NWblock, R1_lambda, R0_lambda);
-
-			if(regressionData_.getGCVmethod() == 2){// Stochastic GCV
-				this->system_factorize();
-			}
-
-			saving_filename = "prova_cdof_4";
-		 	saving_filename = saving_filename + ".txt";
-		 	printer::SaveDimension(saving_filename,test_boi);
-
-			computeDegreesOfFreedom(s, t, lambdaS, lambdaT);
-		}
-	}
-}
-*/
 
 
 template<typename InputHandler, typename IntegratorSpace, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
@@ -565,8 +458,6 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 		X1 = psi_.transpose() * A_.asDiagonal() * LeftMultiplybyQ(psi_);
 	}
 	
-	file_name = "X1_computeDoFExact.txt";
-	printer::SaveMatrixXr(file_name,X1);
 
 	if (isRcomputed_ == false)
 	{
@@ -574,8 +465,6 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 		//take R0 from the final matrix since it has already applied the dirichlet boundary conditions
 		SpMat R0 = matrixNoCov_.bottomRightCorner(nnodes,nnodes)/lambdaS;
 
-		file_name = "R0_computeDoFExact.txt";
-		printer::SaveMatrixXr(file_name,R0);
 		R0dec_.compute(R0);
 		if(!regressionData_.isSpaceTime() || !regressionData_.getFlagParabolic())
 		{
@@ -599,8 +488,6 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 		P = lambdaS*R_;
 	}
 
-	file_name = "P_computeDoFExact.txt";
-	printer::SaveMatrixXr(file_name,P);
 
 	if(regressionData_.isSpaceTime() && !regressionData_.getFlagParabolic())
 		X3 += lambdaT*Ptk_;
@@ -610,8 +497,6 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 	{
 		const std::vector<UInt>& bc_indices = regressionData_.getDirichletIndices();
 		UInt nbc_indices = bc_indices.size();
-
-		printer::milestone("DoFExact_in_getDIdx.txt");
 
 		Real pen=10e20;
 		for(UInt i=0; i<nbc_indices; i++)
@@ -794,16 +679,9 @@ template<typename InputHandler, typename IntegratorSpace, UInt ORDER, typename I
 template<typename A>
 void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim>::apply(EOExpr<A> oper, const ForcingTerm & u)
 {
-		std::string saving_filename = "mixFEreg_obs.txt";
-    	printer::saveVectorXr(saving_filename, this->regressionData_.getObservations());
-
-    	saving_filename = "mixFEreg_WeightMat.txt";
-    	printer::saveVectorXr(saving_filename, this->regressionData_.getWeightsMatrix());
 
 	UInt nnodes = N_*M_;
 	FiniteElement<IntegratorSpace, ORDER, mydim, ndim> fe;
-
-	printer::milestone("asd1.txt");
 
 	if(regressionData_.getNumberOfRegions()>0 && !isAComputed){
 		setA();
@@ -813,24 +691,16 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 	if(!isPsiComputed){
 		setPsi();
 		isPsiComputed = true;
-		printer::milestone("asdPSI.txt");
 	}
 
 	typedef EOExpr<Mass> ETMass; Mass EMass; ETMass mass(EMass);
 	if(!isR1Computed){
 		Assembler::operKernel(oper, mesh_, fe, R1_);
 		isR1Computed = true;
-		printer::milestone("asdR1.txt");
 	}
 	if(!isR0Computed){
 		Assembler::operKernel(mass, mesh_, fe, R0_);
 		isR0Computed = true;
-		printer::milestone("asdR0.txt");
-	}
-
-	//reset wtw for pirls iteration
-	if(this->regressionData_.getWeightsMatrix().size() != 0){
-		isWTWfactorized_ = false;
 	}
 
 	if(this->isSpaceVarying)
@@ -855,7 +725,6 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 	this->_GCV.resize(regressionData_.getLambdaS().size(),regressionData_.getLambdaT().size());
 	if(regressionData_.getCovariates().rows()!=0)
 	{
-		printer::milestone("asd2.txt");
 		this->_beta.resize(regressionData_.getLambdaS().size(),regressionData_.getLambdaT().size());
 	}
 
@@ -874,12 +743,6 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 				R1_lambda -= lambdaS*(lambdaT*LR0k_); // build the SouthWest block of the matrix (also the NorthEast block transposed)
 
 			SpMat NWblock;
-			/*
-			if(regressionData_.getNumberOfRegions()==0) // pointwise data
-				NWblock=psi_.transpose()*psi_;
-			else                                        // areal data: need to add the diag(|D_1|,...,|D_N|)
-			  NWblock=psi_.transpose()*A_.asDiagonal()*psi_;
-			*/
 
 			// build right side of NWblock
 			if(regressionData_.getWeightsMatrix().size() == 0) // no weights
@@ -936,9 +799,7 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 			// covariates computation
 			if(regressionData_.getCovariates().rows()!=0)
 			{
-				printer::milestone("asd3.txt");
 				MatrixXr W(this->regressionData_.getCovariates());
-				printer::milestone("asd3_1.txt");
 				VectorXr P(this->regressionData_.getWeightsMatrix());
 				VectorXr beta_rhs;
 				if( P.size() !=0){
@@ -946,9 +807,7 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 				}else{
 					beta_rhs = W.transpose()*(regressionData_.getObservations() - psi_*_solution(s,t).topRows(psi_.cols()));
 				}
-				printer::milestone("asd4.txt");
 				_beta(s,t) = WTW_.solve(beta_rhs);
-				printer::milestone("asd5.txt");
 			}
 		}
 	}

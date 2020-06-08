@@ -94,8 +94,6 @@ CPP_smooth.GAM.FEM<-function(locations, bary.locations ,observations, FEMbasis, 
   storage.mode(threshold) <- "double"
   storage.mode(search) <- "integer"
 
-  print(max.steps)
-  print(threshold)
   ## Call C++ function
   bigsol <- .Call("gam_Laplace", locations, bary.locations, observations, FEMbasis$mesh, FEMbasis$order,
                  mydim, ndim, lambda, covariates, incidence_matrix, BC$BC_indices, BC$BC_values,
