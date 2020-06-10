@@ -521,6 +521,80 @@ SEXP DE_skeleton(SEXP Rdata, SEXP Rorder, SEXP Rfvec, SEXP RheatStep, SEXP Rheat
 }
 
 
+template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+SEXP DE_init_skeleton(SEXP Rdata, SEXP Rorder, SEXP Rfvec, SEXP RheatStep, SEXP RheatIter, SEXP Rlambda, SEXP Rnfolds, SEXP Rnsim, SEXP RstepProposals,
+	SEXP Rtol1, SEXP Rtol2, SEXP Rprint, SEXP Rmesh, SEXP Rsearch, const std::string & init, UInt init_fold)
+{
+	// Construct data problem object
+	DataProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim> dataProblem(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rsearch, Rmesh);
+
+	// Construct functional problem object
+	FunctionalProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim> functionalProblem(dataProblem);
+
+	if(init == "Heat"){
+
+		// Construct densityInit object
+		std::unique_ptr<DensityInitialization<Integrator, Integrator_noPoly, ORDER, mydim, ndim>> densityInit = make_unique<HeatProcess<Integrator, Integrator_noPoly, ORDER, mydim, ndim>>(dataProblem, functionalProblem);
+
+		// fill fInit
+		std::vector<VectorXr> fInit(dataProblem.getNlambda());
+		for(UInt l = 0; l < dataProblem.getNlambda(); l++){
+			fInit[l] = *(densityInit-> chooseInitialization(dataProblem.getLambda(l)));
+		}
+
+		// Copy result in R memory
+		SEXP result = NILSXP;
+		result = PROTECT(Rf_allocVector(VECSXP, 1));
+		SET_VECTOR_ELT(result, 0, Rf_allocMatrix(REALSXP, ((fInit[0])).size(), fInit.size()));
+
+		Real *rans = REAL(VECTOR_ELT(result, 0));
+		for(UInt j = 0; j < fInit.size(); j++)
+		{
+			for(UInt i = 0; i < (fInit[0]).size(); i++)
+				rans[i + (fInit[0]).size()*j] = (fInit[j])[i];
+		}
+
+		UNPROTECT(1);
+
+		return(result);
+	}
+
+	else if(init=="CV"){
+
+		// Construct densityInit object
+		std::unique_ptr<Heat_CV<Integrator, Integrator_noPoly, ORDER, mydim, ndim>> densityInit = make_unique<Heat_CV<Integrator, Integrator_noPoly, ORDER, mydim, ndim>>(dataProblem, functionalProblem, init_fold);
+
+		// fill fInit
+		VectorXr fInit;
+		fInit = *(densityInit->chooseInitialization(dataProblem.getLambda(0)));
+
+		// Copy result in R memory
+		SEXP result = NILSXP;
+		result = PROTECT(Rf_allocVector(VECSXP, 1));
+		SET_VECTOR_ELT(result, 0, Rf_allocVector(REALSXP, fInit.size()));
+
+		Real *rans = REAL(VECTOR_ELT(result, 0));
+		for(UInt i = 0; i < fInit.size(); i++)
+		{
+			rans[i] = fInit[i];
+		}
+
+		UNPROTECT(1);
+
+		return(result);
+	}
+	else{
+
+		#ifdef R_VERSION_
+		Rprintf("Invalid initialization");
+		#endif
+
+		return NILSXP;
+	}
+
+}
+
+
 template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
 SEXP get_integration_points_skeleton(SEXP Rmesh)
 {
@@ -1072,6 +1146,34 @@ SEXP Density_Estimation(SEXP Rdata, SEXP Rmesh, SEXP Rorder, SEXP Rmydim, SEXP R
 		return(DE_skeleton<IntegratorTetrahedronP2, IntegratorGaussTetra3, 1, 3, 3>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
 	// else if(order == 1 && mydim==3 && ndim==3)
 	// 	return(DE_skeleton<IntegratorTetrahedronP2, IntegratorGaussTetra3, 1, 3, 3>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
+
+	return(NILSXP);
+}
+
+
+SEXP Density_Initialization(SEXP Rdata, SEXP Rmesh, SEXP Rorder, SEXP Rmydim, SEXP Rndim, SEXP Rfvec, SEXP RheatStep, SEXP RheatIter, SEXP Rlambda,
+	 SEXP Rnfolds, SEXP Rnsim, SEXP RstepProposals, SEXP Rtol1, SEXP Rtol2, SEXP Rprint, SEXP Rsearch, SEXP Rinit, SEXP Rinit_fold)
+{
+	UInt order= INTEGER(Rorder)[0];
+  UInt mydim=INTEGER(Rmydim)[0];
+	UInt ndim=INTEGER(Rndim)[0];
+
+	UInt init_fold=INTEGER(Rinit_fold)[0];
+
+	std::string init=CHAR(STRING_ELT(Rinit, 0));
+
+  if(order== 1 && mydim==2 && ndim==2)
+		return(DE_init_skeleton<IntegratorTriangleP2, IntegratorGaussTriangle3, 1, 2, 2>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, init, init_fold));
+	else if(order== 2 && mydim==2 && ndim==2)
+		return(DE_init_skeleton<IntegratorTriangleP4, IntegratorGaussTriangle3, 2, 2, 2>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, init, init_fold));
+	else if(order== 1 && mydim==2 && ndim==3)
+		return(DE_init_skeleton<IntegratorTriangleP2, IntegratorGaussTriangle3, 1, 2, 3>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, init, init_fold));
+	else if(order== 2 && mydim==2 && ndim==3)
+		return(DE_init_skeleton<IntegratorTriangleP4, IntegratorGaussTriangle3, 2, 2, 3>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, init, init_fold));
+	else if(order == 1 && mydim==3 && ndim==3)
+		return(DE_init_skeleton<IntegratorTetrahedronP2, IntegratorGaussTetra3, 1, 3, 3>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, init, init_fold));
+	// else if(order == 1 && mydim==3 && ndim==3)
+	// 	return(DE_init_skeleton<IntegratorTetrahedronP2, IntegratorTetrahedronP2, 1, 3, 3>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, init, init_fold));
 
 	return(NILSXP);
 }

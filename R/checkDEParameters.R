@@ -78,9 +78,6 @@ checkParametersSizeDE <- function(data, FEMbasis, ndim, fvec, preprocess_method,
   if(ncol(data) != ndim)                                       
     stop("'data' and the mesh points have incompatible size.")
   
-  if(nrow(data) > nrow(FEMbasis$mesh$nodes))
-    stop("The number of mesh nodes have to be greater than the number of data.")
-  
   if(!is.null(fvec)){
     if(length(fvec) != nrow(FEMbasis$mesh$nodes))
       stop("The length of fvec has to be equal to the number of mesh nodes")
