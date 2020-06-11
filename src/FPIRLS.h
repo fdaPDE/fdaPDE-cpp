@@ -9,7 +9,6 @@
 #include "evaluator.h"
 #include "fdaPDE.h"
 
-#include "printer.h"
 
 //! @brief An abstract class that implement the apply method for the FPIRLS algorithm.
 template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
@@ -163,7 +162,7 @@ template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UI
 class FPIRLS_Bernoulli : public FPIRLS <InputHandler, Integrator, ORDER, mydim, ndim> {
 
   protected:
-    inline Real link(const Real& mu)const{printer::milestone("BERNULLI"); return log(mu/(1 - mu)); }
+    inline Real link(const Real& mu)const{ return log(mu/(1 - mu)); }
 
     inline Real inv_link(const Real& theta)const{ return 1/(1 + exp(-theta)); }
 
@@ -176,55 +175,6 @@ class FPIRLS_Bernoulli : public FPIRLS <InputHandler, Integrator, ORDER, mydim, 
   public:
 
     FPIRLS_Bernoulli(const MeshHandler<ORDER,mydim,ndim>& mesh, InputHandler& inputData, VectorXr mu0):
-      FPIRLS<InputHandler, Integrator, ORDER, mydim, ndim>(mesh, inputData, mu0, false, 1){};
-};
-
-
-//! @brief A class that specify the Probit distribution for the FPIRLS class.
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-class FPIRLS_Probit : public FPIRLS <InputHandler, Integrator, ORDER, mydim, ndim> {
-  private: 
-    //! A method that compute the inverse erf function.
-    Real erf_inv(const Real& x)const;
-  
-  protected:
-    inline Real link(const Real& mu)const{ return erf_inv(mu); }
-
-    inline Real inv_link(const Real& theta)const{ return erf(theta); }
-
-    inline Real link_deriv(const Real& mu)const{ return 1/(sqrt(2*M_PI)) * exp(- 0.5*(mu*mu)) ;}
-
-    inline Real var_function(const Real& mu)const{ return (mu*(1-mu)); }
-
-    inline Real dev_function(const Real& mu, const Real& x)const{return (x == 0)? 2*log(1/(1-mu)) : 2*log(1/mu);}
-
-  //  void initialize_mu(const VectorXr& y);
-
-  public:
-
-    FPIRLS_Probit(const MeshHandler<ORDER,mydim,ndim>& mesh, InputHandler& inputData, VectorXr mu0):
-      FPIRLS<InputHandler, Integrator, ORDER, mydim, ndim>(mesh, inputData, mu0, false, 1){};
-};
-
-
-//! @brief A class that specify the cloglog distribution for the FPIRLS class.
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-class FPIRLS_cLogLog : public FPIRLS <InputHandler, Integrator, ORDER, mydim, ndim> {
-
-  protected:
-    inline Real link(const Real& mu)const{ return log(-log(1-mu)); }
-
-    inline Real inv_link(const Real& theta)const{ return  1-exp(-exp(theta)) ; }
-
-    inline Real link_deriv(const Real& mu)const{ return  -1/(log(1-mu))*1/(1-mu); }
-
-    inline Real var_function(const Real& mu)const{ return(mu*(1-mu)); }
-
-    inline Real dev_function(const Real& mu, const Real& x)const{return (x == 0)? 2*log(1/(1-mu)) : 2*log(1/mu);}
-
-  public:
-
-    FPIRLS_cLogLog(const MeshHandler<ORDER,mydim,ndim>& mesh, InputHandler& inputData, VectorXr mu0):
       FPIRLS<InputHandler, Integrator, ORDER, mydim, ndim>(mesh, inputData, mu0, false, 1){};
 };
 
@@ -301,28 +251,6 @@ class FPIRLS_Gamma : public FPIRLS <InputHandler, Integrator, ORDER, mydim, ndim
 
 };
 
-//! @brief A class that specify the inverse Gaussian distribution for the FPIRLS class.
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-class FPIRLS_InvGaussian : public FPIRLS <InputHandler, Integrator, ORDER, mydim, ndim> {
-
-    protected:
-
-      inline Real link(const Real& mu)const{ return -1/(2*mu*mu) ; }
-
-      inline Real link_deriv(const Real& mu)const{ return 1/(mu*mu*mu)   ; }
-
-      inline Real inv_link(const Real& theta)const{ return sqrt(-1/(2*theta)); }
-
-      inline Real var_function(const Real& mu)const{ return mu*mu*mu;}
-
-      inline Real dev_function(const Real&mu, const Real& x)const{ return (x-mu)*(x-mu)/(mu*mu*x);}
-
-    public:
-
-    FPIRLS_InvGaussian(const MeshHandler<ORDER,mydim,ndim>& mesh, InputHandler& inputData, VectorXr mu0, bool scale_parameter_flag, Real scale_param):
-      FPIRLS<InputHandler, Integrator, ORDER, mydim, ndim>(mesh, inputData, mu0, scale_parameter_flag, scale_param){};
-
-};
 
 
 #include "FPIRLS_imp.h"

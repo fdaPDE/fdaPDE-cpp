@@ -1,10 +1,39 @@
-checkGAMParameters<-function(max.steps, mu0, observations.len, scale.param, threshold, fam)
+checkGAMParameters<-function(observations, max.steps, mu0, scale.param, threshold, fam)
 {
+  observations.len = length(observations)
 	  #################### Parameter Check #########################
 	# Check max.steps 
 	if(!all.equal(max.steps, as.integer(max.steps)) || max.steps <= 0 )
 		stop("max.steps must be a positive integer.")
 	
+  #check observations
+  if( fam == "binomial"){
+      if(length(c(which(observations==0),which(observations==1))) != observations.len )
+        stop("'observations' must be composed by 0 and 1 values for your distribution.")
+  }
+  if( length(c(which(observations==0),which(observations==1))) == observations.len && fam != "binomial"){
+    stop("'observations' have only 0 and 1 values. Your distribution must be 'bernulli'.")
+  }
+  if(fam == "gamma"){
+      if(any(observations<=0))
+          stop("'observations' must be composed by real positive number for your distribution.")
+  }
+  if(fam == "exponential"){
+      if(any(observations<0))
+          stop("'observations' must be composed by real positive number for your distribution.")
+  }
+  if(fam == "poisson"){
+      if(any(observations<0))
+          stop("'observations' must be composed by real positive number for your distribution.")
+      if(any(observations != floor(observations)))
+          stop("'observations' must be composed by natural positive number for your distribution.")
+  }
+  if( all(observations == floor(observations)) && sum(fam==c("binomial","poisson")) == 0 ){
+      stop("'observations' is composed by natural positive number. Select a discrete distribution.")
+  }
+
+
+
 	# Check mu0 
 	if(!is.null(mu0))
   	{
@@ -19,7 +48,7 @@ checkGAMParameters<-function(max.steps, mu0, observations.len, scale.param, thre
   		if(length(mu0) != observations.len )
     		stop(" 'mu0' and 'observations' must have equal length")
 
-  		fam_positive = c("exponential", "gamma", "poisson", "cloglog")
+  		fam_positive = c("exponential", "gamma", "poisson")
   		if(sum(fam==fam_positive)==1){
   			if(any(mu0<0))
   				stop("mu0 must be composed by real positive number for your distribution")

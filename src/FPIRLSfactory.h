@@ -35,7 +35,7 @@ class FPIRLSfactory
 		
 		if(mu0.size() == 0){
 		  VectorXr y = inputData.getObservations();
-		  if( family == "binomial" || family== "probit" || family=="cloglog" ){ //binary outcomes
+		  if( family == "binomial" ){ //binary outcomes
 		    mu0 = VectorXr::Zero(y.size());
 		    for(UInt i = 0; i < y.size(); i++){
 		        mu0[i] = 0.5 * (y[i] + 0.5);
@@ -53,24 +53,18 @@ class FPIRLSfactory
 
 		// Manage scale_parameter
 		bool scale_parameter_flag = false;
-		if( (family=="gamma" || family=="invgaussian") && scale_parameter<0){
+		if( (family=="gamma") && scale_parameter<0){
 			scale_parameter_flag = true;
 		}
 
 		if(family=="binomial"){
 		    return make_unique<FPIRLS_Bernoulli<InputHandler, Integrator, ORDER,  mydim, ndim>>(mesh, inputData, mu0);
-		}else if(family=="probit"){
-		    return make_unique<FPIRLS_Probit<InputHandler, Integrator, ORDER,  mydim, ndim>>(mesh,inputData,mu0);
-		}else if(family=="cloglog"){
-		    return make_unique<FPIRLS_cLogLog<InputHandler, Integrator, ORDER,  mydim, ndim>>(mesh,inputData,mu0);
 		}else if(family=="poisson"){
 		    return make_unique<FPIRLS_Poisson<InputHandler, Integrator, ORDER,  mydim, ndim>>(mesh, inputData, mu0);
 		}else if(family=="exponential"){
 		    return make_unique<FPIRLS_Exponential<InputHandler, Integrator, ORDER,  mydim, ndim>>(mesh,inputData,mu0);
 		}else if(family=="gamma"){
 		    return make_unique<FPIRLS_Gamma<InputHandler, Integrator, ORDER,  mydim, ndim>>(mesh,inputData,mu0, scale_parameter, scale_parameter_flag);
-		}else if(family=="invgaussian"){
-		    return make_unique<FPIRLS_InvGaussian<InputHandler, Integrator, ORDER,  mydim, ndim>>(mesh,inputData,mu0, scale_parameter, scale_parameter_flag);
 		}
 
 		return std::unique_ptr<FPIRLS<InputHandler, Integrator, ORDER,  mydim,  ndim>>(nullptr);

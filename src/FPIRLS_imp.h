@@ -321,18 +321,5 @@ void FPIRLS<GAMDataEllipticSpaceVarying,Integrator,ORDER, mydim, ndim>::apply(){
 
 }
 
-/*********** defintion of inverse erf function for the Probit Distribution ************/
-
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-Real FPIRLS_Probit<InputHandler,Integrator,ORDER, mydim, ndim>::erf_inv(const Real& x)const{
-   Real tt1, tt2, lnx, sgn;
-   sgn = (x < 0) ? -1.0 : 1.0;
-   lnx = log((1 - x)*(1 + x));  // ln(x) = ln(1 - x*x);
-   tt1 = 2/(M_PI*0.147) + 0.5 * lnx;
-   tt2 = 1/(0.147) * lnx;
-
-   return(sgn*sqrt(-tt1 + sqrt(tt1*tt1 - tt2)));
-}
-
 
 #endif

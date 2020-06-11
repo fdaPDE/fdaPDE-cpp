@@ -374,9 +374,9 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
   }
 
   # FAMILY CHECK
-  family_admit = c("binomial", "probit", "cloglog", "exponential", "gamma", "poisson", "invgaussian", "gaussian")
+  family_admit = c("binomial", "exponential", "gamma", "poisson", "gaussian")
   if(sum(fam==family_admit)==0 ){
-   stop("'family' parameter required.\nCheck if it is one of the following: binomial, probit, cloglog, exponential, gamma, poisson, gaussian, invgaussian")
+   stop("'family' parameter required.\nCheck if it is one of the following: binomial, exponential, gamma, poisson, gaussian")
   }
 
 
@@ -441,7 +441,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
     }
   }else{
     ############# GAMs: FPIRLS algorithm #################
-    checkGAMParameters(max.steps = max.steps, mu0 = mu0, observations.len = length(observations), scale.param = scale.param, threshold = threshold, fam = fam)
+    checkGAMParameters(observations= observations, max.steps = max.steps, mu0 = mu0, observations.len = length(observations), scale.param = scale.param, threshold = threshold, fam = fam)
 
     if(class(FEMbasis$mesh) == 'mesh.2D' & is.null(PDE_parameters)){
 
@@ -564,7 +564,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
   }
 
   # GAM outputs
- if(sum(fam==c("binomial", "probit", "cloglog", "exponential", "gamma", "poisson", "invgaussian")) == 1 ){  
+ if(sum(fam==c("binomial", "exponential", "gamma", "poisson")) == 1 ){  
     fn.eval = bigsol[[13]]
     J_minima = bigsol[[14]]   
     variance.est=bigsol[[15]] 
