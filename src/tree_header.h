@@ -19,35 +19,34 @@
 
 /**	\class Header
  * 	\brief It contains general information about the tree.
-* 	\param	T The template parameter expresses the original objects for the construction of the tree, it is used to store Domain<T>, 
+* 	\param	T The template parameter expresses the original objects for the construction of the tree, it is used to store Domain<T>,
 				T::dp() gives the physical dimension of the object and T::dt() gives the search dimension \n
  * 				The tree always store Box<NDIMP> and the index to find the original object (Triangle...).
  				If we want to store a point, we have to create a box from point.
- 				(for example repeating the same coordinates for Min_point and Max_point) 
+ 				(for example repeating the same coordinates for Min_point and Max_point)
  				In the simplest case, or to change the structure adding the poin case everywhere (treenode...)
  *
  * 	Default copy constructor and default destructor work fine.
  */
-template<class T>
+template<UInt ndim>
 class TreeHeader {
 protected:
-	// Tree memory locations.
-	int tree_loc_;
-
-	// Tree levels.
-	int tree_lev_;
 
 	// Number of physical space dimensions (typically 2 or 3).
-	int ndimp_;
+	constexpr UInt ndimp_=ndim;
+	constexpr UInt ndimt_=2*ndim;
 
-	// Number of dimensions used for the search (2*ndimp because we use box).
-	int ndimt_;
+	// Tree memory locations.
+	int tree_loc_=0;
+
+	// Tree levels.
+	int tree_lev_=0;
 
 	//	Number of logical locations currently used in the tree. Initialized to 0.
-	int nele_;
+	int nele_=0;
 
 	/**	@name Tree indices
-	 *	The use of iava and iend avoids the necessity of initializing the stack of available locations. 
+	 *	The use of iava and iend avoids the necessity of initializing the stack of available locations.
 	 * In fact, the stack contains only locations that have been previously deleted from the tree.
 	 */
 	//@{
@@ -55,7 +54,7 @@ protected:
 	 *
 	 *	The stack of available nodes is a linked list with all nodes that have been previously deleted. If iava=0 the stack is empty.
 	 */
-	int iava_;
+	int iava_=1;
 
 	/**	Next available location in the yet not allocated part of the tree ("tree free store"). Initialized to 1.
 	 *
@@ -64,12 +63,12 @@ protected:
 	 *	It may increase during insertions and will always remain unaltered after deletions.
 	 *	It isn't equal to nele.
 	 */
-	int iend_;
+	int iend_=1;
 	//@}
 
 	// Tree's domain.
-	Domain<T> tree_domain_;
-	
+	Domain<ndim> tree_domain_;
+
 	/**	A protected constructor.
 	 *
 	 *	\param[in] ntree Tree dimension needed.
@@ -78,22 +77,23 @@ protected:
 	 *	Public function createtreeheader must be used to create an object of Header class.
 	 *	This avoids the creation of a tree with more memory locations than a fixed limit.
 	 */
-	TreeHeader(int const & ntree, Domain<T> const & d);
+	TreeHeader(int const & ntree, Domain<ndim> const & d);
 	/// Tries to set the number of tree memory locations (throws a LocLengthError exception if nt is out of range).
 	void stml(int const & nt);
+
 public:
 	/** Default constructor.
 	 *
 	 * 	It's fundamental in creating an ADTree object from a MeshFile::ff2dmesh or a MeshFile::ff3dmesh object.
 	 */
-	TreeHeader():tree_loc_(0), tree_lev_(0), ndimp_(T::dp()), ndimt_(T::dt()), nele_(0), iava_(1), iend_(1), tree_domain_(){}
-	
+	TreeHeader()=default;
+
 	// constructor in case there is already tree information
-	TreeHeader(int const & tree_loc, int const & tree_lev, int const & ndimp, int const & ndimt, 
-		int const & nele, int const & iava, int const & iend, Domain<T> const & tree_domain):
-			tree_loc_(tree_loc), tree_lev_(tree_lev), ndimp_(ndimp), ndimt_(ndimt), 
-			nele_(nele), iava_(iava), iend_(iend), tree_domain_(tree_domain){}
-	
+	TreeHeader(int const & tree_loc, int const & tree_lev, int const & nele, int const & iava,
+		int const & iend, Domain<ndim> const & tree_domain) :
+			tree_loc_(tree_loc), tree_lev_(tree_lev), nele_(nele),
+				iava_(iava), iend_(iend), tree_domain_(tree_domain) {}
+
 	/// Gets the number of tree memory locations.
 	inline int gettreeloc() const { return tree_loc_; }
 	/// Sets the number of tree memory locations (handles a LocLengthError exception).
@@ -133,8 +133,8 @@ public:
 	 *	- number of logical locations currently used in the tree;
 	 *	- tree domain.
 	 */
-	template<class S>
-	friend std::ostream & operator<<(std::ostream &, TreeHeader<S> const &);
+	template<UInt NDIM>
+	friend std::ostream & operator<<(std::ostream &, TreeHeader<NDIM> const &);
 
 	/**	\fn Header<S> createtreeheader(int const & nt, int const & nk, Domain<S> const & d)
 	 *	\brief Creates a tree header handling the exception condition in which tree maximum dimension is exceeded.
@@ -142,8 +142,8 @@ public:
 	 *	\param[in] nk Number of pieces of information carried by the tree.
 	 *	\param[in] d Tree's domain.
 	 */
-	template<class S>
-	friend TreeHeader<S> createtreeheader(int const & nt, Domain<S> const & d);
+	template<class NDIM>
+	friend TreeHeader<NDIM> createtreeheader(int const & nt, Domain<NDIM> const & d);
 };
 
 #include "tree_header_imp.h"

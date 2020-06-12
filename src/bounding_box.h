@@ -12,14 +12,15 @@
 /**
  *	\template parameter NDIMP is the physical dimension of Box: 2 -> 2D, 3 -> 3D
 */
-template<int NDIMP>
+template<UInt ndim>
 class Box {
 protected:
 	/** A vector of rectangle corner coordinates.
 	 * 	First NDIMP values are the coordinates of the rectangle corner with minimum coordinates,
 	 *  followed by the coordinates of the opposite corner. (2D: xmin, ymin, xmax, ymax)
 	 */
-	std::vector<Real> x_;
+	Point<ndim> minPoint_;
+	Point<ndim> maxPoint_;
 
 public:
 	/**	Default constructor.
@@ -27,7 +28,7 @@ public:
 	 *	It's fundamental in creating a vector of Box objects.
 	 *  Sets coordinate values to zero.
 	 */
-	Box();
+	Box()=default;
 
 	/**	Another constructor.
 	 *
@@ -35,35 +36,22 @@ public:
 	 *					 Make sure that its size is equal to the size of protected member x_.
 	 */
 	// constructor in case there is already tree information
-	Box(std::vector<Real> const & coord);
+	Box(const Point<ndim>& min, const Point<ndim>& max) :
+			minPoint_(min), maxPoint_(max) {}
 
-	/**	Another constructor.
-		 *
-		 *	\param[in] Element<NNODES,NDIME,NDIMPP>, NDIME: dimension of Element, NDIMPP: physical dimension
-		 *											 NDIMPP has same dimension as NDIMP
-	 */
-	template <UInt NNODES,int NDIME,int NDIMPP>
-	Box(Element<NNODES,NDIME,NDIMPP> const & element);
+	Box(std::vector<Points<ndim> > const & points);
 
-	/// Returns the i-th coordinate value.
-	inline Real operator[](int const & i) { return x_[i]; }
-	inline Real operator[](int const & i) const { return x_[i]; }
-	/// Returns the number of physical space dimension.
-	inline static constexpr int dp() { return NDIMP; }
-	/// Returns the number of dimensions used for the search (2*NDIMP).
-	inline static constexpr int dt() { return 2*NDIMP; }
-	/// Returns the size of coordinate array. (composed of min and max)
-	inline static constexpr int coordsize() { return 2*NDIMP; }
-	/** Sets coordinate values.
+
+	Point<ndim>& minPoint() {return minPoint_;}
+	const Point<ndim>& minPoint() const {return minPoint_;}
+
+	Point<ndim>& maxPoint() {return maxPoint_;}
+	const Point<ndim>& maxPoint() const {return maxPoint_;}
+	
+ 	/** Sets coordinate values.
 	 *
 	 *	\param[in] data A vector of new coordinates.
 	 *					Make sure that its size is equal to the size of protected member x_.
-	 */
-	void set(std::vector<Real> const & data);
-
-	/** Gets coordinate values.
-	 */
-	std::vector<Real> get() const {return x_; };
 
 	/** print minimum box point and maximum box point
 	*/

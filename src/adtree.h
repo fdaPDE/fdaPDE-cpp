@@ -23,16 +23,16 @@
  * 	\brief Alternating binary range searching tree.
  *	\param Shape: template parameter, the original shape
  */
-template<class Shape>
+template<UInt ndim>
 class ADTree {
 protected:
   /** The header.
    *
    *  It contains general information about the tree.
    */
-  TreeHeader<Shape> header_;
+  TreeHeader<ndim> header_;
   /// Vector of tree nodes.
-  std::vector<TreeNode<Shape>> data_;
+  std::vector<TreeNode<ndim> > data_;
   /** \brief Adds a point to the tree.
    * 	It throws:
    * 	<ul>
@@ -70,7 +70,7 @@ public:
    *	It initializes the tree header and reserve a suitable number of memory
    *	locations to store tree nodes. It doesn't fill the tree.
    */
-  ADTree():header_() {
+  ADTree() : header_() {
     /*
      * The first element in the tree nodes vector is the head.
      * It stores the address of the tree root (i.e. the first node in the tree).
@@ -79,9 +79,7 @@ public:
    	data_.reserve(header_.gettreeloc()+1);
 
     // Id, obj are arbitrary parameters. Remember that data_[0] is the head, not a tree node.
-  	Shape obj;
-  	Id id = std::numeric_limits<UInt>::max();
-  	data_.push_back(TreeNode<Shape>(id, obj));
+  	data_.emplace_back();
 	};
 
   /**	A base constructor.
@@ -89,18 +87,22 @@ public:
    *	It initializes the tree header and reserve a suitable number of memory
    *	locations to store tree nodes. It doesn't fill the tree.
    */
-  ADTree(TreeHeader<Shape> const & header);
+  ADTree(TreeHeader<ndim> const & header) : header_(header) {
+    data_.reserve(header_.gettreeloc()+1);
+    data_.emplace_back();
+  }
 
   // constructor in case there is already tree information
-  ADTree(TreeHeader<Shape> const & header, std::vector<TreeNode<Shape>> const & data):header_(header), data_(data) {};
-  
-  /** It fills all the locations of the tree. Object's coordinates are stored to perform searching operations. 
+  ADTree(TreeHeader<ndim> const & header, std::vector<TreeNode<ndim> > const & data) : header_(header), data_(data) {}
+
+  /** It fills all the locations of the tree. Object's coordinates are stored to perform searching operations.
    * 	See mesh_handler to verify what points and triangle must contain.
    */
-  ADTree(Real const * const points, UInt const * const triangle, UInt num_nodes, UInt num_triangle);
+  template<UInt ORDER, UInt mydim>
+  ADTree(const MeshHandler<ORDER,mydim,ndim>&);
 
   /// Returns a reference to the tree header.
-  inline TreeHeader<Shape> gettreeheader() const { return header_; }
+  inline TreeHeader<ndim>& gettreeheader() const { return header_; }
   /** Adds a node to the tree.
    * 	It calls the handlers of the exceptions that can be thrown by adtrb().
    *
@@ -120,7 +122,7 @@ public:
    *
    * 	\param[in] loc Location of the searched node.
    */
-  inline TreeNode<Shape> gettreenode(int const & loc) const{return data_[loc];};
+  inline TreeNode<ndim> gettreenode(int const & loc) const {return data_[loc];}
 
   /** Finds all points or (bounding) boxes that intersect a given box.
    *
@@ -129,16 +131,13 @@ public:
    *
    * 	This function returns true if it has completed successfully, false otherwise.
    */
-  bool search(std::vector<Real> const & region, std::set<int> & found)const;
-  /// Deletes a specified location in the tree.
-  //void deltreenode(int const & index);
-  /// Gets the j-th coordinate of the bounding box of the p-th object stored in the node.
-  inline Real pointcoord(int const & p, int const & j) const { return data_[p].getcoord(j); }
+  bool search(std::vector<Real> const & region, std::set<int> & found) const;
+
   /// Gets the the Id of the original object of the p-th treenode.
   inline Id pointId (int const & p) const { return data_[p].getid(); }
   /// Outputs informations contained in the tree header.
-  template<class S>
-  friend std::ostream & operator<<(std::ostream & ostr, ADTree<S> const & myadt);
+  template<UInt NDIM>
+  friend std::ostream & operator<<(std::ostream & ostr, ADTree<NDIM> const & myadt);
 
 };
 
