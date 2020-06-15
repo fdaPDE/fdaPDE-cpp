@@ -441,7 +441,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
     }
   }else{
     ############# GAMs: FPIRLS algorithm #################
-    checkGAMParameters(observations= observations, max.steps = max.steps, mu0 = mu0, observations.len = length(observations), scale.param = scale.param, threshold = threshold, fam = fam)
+    checkGAMParameters(observations= observations, max.steps = max.steps, mu0 = mu0, scale.param = scale.param, threshold = threshold, fam = fam)
 
     if(class(FEMbasis$mesh) == 'mesh.2D' & is.null(PDE_parameters)){
 
