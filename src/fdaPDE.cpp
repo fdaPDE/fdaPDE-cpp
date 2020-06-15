@@ -6,6 +6,8 @@
 #include "mesh_objects.h"
 #include "mesh.h"
 #include "finite_element.h"
+#include "param_functors.h"
+#include "pde_expression_templates.h"
 #include "matrix_assembler.h"
 #include "FPCAData.h"
 #include "FPCAObject.h"
@@ -24,11 +26,11 @@
 #include "FEDensityEstimation.h"
 
 
-template<typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
+template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
 SEXP regression_skeleton(InputHandler &regressionData, SEXP Rmesh)
 {
-	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh);
-	MixedFERegression<InputHandler, Integrator,ORDER, IntegratorGaussP3, 0, 0, mydim, ndim> regression(mesh,regressionData);
+	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh, regressionData.getSearch());
+	MixedFERegression<InputHandler, ORDER, IntegratorGaussP3, 0, 0, mydim, ndim> regression(mesh,regressionData);
 
 	regression.apply();
 
@@ -89,40 +91,42 @@ SEXP regression_skeleton(InputHandler &regressionData, SEXP Rmesh)
 			rans4[i + beta(0).size()*j] = beta(j)(i);
 	}
 
-	//SEND TREE INFORMATION TO R
-	SET_VECTOR_ELT(result, 5, Rf_allocVector(INTSXP, 1)); //tree_header information
-	int *rans5 = INTEGER(VECTOR_ELT(result, 5));
-	rans5[0] = mesh.getTree().gettreeheader().gettreelev();
+	if(regressionData.getSearch()==2){
+		//SEND TREE INFORMATION TO R
+		SET_VECTOR_ELT(result, 5, Rf_allocVector(INTSXP, 1)); //tree_header information
+		int *rans5 = INTEGER(VECTOR_ELT(result, 5));
+		rans5[0] = mesh.getTree().gettreeheader().gettreelev();
 
-	SET_VECTOR_ELT(result, 6, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain origin
-	Real *rans6 = REAL(VECTOR_ELT(result, 6));
-	for(UInt i = 0; i < ndim*2; i++)
-		rans6[i] = mesh.getTree().gettreeheader().domainorig(i);
+		SET_VECTOR_ELT(result, 6, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain origin
+		Real *rans6 = REAL(VECTOR_ELT(result, 6));
+		for(UInt i = 0; i < ndim*2; i++)
+			rans6[i] = mesh.getTree().gettreeheader().domainorig(i);
 
-	SET_VECTOR_ELT(result, 7, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain scale
-	Real *rans7 = REAL(VECTOR_ELT(result, 7));
-	for(UInt i = 0; i < ndim*2; i++)
-		rans7[i] = mesh.getTree().gettreeheader().domainscal(i);
+		SET_VECTOR_ELT(result, 7, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain scale
+		Real *rans7 = REAL(VECTOR_ELT(result, 7));
+		for(UInt i = 0; i < ndim*2; i++)
+			rans7[i] = mesh.getTree().gettreeheader().domainscal(i);
 
 
-	UInt num_tree_nodes = mesh.num_elements()+1; //Be careful! This is not equal to number of elements
-	SET_VECTOR_ELT(result, 8, Rf_allocMatrix(INTSXP, num_tree_nodes, 3)); //treenode information
-	int *rans8 = INTEGER(VECTOR_ELT(result, 8));
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		UInt num_tree_nodes = mesh.num_elements()+1; //Be careful! This is not equal to number of elements
+		SET_VECTOR_ELT(result, 8, Rf_allocMatrix(INTSXP, num_tree_nodes, 3)); //treenode information
+		int *rans8 = INTEGER(VECTOR_ELT(result, 8));
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans8[i] = mesh.getTree().gettreenode(i).getid();
 
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans8[i + num_tree_nodes*1] = mesh.getTree().gettreenode(i).getchild(0);
 
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans8[i + num_tree_nodes*2] = mesh.getTree().gettreenode(i).getchild(1);
 
-	SET_VECTOR_ELT(result, 9, Rf_allocMatrix(REALSXP, num_tree_nodes, ndim*2)); //treenode box coordinate
-	Real *rans9 = REAL(VECTOR_ELT(result, 9));
-	for(UInt j = 0; j < ndim*2; j++)
-	{
-		for(UInt i = 0; i < num_tree_nodes; i++)
-			rans9[i + num_tree_nodes*j] = mesh.getTree().gettreenode(i).getbox().get()[j];
+		SET_VECTOR_ELT(result, 9, Rf_allocMatrix(REALSXP, num_tree_nodes, ndim*2)); //treenode box coordinate
+		Real *rans9 = REAL(VECTOR_ELT(result, 9));
+		for(UInt j = 0; j < ndim*2; j++)
+		{
+			for(UInt i = 0; i < num_tree_nodes; i++)
+				rans9[i + num_tree_nodes*j] = mesh.getTree().gettreenode(i).getbox().get()[j];
+		}
 	}
 
 	//SEND BARYCENTER INFORMATION TO R
@@ -144,17 +148,17 @@ SEXP regression_skeleton(InputHandler &regressionData, SEXP Rmesh)
 }
 
 
-template<typename InputHandler, typename IntegratorSpace, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
+template<typename InputHandler, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
 SEXP regression_skeleton_time(InputHandler &regressionData, SEXP Rmesh, SEXP Rmesh_time)
 {
-	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh);//! load the mesh
+	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh, regressionData.getSearch());
 	UInt n_time = Rf_length(Rmesh_time);
 	std::vector<Real> mesh_time(n_time);
 	for(UInt i=0; i<n_time; ++i)
 	{
 		mesh_time[i] = REAL(Rmesh_time)[i];
 	}
-	MixedFERegression<InputHandler, IntegratorSpace, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> regression(mesh, mesh_time,regressionData);//! load data in a C++ object
+	MixedFERegression<InputHandler, ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim> regression(mesh, mesh_time,regressionData);//! load data in a C++ object
 
 	regression.apply(); //! solve the problem (compute the _solution, _dof, _GCV, _beta)
 
@@ -227,40 +231,43 @@ SEXP regression_skeleton_time(InputHandler &regressionData, SEXP Rmesh, SEXP Rme
 				rans4[k + beta(0,0).size()*i + beta(0,0).size()*beta.rows()*j] = beta.coeff(i,j)(k);
 		}
 	}
-	//SEND TREE INFORMATION TO R
-	SET_VECTOR_ELT(result, 5, Rf_allocVector(INTSXP, 1)); //tree_header information
-	int *rans5 = INTEGER(VECTOR_ELT(result, 5));
-	rans5[0] = mesh.getTree().gettreeheader().gettreelev();
 
-	SET_VECTOR_ELT(result, 6, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain origin
-	Real *rans6 = REAL(VECTOR_ELT(result, 6));
-	for(UInt i = 0; i < ndim*2; i++)
-		rans6[i] = mesh.getTree().gettreeheader().domainorig(i);
+	if(regressionData.getSearch()==2){
+		//SEND TREE INFORMATION TO R
+		SET_VECTOR_ELT(result, 5, Rf_allocVector(INTSXP, 1)); //tree_header information
+		int *rans5 = INTEGER(VECTOR_ELT(result, 5));
+		rans5[0] = mesh.getTree().gettreeheader().gettreelev();
 
-	SET_VECTOR_ELT(result, 7, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain scale
-	Real *rans7 = REAL(VECTOR_ELT(result, 7));
-	for(UInt i = 0; i < ndim*2; i++)
-		rans7[i] = mesh.getTree().gettreeheader().domainscal(i);
+		SET_VECTOR_ELT(result, 6, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain origin
+		Real *rans6 = REAL(VECTOR_ELT(result, 6));
+		for(UInt i = 0; i < ndim*2; i++)
+			rans6[i] = mesh.getTree().gettreeheader().domainorig(i);
+
+		SET_VECTOR_ELT(result, 7, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain scale
+		Real *rans7 = REAL(VECTOR_ELT(result, 7));
+		for(UInt i = 0; i < ndim*2; i++)
+			rans7[i] = mesh.getTree().gettreeheader().domainscal(i);
 
 
-	UInt num_tree_nodes = mesh.num_elements()+1; //Be careful! This is not equal to number of elements
-	SET_VECTOR_ELT(result, 8, Rf_allocMatrix(INTSXP, num_tree_nodes, 3)); //treenode information
-	int *rans8 = INTEGER(VECTOR_ELT(result, 8));
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		UInt num_tree_nodes = mesh.num_elements()+1; //Be careful! This is not equal to number of elements
+		SET_VECTOR_ELT(result, 8, Rf_allocMatrix(INTSXP, num_tree_nodes, 3)); //treenode information
+		int *rans8 = INTEGER(VECTOR_ELT(result, 8));
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans8[i] = mesh.getTree().gettreenode(i).getid();
 
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans8[i + num_tree_nodes*1] = mesh.getTree().gettreenode(i).getchild(0);
 
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans8[i + num_tree_nodes*2] = mesh.getTree().gettreenode(i).getchild(1);
 
-	SET_VECTOR_ELT(result, 9, Rf_allocMatrix(REALSXP, num_tree_nodes, ndim*2)); //treenode box coordinate
-	Real *rans9 = REAL(VECTOR_ELT(result, 9));
-	for(UInt j = 0; j < ndim*2; j++)
-	{
-		for(UInt i = 0; i < num_tree_nodes; i++)
-			rans9[i + num_tree_nodes*j] = mesh.getTree().gettreenode(i).getbox().get()[j];
+		SET_VECTOR_ELT(result, 9, Rf_allocMatrix(REALSXP, num_tree_nodes, ndim*2)); //treenode box coordinate
+		Real *rans9 = REAL(VECTOR_ELT(result, 9));
+		for(UInt j = 0; j < ndim*2; j++)
+		{
+			for(UInt i = 0; i < num_tree_nodes; i++)
+				rans9[i + num_tree_nodes*j] = mesh.getTree().gettreenode(i).getbox().get()[j];
+		}
 	}
 
 	//SEND BARYCENTER INFORMATION TO R
@@ -282,13 +289,13 @@ SEXP regression_skeleton_time(InputHandler &regressionData, SEXP Rmesh, SEXP Rme
 }
 
 
-template<typename Integrator,UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 SEXP FPCA_skeleton(FPCAData &fPCAData, SEXP Rmesh, std::string validation)
 {
 
-	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh);
+	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh, fPCAData.getSearch());
 
-	std::unique_ptr<MixedFEFPCABase<Integrator, ORDER, mydim, ndim>> fpca = MixedFEFPCAfactory<Integrator, ORDER, mydim, ndim>::createFPCAsolver(validation, mesh, fPCAData);
+	std::unique_ptr<MixedFEFPCABase<ORDER, mydim, ndim>> fpca = MixedFEFPCAfactory<ORDER, mydim, ndim>::createFPCAsolver(validation, mesh, fPCAData);
 
 	fpca->apply();
 
@@ -349,48 +356,49 @@ SEXP FPCA_skeleton(FPCAData &fPCAData, SEXP Rmesh, std::string validation)
 		rans5[i] = var[i];
 	}
 
-	//TREE INFORMATION
-	SET_VECTOR_ELT(result, 6, Rf_allocVector(INTSXP, 7)); //tree_header information
-	int *rans6 = INTEGER(VECTOR_ELT(result, 6));
-	rans6[0] = mesh.getTree().gettreeheader().gettreeloc();
-	rans6[1] = mesh.getTree().gettreeheader().gettreelev();
-	rans6[2] = mesh.getTree().gettreeheader().getndimp();
-	rans6[3] = mesh.getTree().gettreeheader().getndimt();
-	rans6[4] = mesh.getTree().gettreeheader().getnele();
-	rans6[5] = mesh.getTree().gettreeheader().getiava();
-	rans6[6] = mesh.getTree().gettreeheader().getiend();
+	if(fPCAData.getSearch()==2){
+		//TREE INFORMATION
+		SET_VECTOR_ELT(result, 6, Rf_allocVector(INTSXP, 7)); //tree_header information
+		int *rans6 = INTEGER(VECTOR_ELT(result, 6));
+		rans6[0] = mesh.getTree().gettreeheader().gettreeloc();
+		rans6[1] = mesh.getTree().gettreeheader().gettreelev();
+		rans6[2] = mesh.getTree().gettreeheader().getndimp();
+		rans6[3] = mesh.getTree().gettreeheader().getndimt();
+		rans6[4] = mesh.getTree().gettreeheader().getnele();
+		rans6[5] = mesh.getTree().gettreeheader().getiava();
+		rans6[6] = mesh.getTree().gettreeheader().getiend();
 
-	SET_VECTOR_ELT(result, 7, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain origin
-	Real *rans7 = REAL(VECTOR_ELT(result, 7));
-	for(UInt i = 0; i < ndim*2; i++)
-		rans7[i] = mesh.getTree().gettreeheader().domainorig(i);
+		SET_VECTOR_ELT(result, 7, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain origin
+		Real *rans7 = REAL(VECTOR_ELT(result, 7));
+		for(UInt i = 0; i < ndim*2; i++)
+			rans7[i] = mesh.getTree().gettreeheader().domainorig(i);
 
-	SET_VECTOR_ELT(result, 8, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain scale
-	Real *rans8 = REAL(VECTOR_ELT(result, 8));
-	for(UInt i = 0; i < ndim*2; i++)
-		rans8[i] = mesh.getTree().gettreeheader().domainscal(i);
+		SET_VECTOR_ELT(result, 8, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain scale
+		Real *rans8 = REAL(VECTOR_ELT(result, 8));
+		for(UInt i = 0; i < ndim*2; i++)
+			rans8[i] = mesh.getTree().gettreeheader().domainscal(i);
 
 
-	UInt num_tree_nodes = mesh.num_elements()+1; //Be careful! This is not equal to number of elements
-	SET_VECTOR_ELT(result, 9, Rf_allocMatrix(INTSXP, num_tree_nodes, 3)); //treenode information
-	int *rans9 = INTEGER(VECTOR_ELT(result, 9));
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		UInt num_tree_nodes = mesh.num_elements()+1; //Be careful! This is not equal to number of elements
+		SET_VECTOR_ELT(result, 9, Rf_allocMatrix(INTSXP, num_tree_nodes, 3)); //treenode information
+		int *rans9 = INTEGER(VECTOR_ELT(result, 9));
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans9[i] = mesh.getTree().gettreenode(i).getid();
 
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans9[i + num_tree_nodes*1] = mesh.getTree().gettreenode(i).getchild(0);
 
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans9[i + num_tree_nodes*2] = mesh.getTree().gettreenode(i).getchild(1);
 
-	SET_VECTOR_ELT(result, 10, Rf_allocMatrix(REALSXP, num_tree_nodes, ndim*2)); //treenode box coordinate
-	Real *rans10 = REAL(VECTOR_ELT(result, 10));
-	for(UInt j = 0; j < ndim*2; j++)
-	{
-		for(UInt i = 0; i < num_tree_nodes; i++)
-			rans10[i + num_tree_nodes*j] = mesh.getTree().gettreenode(i).getbox().get()[j];
+		SET_VECTOR_ELT(result, 10, Rf_allocMatrix(REALSXP, num_tree_nodes, ndim*2)); //treenode box coordinate
+		Real *rans10 = REAL(VECTOR_ELT(result, 10));
+		for(UInt j = 0; j < ndim*2; j++)
+		{
+			for(UInt i = 0; i < num_tree_nodes; i++)
+				rans10[i + num_tree_nodes*j] = mesh.getTree().gettreenode(i).getbox().get()[j];
+		}
 	}
-
 	//BARYCENTER INFORMATION
 	SET_VECTOR_ELT(result, 11, Rf_allocMatrix(REALSXP, barycenters.rows(), barycenters.cols())); //barycenter information (matrix)
 	Real *rans11 = REAL(VECTOR_ELT(result, 11));
@@ -411,23 +419,23 @@ SEXP FPCA_skeleton(FPCAData &fPCAData, SEXP Rmesh, std::string validation)
 }
 
 
-template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
 SEXP DE_skeleton(SEXP Rdata, SEXP Rorder, SEXP Rfvec, SEXP RheatStep, SEXP RheatIter, SEXP Rlambda, SEXP Rnfolds, SEXP Rnsim, SEXP RstepProposals,
 	SEXP Rtol1, SEXP Rtol2, SEXP Rprint, SEXP Rmesh, SEXP Rsearch,
 	const std::string & step_method, const std::string & direction_method, const std::string & preprocess_method)
 {
 	// Construct data problem object
-	DataProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim> dataProblem(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rsearch, Rmesh);
+	DataProblem<Integrator_noPoly, ORDER, mydim, ndim> dataProblem(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rsearch, Rmesh);
 
 	// Construct functional problem object
-	FunctionalProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim> functionalProblem(dataProblem);
+	FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim> functionalProblem(dataProblem);
 
 	// Construct minimization algorithm object
-	std::shared_ptr<MinimizationAlgorithm<Integrator, Integrator_noPoly, ORDER, mydim, ndim>> minimizationAlgo =
-		MinimizationAlgorithm_factory<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::createStepSolver(dataProblem, functionalProblem, direction_method, step_method);
+	std::shared_ptr<MinimizationAlgorithm<Integrator_noPoly, ORDER, mydim, ndim>> minimizationAlgo =
+		MinimizationAlgorithm_factory<Integrator_noPoly, ORDER, mydim, ndim>::createStepSolver(dataProblem, functionalProblem, direction_method, step_method);
 
 	// Construct FEDE object
-	FEDE<Integrator, Integrator_noPoly, ORDER, mydim, ndim> fede(dataProblem, functionalProblem, minimizationAlgo, preprocess_method);
+	FEDE<Integrator_noPoly, ORDER, mydim, ndim> fede(dataProblem, functionalProblem, minimizationAlgo, preprocess_method);
 
   // Perform the whole task
 	fede.apply();
@@ -438,7 +446,7 @@ SEXP DE_skeleton(SEXP Rdata, SEXP Rorder, SEXP Rfvec, SEXP RheatStep, SEXP Rheat
 	Real lambda_sol = fede.getBestLambda();
 	std::vector<Real> CV_errors = fede.getCvError();
 
-	std::vector<Point> data = dataProblem.getData();
+	std::vector<Point<ndim> > data = dataProblem.getData();
 
 	// Copy result in R memory
 	SEXP result = NILSXP;
@@ -479,40 +487,42 @@ SEXP DE_skeleton(SEXP Rdata, SEXP Rorder, SEXP Rfvec, SEXP RheatStep, SEXP Rheat
 		rans4[i] = CV_errors[i];
 	}
 
-	//SEND TREE INFORMATION TO R
-	SET_VECTOR_ELT(result, 5, Rf_allocVector(INTSXP, 1)); //tree_header information
-	int *rans5 = INTEGER(VECTOR_ELT(result, 5));
-	rans5[0] = dataProblem.getMesh().getTree().gettreeheader().gettreelev();
+	if(dataProblem.getSearch()==2){
+		//SEND TREE INFORMATION TO R
+		SET_VECTOR_ELT(result, 5, Rf_allocVector(INTSXP, 1)); //tree_header information
+		int *rans5 = INTEGER(VECTOR_ELT(result, 5));
+		rans5[0] = dataProblem.getMesh().getTree().gettreeheader().gettreelev();
 
-	SET_VECTOR_ELT(result, 6, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain origin
-	Real *rans6 = REAL(VECTOR_ELT(result, 6));
-	for(UInt i = 0; i < ndim*2; i++)
-		rans6[i] = dataProblem.getMesh().getTree().gettreeheader().domainorig(i);
+		SET_VECTOR_ELT(result, 6, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain origin
+		Real *rans6 = REAL(VECTOR_ELT(result, 6));
+		for(UInt i = 0; i < ndim*2; i++)
+			rans6[i] = dataProblem.getMesh().getTree().gettreeheader().domainorig(i);
 
-	SET_VECTOR_ELT(result, 7, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain scale
-	Real *rans7 = REAL(VECTOR_ELT(result, 7));
-	for(UInt i = 0; i < ndim*2; i++)
-		rans7[i] = dataProblem.getMesh().getTree().gettreeheader().domainscal(i);
+		SET_VECTOR_ELT(result, 7, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain scale
+		Real *rans7 = REAL(VECTOR_ELT(result, 7));
+		for(UInt i = 0; i < ndim*2; i++)
+			rans7[i] = dataProblem.getMesh().getTree().gettreeheader().domainscal(i);
 
 
-	UInt num_tree_nodes = dataProblem.getMesh().num_elements()+1; //Be careful! This is not equal to number of elements
-	SET_VECTOR_ELT(result, 8, Rf_allocMatrix(INTSXP, num_tree_nodes, 3)); //treenode information
-	int *rans8 = INTEGER(VECTOR_ELT(result, 8));
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		UInt num_tree_nodes = dataProblem.getMesh().num_elements()+1; //Be careful! This is not equal to number of elements
+		SET_VECTOR_ELT(result, 8, Rf_allocMatrix(INTSXP, num_tree_nodes, 3)); //treenode information
+		int *rans8 = INTEGER(VECTOR_ELT(result, 8));
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans8[i] = dataProblem.getMesh().getTree().gettreenode(i).getid();
 
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans8[i + num_tree_nodes*1] = dataProblem.getMesh().getTree().gettreenode(i).getchild(0);
 
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans8[i + num_tree_nodes*2] = dataProblem.getMesh().getTree().gettreenode(i).getchild(1);
 
-	SET_VECTOR_ELT(result, 9, Rf_allocMatrix(REALSXP, num_tree_nodes, ndim*2)); //treenode box coordinate
-	Real *rans9 = REAL(VECTOR_ELT(result, 9));
-	for(UInt j = 0; j < ndim*2; j++)
-	{
-		for(UInt i = 0; i < num_tree_nodes; i++)
-			rans9[i + num_tree_nodes*j] = dataProblem.getMesh().getTree().gettreenode(i).getbox().get()[j];
+		SET_VECTOR_ELT(result, 9, Rf_allocMatrix(REALSXP, num_tree_nodes, ndim*2)); //treenode box coordinate
+		Real *rans9 = REAL(VECTOR_ELT(result, 9));
+		for(UInt j = 0; j < ndim*2; j++)
+		{
+			for(UInt i = 0; i < num_tree_nodes; i++)
+				rans9[i + num_tree_nodes*j] = dataProblem.getMesh().getTree().gettreenode(i).getbox().get()[j];
+		}
 	}
 
 	UNPROTECT(1);
@@ -521,20 +531,23 @@ SEXP DE_skeleton(SEXP Rdata, SEXP Rorder, SEXP Rfvec, SEXP RheatStep, SEXP Rheat
 }
 
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 SEXP get_integration_points_skeleton(SEXP Rmesh)
 {
+	using Integrator = typename FiniteElement<ORDER, mydim, ndim>::Integrator;
+	using meshElement = typename MeshHandler<ORDER, mydim, ndim>::meshElement;
+	using EigenMap2PointCoord = Eigen::Map<const Eigen::Matrix<Real,mydim,1> >;
 	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh);
-	FiniteElement<Integrator,ORDER, mydim, ndim> fe;
 
 	SEXP result;
 	PROTECT(result=Rf_allocVector(REALSXP, 2*Integrator::NNODES*mesh.num_elements()));
 	for(UInt i=0; i<mesh.num_elements(); i++)
 	{
-		fe.updateElement(mesh.getElement(i));
-		for(UInt l = 0;l < Integrator::NNODES; l++)
+		meshElement el = mesh.getElement(i);
+		for(UInt l = 0; l < Integrator::NNODES; l++)
 		{
-			Point p = fe.coorQuadPt(l);
+			Point<ndim> p{el.getM_J() * EigenMap2PointCoord(&Integrator::NODES[l][0])};
+			p += el[0];
 			REAL(result)[i*Integrator::NNODES + l] = p[0];
 			REAL(result)[mesh.num_elements()*Integrator::NNODES + i*Integrator::NNODES + l] = p[1];
 		}
@@ -544,12 +557,12 @@ SEXP get_integration_points_skeleton(SEXP Rmesh)
 	return(result);
 }
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim, typename A>
+template<UInt ORDER, UInt mydim, UInt ndim, typename A>
 SEXP get_FEM_Matrix_skeleton(SEXP Rmesh, EOExpr<A> oper)
 {
 	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh);
 
-	FiniteElement<Integrator, ORDER, mydim, ndim> fe;
+	FiniteElement<ORDER, mydim, ndim> fe;
 
 	SpMat AMat;
 	Assembler::operKernel(oper, mesh, fe, AMat);
@@ -610,15 +623,15 @@ SEXP regression_Laplace(SEXP Rlocations, SEXP RbaryLocations, SEXP Robservations
 	UInt ndim=INTEGER(Rndim)[0];
 
     if(regressionData.getOrder()==1 && mydim==2 && ndim==2)
-    	return(regression_skeleton<RegressionData,IntegratorTriangleP2, 1, 2, 2>(regressionData, Rmesh));
+    	return(regression_skeleton<RegressionData, 1, 2, 2>(regressionData, Rmesh));
     else if(regressionData.getOrder()==2 && mydim==2 && ndim==2)
-		return(regression_skeleton<RegressionData,IntegratorTriangleP4, 2, 2, 2>(regressionData, Rmesh));
+			return(regression_skeleton<RegressionData, 2, 2, 2>(regressionData, Rmesh));
     else if(regressionData.getOrder()==1 && mydim==2 && ndim==3)
-		return(regression_skeleton<RegressionData,IntegratorTriangleP2, 1, 2, 3>(regressionData, Rmesh));
-   else if(regressionData.getOrder()==2 && mydim==2 && ndim==3)
-		return(regression_skeleton<RegressionData,IntegratorTriangleP4, 2, 2, 3>(regressionData, Rmesh));
-	else if(regressionData.getOrder()==1 && mydim==3 && ndim==3)
-		return(regression_skeleton<RegressionData,IntegratorTetrahedronP2, 1, 3, 3>(regressionData, Rmesh));
+			return(regression_skeleton<RegressionData, 1, 2, 3>(regressionData, Rmesh));
+    else if(regressionData.getOrder()==2 && mydim==2 && ndim==3)
+			return(regression_skeleton<RegressionData, 2, 2, 3>(regressionData, Rmesh));
+		else if(regressionData.getOrder()==1 && mydim==3 && ndim==3)
+			return(regression_skeleton<RegressionData, 1, 3, 3>(regressionData, Rmesh));
     return(NILSXP);
 }
 
@@ -653,13 +666,13 @@ SEXP regression_PDE(SEXP Rlocations, SEXP RbaryLocations, SEXP Robservations, SE
 	UInt ndim=INTEGER(Rndim)[0];
 
 	if(regressionData.getOrder() == 1 && ndim==2)
-		return(regression_skeleton<RegressionDataElliptic,IntegratorTriangleP2, 1, 2, 2>(regressionData, Rmesh));
+		return(regression_skeleton<RegressionDataElliptic, 1, 2, 2>(regressionData, Rmesh));
 	else if(regressionData.getOrder() == 2 && ndim==2)
-		return(regression_skeleton<RegressionDataElliptic,IntegratorTriangleP4, 2, 2, 2>(regressionData, Rmesh));
+		return(regression_skeleton<RegressionDataElliptic, 2, 2, 2>(regressionData, Rmesh));
 	else if(regressionData.getOrder() == 1 && ndim==3)
-		return(regression_skeleton<RegressionDataElliptic,IntegratorTriangleP2, 1, 2, 3>(regressionData, Rmesh));
+		return(regression_skeleton<RegressionDataElliptic, 1, 2, 3>(regressionData, Rmesh));
 	else if(regressionData.getOrder() == 2 && ndim==3)
-		return(regression_skeleton<RegressionDataElliptic,IntegratorTriangleP4, 2, 2, 3>(regressionData, Rmesh));
+		return(regression_skeleton<RegressionDataElliptic, 2, 2, 3>(regressionData, Rmesh));
 	return(NILSXP);
 }
 
@@ -697,13 +710,13 @@ SEXP regression_PDE_space_varying(SEXP Rlocations, SEXP RbaryLocations, SEXP Rob
 	UInt ndim=INTEGER(Rndim)[0];
 
 	if(regressionData.getOrder() == 1 && ndim==2)
-		return(regression_skeleton<RegressionDataEllipticSpaceVarying,IntegratorTriangleP2, 1, 2, 2>(regressionData, Rmesh));
+		return(regression_skeleton<RegressionDataEllipticSpaceVarying, 1, 2, 2>(regressionData, Rmesh));
 	else if(regressionData.getOrder() == 2 && ndim==2)
-		return(regression_skeleton<RegressionDataEllipticSpaceVarying,IntegratorTriangleP4, 2, 2, 2>(regressionData, Rmesh));
+		return(regression_skeleton<RegressionDataEllipticSpaceVarying, 2, 2, 2>(regressionData, Rmesh));
 	else if(regressionData.getOrder() == 1 && ndim==3)
-		return(regression_skeleton<RegressionDataEllipticSpaceVarying,IntegratorTriangleP2, 1, 2, 3>(regressionData, Rmesh));
+		return(regression_skeleton<RegressionDataEllipticSpaceVarying, 1, 2, 3>(regressionData, Rmesh));
 	else if(regressionData.getOrder() == 2 && ndim==3)
-		return(regression_skeleton<RegressionDataEllipticSpaceVarying,IntegratorTriangleP4, 2, 2, 3>(regressionData, Rmesh));
+		return(regression_skeleton<RegressionDataEllipticSpaceVarying, 2, 2, 3>(regressionData, Rmesh));
 	return(NILSXP);
 }
 
@@ -751,15 +764,15 @@ SEXP regression_Laplace_time(SEXP Rlocations, SEXP RbaryLocations, SEXP Rtime_lo
 	UInt ndim=INTEGER(Rndim)[0];
 
     if(regressionData.getOrder()==1 && mydim==2 && ndim==2)
-    	return(regression_skeleton_time<RegressionData,IntegratorTriangleP2, 1, IntegratorGaussP5, 3, 2, 2, 2>(regressionData, Rmesh, Rmesh_time));
+    	return(regression_skeleton_time<RegressionData, 1, IntegratorGaussP5, 3, 2, 2, 2>(regressionData, Rmesh, Rmesh_time));
     else if(regressionData.getOrder()==2 && mydim==2 && ndim==2)
-		return(regression_skeleton_time<RegressionData,IntegratorTriangleP4, 2, IntegratorGaussP5, 3, 2, 2, 2>(regressionData, Rmesh, Rmesh_time));
+		return(regression_skeleton_time<RegressionData, 2, IntegratorGaussP5, 3, 2, 2, 2>(regressionData, Rmesh, Rmesh_time));
     else if(regressionData.getOrder()==1 && mydim==2 && ndim==3)
-		return(regression_skeleton_time<RegressionData,IntegratorTriangleP2, 1, IntegratorGaussP5, 3, 2, 2, 3>(regressionData, Rmesh, Rmesh_time));
+		return(regression_skeleton_time<RegressionData, 1, IntegratorGaussP5, 3, 2, 2, 3>(regressionData, Rmesh, Rmesh_time));
    else if(regressionData.getOrder()==2 && mydim==2 && ndim==3)
-		return(regression_skeleton_time<RegressionData,IntegratorTriangleP4, 2, IntegratorGaussP5, 3, 2, 2, 3>(regressionData, Rmesh, Rmesh_time));
+		return(regression_skeleton_time<RegressionData, 2, IntegratorGaussP5, 3, 2, 2, 3>(regressionData, Rmesh, Rmesh_time));
 	else if(regressionData.getOrder()==1 && mydim==3 && ndim==3)
-		return(regression_skeleton_time<RegressionData,IntegratorTetrahedronP2, 1, IntegratorGaussP5, 3, 2, 3, 3>(regressionData, Rmesh, Rmesh_time));
+		return(regression_skeleton_time<RegressionData, 1, IntegratorGaussP5, 3, 2, 3, 3>(regressionData, Rmesh, Rmesh_time));
     return(NILSXP);
 }
 
@@ -804,13 +817,13 @@ SEXP regression_PDE_time(SEXP Rlocations, SEXP RbaryLocations, SEXP Rtime_locati
 	UInt ndim=INTEGER(Rndim)[0];
 
 	if(regressionData.getOrder() == 1 && ndim==2)
-		return(regression_skeleton_time<RegressionDataElliptic,IntegratorTriangleP2, 1, IntegratorGaussP5, 3, 2, 2, 2>(regressionData, Rmesh, Rmesh_time));
+		return(regression_skeleton_time<RegressionDataElliptic, 1, IntegratorGaussP5, 3, 2, 2, 2>(regressionData, Rmesh, Rmesh_time));
 	else if(regressionData.getOrder() == 2 && ndim==2)
-		return(regression_skeleton_time<RegressionDataElliptic,IntegratorTriangleP4, 2, IntegratorGaussP5, 3, 2, 2, 2>(regressionData, Rmesh, Rmesh_time));
+		return(regression_skeleton_time<RegressionDataElliptic, 2, IntegratorGaussP5, 3, 2, 2, 2>(regressionData, Rmesh, Rmesh_time));
 	else if(regressionData.getOrder() == 1 && ndim==3)
-		return(regression_skeleton_time<RegressionDataElliptic,IntegratorTriangleP2, 1, IntegratorGaussP5, 3, 2, 2, 3>(regressionData, Rmesh, Rmesh_time));
+		return(regression_skeleton_time<RegressionDataElliptic, 1, IntegratorGaussP5, 3, 2, 2, 3>(regressionData, Rmesh, Rmesh_time));
 	else if(regressionData.getOrder() == 2 && ndim==3)
-		return(regression_skeleton_time<RegressionDataElliptic,IntegratorTriangleP4, 2, IntegratorGaussP5, 3, 2, 2, 3>(regressionData, Rmesh, Rmesh_time));
+		return(regression_skeleton_time<RegressionDataElliptic, 2, IntegratorGaussP5, 3, 2, 2, 3>(regressionData, Rmesh, Rmesh_time));
 	return(NILSXP);
 }
 
@@ -859,13 +872,13 @@ SEXP regression_PDE_space_varying_time(SEXP Rlocations, SEXP RbaryLocations, SEX
 	UInt ndim=INTEGER(Rndim)[0];
 
 	if(regressionData.getOrder() == 1 && ndim==2)
-		return(regression_skeleton_time<RegressionDataEllipticSpaceVarying,IntegratorTriangleP2, 1, IntegratorGaussP5, 3, 2, 2, 2>(regressionData, Rmesh, Rmesh_time));
+		return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 1, IntegratorGaussP5, 3, 2, 2, 2>(regressionData, Rmesh, Rmesh_time));
 	else if(regressionData.getOrder() == 2 && ndim==2)
-		return(regression_skeleton_time<RegressionDataEllipticSpaceVarying,IntegratorTriangleP4, 2, IntegratorGaussP5, 3, 2, 2, 2>(regressionData, Rmesh, Rmesh_time));
+		return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 2, IntegratorGaussP5, 3, 2, 2, 2>(regressionData, Rmesh, Rmesh_time));
 	else if(regressionData.getOrder() == 1 && ndim==3)
-		return(regression_skeleton_time<RegressionDataEllipticSpaceVarying,IntegratorTriangleP2, 1, IntegratorGaussP5, 3, 2, 2, 3>(regressionData, Rmesh, Rmesh_time));
+		return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 1, IntegratorGaussP5, 3, 2, 2, 3>(regressionData, Rmesh, Rmesh_time));
 	else if(regressionData.getOrder() == 2 && ndim==3)
-		return(regression_skeleton_time<RegressionDataEllipticSpaceVarying,IntegratorTriangleP4, 2, IntegratorGaussP5, 3, 2, 2, 3>(regressionData, Rmesh, Rmesh_time));
+		return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 2, IntegratorGaussP5, 3, 2, 2, 3>(regressionData, Rmesh, Rmesh_time));
 	return(NILSXP);
 }
 
@@ -883,9 +896,9 @@ SEXP get_integration_points(SEXP Rmesh, SEXP Rorder, SEXP Rmydim, SEXP Rndim)
 	UInt ndim=INTEGER(Rndim)[0];
 //Not implemented for ndim==3
     if(order == 1 && ndim ==2)
-    	return(get_integration_points_skeleton<IntegratorTriangleP2, 1,2,2>(Rmesh));
+    	return(get_integration_points_skeleton<1,2,2>(Rmesh));
     else if(order == 2 && ndim==2)
-    	return(get_integration_points_skeleton<IntegratorTriangleP4, 2,2,2>(Rmesh));
+    	return(get_integration_points_skeleton<2,2,2>(Rmesh));
     return(NILSXP);
 }
 
@@ -901,10 +914,10 @@ SEXP get_FEM_mass_matrix(SEXP Rmesh, SEXP Rorder, SEXP Rmydim, SEXP Rndim)
 
 	typedef EOExpr<Mass> ETMass;   Mass EMass;   ETMass mass(EMass);
 
-    if(order==1 && ndim==2)
-    	return(get_FEM_Matrix_skeleton<IntegratorTriangleP2, 1,2,2>(Rmesh, mass));
+  if(order==1 && ndim==2)
+    	return(get_FEM_Matrix_skeleton<1,2,2>(Rmesh, mass));
 	if(order==2 && ndim==2)
-		return(get_FEM_Matrix_skeleton<IntegratorTriangleP4, 2,2,2>(Rmesh, mass));
+		return(get_FEM_Matrix_skeleton<2,2,2>(Rmesh, mass));
 	return(NILSXP);
 }
 
@@ -919,10 +932,10 @@ SEXP get_FEM_stiff_matrix(SEXP Rmesh, SEXP Rorder, SEXP Rmydim, SEXP Rndim)
 
 	typedef EOExpr<Stiff> ETMass;   Stiff EStiff;   ETMass stiff(EStiff);
 
-    if(order==1 && ndim==2)
-    	return(get_FEM_Matrix_skeleton<IntegratorTriangleP2, 1,2,2>(Rmesh, stiff));
+  if(order==1 && ndim==2)
+    return(get_FEM_Matrix_skeleton<1,2,2>(Rmesh, stiff));
 	if(order==2 && ndim==2)
-		return(get_FEM_Matrix_skeleton<IntegratorTriangleP4, 2,2,2>(Rmesh, stiff));
+		return(get_FEM_Matrix_skeleton<2,2,2>(Rmesh, stiff));
 	return(NILSXP);
 }
 
@@ -941,13 +954,13 @@ SEXP get_FEM_PDE_matrix(SEXP Rlocations, SEXP RbaryLocations, SEXP Robservations
 	typedef EOExpr<Grad> ETGrad;   Grad EGrad;   ETGrad grad(EGrad);
 
 	const Real& c = regressionData.getC();
-	const Eigen::Matrix<Real,2,2>& K = regressionData.getK();
-	const Eigen::Matrix<Real,2,1>& beta = regressionData.getBeta();
+	const Diffusion<PDEParameterOptions::Constant>& K = regressionData.getK();
+	const Advection<PDEParameterOptions::Constant>& beta = regressionData.getBeta();
 
-    if(regressionData.getOrder()==1 && ndim==2)
-    	return(get_FEM_Matrix_skeleton<IntegratorTriangleP2, 1,2,2>(Rmesh, c*mass+stiff[K]+dot(beta,grad)));
+  if(regressionData.getOrder()==1 && ndim==2)
+    return(get_FEM_Matrix_skeleton<1,2,2>(Rmesh, c*mass+stiff[K]+beta.dot(grad)));
 	if(regressionData.getOrder()==2 && ndim==2)
-		return(get_FEM_Matrix_skeleton<IntegratorTriangleP4, 2,2,2>(Rmesh, c*mass+stiff[K]+dot(beta,grad)));
+		return(get_FEM_Matrix_skeleton<2,2,2>(Rmesh, c*mass+stiff[K]+beta.dot(grad)));
 	return(NILSXP);
 }
 
@@ -966,13 +979,13 @@ SEXP get_FEM_PDE_space_varying_matrix(SEXP Rlocations, SEXP RbaryLocations, SEXP
 	typedef EOExpr<Grad> ETGrad;   Grad EGrad;   ETGrad grad(EGrad);
 
 	const Reaction& c = regressionData.getC();
-	const Diffusivity& K = regressionData.getK();
-	const Advection& beta = regressionData.getBeta();
+	const Diffusion<PDEParameterOptions::SpaceVarying>& K = regressionData.getK();
+	const Advection<PDEParameterOptions::SpaceVarying>& beta = regressionData.getBeta();
 
-    if(regressionData.getOrder()==1 && ndim==2)
-    	return(get_FEM_Matrix_skeleton<IntegratorTriangleP2, 1,2,2>(Rmesh, c*mass+stiff[K]+dot(beta,grad)));
+  if(regressionData.getOrder()==1 && ndim==2)
+    return(get_FEM_Matrix_skeleton<1,2,2>(Rmesh, c*mass+stiff[K]+beta.dot(grad)));
 	if(regressionData.getOrder()==2 && ndim==2)
-		return(get_FEM_Matrix_skeleton<IntegratorTriangleP4, 2,2,2>(Rmesh, c*mass+stiff[K]+dot(beta,grad)));
+		return(get_FEM_Matrix_skeleton<2,2,2>(Rmesh, c*mass+stiff[K]+beta.dot(grad)));
 	return(NILSXP);
 }
 
@@ -1008,15 +1021,15 @@ SEXP Smooth_FPCA(SEXP Rlocations, SEXP RbaryLocations, SEXP Rdatamatrix, SEXP Rm
 	std::string validation=CHAR(STRING_ELT(Rvalidation,0));
 
 	if(fPCAdata.getOrder() == 1 && mydim==2 && ndim==2)
-		return(FPCA_skeleton<IntegratorTriangleP2, 1, 2, 2>(fPCAdata, Rmesh, validation));
+		return(FPCA_skeleton<1, 2, 2>(fPCAdata, Rmesh, validation));
 	else if(fPCAdata.getOrder() == 2 && mydim==2 && ndim==2)
-		return(FPCA_skeleton<IntegratorTriangleP4, 2, 2, 2>(fPCAdata, Rmesh, validation));
+		return(FPCA_skeleton<2, 2, 2>(fPCAdata, Rmesh, validation));
 	else if(fPCAdata.getOrder() == 1 && mydim==2 && ndim==3)
-		return(FPCA_skeleton<IntegratorTriangleP2, 1, 2, 3>(fPCAdata, Rmesh, validation));
+		return(FPCA_skeleton<1, 2, 3>(fPCAdata, Rmesh, validation));
 	else if(fPCAdata.getOrder() == 2 && mydim==2 && ndim==3)
-		return(FPCA_skeleton<IntegratorTriangleP4, 2, 2, 3>(fPCAdata, Rmesh, validation));
+		return(FPCA_skeleton<2, 2, 3>(fPCAdata, Rmesh, validation));
 	else if(fPCAdata.getOrder() == 1 && mydim==3 && ndim==3)
-		return(FPCA_skeleton<IntegratorTetrahedronP2, 1, 3, 3>(fPCAdata, Rmesh, validation));
+		return(FPCA_skeleton<1, 3, 3>(fPCAdata, Rmesh, validation));
 	return(NILSXP);
 	 }
 
@@ -1061,17 +1074,15 @@ SEXP Density_Estimation(SEXP Rdata, SEXP Rmesh, SEXP Rorder, SEXP Rmydim, SEXP R
 	std::string preprocess_method=CHAR(STRING_ELT(RpreprocessMethod, 0));
 
   if(order== 1 && mydim==2 && ndim==2)
-		return(DE_skeleton<IntegratorTriangleP2, IntegratorGaussTriangle3, 1, 2, 2>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
+		return(DE_skeleton<IntegratorGaussTriangle3, 1, 2, 2>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
 	else if(order== 2 && mydim==2 && ndim==2)
-		return(DE_skeleton<IntegratorTriangleP4, IntegratorGaussTriangle3, 2, 2, 2>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
+		return(DE_skeleton<IntegratorGaussTriangle3, 2, 2, 2>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
 	else if(order== 1 && mydim==2 && ndim==3)
-		return(DE_skeleton<IntegratorTriangleP2, IntegratorGaussTriangle3, 1, 2, 3>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
+		return(DE_skeleton<IntegratorGaussTriangle3, 1, 2, 3>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
 	else if(order== 2 && mydim==2 && ndim==3)
-		return(DE_skeleton<IntegratorTriangleP4, IntegratorGaussTriangle3, 2, 2, 3>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
+		return(DE_skeleton<IntegratorGaussTriangle3, 2, 2, 3>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
 	else if(order == 1 && mydim==3 && ndim==3)
-		return(DE_skeleton<IntegratorTetrahedronP2, IntegratorGaussTetra3, 1, 3, 3>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
-	// else if(order == 1 && mydim==3 && ndim==3)
-	// 	return(DE_skeleton<IntegratorTetrahedronP2, IntegratorGaussTetra3, 1, 3, 3>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
+		return(DE_skeleton<IntegratorGaussTetra3, 1, 3, 3>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
 
 	return(NILSXP);
 }

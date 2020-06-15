@@ -3,7 +3,7 @@
 
 #include <iostream>
 
-template<UInt DEGREE, UInt ORDER_DERIVATIVE>
+template<typename Integrator, UInt DEGREE, UInt ORDER_DERIVATIVE>
 class Spline
 {
     public:
@@ -118,7 +118,7 @@ class Spline
          }
 
          Real time_mass_impl(UInt i, UInt j, Real u){
-           return spline_.BasisFunctionDerivative(DEGREE, ORDER_DERIVATIVE, i, u) * spline_.BasisFunctionDerivative(DEGREE, ORDER_DERIVATIVE, j, u);
+           return BasisFunctionDerivative(DEGREE, ORDER_DERIVATIVE, i, u) * BasisFunctionDerivative(DEGREE, ORDER_DERIVATIVE, j, u);
          }
 
     private:

@@ -34,6 +34,9 @@ struct Assembler{
   template<UInt ORDER, UInt mydim, UInt ndim>
   static void forcingTerm(const MeshHandler<ORDER,mydim,ndim>& mesh, FiniteElement<ORDER,mydim,ndim>& fe, const ForcingTerm& u, VectorXr& forcingTerm);
 
+  template<UInt DEGREE, UInt ORDER_DERIVATIVE, typename Integrator, typename A>
+  static void operKernel(EOExpr<A> oper, Spline<Integrator, DEGREE, ORDER_DERIVATIVE>& spline, SpMat& OpMat);
+
 };
 
 #include "matrix_assembler_imp.h"

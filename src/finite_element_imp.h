@@ -34,7 +34,7 @@ template <UInt ORDER, UInt mydim, UInt ndim>
 void FiniteElementData<ORDER, mydim, ndim>::setPhi()
 {
 	for(UInt iq=0; iq<Integrator::NNODES; ++iq)
-		referencePhi.col(iq) = reference_eval_point<NBASES,mydim>(Integrator::NODES[iq]);
+		referencePhi.row(iq) = reference_eval_point<NBASES,mydim>(Integrator::NODES[iq]).transpose();
 }
 
 template <UInt ORDER, UInt mydim, UInt ndim>

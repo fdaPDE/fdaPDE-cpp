@@ -15,7 +15,8 @@ class  RegressionData{
 	private:
 
 		// Design matrix pointer and dimensions
-		std::vector<Point> locations_;
+		const Real* locations_;
+		UInt n_locations_;
 		//Vector of the time locations
 		std::vector<Real> time_locations_;
 
@@ -66,7 +67,6 @@ class  RegressionData{
 
 		#ifdef R_VERSION_
 		void setBaryLocations(SEXP RbaryLocations);
-		void setLocations(SEXP Rlocations);
 		void setTimeLocations(SEXP Rtime_locations);
 		void setObservations(SEXP Robservations);
 		void setObservationsTime(SEXP Robservations);
@@ -112,9 +112,9 @@ class  RegressionData{
 						SEXP Rnrealizations, SEXP DOF, SEXP RDOF_matrix, SEXP Rsearch);
 		#endif
 
-		explicit RegressionData(std::vector<Point>& locations, VectorXr& observations, UInt order, std::vector<Real> lambdaS, MatrixXr& covariates, MatrixXi& incidenceMatrix, std::vector<UInt>& bc_indices, std::vector<Real>& bc_values, bool DOF, bool GCV,  UInt search);
+		explicit RegressionData(Real* locations, UInt n_locations, VectorXr& observations, UInt order, std::vector<Real> lambdaS, MatrixXr& covariates, MatrixXi& incidenceMatrix, std::vector<UInt>& bc_indices, std::vector<Real>& bc_values, bool DOF, bool GCV,  UInt search);
 
-		explicit RegressionData(std::vector<Point>& locations, std::vector<Real>& time_locations, VectorXr& observations, UInt order,
+		explicit RegressionData(Real* locations, UInt n_locations, std::vector<Real>& time_locations, VectorXr& observations, UInt order,
 														std::vector<Real>& lambdaS, std::vector<Real>& lambdaT, MatrixXr& covariates, MatrixXi& incidenceMatrix,
 														std::vector<UInt>& bc_indices, std::vector<Real>& bc_values, VectorXr& ic, bool flag_mass, bool flag_parabolic, bool DOF, bool GCV,  UInt search);
 
@@ -137,7 +137,8 @@ class  RegressionData{
 		//! A method returning the number of time observations
 		inline UInt const getNumberofTimeObservations() const {return time_locations_.size();}
 		//! A method returning the locations of the observations
-		inline std::vector<Point> const & getLocations() const {return locations_;}
+		template<UInt ndim>
+		inline Point<ndim> getLocations(UInt i) const {return Point<ndim>(i, locations_, n_locations_);}
 		//! A method returning the locations of the time observations
 		inline std::vector<Real> const & getTimeLocations() const {return time_locations_;}
 		//! A method returning the number of regions
@@ -182,11 +183,11 @@ class  RegressionData{
 };
 
 
-class  RegressionDataElliptic:public RegressionData
+class RegressionDataElliptic : public RegressionData
 {
 	private:
-		Eigen::Matrix<Real,2,2> K_;
-		Eigen::Matrix<Real,2,1> beta_;
+		Diffusion<PDEParameterOptions::Constant> K_;
+		Advection<PDEParameterOptions::Constant> beta_;
 		Real c_;
 
 	public:
@@ -219,27 +220,27 @@ class  RegressionDataElliptic:public RegressionData
 				SEXP GCV,SEXP RGCVmethod, SEXP Rnrealizations, SEXP DOF, SEXP RDOF_matrix, SEXP Rsearch);
 		#endif
 
-		explicit RegressionDataElliptic(std::vector<Point>& locations, VectorXr& observations, UInt order,
-										std::vector<Real> lambdaS, Eigen::Matrix<Real,2,2>& K,
-										Eigen::Matrix<Real,2,1>& beta, Real c, MatrixXr& covariates,
+		explicit RegressionDataElliptic(Real* locations, UInt n_locations, VectorXr& observations, UInt order,
+										std::vector<Real> lambdaS, Real* K,
+										Real* beta, Real c, MatrixXr& covariates,
 										MatrixXi& incidenceMatrix, std::vector<UInt>& bc_indices,
 										std::vector<Real>& bc_values, bool DOF, bool GCV, UInt search);
 
-		explicit RegressionDataElliptic(std::vector<Point>& locations, std::vector<Real>& time_locations, VectorXr& observations, UInt order,
-										std::vector<Real>& lambdaS, std::vector<Real>& lambdaT, Eigen::Matrix<Real,2,2>& K,	Eigen::Matrix<Real,2,1>& beta, Real c,
+		explicit RegressionDataElliptic(Real* locations, UInt n_locations, std::vector<Real>& time_locations, VectorXr& observations, UInt order,
+										std::vector<Real>& lambdaS, std::vector<Real>& lambdaT, Real* K,	Real* beta, Real c,
 										MatrixXr& covariates, MatrixXi& incidenceMatrix, std::vector<UInt>& bc_indices,	std::vector<Real>& bc_values, VectorXr& ic,
 										bool flag_mass, bool flag_parabolic, bool DOF, bool GCV, UInt search);
 
-		inline Eigen::Matrix<Real,2,2> const & getK() const {return K_;}
-		inline Eigen::Matrix<Real,2,1> const & getBeta() const {return beta_;}
+		inline Diffusion<PDEParameterOptions::Constant> const & getK() const {return K_;}
+		inline Advection<PDEParameterOptions::Constant> const & getBeta() const {return beta_;}
 		inline Real const getC() const {return c_;}
 };
 
-class RegressionDataEllipticSpaceVarying:public RegressionData
+class RegressionDataEllipticSpaceVarying : public RegressionData
 {
 	private:
-		Diffusivity K_;
-		Advection beta_;
+		Diffusion<PDEParameterOptions::SpaceVarying> K_;
+		Advection<PDEParameterOptions::SpaceVarying> beta_;
 		Reaction c_;
 		ForcingTerm u_;
 
@@ -277,25 +278,21 @@ class RegressionDataEllipticSpaceVarying:public RegressionData
 		#endif
 
 
-		explicit RegressionDataEllipticSpaceVarying(std::vector<Point>& locations, VectorXr& observations,
+		explicit RegressionDataEllipticSpaceVarying(Real* locations, UInt n_locations, VectorXr& observations,
 													UInt order, std::vector<Real> lambdaS,
-													const std::vector<Eigen::Matrix<Real,2,2>, Eigen::aligned_allocator<Eigen::Matrix<Real,2,2> > >& K,
-													const std::vector<Eigen::Matrix<Real,2,1>, Eigen::aligned_allocator<Eigen::Matrix<Real,2,1> > >& beta,
-													const std::vector<Real>& c, const std::vector<Real>& u,
+													Real* K, Real* beta, Real* c, Real* u,
 													MatrixXr& covariates, MatrixXi& incidenceMatrix,
 													std::vector<UInt>& bc_indices, std::vector<Real>& bc_values,
 													bool DOF, bool GCV, UInt search);
 
-		explicit RegressionDataEllipticSpaceVarying(std::vector<Point>& locations, std::vector<Real>& time_locations, VectorXr& observations, UInt order,
+		explicit RegressionDataEllipticSpaceVarying(Real* locations, UInt n_locations, std::vector<Real>& time_locations, VectorXr& observations, UInt order,
 													std::vector<Real>& lambdaS, std::vector<Real>& lambdaT,
-													const std::vector<Eigen::Matrix<Real,2,2>, Eigen::aligned_allocator<Eigen::Matrix<Real,2,2> > >& K,
-													const std::vector<Eigen::Matrix<Real,2,1>, Eigen::aligned_allocator<Eigen::Matrix<Real,2,1> > >& beta,
-													const std::vector<Real>& c, const std::vector<Real>& u,
+													Real* K, Real* beta, Real* c, Real* u,
 													MatrixXr& covariates, MatrixXi& incidenceMatrix, std::vector<UInt>& bc_indices,	std::vector<Real>& bc_values, VectorXr& ic,
-													bool flag_mass, bool flag_parabolic, bool DOF,bool GCV, UInt search);
+													bool flag_mass, bool flag_parabolic, bool DOF, bool GCV, UInt search);
 
-		inline Diffusivity const & getK() const {return K_;}
-		inline Advection const & getBeta() const {return beta_;}
+		inline Diffusion<PDEParameterOptions::SpaceVarying> const & getK() const {return K_;}
+		inline Advection<PDEParameterOptions::SpaceVarying> const & getBeta() const {return beta_;}
 		inline Reaction const & getC() const {return c_;}
 		inline ForcingTerm const & getU() const {return u_;}
 

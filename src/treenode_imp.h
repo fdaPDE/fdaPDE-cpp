@@ -2,8 +2,8 @@
 #define TREENODE_IMP_H_
 
 
-template<UInt ndim>
-void TreeNode<ndim>::print(std::ostream & out) const
+template<class T>
+void TreeNode<T>::print(std::ostream & out) const
 {
 	//Be careful! this id is not the id of the Treenode but id of Triangle
 	out << "------------------------------" << std::endl;

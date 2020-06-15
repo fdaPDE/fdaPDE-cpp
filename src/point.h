@@ -98,6 +98,12 @@ class Point : public Identifier{
     using pointCoords = std::array<Real,ndim>;
     using EigenCoords = Eigen::Matrix<Real,ndim,1>;
 
+		// Note: these don't really mean anything, they're just here for compatibility
+		// with the adtree implementation
+		static constexpr UInt dp() {return 3;}
+		static constexpr UInt dt() {return 3;}
+		static constexpr UInt coordsize() {return 3;}
+
     // Note: some of the constructors are declared constexpr so that Point can be
     // used as a literal type (see integration.h)
     //! The default constructor initializing the origin

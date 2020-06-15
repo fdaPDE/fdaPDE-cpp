@@ -14,7 +14,7 @@
 
 /*! A base class for the smooth regression.
 */
-template<typename InputHandler, typename IntegratorSpace, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
+template<typename InputHandler, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
 class MixedFERegressionBase
 {
 	protected:
@@ -144,14 +144,14 @@ class MixedFERegressionBase
 	inline UInt getBestLambdaT(){return bestLambdaT_;}
 };
 
-template<typename InputHandler, typename IntegratorSpace, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
-class MixedFERegression : public MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER,IntegratorTime,SPLINE_DEGREE,ORDER_DERIVATIVE,mydim,ndim>
+template<typename InputHandler, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
+class MixedFERegression : public MixedFERegressionBase<InputHandler,ORDER,IntegratorTime,SPLINE_DEGREE,ORDER_DERIVATIVE,mydim,ndim>
 {
 public:
 	MixedFERegression(const MeshHandler<ORDER,mydim,ndim>& mesh, const InputHandler& regressionData):
-			MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER,IntegratorTime,SPLINE_DEGREE,ORDER_DERIVATIVE,mydim,ndim>(mesh, regressionData){};
+			MixedFERegressionBase<InputHandler,ORDER,IntegratorTime,SPLINE_DEGREE,ORDER_DERIVATIVE,mydim,ndim>(mesh, regressionData){};
 	MixedFERegression(const MeshHandler<ORDER,mydim,ndim>& mesh, const std::vector<Real>& mesh_time, const InputHandler& regressionData):
-			MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER,IntegratorTime,SPLINE_DEGREE,ORDER_DERIVATIVE,mydim,ndim>(mesh, mesh_time, regressionData){};
+			MixedFERegressionBase<InputHandler,ORDER,IntegratorTime,SPLINE_DEGREE,ORDER_DERIVATIVE,mydim,ndim>(mesh, mesh_time, regressionData){};
 
 	void apply()
 	{

@@ -9,28 +9,26 @@
 #define DOMAIN_H_
 
 #include "fdaPDE.h"
-#include "mesh_objects.h"
 
 
 /**	\class Domain
  * 	\brief It defines geometric limits of a set of points.
- * template parameter Shape is the original geometric figure (ex: Point, Triangle, Tetrahedron, Box),
+ * template parameter Shape is the original geometric figure (ex: Point, Triangle, Tetrahedron, Box), 
  * it's useful to extract the physical dimension
  */
-template<UInt ndim>
+template<class Shape>
 class Domain {
 protected:
 	/// Origin of the object's bounding box = min(coord(*,1:number of points)).
 	// ex) 2D: xmin, ymin, xmin, ymin
-	Point<ndim> origin_;
+	std::vector<Real> origin_;
 	/// Scaling factors = 1./(max(coord(*,1:number of points)) - min(coord(*,1:number of points))).
 	// ex) 2D: xscale, yscale, xscale, yscale
-	std::array<Real, ndim> scalingfactors_;
+	std::vector<Real> scalingfactors_;
 	/// Tolerance being applied to the object's bounding box.
-	static Real tolerance_=1.e-3;
+	static Real tolerance_;
 	/// Minimum difference between coordinates allowed.
-	static Real mindiff_=std::numeric_limits<Real>::min();
-
+	static Real mindiff_;
 public:
 	/** Default constructor.
 	 */
@@ -46,11 +44,9 @@ public:
 	 */
 
 	// constructor in case there is already tree information
-	Domain(const Point<ndim>& origin, const std::array<Real,ndim> scalingfactors) :
-			origin_(origin), scalingfactors_(scalingfactors) {}
-			
-	Domain(const std::vector<Point<ndim> >& points);
-
+	Domain(std::vector<Real> const & origin, std::vector<Real> const & scalingfactors):origin_(origin), scalingfactors_(scalingfactors) {};
+	Domain(std::vector<std::vector<Real> > const & coord);
+	
 	/// Sets the tolerance being applied to the object's bounding box.
 	inline static void settolerance(Real const & tol) { tolerance_ = tol; }
 	/// Gets the tolerance being applied to the object's bounding box.
@@ -64,17 +60,17 @@ public:
 	/// Gets the i-th scaling factor of the object's bounding box.
 	inline double scal(int const & i) const { return scalingfactors_[i]; }
 	/// Gets the size of origin_ vector
-	inline int getoriginsize() { return ndim; }
+	inline int getoriginsize() { return int(origin_.size()); }
 	/// Gets the size of scalingfactors_  vector
 	inline int getscalingsize() { return int(scalingfactors_.size()); }
-
-
+	
+	
 	/**	Output operator.
 	 *
 	 * 	It outputs the bounding box.
 	 */
-	template<UInt NDIM>
-	friend std::ostream & operator<<(std::ostream &, Domain<NDIM> const &);
+	template<class S>
+	friend std::ostream & operator<<(std::ostream &, Domain<S> const &);
 };
 
 #include "domain_imp.h"

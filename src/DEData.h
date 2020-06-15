@@ -12,10 +12,11 @@
  * series of method for their access, so isolating the more the possible the specific
  * code for R/C++ data conversion.
 */
+template <UInt ndim>
 class  DEData{
 	private:
 		// Data = locations.
-		std::vector<Point> data_;
+		std::vector<Point<ndim> > data_;
 		// Number of observations.
 		UInt n_;
 		// Finite element order.
@@ -55,7 +56,7 @@ class  DEData{
 		// Constructors
 		DEData(){};
 
-		explicit DEData(const std::vector<Point>& data, const UInt& order, const VectorXr& fvec, Real heatStep, UInt heatIter,
+		explicit DEData(const std::vector<Point<ndim> >& data, const UInt& order, const VectorXr& fvec, Real heatStep, UInt heatIter,
 			const std::vector<Real>& lambda, const UInt& nfolds, const UInt& nsim, const std::vector<Real>& stepProposals,
 			 Real tol1, Real tol2, bool print, UInt search);
 
@@ -84,15 +85,15 @@ class  DEData{
 
 		// Setters
 		//! A method to set new data (needed for projection).
-		void setNewData(const std::vector<Point>& );
-		void setDatum(const Point& , UInt );
+		void setNewData(const std::vector<Point<ndim> >& );
+		void setDatum(const Point<ndim>& , UInt );
 		void updateN(UInt );
 
 		// Getters
 		//! A method returning the data.
-		inline std::vector<Point> getData() const {return data_;}
+		inline std::vector<Point<ndim> > getData() const {return data_;}
 		//! A method returning a datum.
-		inline Point getDatum(UInt i) const {return data_[i];}
+		inline Point<ndim> getDatum(UInt i) const {return data_[i];}
 		//! A method returning the number of observations.
 		inline UInt getNumberofData() const {return n_;}
 		//! A method returning the the input order.

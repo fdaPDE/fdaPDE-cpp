@@ -11,6 +11,15 @@ constexpr std::array<Point<3>,IntegratorTetrahedronP2::NNODES> IntegratorTetrahe
 
 constexpr std::array<Point<3>,IntegratorTetrahedronP4::NNODES> IntegratorTetrahedronP4::NODES;
 
+constexpr std::array<Real,IntegratorGaussP3::NNODES> IntegratorGaussP3::NODES;
+
+constexpr std::array<Real,IntegratorGaussP5::NNODES> IntegratorGaussP5::NODES;
+
+constexpr std::array<Point<2>,IntegratorGaussTriangle3::NNODES> IntegratorGaussTriangle3::NODES;
+
+constexpr std::array<Point<3>,IntegratorGaussTetra3::NNODES> IntegratorGaussTetra3::NODES;
+
+
 constexpr std::array<Real,IntegratorTriangleP2::NNODES> IntegratorTriangleP2::WEIGHTS;
 
 constexpr std::array<Real,IntegratorTriangleP4::NNODES> IntegratorTriangleP4::WEIGHTS;
@@ -18,3 +27,11 @@ constexpr std::array<Real,IntegratorTriangleP4::NNODES> IntegratorTriangleP4::WE
 constexpr std::array<Real,IntegratorTetrahedronP2::NNODES> IntegratorTetrahedronP2::WEIGHTS;
 
 constexpr std::array<Real,IntegratorTetrahedronP4::NNODES> IntegratorTetrahedronP4::WEIGHTS;
+
+constexpr std::array<Real,IntegratorGaussP3::NNODES> IntegratorGaussP3::WEIGHTS;
+
+constexpr std::array<Real,IntegratorGaussP5::NNODES> IntegratorGaussP5::WEIGHTS;
+
+constexpr std::array<Real,IntegratorGaussTriangle3::NNODES> IntegratorGaussTriangle3::WEIGHTS;
+
+constexpr std::array<Real,IntegratorGaussTetra3::NNODES> IntegratorGaussTetra3::WEIGHTS;

@@ -34,7 +34,7 @@ void Assembler::operKernel(EOExpr<A> oper, const MeshHandler<ORDER,mydim,ndim>& 
 					for(int iq = 0; iq < Integrator::NNODES; ++iq)
 						s += oper(fe, iq, i, j) * Integrator::WEIGHTS[iq];
 					s *= fe.getMeasure();
-					triplets.push_back(coeff(identifiers[i],identifiers[j],s));
+					triplets.emplace_back(identifiers[i], identifiers[j], s);
 				}
 
 		identifiers.clear();
@@ -46,6 +46,34 @@ void Assembler::operKernel(EOExpr<A> oper, const MeshHandler<ORDER,mydim,ndim>& 
 	OpMat.prune(tolerance);
 }
 
+template<UInt DEGREE, UInt ORDER_DERIVATIVE, typename Integrator, typename A>
+void Assembler::operKernel(EOExpr<A> oper, Spline<Integrator, DEGREE, ORDER_DERIVATIVE>& spline, SpMat& OpMat)
+{
+    const UInt M = spline.num_knots()-DEGREE-1;
+  	OpMat.resize(M, M);
+
+    for (UInt i = 0; i < M; ++i)
+    {
+        for (UInt j = 0; j <= i; ++j)
+        {
+            Real s = 0;
+
+            for(UInt k = i; k <= j+DEGREE; ++k)
+            {
+                Real a = spline.getKnot(k);
+                Real b = spline.getKnot(k+1);
+
+                for (UInt l = 0; l < Integrator::NNODES; ++l)
+                    s += oper(spline, i, j, (b-a)/2*Integrator::NODES[l]+(b+a)/2) * Integrator::WEIGHTS[l] * (b-a)/2;
+            }
+
+         if(s!=0) OpMat.coeffRef(i,j) = s;
+         if(i!=j && s!=0) OpMat.coeffRef(j,i) = s;
+        }
+    }
+}
+
+// Pensarci di più!
 template<UInt ORDER, UInt mydim, UInt ndim>
 void Assembler::forcingTerm(const MeshHandler<ORDER,mydim,ndim>& mesh,
 	                     FiniteElement<ORDER,mydim,ndim>& fe, const ForcingTerm& u, VectorXr& forcingTerm)
@@ -59,14 +87,8 @@ void Assembler::forcingTerm(const MeshHandler<ORDER,mydim,ndim>& mesh,
 
 		fe.updateElement(mesh.getElement(t));
 
-		for(int i=0; i<NBASES; ++i){
-			Real s=0;
-			for(int iq = 0; iq < Integrator::NNODES; ++iq){
-				UInt globalIndex = fe.getGlobalIndex(iq);
-				s +=  fe.getPhi(i,iq) * u[globalIndex] * Integrator::WEIGHTS[iq];
-			}
-			forcingTerm[fe[i].id()] += s * fe.getMeasure();
-		}
+		for(int i=0; i<NBASES; ++i)
+			forcingTerm[fe[i].id()] += u.integrate(fe, i) * fe.getMeasure();
 	}
 }
 

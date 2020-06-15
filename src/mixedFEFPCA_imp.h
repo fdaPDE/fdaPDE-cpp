@@ -14,8 +14,8 @@
 #include "R_ext/Print.h"
 
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void MixedFEFPCABase<Integrator, ORDER, mydim, ndim>::computeDelta()
+template<UInt ORDER, UInt mydim, UInt ndim>
+void MixedFEFPCABase<ORDER, mydim, ndim>::computeDelta()
 {
 	UInt nRegions = fpcaData_.getNumberOfRegions();
 	Delta_.resize(nRegions,1);
@@ -32,8 +32,8 @@ void MixedFEFPCABase<Integrator, ORDER, mydim, ndim>::computeDelta()
 	}
 }
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void MixedFEFPCABase<Integrator, ORDER, mydim, ndim>::computeBasisEvaluations()
+template<UInt ORDER, UInt mydim, UInt ndim>
+void MixedFEFPCABase<ORDER, mydim, ndim>::computeBasisEvaluations()
 {
 	//std::cout<<"Data Matrix Computation by Basis Evaluation.."<<std::endl;
 	UInt nnodes = mesh_.num_nodes();
@@ -102,9 +102,9 @@ void MixedFEFPCABase<Integrator, ORDER, mydim, ndim>::computeBasisEvaluations()
 		{
 
 			if (fpcaData_.getSearch() == 1) { //use Naive search
-				tri_activated = mesh_.findLocationNaive(fpcaData_.getLocations()[i]);
+				tri_activated = mesh_.findLocationNaive(fpcaData_.template getLocations<ndim>(i));
 			} else if (fpcaData_.getSearch() == 2) { //use Tree search (default)
-				tri_activated = mesh_.findLocationTree(fpcaData_.getLocations()[i]);
+				tri_activated = mesh_.findLocationTree(fpcaData_.template getLocations<ndim>(i));
 			}
 
 			if(tri_activated.getId() == Identifier::NVAL)
@@ -122,7 +122,7 @@ void MixedFEFPCABase<Integrator, ORDER, mydim, ndim>::computeBasisEvaluations()
 				{
 					coefficients = Eigen::Matrix<Real,Nodes,1>::Zero();
 					coefficients(node) = 1; //Activates only current base
-					evaluator = evaluate_point<Nodes, mydim, ndim>(tri_activated, fpcaData_.getLocations()[i], coefficients);
+					evaluator = tri_activated.evaluate_point(fpcaData_.template getLocations<ndim>(i), coefficients);
 					barycenters_(i,node)=evaluator;
 					Psi_.insert(i, tri_activated[node].getId()) = evaluator;
 				}
@@ -165,8 +165,8 @@ void MixedFEFPCABase<Integrator, ORDER, mydim, ndim>::computeBasisEvaluations()
 	}
 }
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void MixedFEFPCABase<Integrator, ORDER, mydim, ndim>::buildCoeffMatrix(const SpMat& DMat,  const SpMat& AMat,  const SpMat& MMat)
+template<UInt ORDER, UInt mydim, UInt ndim>
+void MixedFEFPCABase<ORDER, mydim, ndim>::buildCoeffMatrix(const SpMat& DMat,  const SpMat& AMat,  const SpMat& MMat)
 {
 	UInt nnodes = mesh_.num_nodes();
 
@@ -202,8 +202,8 @@ void MixedFEFPCABase<Integrator, ORDER, mydim, ndim>::buildCoeffMatrix(const SpM
 
 //construct NW block of the system matrix when basis evaluation is necessary
 //!! Depends on computeBasisEvaluations
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void MixedFEFPCABase<Integrator, ORDER, mydim, ndim>::computeDataMatrix(SpMat& DMat)
+template<UInt ORDER, UInt mydim, UInt ndim>
+void MixedFEFPCABase<ORDER, mydim, ndim>::computeDataMatrix(SpMat& DMat)
 {
 	UInt nnodes = mesh_.num_nodes();
 	DMat.resize(nnodes,nnodes);
@@ -216,8 +216,8 @@ void MixedFEFPCABase<Integrator, ORDER, mydim, ndim>::computeDataMatrix(SpMat& D
 //construct NW block of the system matrix in Ramsay when locations of observations are
 //a subset of the meshe's nodes
 //!! Depends on computeBasisEvaluations
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void MixedFEFPCABase<Integrator,ORDER, mydim, ndim>::computeDataMatrixByIndices(SpMat& DMat)
+template<UInt ORDER, UInt mydim, UInt ndim>
+void MixedFEFPCABase<ORDER, mydim, ndim>::computeDataMatrixByIndices(SpMat& DMat)
 {
 	UInt nnodes = mesh_.num_nodes();
 	UInt nlocations = fpcaData_.getNumberofObservations();
@@ -233,8 +233,8 @@ void MixedFEFPCABase<Integrator,ORDER, mydim, ndim>::computeDataMatrixByIndices(
 }
 
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void MixedFEFPCABase<Integrator,ORDER, mydim, ndim>::computeRightHandData(VectorXr& rightHandData,FPCAObject& FPCAinput)
+template<UInt ORDER, UInt mydim, UInt ndim>
+void MixedFEFPCABase<ORDER, mydim, ndim>::computeRightHandData(VectorXr& rightHandData,FPCAObject& FPCAinput)
 {
 	UInt nnodes = mesh_.num_nodes();
 	UInt nlocations = fpcaData_.getNumberofObservations();
@@ -260,8 +260,8 @@ void MixedFEFPCABase<Integrator,ORDER, mydim, ndim>::computeRightHandData(Vector
 }
 
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void MixedFEFPCABase<Integrator,ORDER, mydim, ndim>::computeVarianceExplained()
+template<UInt ORDER, UInt mydim, UInt ndim>
+void MixedFEFPCABase<ORDER, mydim, ndim>::computeVarianceExplained()
 {
 
 	MatrixXr U_not_normalized(scores_mat_[0].size(),scores_mat_.size());
@@ -274,8 +274,8 @@ void MixedFEFPCABase<Integrator,ORDER, mydim, ndim>::computeVarianceExplained()
 	variance_explained_[i]=(R.diagonal()*R.diagonal().transpose()).diagonal()[i]/scores_mat_[0].size();
 }
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void MixedFEFPCABase<Integrator,ORDER, mydim, ndim>::computeCumulativePercentageExplained()
+template<UInt ORDER, UInt mydim, UInt ndim>
+void MixedFEFPCABase<ORDER, mydim, ndim>::computeCumulativePercentageExplained()
 {
 	Eigen::BDCSVD<MatrixXr> svd(fpcaData_.getDatamatrix(),Eigen::ComputeThinU|Eigen::ComputeThinV);
 	MatrixXr U_ALL(fpcaData_.getDatamatrix().rows(),fpcaData_.getDatamatrix().rows());
@@ -292,8 +292,8 @@ void MixedFEFPCABase<Integrator,ORDER, mydim, ndim>::computeCumulativePercentage
 
 
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void MixedFEFPCABase<Integrator,ORDER, mydim, ndim>::computeIterations(MatrixXr & datamatrixResiduals_, FPCAObject & FPCAinput, UInt lambda_index, UInt nnodes)
+template<UInt ORDER, UInt mydim, UInt ndim>
+void MixedFEFPCABase<ORDER, mydim, ndim>::computeIterations(MatrixXr & datamatrixResiduals_, FPCAObject & FPCAinput, UInt lambda_index, UInt nnodes)
 {
 
 	Real lambda = fpcaData_.getLambda()[lambda_index];
@@ -342,10 +342,10 @@ void MixedFEFPCABase<Integrator,ORDER, mydim, ndim>::computeIterations(MatrixXr 
 
 
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void MixedFEFPCABase<Integrator,ORDER, mydim, ndim>::SetAndFixParameters()
+template<UInt ORDER, UInt mydim, UInt ndim>
+void MixedFEFPCABase<ORDER, mydim, ndim>::SetAndFixParameters()
 {
-	FiniteElement<Integrator, ORDER, mydim, ndim> fe;
+	FiniteElement<ORDER, mydim, ndim> fe;
 
 	computeDelta();
 	computeBasisEvaluations(); //compute Psi
@@ -379,16 +379,16 @@ void MixedFEFPCABase<Integrator,ORDER, mydim, ndim>::SetAndFixParameters()
 
 
 ///CLASS MIXEDFEFPCA
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void MixedFEFPCA<Integrator, ORDER, mydim, ndim>::apply()
+template<UInt ORDER, UInt mydim, UInt ndim>
+void MixedFEFPCA<ORDER, mydim, ndim>::apply()
 {
-	MixedFEFPCABase<Integrator, ORDER, mydim, ndim>::SetAndFixParameters();
+	MixedFEFPCABase<ORDER, mydim, ndim>::SetAndFixParameters();
 
 	for(auto np=0; np<this->fpcaData_.getNPC(); np++)
 	{
 		UInt i=0;
 		FPCAObject FPCAinput(this->datamatrixResiduals_);
-		MixedFEFPCABase<Integrator, ORDER, mydim, ndim>::computeIterations(this->datamatrixResiduals_,FPCAinput,i,this->mesh_.num_nodes());
+		MixedFEFPCABase<ORDER, mydim, ndim>::computeIterations(this->datamatrixResiduals_,FPCAinput,i,this->mesh_.num_nodes());
 
 		this->scores_mat_[np]=FPCAinput.getScores();
 		this->loadings_mat_[np]=FPCAinput.getLoadings();
@@ -408,15 +408,15 @@ void MixedFEFPCA<Integrator, ORDER, mydim, ndim>::apply()
 
 		this->scores_mat_[np]=this->scores_mat_[np]*load_norm;
 	}
-	MixedFEFPCABase<Integrator, ORDER, mydim, ndim>::computeVarianceExplained();
-	MixedFEFPCABase<Integrator, ORDER, mydim, ndim>::computeCumulativePercentageExplained();
+	MixedFEFPCABase<ORDER, mydim, ndim>::computeVarianceExplained();
+	MixedFEFPCABase<ORDER, mydim, ndim>::computeCumulativePercentageExplained();
 }
 
 
 ///CLASS MIXEDFEFPCAGCV
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void MixedFEFPCAGCV<Integrator,ORDER, mydim, ndim>::computeDegreesOfFreedom(UInt output_index, Real lambda)
+template<UInt ORDER, UInt mydim, UInt ndim>
+void MixedFEFPCAGCV<ORDER, mydim, ndim>::computeDegreesOfFreedom(UInt output_index, Real lambda)
 {
 	int GCVmethod = this->fpcaData_.getGCVmethod();
 	switch (GCVmethod) {
@@ -429,8 +429,8 @@ void MixedFEFPCAGCV<Integrator,ORDER, mydim, ndim>::computeDegreesOfFreedom(UInt
 	}
 }
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void MixedFEFPCAGCV<Integrator,ORDER, mydim, ndim>::computeDegreesOfFreedomExact(UInt output_index, Real lambda)
+template<UInt ORDER, UInt mydim, UInt ndim>
+void MixedFEFPCAGCV<ORDER, mydim, ndim>::computeDegreesOfFreedomExact(UInt output_index, Real lambda)
 {
 	UInt nnodes = this->mesh_.num_nodes();
 	UInt nlocations = this->fpcaData_.getNumberofObservations();
@@ -463,8 +463,8 @@ void MixedFEFPCAGCV<Integrator,ORDER, mydim, ndim>::computeDegreesOfFreedomExact
 	this->var_[output_index] = 0;
 }
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void MixedFEFPCAGCV<Integrator,ORDER, mydim, ndim>::computeDegreesOfFreedomStochastic(UInt output_index, Real lambda)
+template<UInt ORDER, UInt mydim, UInt ndim>
+void MixedFEFPCAGCV<ORDER, mydim, ndim>::computeDegreesOfFreedomStochastic(UInt output_index, Real lambda)
 {
 	UInt nnodes = this->mesh_.num_nodes();
 	UInt nlocations = this->fpcaData_.getNumberofObservations();
@@ -513,8 +513,8 @@ void MixedFEFPCAGCV<Integrator,ORDER, mydim, ndim>::computeDegreesOfFreedomStoch
 }
 
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void MixedFEFPCAGCV<Integrator,ORDER, mydim, ndim>::computeDegreesOfFreedom(UInt output_index)
+template<UInt ORDER, UInt mydim, UInt ndim>
+void MixedFEFPCAGCV<ORDER, mydim, ndim>::computeDegreesOfFreedom(UInt output_index)
 {
 	UInt nnodes = this->mesh_.num_nodes();
 	UInt nlocations = this->fpcaData_.getNumberofObservations();
@@ -551,8 +551,8 @@ void MixedFEFPCAGCV<Integrator,ORDER, mydim, ndim>::computeDegreesOfFreedom(UInt
 	dof_[output_index] = degrees;
 }
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void MixedFEFPCAGCV<Integrator,ORDER, mydim, ndim>::computeGCV(FPCAObject& FPCAinput,UInt output_index)
+template<UInt ORDER, UInt mydim, UInt ndim>
+void MixedFEFPCAGCV<ORDER, mydim, ndim>::computeGCV(FPCAObject& FPCAinput,UInt output_index)
 {
 	UInt s;
 	VectorXr zhat;
@@ -580,8 +580,8 @@ void MixedFEFPCAGCV<Integrator,ORDER, mydim, ndim>::computeGCV(FPCAObject& FPCAi
 	//GCV_[output_index]=norm_squared/(s-(1-1/s*dof_[output_index])*(1-1/s*dof_[output_index]));
 }
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void MixedFEFPCAGCV<Integrator,ORDER, mydim, ndim>::computeIterationsGCV(MatrixXr & datamatrixResiduals_, UInt nnodes, UInt np)
+template<UInt ORDER, UInt mydim, UInt ndim>
+void MixedFEFPCAGCV<ORDER, mydim, ndim>::computeIterationsGCV(MatrixXr & datamatrixResiduals_, UInt nnodes, UInt np)
 {
 	UInt niter=20;
 //	FPCAObject FPCAinput(this->datamatrixResiduals_);
@@ -640,7 +640,7 @@ void MixedFEFPCAGCV<Integrator,ORDER, mydim, ndim>::computeIterationsGCV(MatrixX
 
 	FPCAObject FPCAinput(this->datamatrixResiduals_);
 
-	MixedFEFPCABase<Integrator,ORDER, mydim, ndim>::computeIterations(this->datamatrixResiduals_,FPCAinput,best_GCV,this->mesh_.num_nodes());
+	MixedFEFPCABase<ORDER, mydim, ndim>::computeIterations(this->datamatrixResiduals_,FPCAinput,best_GCV,this->mesh_.num_nodes());
 
 //	if(this->fpcaData_.isLocationsByNodes())  � gi� dentro compute_iterations
 //	{
@@ -667,10 +667,10 @@ void MixedFEFPCAGCV<Integrator,ORDER, mydim, ndim>::computeIterationsGCV(MatrixX
 	this->scores_mat_[np]=this->scores_mat_[np]*load_norm;
 }
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void MixedFEFPCAGCV<Integrator,ORDER, mydim, ndim>::apply()
+template<UInt ORDER, UInt mydim, UInt ndim>
+void MixedFEFPCAGCV<ORDER, mydim, ndim>::apply()
 {
-	MixedFEFPCABase<Integrator, ORDER, mydim, ndim>::SetAndFixParameters();
+	MixedFEFPCABase<ORDER, mydim, ndim>::SetAndFixParameters();
 	this->computeBasisEvaluations();
 	dof_.resize(this->fpcaData_.getLambda().size());
 	GCV_.resize(this->fpcaData_.getLambda().size());
@@ -682,14 +682,14 @@ void MixedFEFPCAGCV<Integrator,ORDER, mydim, ndim>::apply()
 	{
 		computeIterationsGCV(this->datamatrixResiduals_,this->mesh_.num_nodes(),np);
 	}
-	MixedFEFPCABase<Integrator, ORDER, mydim, ndim>::computeVarianceExplained();
-	MixedFEFPCABase<Integrator, ORDER, mydim,ndim>::computeCumulativePercentageExplained();
+	MixedFEFPCABase<ORDER, mydim, ndim>::computeVarianceExplained();
+	MixedFEFPCABase<ORDER, mydim,ndim>::computeCumulativePercentageExplained();
 }
 
 
 ///CLASS MIXEDFEFPCAKFOLD
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void MixedFEFPCAKFold<Integrator,ORDER, mydim, ndim>::computeKFolds(MatrixXr & datamatrixResiduals_, UInt lambda_index, UInt nnodes, UInt nFolds)
+template<UInt ORDER, UInt mydim, UInt ndim>
+void MixedFEFPCAKFold<ORDER, mydim, ndim>::computeKFolds(MatrixXr & datamatrixResiduals_, UInt lambda_index, UInt nnodes, UInt nFolds)
 {
 
 	Real lambda = this->fpcaData_.getLambda()[lambda_index];
@@ -777,11 +777,11 @@ void MixedFEFPCAKFold<Integrator,ORDER, mydim, ndim>::computeKFolds(MatrixXr & d
 
 }
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void MixedFEFPCAKFold<Integrator,ORDER, mydim, ndim>::apply()
+template<UInt ORDER, UInt mydim, UInt ndim>
+void MixedFEFPCAKFold<ORDER, mydim, ndim>::apply()
 {
 
-	MixedFEFPCABase<Integrator,ORDER, mydim, ndim>::SetAndFixParameters();
+	MixedFEFPCABase<ORDER, mydim, ndim>::SetAndFixParameters();
 	nFolds=this->fpcaData_.getNFolds();
 	KFold_.resize(this->fpcaData_.getLambda().size());
 
@@ -801,7 +801,7 @@ void MixedFEFPCAKFold<Integrator,ORDER, mydim, ndim>::apply()
 
 		FPCAObject FPCAinput(this->datamatrixResiduals_);
 
-		MixedFEFPCABase<Integrator,ORDER, mydim, ndim>::computeIterations(this->datamatrixResiduals_,FPCAinput,index_best_KF,this->mesh_.num_nodes());
+		MixedFEFPCABase<ORDER, mydim, ndim>::computeIterations(this->datamatrixResiduals_,FPCAinput,index_best_KF,this->mesh_.num_nodes());
 
 		this->scores_mat_[np]=FPCAinput.getScores();
 		this->loadings_mat_[np]=FPCAinput.getLoadings();
@@ -825,8 +825,8 @@ void MixedFEFPCAKFold<Integrator,ORDER, mydim, ndim>::apply()
 		this->scores_mat_[np]=this->scores_mat_[np]*load_norm;
 	}
 
-	MixedFEFPCABase<Integrator,ORDER, mydim, ndim>::computeVarianceExplained();
-	MixedFEFPCABase<Integrator,ORDER, mydim,ndim>::computeCumulativePercentageExplained();
+	MixedFEFPCABase<ORDER, mydim, ndim>::computeVarianceExplained();
+	MixedFEFPCABase<ORDER, mydim,ndim>::computeCumulativePercentageExplained();
 
 }
 

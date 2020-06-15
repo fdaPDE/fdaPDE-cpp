@@ -7,81 +7,78 @@
 #ifndef PARAM_FUNCTORS_H_
 #define PARAM_FUNCTORS_H_
 
+#include "pde_expression_templates.h"
+
+// Forward declaration!
 template <UInt ORDER, UInt mydim, UInt ndim>
 class FiniteElement;
 
-#include "pde_expression_templates.h"
+// Convenience enum for options
+enum class PDEParameterOptions{Constant, SpaceVarying};
 
-template <UInt ndim, bool is_SV = false>
-struct Diffusion{
-  using diffusion_matr = Eigen::Matrix<Real,ndim,ndim>;
+template<PDEParameterOptions OPTION>
+struct Diffusion;
 
-	Diffusion(const diffusion_matr& K) :
-			K_(K) {}
+template<>
+struct Diffusion<PDEParameterOptions::Constant>{
+
+  Diffusion(const Real* const K_ptr) :
+    K_ptr_(K_ptr) {}
 
   #ifdef R_VERSION_
-  Diffusion(SEXP RGlobalVector){
-    K_ = Eigen::Map<const diffusion_matr>(&REAL(RGlobalVector)[0]);
-  }
+  Diffusion(SEXP RGlobalVector) :
+    K_ptr_(REAL(RGlobalVector)) {}
   #endif
 
-  template<UInt ORDER, UInt mydim, UInt WRONG>
-  auto operator() (const FiniteElement<ORDER,mydim,WRONG>& fe_, UInt iq, UInt i, UInt j) const -> decltype(fe_.stiff_impl(iq, i, j, diffusion_matr())) {
-    static_assert(ndim==WRONG, "ERROR! INCOMPATIBLE DIMENSIONS OF DIFFUSION PARAMETER AND FINITE ELEMENT! See param_functors.h");
-    return fe_.stiff_impl(iq, i, j, K_);
+  template<UInt ORDER, UInt mydim, UInt ndim>
+  Real operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
+    using EigenMap2Diff_matr = Eigen::Map<const Eigen::Matrix<Real,ndim,ndim> >;
+    return fe_.stiff_impl(iq, i, j, EigenMap2Diff_matr(K_ptr_));
   }
-
 private:
-  diffusion_matr K_;
+  const Real* const K_ptr_;
+};
+
+template<>
+struct Diffusion<PDEParameterOptions::SpaceVarying>{
+
+  Diffusion(const Real* const K_ptr) :
+    K_ptr_(K_ptr) {}
+
+  #ifdef R_VERSION_
+  Diffusion(SEXP RGlobalVector) :
+    K_ptr_(REAL(RGlobalVector)) {}
+  #endif
+
+  template<UInt ORDER, UInt mydim, UInt ndim>
+  Real operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
+    using EigenMap2Diff_matr = Eigen::Map<const Eigen::Matrix<Real,ndim,ndim> >;
+    const UInt index = fe_.getGlobalIndex(iq)*ndim*ndim;
+    return fe_.stiff_impl(iq, i, j, EigenMap2Diff_matr(&K_ptr_[index]));
+  }
+private:
+  const Real* const K_ptr_;
 };
 
 
-template <UInt ndim>
-struct Diffusion<ndim, true>{
-  using diffusion_matr = Eigen::Matrix<Real,ndim,ndim>;
-	using diff_matr_container = std::vector<diffusion_matr, Eigen::aligned_allocator<diffusion_matr> >;
+template<PDEParameterOptions OPTION>
+struct Advection;
 
-	Diffusion(const diff_matr_container& K):
-			K_(K){}
+template<>
+struct Advection<PDEParameterOptions::Constant>{
 
-  #ifdef R_VERSION_
-	Diffusion(SEXP RGlobalVector){
-		UInt num_int_nodes = Rf_length(RGlobalVector)/(ndim*ndim);
-		K_.reserve(num_int_nodes);
-		for(UInt i=0; i<num_int_nodes; ++i)
-				K_.push_back(Eigen::Map<const diffusion_matr>(&REAL(RGlobalVector)[ndim*ndim*i]));
-	}
-	#endif
-
-  template<UInt ORDER, UInt mydim, UInt WRONG>
-  auto operator() (const FiniteElement<ORDER,mydim,WRONG>& fe_, UInt iq, UInt i, UInt j) const -> decltype(fe_.stiff_impl(iq, i, j, diffusion_matr())) {
-    static_assert(ndim==WRONG, "ERROR! INCOMPATIBLE DIMENSIONS OF DIFFUSION PARAMETER AND FINITE ELEMENT! See param_functors.h");
-    UInt globalIndex=fe_.getGlobalIndex(iq);
-    return fe_.stiff_impl(iq, i, j, K_[globalIndex]);
-  }
-
-private:
-  diff_matr_container K_;
-};
-
-
-template <UInt ndim, bool is_SV = false>
-struct Advection{
-	using advection_vec = Eigen::Matrix<Real,ndim,1>;
-
-	Advection(const advection_vec& beta) :
-		beta_(beta){}
+  Advection(const Real* const b_ptr) :
+    b_ptr_(b_ptr) {}
 
   #ifdef R_VERSION_
-  Advection(SEXP RGlobalVector){
-    beta_ = Eigen::Map<const advection_vec>(&REAL(RGlobalVector)[0]);
-  }
+  Advection(SEXP RGlobalVector) :
+    b_ptr_(REAL(RGlobalVector)) {}
   #endif
 
-  template<UInt ORDER, UInt mydim, UInt WRONG>
-  auto operator() (const FiniteElement<ORDER,mydim,WRONG>& fe_, UInt iq, UInt i, UInt j) const -> decltype(fe_.grad_impl(iq, i, j, advection_vec())) {
-    static_assert(ndim==WRONG, "ERROR! INCOMPATIBLE DIMENSIONS OF ADVECTION PARAMETER AND FINITE ELEMENT! See param_functors.h");
-    return fe_.grad_impl(iq, i, j, beta_);
+  template<UInt ORDER, UInt mydim, UInt ndim>
+  Real operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
+    using EigenMap2Adv_vec = Eigen::Map<const Eigen::Matrix<Real,ndim,1> >;
+    return fe_.grad_impl(iq, i, j, EigenMap2Adv_vec(b_ptr_));
   }
 
   EOExpr<const Advection&> dot(const EOExpr<Grad>& grad) const {
@@ -90,31 +87,25 @@ struct Advection{
   }
 
 private:
-  advection_vec beta_;
+  const Real* const b_ptr_;
 };
 
-template<UInt ndim>
-struct Advection<ndim, true>{
-	using advection_vec = Eigen::Matrix<Real,ndim,1>;
-	using adv_vec_container = std::vector<advection_vec, Eigen::aligned_allocator<advection_vec> >;
+template<>
+struct Advection<PDEParameterOptions::SpaceVarying>{
 
-	Advection(const adv_vec_container& beta):
-		beta_(beta){}
+  Advection(const Real* const b_ptr) :
+    b_ptr_(b_ptr) {}
 
-	#ifdef R_VERSION_
-	Advection(SEXP RGlobalVector){
-		UInt num_int_nodes = Rf_length(RGlobalVector)/ndim;
-		beta_.reserve(num_int_nodes);
-		for(UInt i=0; i<num_int_nodes; ++i)
-			beta_.push_back(Eigen::Map<const advection_vec>(&REAL(RGlobalVector)[ndim*i]));
-	}
-	#endif
+  #ifdef R_VERSION_
+  Advection(SEXP RGlobalVector) :
+    b_ptr_(REAL(RGlobalVector)) {}
+  #endif
 
-  template<UInt ORDER, UInt mydim, UInt WRONG>
-  auto operator() (const FiniteElement<ORDER,mydim,WRONG>& fe_, UInt iq, UInt i, UInt j) const -> decltype(fe_.grad_impl(iq, i, j, advection_vec())) {
-    static_assert(ndim==WRONG, "ERROR! INCOMPATIBLE DIMENSIONS OF ADVECTION PARAMETER AND FINITE ELEMENT! See param_functors.h");
-    UInt globalIndex=fe_.getGlobalIndex(iq);
-    return fe_.grad_impl(iq, i, j, beta_[globalIndex]);
+  template<UInt ORDER, UInt mydim, UInt ndim>
+  Real operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
+    using EigenMap2Adv_vec = Eigen::Map<const Eigen::Matrix<Real,ndim,1> >;
+    const UInt index = fe_.getGlobalIndex(iq)*ndim;
+    return fe_.grad_impl(iq, i, j, EigenMap2Adv_vec(&b_ptr_[index]));
   }
 
   EOExpr<const Advection&> dot(const EOExpr<Grad>& grad) const {
@@ -123,26 +114,24 @@ struct Advection<ndim, true>{
   }
 
 private:
-  adv_vec_container beta_;
+  const Real* const b_ptr_;
 };
+
 
 struct Reaction{
-	Reaction(const std::vector<Real>& c):
-		c_(c) {}
 
-#ifdef R_VERSION_
-	Reaction(SEXP RGlobalVector){
-		UInt num_int_nodes = Rf_length(RGlobalVector);
-		c_.reserve(num_int_nodes);
-		for(UInt i=0; i<num_int_nodes; ++i)
-			c_.push_back(REAL(RGlobalVector)[i]);
-	}
+	Reaction(const Real* const  c_ptr) :
+		c_ptr_(c_ptr) {}
+
+  #ifdef R_VERSION_
+	Reaction(SEXP RGlobalVector) :
+    c_ptr_(REAL(RGlobalVector)) {}
 	#endif
 
   template<UInt ORDER, UInt mydim, UInt ndim>
-  auto operator() (const FiniteElement<ORDER, mydim, ndim>& fe_, UInt iq, UInt i, UInt j) const -> decltype(0.*fe_.mass_impl(iq, i, j)){
-    UInt globalIndex=fe_.getGlobalIndex(iq);
-    return c_[globalIndex]*fe_.mass_impl(iq, i, j);
+  Real operator() (const FiniteElement<ORDER, mydim, ndim>& fe_, UInt iq, UInt i, UInt j) const {
+    const UInt index = fe_.getGlobalIndex(iq);
+    return c_ptr_[index]*fe_.mass_impl(iq, i, j);
   }
 
   EOExpr<const Reaction&> operator* (const EOExpr<Mass>&  mass) const {
@@ -150,32 +139,31 @@ struct Reaction{
       return ExprT(*this);
   }
 
-
 private:
-  std::vector<Real> c_;
+  const Real* const c_ptr_;
 };
-
-
 
 
 struct ForcingTerm{
 
-  ForcingTerm() = default;
-	ForcingTerm(const std::vector<Real>& u) :
-		u_(u) {}
+  ForcingTerm() :
+    u_ptr_(nullptr) {}
+	ForcingTerm(const Real* const u_ptr) :
+		u_ptr_(u_ptr) {}
 
 	#ifdef R_VERSION_
-	ForcingTerm(SEXP RGlobalVector){
-		UInt num_int_nodes = Rf_length(RGlobalVector);
-		u_.reserve(num_int_nodes);
-		for(UInt i=0; i<num_int_nodes; ++i)
-			u_.push_back(REAL(RGlobalVector)[i]);
-	}
+	ForcingTerm(SEXP RGlobalVector) :
+    u_ptr_(REAL(RGlobalVector)) {}
 	#endif
 
-	Real operator[](UInt globalNodeIndex) const {return u_[globalNodeIndex];}
+  template<UInt ORDER, UInt mydim, UInt ndim>
+  Real integrate (const FiniteElement<ORDER, mydim, ndim>& fe_, UInt i) const {
+    const UInt index = fe_.getGlobalIndex(0);
+    return fe_.forcing_integrate(i, &u_ptr_[index]);
+  }
+
 private:
-  std::vector<Real> u_;
+  const Real* const u_ptr_;
 };
 
 

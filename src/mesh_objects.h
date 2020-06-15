@@ -6,6 +6,7 @@
 
 #include "point.h"
 
+using Id=int;
 /*! \brief A function to evaluate factorial at compile time
  *
  *  This function evaluates the factorial of a given UInt n
@@ -67,6 +68,13 @@ public:
   using elementPoints = std::array<Point<ndim>,NNODES>;
   using iterator = typename elementPoints::iterator;
   using const_iterator = typename elementPoints::const_iterator;
+
+  // Note: these don't really mean anything, they're just here for compatibility
+  // with the adtree implementation
+  static constexpr UInt dp() {return ndim;}
+  static constexpr UInt dt() {return 2*ndim;}
+  static constexpr UInt coordsize() {return (ndim+1)*ndim;}
+  static constexpr UInt numVertices() {return mydim+1;}
 
   //! This constructor creates an "empty" Element, with an Id Not Valid
   Element()=default;
@@ -160,6 +168,14 @@ public:
   using elementPoints = std::array<Point<3>, NNODES>;
   using iterator = typename elementPoints::iterator;
   using const_iterator = typename elementPoints::const_iterator;
+
+  // Note: these don't really mean anything, they're just here for compatibility
+  // with the adtree implementation
+  static constexpr UInt dp() {return 3;}
+  static constexpr UInt dt() {return 6;}
+  static constexpr UInt coordsize() {return 9;}
+  static constexpr UInt numVertices() {return 3;}
+
 
   //! This constructor creates an "empty" Element, with an Id Not Valid
   Element()=default;

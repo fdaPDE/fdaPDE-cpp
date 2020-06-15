@@ -1,14 +1,14 @@
 #ifndef __FPCADATA_IMP_HPP__
 #define __FPCADATA_IMP_HPP__
 
-FPCAData::FPCAData(std::vector<Point>& locations, MatrixXr& datamatrix, UInt order, MatrixXi& incidenceMatrix,
-					std::vector<Real> lambda, UInt nPC, UInt nFolds, UInt search): 
+FPCAData::FPCAData(Real* locations, UInt n_locations, MatrixXr& datamatrix, UInt order, MatrixXi& incidenceMatrix,
+					std::vector<Real> lambda, UInt nPC, UInt nFolds, UInt search):
 					locations_(locations), datamatrix_(datamatrix), order_(order),
 					incidenceMatrix_(incidenceMatrix), lambda_(lambda),  nPC_(nPC),
 					nFolds_(nFolds), search_(search)
 {
 	nRegions_ = incidenceMatrix.rows();
-	if(locations.size()==0 && nRegions_==0)
+	if(n_locations_==0 && nRegions_==0)
 	{
 		locations_by_nodes_ = true;
 		for(int i = 0; i<datamatrix_.cols();++i) observations_indices_.push_back(i);
@@ -17,47 +17,31 @@ FPCAData::FPCAData(std::vector<Point>& locations, MatrixXr& datamatrix, UInt ord
 }
 
 #ifdef R_VERSION_
-FPCAData::FPCAData(SEXP Rlocations, SEXP RbaryLocations, SEXP Rdatamatrix, SEXP Rorder, SEXP RincidenceMatrix, SEXP Rlambda, 
+FPCAData::FPCAData(SEXP Rlocations, SEXP RbaryLocations, SEXP Rdatamatrix, SEXP Rorder, SEXP RincidenceMatrix, SEXP Rlambda,
 					SEXP RnPC, SEXP RnFolds,SEXP RGCVmethod, SEXP Rnrealizations, SEXP Rsearch)
 {
-	setLocations(Rlocations);
+
+	locations_=REAL(Rlocations);
+	n_locations_=INTEGER(Rf_getAttrib(Rlocations, R_DimSymbol))[0];
+
 	setBaryLocations(RbaryLocations);
 	setIncidenceMatrix(RincidenceMatrix);
 	setDatamatrix(Rdatamatrix);
 	setNrealizations(Rnrealizations);
-	
+
 	GCVmethod_ = INTEGER(RGCVmethod)[0];
 
 	order_ =  INTEGER(Rorder)[0];
 	search_ =  INTEGER(Rsearch)[0];
-	
+
 	UInt length_lambda = Rf_length(Rlambda);
 	for (UInt i = 0; i<length_lambda; ++i) lambda_.push_back(REAL(Rlambda)[i]);
 
 	nPC_ = INTEGER(RnPC)[0];
-	
+
 	nFolds_=INTEGER(RnFolds)[0];
 }
 
-void FPCAData::setLocations(SEXP Rlocations)
-{
-	n_ = INTEGER(Rf_getAttrib(Rlocations, R_DimSymbol))[0];
-	if(n_>0){
-		int ndim = INTEGER(Rf_getAttrib(Rlocations, R_DimSymbol))[1];
-
-	  if (ndim == 2){
-			for(auto i=0; i<n_; ++i)
-			{
-				locations_.emplace_back(REAL(Rlocations)[i+ n_*0],REAL(Rlocations)[i+ n_*1]);
-			}
-		}else{ //ndim == 3
-			for(auto i=0; i<n_; ++i)
-			{
-				locations_.emplace_back(REAL(Rlocations)[i+ n_*0],REAL(Rlocations)[i+ n_*1],REAL(Rlocations)[i+ n_*2]);
-			}
-		}
-	}
-}
 
 void FPCAData::setBaryLocations(SEXP RbaryLocations)
 {
@@ -70,7 +54,7 @@ void FPCAData::setBaryLocations(SEXP RbaryLocations)
 		barycenters_.resize(n_, p_);
 		element_ids_.resize(n_);
 
-		if(n_>0){ 
+		if(n_>0){
 			for(auto i=0; i<n_; ++i)
 			{
 				for (auto j=0; j<p_; ++j)
@@ -95,14 +79,14 @@ void FPCAData::setDatamatrix(SEXP Rdatamatrix)
 	observations_indices_.reserve(p_);
 	VectorXr auxiliary_row_;
 	auxiliary_row_.resize(p_);
-	
+
 	nRegions_ = incidenceMatrix_.rows();
-	
-	if(locations_.size() == 0 && nRegions_==0)
+
+	if(n_locations_ == 0 && nRegions_==0)
 	{
 		locations_by_nodes_ = true;
 		for(auto i=0; i<n_; ++i)
-		{	
+		{
 			UInt count=0;
 			for(auto j=0; j<p_ ; ++j)
 			{
@@ -169,15 +153,18 @@ void FPCAData::printDatamatrix(std::ostream & out) const
 {    	datamatrix_=scores_*loadings_.transpose();
 }
 */
-void FPCAData::printLocations(std::ostream & out) const
-{
 
-	for(std::vector<Point>::size_type i=0;i<locations_.size(); i++)
-	{
-		locations_[i].print(out);
-		//std::cout<<std::endl;
-	}
-}
+// void FPCAData::printLocations(std::ostream & out) const
+// {
+// 	if(INTEGER(Rf_getAttrib(Rlocations, R_DimSymbol))[1]==2)
+// 		for(UInt i=0; i<n_locations_; i++)
+// 			out<<getLocations<2>(i)<<std::endl;
+// 	else
+// 		for(UInt i=0; i<n_locations_; i++)
+// 			out<<getLocations<3>(i)<<std::endl;
+//
+// }
+
 
 void FPCAData::printIncidenceMatrix(std::ostream & out) const
 {

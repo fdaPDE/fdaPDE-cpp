@@ -16,10 +16,8 @@ class FiniteElementData{
 								 mydim <= ndim,
 								 "ERROR! TRYING TO INSTANTIATE FINITE ELEMENT WITH WRONG NUMBER OF NODES AND/OR DIMENSIONS! See finite_element.h");
 public:
-  using meshSide = std::array<UInt, mydim>;
-
 	// This type encodes an appropriate quadrature rule depending on order and dimension
-	using Integrator = typename IntegratorHelper::Integrator<ORDER,mydim>;
+	using Integrator = typename SpaceIntegratorHelper::Integrator<ORDER,mydim>;
 
 	// Number of basis function on the element
 	static constexpr UInt NBASES = how_many_nodes(ORDER,mydim);
@@ -57,14 +55,6 @@ public:
 	// A member returning the ID of the underlying element
 	Real getId() const {return t_.getId();}
 
-	// A member returning the iq-th quadrature point as a point in ndim-ensional space
-	Point<ndim> coorQuadPt(UInt iq){
-		Point<ndim> quadPt{t_.getM_J() * Eigen::Map<const Eigen::Matrix<Real,mydim,1> >(&Integrator::NODES[iq][0])};
-		return quadPt += t_[0];
-	}
-
-	// A member returning ^phi(i,iq)
-	Real getPhi(UInt i, UInt iq) const {return referencePhi(i, iq);}
 	// A member returning the global index of a quadrature node
 	UInt getGlobalIndex(UInt iq) const {return Integrator::NNODES * t_.getId() + iq;}
 
@@ -74,7 +64,7 @@ protected:
 	// A matrix Phi
 	// Phi(i,iq) is ^phi_i(node_iq), i.e. the i-th basis function evaluated at the
 	// iq-th quadrature node on the reference element
-	Eigen::Matrix<Real, NBASES, Integrator::NNODES> referencePhi;
+	Eigen::Matrix<Real, Integrator::NNODES, NBASES> referencePhi;
 	// A block matrix PhiDer
 	// Each block iq is made of nabla ^phi(node_iq), i.e. it stores the gradients
 	// of the basis functions evaluated at the quadrature nodes on the reference element
@@ -99,6 +89,11 @@ template <UInt ORDER, UInt mydim, UInt ndim>
 struct FiniteElement : public FiniteElementData<ORDER, mydim, ndim> {
 
 	using Integrator = typename FiniteElementData<ORDER, mydim, ndim>::Integrator;
+	using Diff_matr = Eigen::Matrix<Real, ndim, ndim>;
+	using EigenMap2Diff_matr = Eigen::Map<const Diff_matr>;
+	using Adv_vec = Eigen::Matrix<Real, ndim, 1>;
+	using EigenMap2Adv_vec = Eigen::Map<const Adv_vec>;
+	using EigenMap2Forcing_vec = Eigen::Map<const Eigen::Matrix<Real, Integrator::NNODES, 1> >;
 
 	static constexpr UInt NBASES = FiniteElementData<ORDER, mydim, ndim>::NBASES;
 
@@ -107,21 +102,29 @@ struct FiniteElement : public FiniteElementData<ORDER, mydim, ndim> {
 	Real stiff_impl(UInt iq, UInt i, UInt j) const {
 		return this->elementPhiDer.col(iq*NBASES+i).dot(this->elementPhiDer.col(iq*NBASES+j));
 	}
-
-	Real stiff_impl(UInt iq, UInt i, UInt j, const Eigen::Matrix<Real, ndim, ndim>& K) const {
+	Real stiff_impl(UInt iq, UInt i, UInt j, const Diff_matr& K) const {
+		return this->elementPhiDer.col(iq*NBASES+i).dot(K * this->elementPhiDer.col(iq*NBASES+j));
+	}
+	Real stiff_impl(UInt iq, UInt i, UInt j, const EigenMap2Diff_matr& K) const {
 		return this->elementPhiDer.col(iq*NBASES+i).dot(K * this->elementPhiDer.col(iq*NBASES+j));
 	}
 
-	Real mass_impl(UInt iq, UInt i, UInt j) const {
-		return this->referencePhi(i,iq) * this->referencePhi(j,iq);
-	}
-
 	Real grad_impl(UInt iq, UInt i, UInt j) const {
-		return this->referencePhi(i,iq) * this->elementPhiDer(0,iq*NBASES+j);
+		return this->referencePhi(iq,i) * this->elementPhiDer(0,iq*NBASES+j);
+	}
+	Real grad_impl(UInt iq, UInt i, UInt j, const Adv_vec& b) const {
+		return this->referencePhi(iq,i) * b.dot(this->elementPhiDer.col(iq*NBASES+j));
+	}
+	Real grad_impl(UInt iq, UInt i, UInt j, const EigenMap2Adv_vec& b) const {
+		return this->referencePhi(iq,i) * b.dot(this->elementPhiDer.col(iq*NBASES+j));
 	}
 
-	Real grad_impl(UInt iq, UInt i, UInt j, const Eigen::Matrix<Real, ndim, 1>& b) const {
-		return this->referencePhi(i,iq) * b.dot(this->elementPhiDer.col(iq*NBASES+j));
+	Real mass_impl(UInt iq, UInt i, UInt j) const {
+		return this->referencePhi(iq,i) * this->referencePhi(iq,j);
+	}
+
+	Real forcing_integrate(UInt i, const Real* const local_u) const {
+		return this->referencePhi.col(i).dot(EigenMap2Forcing_vec(local_u).cwiseProduct(EigenMap2Forcing_vec(&Integrator::WEIGHTS[0])));
 	}
 
 };

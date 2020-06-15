@@ -1,13 +1,12 @@
 #ifndef MESH_H_
 #define MESH_H_
 
-// Needed for std::enable_if
-#include <type_traits>
-
+#include <set>
+#include <memory>
 // Note: how_many_nodes constexpr function is defined in mesh_objects.h
 // Also Point and Element
 #include "mesh_objects.h"
-
+#include "adtree.h"
 
 template <UInt ORDER, UInt mydim, UInt ndim>
 class MeshHandler{
@@ -20,8 +19,7 @@ public:
 
   // A constructor
   // Note: this constructor is never actually used in practice outside of debug
-	MeshHandler(Real* points, UInt* sides, UInt* elements, UInt* neighbors, UInt num_nodes, UInt num_sides, UInt num_elements):
-			points_(points), sides_(sides), elements_(elements), neighbors_(neighbors), num_nodes_(num_nodes), num_sides_(num_sides), num_elements_(num_elements) {};
+  MeshHandler(Real* points, UInt* sides, UInt* elements, UInt* neighbors, UInt num_nodes, UInt num_sides, UInt num_elements, UInt search);
 
   //! A constructor.
     /*!
@@ -32,8 +30,13 @@ public:
     */
 
 	#ifdef R_VERSION_
-	MeshHandler(SEXP Rmesh);
+	MeshHandler(SEXP Rmesh, UInt search=1);
 	#endif
+
+  MeshHandler(const MeshHandler&) = delete;
+  MeshHandler(MeshHandler&&) = delete;
+  MeshHandler& operator=(const MeshHandler&) = delete;
+  MeshHandler& operator=(MeshHandler&&) = delete;
 
 	//! A member returning the number of nodes in the mesh
 	UInt num_nodes() const {return num_nodes_;}
@@ -44,40 +47,41 @@ public:
 	//! A member returning the number of distinct sides
   // (edges for mydim=2,faces for mydim=3) in the mesh
   // All three implemented for convenience
-	UInt num_sides() const {return num_sides_;}
-  UInt num_edges() const {return num_sides();}
-  UInt num_faces() const {return num_sides();}
+  UInt num_edges() const {return num_sides_;}
+  UInt num_faces() const {return num_sides_;}
 
 
   const Real& nodes(const UInt i, const UInt j) const {return points_[i+j*num_nodes_];}
 
   const UInt& elements(const UInt i, const UInt j) const {return elements_[i+j*num_elements_];}
 
-  const UInt& sides(const UInt i, const UInt j) const {return sides_[i+j*num_sides_];}
-  const UInt& edges(const UInt i, const UInt j) const {return sides(i,j);}
-  const UInt& faces(const UInt i, const UInt j) const {return sides(i,j);}
+  const UInt& edges(const UInt i, const UInt j) const {return sides_[i+j*num_sides_];}
+  const UInt& faces(const UInt i, const UInt j) const {return sides_[i+j*num_sides_];}
 
   const UInt& neighbors(const UInt i, const UInt j) const {return neighbors_[i+j*num_elements_];}
 
-
-
 	//! A member returning the ndim-dimensional Point with the specified ID
-	Point<ndim> getPoint(UInt id) const;
+	Point<ndim> getPoint(const UInt id) const;
 
 	//! A member returning an Element with the specified ID
-	meshElement getElement(UInt id) const;
+	meshElement getElement(const UInt id) const;
 
   //! A member returning the area/volume of a given element of the mesh
-  Real elementMeasure(UInt id) const {return getElement(id).getMeasure();}
+  Real elementMeasure(const UInt id) const {return getElement(id).getMeasure();}
 
+  UInt getSearch() const {return search_;}
+
+  const ADTree<meshElement>& getTree() const {return *tree_ptr_;}
   //! A member returning the "number"-th neighbor of element id_element,
   // i.e. the neighbor opposite the "number"-th vertex of the element id_element
   // Note: this function returns an empty element if the neighbor lies outside the boundary
-	meshElement getNeighbors(UInt id_element, UInt number) const;
+	meshElement getNeighbors(const UInt id_element, const UInt number) const;
 
-	void printPoints(std::ostream &);
-	void printElements(std::ostream &);
-	void printNeighbors(std::ostream &);
+	void printPoints(std::ostream &) const;
+	void printElements(std::ostream &) const;
+	void printNeighbors(std::ostream &) const;
+  void printTree(std::ostream & out) const;
+
 
 	//! A normal member returning the element on which a point is located
 		/*!
@@ -91,22 +95,26 @@ public:
     */
   // Note: this method is guaranteed to work only on convex domains
   // It does not work for manifold data!
-  // We make sure that it is not available for manifold data at compile time using enable_if
-  template <UInt m=mydim, UInt n=ndim>
-  typename std::enable_if<n==m && n==ndim && m==mydim, meshElement>::type
-  findLocationWalking(const Point<ndim>&, const meshElement&) const;
+  // We make sure that it is not available for manifold data at compile time using static_assert
 
+  meshElement findLocationWalking(const Point<ndim>&, const meshElement&) const;
+
+  meshElement findLocationTree(const Point<ndim>& point) const;
 
 private:
-	#ifdef R_VERSION_
-	SEXP mesh_;
-	#endif
-	Real *points_;
-	UInt *sides_;
-	UInt *elements_;
-	UInt *neighbors_;
 
-	UInt num_nodes_, num_sides_, num_elements_;
+  const Real * const points_;
+	const UInt * const sides_;
+	const UInt * const elements_;
+	const UInt * const neighbors_;
+
+	const UInt num_nodes_;
+  const UInt num_sides_;
+  const UInt num_elements_;
+
+  const UInt search_;
+
+  std::unique_ptr<const ADTree<meshElement> > tree_ptr_;
 
 };
 

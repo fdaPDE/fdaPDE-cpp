@@ -4,33 +4,39 @@
 template <UInt ORDER, UInt mydim, UInt ndim>
 class FiniteElement;
 
-template <UInt ndim, bool is_SV>
+template<typename Integrator, UInt DEGREE, UInt ORDER_DERIVATIVE>
+class Spline;
+
+enum class PDEParameterOptions;
+
+template<PDEParameterOptions OPTION>
 struct Diffusion;
+
 
 struct Stiff {
   template<UInt ORDER, UInt mydim, UInt ndim>
-  auto operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const -> decltype(fe_.stiff_impl(iq, i, j)) {
+  Real operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
     return fe_.stiff_impl(iq, i, j);
   }
 };
 
 struct Grad {
   template<UInt ORDER, UInt mydim, UInt ndim>
-  auto operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const -> decltype(fe_.grad_impl(iq, i, j)) {
+  Real operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
     return fe_.grad_impl(iq, i, j);
   }
 };
 
 struct Mass {
   template<UInt ORDER, UInt mydim, UInt ndim>
-  auto operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const -> decltype(fe_.mass_impl(iq, i, j)) {
+  Real operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
     return fe_.mass_impl(iq, i, j);
   }
 };
 
 struct TimeMass{
-    template <UInt DEGREE, UInt ORDER_DERIVATIVE>
-    auto operator() (Spline<DEGREE, ORDER_DERIVATIVE>& spline_, UInt i, UInt j, Real u) const -> decltype(spline_.time_mass_impl(i,j,u)) {
+    template <typename Integrator, UInt DEGREE, UInt ORDER_DERIVATIVE>
+    Real operator() (Spline<Integrator, DEGREE, ORDER_DERIVATIVE>& spline_, UInt i, UInt j, Real u) const {
         return spline_.time_mass_impl(i,j,u);
     }
 };
@@ -48,7 +54,7 @@ public:
 	 EOExpr(const A& a) : a_(a) {}
 
 	 template<UInt ORDER, UInt mydim, UInt ndim>
- 	 auto operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const -> decltype(a_(fe_, iq, i, j)) {
+ 	 Real operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
 		 return a_(fe_, iq, i, j);
 	 }
 };
@@ -64,14 +70,14 @@ public:
 	 */
 	 EOExpr(const Stiff& a) : a_(a) {}
 
-   template<UInt ndim, bool is_SV>
-   EOExpr<const Diffusion<ndim, is_SV>&> operator[] (const Diffusion<ndim, is_SV>& K){
-     typedef EOExpr<const Diffusion<ndim, is_SV>&> ExprT;
+   template<PDEParameterOptions OPTION>
+   EOExpr<const Diffusion<OPTION>&> operator[] (const Diffusion<OPTION>& K){
+     typedef EOExpr<const Diffusion<OPTION>&> ExprT;
      return ExprT(K);
    }
 
 	 template<UInt ORDER, UInt mydim, UInt ndim>
- 	 auto operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const -> decltype(a_(fe_, iq, i, j)) {
+ 	 Real operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
 		 return a_(fe_, iq, i, j);
 	 }
 };
@@ -87,8 +93,8 @@ public:
 	 */
 	 EOExpr(const TimeMass& a) : a_(a) {}
 
-   template<UInt DEGREE, UInt ORDER_DERIVATIVE>
-   auto operator() (Spline<DEGREE, ORDER_DERIVATIVE>& spline_, UInt i, UInt j, Real u) const -> decltype(a_(spline_, i, j, u)){
+   template<typename Integrator, UInt DEGREE, UInt ORDER_DERIVATIVE>
+   Real operator() (Spline<Integrator, DEGREE, ORDER_DERIVATIVE>& spline_, UInt i, UInt j, Real u) const {
          return a_(spline_, i, j, u);
    }
 };
@@ -122,7 +128,7 @@ public:
      * returns a type P variable
 	 */
 		template<UInt ORDER,UInt mydim,UInt ndim>
- 		auto operator () (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const -> decltype(Op::apply(a_(fe_, iq, i, j), b_(fe_, iq, i, j))) {
+ 		Real operator () (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
 		  return Op::apply(a_(fe_, iq, i, j), b_(fe_, iq, i, j));
 	  }
 };
@@ -135,7 +141,7 @@ public:
 	EOBinOp(Real a, const B& b) : M_a(a), M_b(b) {};
 
 	template<UInt ORDER, UInt mydim, UInt ndim>
-  auto operator () (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const -> decltype(Op::apply(M_a, M_b(fe_, iq, i, j))) {
+  Real operator () (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
 		return Op::apply(M_a, M_b(fe_, iq, i, j));
 	}
 };

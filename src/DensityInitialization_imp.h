@@ -3,28 +3,28 @@
 
 #include <unordered_set>
 
-template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-UserInitialization<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::UserInitialization(const DataProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim>& dp):
-  DensityInitialization<Integrator, Integrator_noPoly, ORDER, mydim, ndim>(dp){
+template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+UserInitialization<Integrator_noPoly, ORDER, mydim, ndim>::UserInitialization(const DataProblem<Integrator_noPoly, ORDER, mydim, ndim>& dp):
+  DensityInitialization<Integrator_noPoly, ORDER, mydim, ndim>(dp){
 
     initialization = dp.getFvec();
 
 }
 
 
-template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
 const VectorXr*
-UserInitialization<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::chooseInitialization(Real lambda) const{
+UserInitialization<Integrator_noPoly, ORDER, mydim, ndim>::chooseInitialization(Real lambda) const{
 
   return &(this->initialization);
 
 }
 
 
-template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-HeatProcess<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::HeatProcess(const DataProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim>& dp,
-  const FunctionalProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim>& fp):
-  DensityInitialization<Integrator, Integrator_noPoly, ORDER, mydim, ndim>(dp), funcProblem_(fp){
+template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>::HeatProcess(const DataProblem<Integrator_noPoly, ORDER, mydim, ndim>& dp,
+  const FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>& fp):
+  DensityInitialization<Integrator_noPoly, ORDER, mydim, ndim>(dp), funcProblem_(fp){
 
     patch_areas_= VectorXr::Zero(this->dataProblem_.getNumNodes());
     alpha_=dp.getHeatStep();
@@ -39,9 +39,9 @@ HeatProcess<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::HeatProcess(cons
 }
 
 
-template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
 void
-HeatProcess<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::computePatchAreas(){
+HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>::computePatchAreas(){
 
   constexpr UInt Nodes = mydim==2? 3*ORDER : 6*ORDER-2;
 
@@ -61,9 +61,9 @@ HeatProcess<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::computePatchArea
 }
 
 
-template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
 VectorXr
-HeatProcess<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::computeDensityOnlyData(){
+HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>::computeDensityOnlyData(){
 
 	constexpr UInt Nodes = mydim==2? 3*ORDER : 6*ORDER-2;
 
@@ -90,9 +90,9 @@ HeatProcess<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::computeDensityOn
 }
 
 
-template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
 void
-HeatProcess<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::computeStartingDensities(){
+HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>::computeStartingDensities(){
 
 	constexpr UInt Nodes = mydim==2? 3*ORDER : 6*ORDER-2;
 
@@ -133,9 +133,9 @@ HeatProcess<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::computeStartingD
 }
 
 
-template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
 const VectorXr*
-HeatProcess<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::chooseInitialization(Real lambda) const{
+HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>::chooseInitialization(Real lambda) const{
 
   VectorXr sum = llik_ + lambda*penTerm_;
 

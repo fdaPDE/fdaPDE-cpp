@@ -2,21 +2,21 @@
 #define _FE_DE_IMP_HPP_
 
 
-template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-FEDE<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::
-  FEDE(const DataProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim>& dp,
-    const FunctionalProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim>& fp,
-    std::shared_ptr<MinimizationAlgorithm<Integrator, Integrator_noPoly, ORDER, mydim, ndim>> ma, const std::string& p):
+template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+FEDE<Integrator_noPoly, ORDER, mydim, ndim>::
+  FEDE(const DataProblem<Integrator_noPoly, ORDER, mydim, ndim>& dp,
+    const FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>& fp,
+    std::shared_ptr<MinimizationAlgorithm<Integrator_noPoly, ORDER, mydim, ndim>> ma, const std::string& p):
       dataProblem_(dp), funcProblem_(fp), minAlgo_(ma){
 
-        preprocess_ = Preprocess_factory<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::createPreprocessSolver(dp, fp, ma, p);
+        preprocess_ = Preprocess_factory<Integrator_noPoly, ORDER, mydim, ndim>::createPreprocessSolver(dp, fp, ma, p);
 
 }
 
 
-template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
 void
-FEDE<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::apply(){
+FEDE<Integrator_noPoly, ORDER, mydim, ndim>::apply(){
 
   // perform the preprocess phase
   #ifdef R_VERSION_

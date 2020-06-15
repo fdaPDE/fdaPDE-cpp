@@ -1,21 +1,50 @@
 #ifndef ADTREE_IMP_H_
 #define ADTREE_IMP_H_
 
+template<class Shape>
+// Initialize header_ and data_
+ADTree<Shape>::ADTree(TreeHeader<Shape> const & header): header_(header) {
+  /*
+   * The first element in the tree nodes vector is the head.
+   * It stores the address of the tree root (i.e. the first node in the tree).
+   * If it stores 0 it means that the tree is empty.
+   */
+  data_.reserve(header_.gettreeloc()+1);
+
+  // Id, obj are arbitrary parameters. Remember that data_[0] is the head, not a tree node.
+  Shape obj;
+  Id id = std::numeric_limits<UInt>::max();
+  data_.push_back(TreeNode<Shape>(id,obj));
+
+}
+
 
 //Shape is given as Element<NNODES,myDim,nDim> from mesh.h
-template<UInt ndim>
-template<UInt ORDER, UInt mydim>
-ADTree(const MeshHandler<ORDER,mydim,ndim>& mesh_){
+template<class Shape>
+ADTree<Shape>::ADTree(Real const * const points, UInt const * const triangle, const UInt num_nodes, const UInt num_triangle) {
+    int ndimp = Shape::dp(); //physical dimension
+    int nvertex = Shape::numVertices(); //number of nodes at each Element (not total number of nodes!)
 
     // Build the tree.
 
-    std::vector<Points<ndim> > mesh_points;
-    mesh_points.reserve(mesh.num_nodes());
+    // step1: Construct TreeHeader
+    std::vector<std::vector<Real> > vcoord;
+    vcoord.resize(ndimp);
 
-    for (int i=0; i<num_nodes; ++i)
-      mesh_points.push_back(mesh_.getPoint(i));
 
-    Domain<ndim> mydom(mesh_points);
+    for (int i = 0; i < ndimp; i++) {
+      vcoord[i].resize(num_nodes);
+      for(int j = 0; j < num_nodes; j++)
+        vcoord[i][j] = points[i*num_nodes + j];
+    }
+
+    Domain<Shape> mydom(vcoord);
+
+    //expect to have 'num_triangle' number of TreeNode
+    //domain is extracted from 'points' array
+    TreeHeader<Shape> myhead = createtreeheader<Shape>(num_triangle, mydom);
+
+
 
     //Step 2: Construct first node of adtree
     /*
@@ -23,26 +52,80 @@ ADTree(const MeshHandler<ORDER,mydim,ndim>& mesh_){
      * It stores the address of the tree root (i.e. the first node in the tree).
      * If it stores 0 it means that the tree is empty.
      */
-    //expect to have 'num_triangle' number of TreeNode
-    //domain is extracted from 'points' array
-    header_ = createtreeheader<ndim>(mesh_.num_elements(), mydom);
+    header_ = myhead;
     data_.reserve(header_.gettreeloc()+1);
 
-    data_.emplace_back();
+    Shape obj;
+    Id id = std::numeric_limits<UInt>::max();
+    data_.push_back(TreeNode<Shape>(id, obj)); // Id, obj are arbitrary parameters. Remember that data_[0] is the head, not a tree node.
 
-    std::vector<Points<ndim> > element_vertices;
-    element_vertices.reserve(NDIME+1);
-    for (int i=0; i<mesh.num_elements(); ++i){
-      for (int j=0; j<NDIME+1; ++j)
-        element_vertices.push_back(mesh_.getPoint(mesh_.elements(i,j)));
-      addtreenode(i, element_vertices);
-      element_vertices.clear();
+
+    // Step 3: Fill the tree: Add each element to the Treenode
+    UInt idpt;
+
+    std::vector<Real> elem(nvertex*ndimp); //'elem' is a single Element, composed of vector of points
+    for ( int i = 0; i < num_triangle; i++ ) {
+      for (int j = 0; j < nvertex ; j++) {
+        for (int l = 0; l < ndimp ; l++) {
+          idpt = triangle[j*num_triangle + i];
+          elem[j*ndimp + l] =  points[idpt + l*num_nodes];
+        }
+      }
+      //insert Element into tree
+      this -> addtreenode(i, elem);
+    } //end of loop
+}
+
+
+#ifdef R_VERSION_
+template<class Shape>
+ADTree<Shape>::ADTree(SEXP Rmesh){
+  int tree_loc_ = INTEGER(Rf_getAttrib(VECTOR_ELT(Rmesh, 3), R_DimSymbol))[0];
+  int tree_lev_ = INTEGER(VECTOR_ELT(Rmesh, 11))[0];
+  int ndimp_ = Shape::dp();
+  int ndimt_ = 2*ndimp_;
+  int nele_ = tree_loc_;
+  int iava_ = tree_loc_+1;
+  int iend_ = tree_loc_+1;
+
+  std::vector<Real>  origin_;
+  origin_.assign(REAL(VECTOR_ELT(Rmesh, 12)), REAL(VECTOR_ELT(Rmesh, 12))+ndimt_);
+  std::vector<Real> scalingfactors_;
+  scalingfactors_.assign(REAL(VECTOR_ELT(Rmesh, 13)), REAL(VECTOR_ELT(Rmesh, 13))+ndimt_);
+
+  Domain<Shape> tree_domain(origin_, scalingfactors_);
+  TreeHeader<Shape> tree_header(tree_loc_, tree_lev_, ndimp_, ndimt_, nele_, iava_, iend_, tree_domain);
+
+
+  //treenode information (number of nodes = number of elements+1)
+  std::vector<Id> id_;
+  id_.assign(INTEGER(VECTOR_ELT(Rmesh, 14)), INTEGER(VECTOR_ELT(Rmesh, 14))+tree_loc_+1);
+  std::vector<int> node_left_child_;
+  node_left_child_.assign(INTEGER(VECTOR_ELT(Rmesh, 15)), INTEGER(VECTOR_ELT(Rmesh, 15))+tree_loc_+1);
+  std::vector<int> node_right_child_;
+  node_right_child_.assign(INTEGER(VECTOR_ELT(Rmesh, 16)), INTEGER(VECTOR_ELT(Rmesh, 16))+tree_loc_+1);
+  Real* box_ = REAL(VECTOR_ELT(Rmesh, 17));
+
+  UInt num_tree_nodes = id_.size();
+  std::vector<TreeNode<Shape> > tree_nodes;
+  for (UInt i=0; i<num_tree_nodes; i++) {
+    std::vector<Real> coord;
+    for (UInt j=0; j<ndimt_; j++) {
+      coord.push_back(box_[i + num_tree_nodes*j]);
     }
+    Box<Shape::dp()> box(coord);
+    TreeNode<Shape> tree_node(box, id_[i], node_left_child_[i], node_right_child_[i]);
+    tree_nodes.push_back(tree_node);
   }
 
+  header_=tree_header;
+  data_=tree_nodes;
+}
+#endif
 
-template<UInt ndim>
-int ADTree<Shape>::adtrb(Id shapeid, std::vector<Points<ndim> > const & points) {
+
+template<class Shape>
+int ADTree<Shape>::adtrb(Id shapeid, std::vector<Real> const & coords) {
   /*
    * We will traverse the tree in preorder fashion.
    * ipoi and ifth will store the location of the current node
@@ -74,21 +157,12 @@ int ADTree<Shape>::adtrb(Id shapeid, std::vector<Points<ndim> > const & points) 
   /* We scale the dimension of the "bounding box" of the Shape object
    * with coordinate values given by coords.
    */
-  Box<ndim> box(points);
-  for(int i = 0; i < ndim; ++i) {
-    Real orig = header_.domainorig(i);
-    Real scal = header_.domainscal(i);
-    Real val  = (box.minPoint()[i]-orig)*scal;
-    if( (val<0.) || (val>1.) )
-      // Object out of domain.
-      throw(TreeDomainError<Shape>(nele+1, Shape::coordsize(), coords));
-    x.push_back(val);
-  }
 
-  for(int i = 0; i < ndim; ++i) {
+  Box<Shape::dp()> shapebox(coords);
+  for(int i = 0; i < header_.getndimt(); ++i) {
     Real orig = header_.domainorig(i);
     Real scal = header_.domainscal(i);
-    Real val  = (box.maxPoint()[i]-orig)*scal;
+    Real val  = (shapebox[i]-orig)*scal;
     if( (val<0.) || (val>1.) )
       // Object out of domain.
       throw(TreeDomainError<Shape>(nele+1, Shape::coordsize(), coords));
@@ -139,9 +213,12 @@ int ADTree<Shape>::adtrb(Id shapeid, std::vector<Points<ndim> > const & points) 
      * The list of available node is empty, so we have to put the new node
      * in the yet unassigned portion of the vector storing the tree.
      */
-    data_.emplace_back(shapeid, box); // push dummy object to be changed
+    data_.push_back(TreeNode<Shape>(shapeid, shapebox)); // push dummy object to be changed
   }
-
+  // else {
+  //   std::vector<Real> bcoords = {shapebox[0], shapebox[1], shapebox[2], shapebox[3]};
+  //   data_[iava].setcoords(bcoords);
+  // }
 
   int neletmp = nele;
   // Add the node in the next available location.
@@ -201,7 +278,7 @@ int ADTree<Shape>::adtrb(Id shapeid, std::vector<Points<ndim> > const & points) 
   return ipoi;
 }
 
-template<UInt ndim>
+template<class Shape>
 int ADTree<Shape>::handledomerr(Id shapeid, std::vector<Real> const & coords) {
   try {
     int iloc = adtrb(shapeid, coords);
@@ -218,7 +295,7 @@ int ADTree<Shape>::handledomerr(Id shapeid, std::vector<Real> const & coords) {
   }
 }
 
-template<UInt ndim>
+template<class Shape>
 int ADTree<Shape>::handletreealloc(Id shapeid, std::vector<Real> const & coords) {
   try {
     int iloc = handledomerr(shapeid, coords);
@@ -241,7 +318,7 @@ int ADTree<Shape>::handletreealloc(Id shapeid, std::vector<Real> const & coords)
   }
 }
 
-template<UInt ndim>
+template<class Shape>
 int ADTree<Shape>::handleleverr(Id shapeid, std::vector<Real> const & coords) {
   try {
     int iloc = handletreealloc(shapeid, coords);
@@ -259,12 +336,12 @@ int ADTree<Shape>::handleleverr(Id shapeid, std::vector<Real> const & coords) {
   }
 }
 
-template<UInt ndim>
+template<class Shape>
 int ADTree<Shape>::addtreenode(Id shapeid, std::vector<Real> const & coords) {
   return handleleverr(shapeid, coords);
 }
 
-template<UInt ndim>
+template<class Shape>
 void ADTree<Shape>::gettri(int const & loc, std::vector<Real> & coord, Id & id) {
   coord.clear();
   coord.reserve(Shape::dt());
@@ -274,7 +351,7 @@ void ADTree<Shape>::gettri(int const & loc, std::vector<Real> & coord, Id & id) 
    id = data_[loc].getid();
 }
 
-template<UInt ndim>
+template<class Shape>
 bool ADTree<Shape>::search(std::vector<Real> const & region, std::set<int> & found) const {
 
   // This function returns true if it has completed successfully, false otherwise.
@@ -445,9 +522,72 @@ bool ADTree<Shape>::search(std::vector<Real> const & region, std::set<int> & fou
   return !found.empty(); //if empty, return False; if not empty, return True
 }
 
+// template<class Shape>
+// void ADTree<Shape>::deltreenode(int const & index) {
+//   if(index < header_.getiend()) {
+//     int nele = header_.getnele();
+//     int ipoi = index;
+//     int iava = header_.getiava();
+//     int ifth = data_[ipoi].getfather();
 
-template<UInt NDIM>
-std::ostream & operator<<(std::ostream & ostr, ADTree<NDIM> const & myadt) {
+//     --nele;
+//     int lchild = data_[ipoi].getchild(0);
+//     int rchild = data_[ipoi].getchild(1);
+//     int whichchild;
+
+//     if(data_[ifth].getchild(0) == ipoi) {
+//       whichchild = 0;
+//     } else {
+//       whichchild = 1;
+//     }
+
+//     if( (lchild == 0) && (rchild == 0) ) {
+//       // If the location is already a leaf, we can just release it.
+//       data_[ifth].setchild(whichchild, 0);
+//     } else {
+//         int ipoiNext = ipoi;
+//         int flag = 0;
+//         int il = data_[ipoiNext].getchild(0);
+//         int ir = data_[ipoiNext].getchild(1);
+//         // Traverse the tree to find an empty leaf.
+//         while( (il != 0) || (ir != 0) ) {
+//           il = data_[ipoiNext].getchild(0);
+//           ir = data_[ipoiNext].getchild(1);
+//           if(il != 0) {
+//             flag = 0;
+//             ipoiNext = il;
+//           } else if(ir != 0) {
+//             flag = 1;
+//             ipoiNext = ir;
+//           }
+//         }
+
+//         data_[ifth].setchild(whichchild, ipoiNext);
+//         int foo_f = data_[ipoiNext].getfather();
+//         data_[foo_f].setchild(flag, 0);
+//         data_[ipoiNext].setfather(ifth);
+//         if(ipoiNext != lchild) {
+//           data_[ipoiNext].setchild(0, lchild);
+//           data_[lchild].setfather(ipoiNext);
+//         }
+//         if(ipoiNext != rchild) {
+//           data_[ipoiNext].setchild(1, rchild);
+//           data_[rchild].setfather(ipoiNext);
+//         }
+//       }
+
+//     // Add the erased location to iava
+//     data_[ipoi].setchild(0, iava);
+//     data_[ipoi].setchild(1, 0);
+
+//     // Store back header informations.
+//     header_.setiava(ipoi);
+//     header_.setnele(nele);
+//   }
+// }
+
+template<class S>
+std::ostream & operator<<(std::ostream & ostr, ADTree<S> const & myadt) {
   ostr << myadt.header_;
 
   return ostr;
