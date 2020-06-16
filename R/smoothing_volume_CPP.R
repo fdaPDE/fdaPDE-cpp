@@ -1,14 +1,11 @@
 CPP_smooth.volume.FEM.basis<-function(locations, bary.locations, observations, FEMbasis, lambda, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, GCV, GCVMETHOD = 2, nrealizations = 100, DOF=TRUE, DOF_matrix=NULL, search)
 {
 
-  # C++ function for volumetric works with vectors not with matrices
-
-  FEMbasis$mesh$tetrahedrons=c(t(FEMbasis$mesh$tetrahedrons))
-  FEMbasis$mesh$nodes=c(t(FEMbasis$mesh$nodes))
-
   # Indexes in C++ starts from 0, in R from 1, opportune transformation
 
-  FEMbasis$mesh$tetrahedrons=FEMbasis$mesh$tetrahedrons-1
+  FEMbasis$mesh$tetrahedrons = FEMbasis$mesh$tetrahedrons - 1
+  FEMbasis$mesh$faces = FEMbasis$mesh$faces - 1
+  FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
 
   if(is.null(covariates))
   {
@@ -53,9 +50,9 @@ CPP_smooth.volume.FEM.basis<-function(locations, bary.locations, observations, F
   data <- as.vector(observations)
   storage.mode(observations) <- "double"
   storage.mode(FEMbasis$mesh$order) <- "integer"
-  storage.mode(FEMbasis$mesh$nnodes) <- "integer"
-  storage.mode(FEMbasis$mesh$ntetrahedrons) <- "integer"
   storage.mode(FEMbasis$mesh$nodes) <- "double"
+  storage.mode(FEMbasis$mesh$faces) <- "integer"
+  storage.mode(FEMbasis$mesh$neighbors) <- "integer"
   storage.mode(FEMbasis$mesh$tetrahedrons) <- "integer"
   covariates <- as.matrix(covariates)
   storage.mode(covariates) <- "double"
@@ -86,13 +83,9 @@ CPP_eval.volume.FEM = function(FEM, locations, incidence_matrix, redundancy, ndi
 {
   FEMbasis = FEM$FEMbasis
 
-  # C++ function for volumetric works with vectors not with matrices
-
-  FEMbasis$mesh$tetrahedrons=c(t(FEMbasis$mesh$tetrahedrons))
-  FEMbasis$mesh$nodes=c(t(FEMbasis$mesh$nodes))
-
-  #NEW: riporto shift indici in R
-  FEMbasis$mesh$tetrahedrons=FEMbasis$mesh$tetrahedrons-1
+  FEMbasis$mesh$tetrahedrons = FEMbasis$mesh$tetrahedrons - 1
+  FEMbasis$mesh$faces = FEMbasis$mesh$faces - 1
+  FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
 
   # Imposing types, this is necessary for correct reading from C++
   ## Set proper type for correct C++ reading
@@ -100,9 +93,11 @@ CPP_eval.volume.FEM = function(FEM, locations, incidence_matrix, redundancy, ndi
   storage.mode(locations) <- "double"
   incidence_matrix <- as.matrix(incidence_matrix)
   storage.mode(incidence_matrix) <- "integer"
+  storage.mode(FEMbasis$mesh$order) <- "integer"
   storage.mode(FEMbasis$mesh$nodes) <- "double"
+  storage.mode(FEMbasis$mesh$faces) <- "integer"
+  storage.mode(FEMbasis$mesh$neighbors) <- "integer"
   storage.mode(FEMbasis$mesh$tetrahedrons) <- "integer"
-  storage.mode(FEMbasis$order) <- "integer"
   coeff <- as.matrix(FEM$coeff)
   storage.mode(coeff) <- "double"
   storage.mode(ndim) <- "integer"

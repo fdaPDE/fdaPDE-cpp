@@ -3,7 +3,7 @@
 #include <stdlib.h> // for NULL
 #include <R_ext/Rdynload.h>
 
-/* FIXME: 
+/* FIXME:
    Check these declarations against the C/Fortran source code.
 */
 
@@ -27,6 +27,12 @@ extern SEXP regression_PDE_space_varying_time(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP
 extern SEXP regression_PDE_time(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP Smooth_FPCA(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP tree_mesh_construction(SEXP, SEXP, SEXP, SEXP);
+extern SEXP CPP_SurfaceMeshHelper(SEXP, SEXP);
+extern SEXP CPP_SurfaceMeshOrder2(SEXP, SEXP);
+extern SEXP CPP_VolumeMeshHelper(SEXP, SEXP);
+extern SEXP CPP_VolumeMeshOrder2(SEXP, SEXP);
+extern SEXP CPP_TriangleMeshSplit(SEXP, SEXP);
+extern SEXP CPP_TetraMeshSplit(SEXP, SEXP);
 
 static const R_CallMethodDef CallEntries[] = {
     {"Density_Estimation",                (DL_FUNC) &Density_Estimation,                19},
@@ -48,6 +54,12 @@ static const R_CallMethodDef CallEntries[] = {
     {"regression_PDE_time",               (DL_FUNC) &regression_PDE_time,               27},
     {"Smooth_FPCA",                       (DL_FUNC) &Smooth_FPCA,                       15},
     {"tree_mesh_construction",            (DL_FUNC) &tree_mesh_construction,             4},
+    {"CPP_SurfaceMeshHelper",             (DL_FUNC) &CPP_SurfaceMeshHelper,              2},
+    {"CPP_SurfaceMeshOrder2",             (DL_FUNC) &CPP_SurfaceMeshOrder2,              2},
+    {"CPP_VolumeMeshHelper",              (DL_FUNC) &CPP_VolumeMeshHelper,               2},
+    {"CPP_VolumeMeshOrder2",              (DL_FUNC) &CPP_VolumeMeshOrder2,               2},
+    {"CPP_TriangleMeshSplit",             (DL_FUNC) &CPP_TriangleMeshSplit, 	            2},
+    {"CPP_TetraMeshSplit",                (DL_FUNC) &CPP_TetraMeshSplit,                 2},
     {NULL, NULL, 0}
 };
 

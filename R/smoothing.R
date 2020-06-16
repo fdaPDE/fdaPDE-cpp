@@ -83,7 +83,7 @@
 #'  can be imposed at the domain boundaries.
 #' @usage smooth.FEM(locations = NULL, observations, FEMbasis, lambda,
 #'                   covariates = NULL, PDE_parameters=NULL, incidence_matrix = NULL,
-#'                   BC = NULL, GCV = FALSE, GCVmethod = "Stochastic", nrealizations = 100, 
+#'                   BC = NULL, GCV = FALSE, GCVmethod = "Stochastic", nrealizations = 100,
 #'                   DOF_matrix=NULL, search = "tree", bary.locations = NULL)
 #' @export
 
@@ -102,7 +102,7 @@
 #' boundary_nodes = horseshoe2D$boundary_nodes
 #' boundary_segments = horseshoe2D$boundary_segments
 #' locations = horseshoe2D$locations
-#' 
+#'
 #' mesh = create.mesh.2D(nodes = rbind(boundary_nodes, locations), segments = boundary_segments)
 #' FEMbasis = create.FEM.basis(mesh)
 #' lambda = 10^-1
@@ -116,7 +116,7 @@
 #' covariate = covs.test(mesh$nodes[,1], mesh$nodes[,2])
 #' data = fs.test(mesh$nodes[,1], mesh$nodes[,2]) + 2*covariate + rnorm(nrow(mesh$nodes), sd = 0.5)
 #'
-#' solution = smooth.FEM(observations = data, covariates = covariate, 
+#' solution = smooth.FEM(observations = data, covariates = covariate,
 #'                       FEMbasis = FEMbasis, lambda = lambda)
 #' # beta estimate:
 #' solution$beta
@@ -140,7 +140,7 @@
 #' boundary_segments = quasicircle2D$boundary_segments
 #' locations = quasicircle2D$locations
 #' data = quasicircle2D$data
-#' 
+#'
 #' mesh = create.mesh.2D(nodes = rbind(boundary_nodes, locations), segments = boundary_segments)
 #' FEMbasis = create.FEM.basis(mesh)
 #' lambda = 10^-2
@@ -319,7 +319,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
     BC$BC_values = as.matrix(BC$BC_values)
   }
 
-  space_varying=checkSmoothingParameters(locations=locations, observations=observations, FEMbasis=FEMbasis, lambda=lambda, covariates=covariates, incidence_matrix=incidence_matrix, 
+  space_varying=checkSmoothingParameters(locations=locations, observations=observations, FEMbasis=FEMbasis, lambda=lambda, covariates=covariates, incidence_matrix=incidence_matrix,
     BC=BC, GCV=GCV, PDE_parameters=PDE_parameters, GCVmethod=GCVMETHOD , nrealizations=nrealizations, search=search, bary.locations=bary.locations)
 
   # if I have PDE non-sv case I need (constant) matrices as parameters
@@ -332,7 +332,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
   }
 
 
-  checkSmoothingParametersSize(locations=locations, observations=observations, FEMbasis=FEMbasis, lambda=lambda, covariates=covariates, incidence_matrix=incidence_matrix, 
+  checkSmoothingParametersSize(locations=locations, observations=observations, FEMbasis=FEMbasis, lambda=lambda, covariates=covariates, incidence_matrix=incidence_matrix,
     BC=BC, GCV=GCV, space_varying=space_varying, PDE_parameters=PDE_parameters, ndim=ndim, mydim=mydim)
 
 
@@ -392,21 +392,21 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
     print('C++ Code Execution')
     # if(!is.null(locations))
     #   stop("The option locations!=NULL for manifold domains is currently not implemented")
-    bigsol = CPP_smooth.manifold.FEM.basis(locations=locations, observations=observations, FEMbasis=FEMbasis, lambda=lambda, 
-                                          covariates=covariates, incidence_matrix=incidence_matrix, ndim=ndim, mydim=mydim, 
+    bigsol = CPP_smooth.manifold.FEM.basis(locations=locations, observations=observations, FEMbasis=FEMbasis, lambda=lambda,
+                                          covariates=covariates, incidence_matrix=incidence_matrix, ndim=ndim, mydim=mydim,
                                           BC=BC, GCV=GCV, GCVMETHOD=GCVMETHOD, nrealizations=nrealizations, DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations)
 
-    numnodes = FEMbasis$mesh$nnodes
+    numnodes = nrow(FEMbasis$mesh$nodes)
 
   }else if(class(FEMbasis$mesh) == 'mesh.3D'){
 
     bigsol = NULL
     print('C++ Code Execution')
-    bigsol = CPP_smooth.volume.FEM.basis(locations=locations, observations=observations, FEMbasis=FEMbasis, lambda=lambda, 
-                                        covariates=covariates, incidence_matrix=incidence_matrix, ndim=ndim, mydim=mydim, 
+    bigsol = CPP_smooth.volume.FEM.basis(locations=locations, observations=observations, FEMbasis=FEMbasis, lambda=lambda,
+                                        covariates=covariates, incidence_matrix=incidence_matrix, ndim=ndim, mydim=mydim,
                                         BC=BC, GCV=GCV, GCVMETHOD=GCVMETHOD, nrealizations=nrealizations, DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations)
 
-    numnodes = FEMbasis$mesh$nnodes
+    numnodes = nrow(FEMbasis$mesh$nodes)
   }
 
   f = bigsol[[1]][1:numnodes,]
@@ -424,7 +424,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
    # Save information of Tree Mesh
     tree_mesh = list(
     treelev = bigsol[[6]][1],
-    header_orig= bigsol[[7]], 
+    header_orig= bigsol[[7]],
     header_scale = bigsol[[8]],
     node_id = bigsol[[9]][,1],
     node_left_child = bigsol[[9]][,2],
@@ -436,11 +436,11 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
   if (is.null(FEMbasis$mesh$treelev)) { #if doesn't exist the tree information
     FEMbasis$mesh = append(FEMbasis$mesh, tree_mesh)
   } #if already exist the tree information, don't append
-  class(FEMbasis$mesh) = mesh.class  
+  class(FEMbasis$mesh) = mesh.class
 
   # Save information of Barycenter
   if (is.null(bary.locations)) {
-      bary.locations = list(locations=locations, element_ids = bigsol[[11]], barycenters = bigsol[[12]])    
+      bary.locations = list(locations=locations, element_ids = bigsol[[11]], barycenters = bigsol[[12]])
   }
   class(bary.locations) = "bary.locations"
 

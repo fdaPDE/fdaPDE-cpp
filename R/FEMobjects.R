@@ -44,33 +44,35 @@
 #' FEMbasis = create.FEM.basis(mesh)
 #' @export
 
-create.FEM.basis = function(mesh, saveTree = FALSE)
+create.FEM.basis = function(mesh=NULL, saveTree = FALSE)
 {
+
+  if (is.null(mesh))
+    stop("mesh required;  is NULL.")
+
   if(class(mesh)!='mesh.2D' & class(mesh)!='mesh.2.5D' & class(mesh)!='mesh.3D')
     stop("Unknown mesh class")
 
-  if (class(mesh)=="mesh.2D"){
-
-	  #  The number of basis functions corresponds to the number of vertices
-	  #  for order = 1, and to vertices plus edge midpoints for order = 2
-
-	  nbasis = dim(mesh$nodes)[[1]]
-	  eleProp = R_elementProperties(mesh)
-
-	  #eleProp = NULL
-	  #if(CPP_CODE == FALSE)
-	  #{
-	  #  eleProp = R_elementProperties(mesh)
-	  #}
-
   if (saveTree == TRUE) {
       ## Call C++ function
+      # Note: myDim and nDim are available outside the scope (different from C++)
+      if (class(mesh)=='mesh.2D'){
+        myDim = 2
+        nDim = 2
+      }
+      if (class(mesh)=='mesh.2.5D'){
+        myDim = 2
+        nDim = 3
+      }
+      if (class(mesh)=='mesh.3D'){
+        myDim = 3
+        nDim = 3
+      }
+
       orig_mesh = mesh
       mesh$triangles = mesh$triangles - 1
       mesh$edges = mesh$edges - 1
       mesh$neighbors[mesh$neighbors != -1] = mesh$neighbors[mesh$neighbors != -1] - 1
-      myDim = 2
-      nDim = 2
 
       storage.mode(mesh$nodes) <- "double"
       storage.mode(mesh$triangles) <- "integer"
@@ -96,73 +98,12 @@ create.FEM.basis = function(mesh, saveTree = FALSE)
       class(mesh) = mesh.class
   }
 
-  FEMbasis = list(mesh = mesh, order = as.integer(mesh$order), nbasis = nbasis, detJ=eleProp$detJ, transf_coord = eleProp$transf_coord)
+  FEMbasis = list(mesh = mesh, order = as.integer(mesh$order), nbasis = nrow(mesh$nodes))
+
   class(FEMbasis) = "FEMbasis"
 
-  FEMbasis
-  } else if (class(mesh) == "mesh.2.5D" || class(mesh) == "mesh.3D"){
-      if (saveTree == TRUE) {
+  return(FEMbasis)
 
-        if (class(mesh) == "mesh.2.5D") {
-          orig_mesh = mesh
-
-          myDim = 2
-          nDim = 3
-          # C++ function for manifold works with vectors not with matrices
-          mesh$triangles=c(t(mesh$triangles))
-          mesh$nodes=c(t(mesh$nodes))
-          # Indexes in C++ starts from 0, in R from 1, opportune transformation
-          mesh$triangles=mesh$triangles-1
-
-          storage.mode(mesh$order) <- "integer"
-          storage.mode(mesh$nnodes) <- "integer"
-          storage.mode(mesh$ntriangles) <- "integer"
-          storage.mode(mesh$nodes) <- "double"
-          storage.mode(mesh$triangles) <- "integer"
-          storage.mode(myDim) <- "integer"
-          storage.mode(nDim) <- "integer"
-
-        } else if (class(mesh) == "mesh.3D") {
-          orig_mesh = mesh
-
-          myDim = 3
-          nDim = 3
-          # C++ function for volumetric works with vectors not with matrices
-          mesh$tetrahedrons=c(t(mesh$tetrahedrons))
-          mesh$nodes=c(t(mesh$nodes))
-          # Indexes in C++ starts from 0, in R from 1, opportune transformation
-          mesh$tetrahedrons=mesh$tetrahedrons-1
-
-          storage.mode(mesh$order) <- "integer"
-          storage.mode(mesh$nnodes) <- "integer"
-          storage.mode(mesh$ntetrahedrons) <- "integer"
-          storage.mode(mesh$nodes) <- "double"
-          storage.mode(mesh$tetrahedrons) <- "integer"
-          storage.mode(myDim) <- "integer"
-          storage.mode(nDim) <- "integer"
-        }
-
-
-        bigsol <- .Call("tree_mesh_construction", mesh, mesh$order, myDim, nDim, PACKAGE = "fdaPDE")
-        tree_mesh = list(
-        treelev = bigsol[[1]][1],
-        header_orig= bigsol[[2]],
-        header_scale = bigsol[[3]],
-        node_id = bigsol[[4]][,1],
-        node_left_child = bigsol[[4]][,2],
-        node_right_child = bigsol[[4]][,3],
-        node_box= bigsol[[5]])
-
-        # Reconstruct FEMbasis with tree mesh
-        mesh.class= class(orig_mesh)
-        mesh = append(orig_mesh, tree_mesh)
-        class(mesh) = mesh.class
-      }
-
-  	  FEMbasis = list(mesh = mesh, order = as.integer(mesh$order), nbasis = mesh$nnodes)
-  	  class(FEMbasis) = "FEMbasis"
-  	  FEMbasis
-  }
  }
 #' Define a surface or spatial field by a Finite Element basis expansion
 #'
@@ -259,40 +200,4 @@ FEM.time<-function(coeff,time_mesh,FEMbasis,FLAG_PARABOLIC=FALSE)
   fclass = list(coeff=coeff, mesh_time=time_mesh, FLAG_PARABOLIC=FLAG_PARABOLIC, FEMbasis=FEMbasis)
   class(fclass)<-"FEM.time"
   return(fclass)
-}
-
-
-R_elementProperties=function(mesh)
-{
-  nele = dim(mesh$triangles)[[1]]
-  nodes = mesh$nodes
-  triangles = mesh$triangles
-
-  #detJ   = matrix(0,nele,1)      #  vector of determinant of transformations
-  #metric = array(0,c(nele,2,2))  #  3-d array of metric matrices
-  #transf = array(0,c(nele,2,2))
-
-  transf_coord = NULL
-  transf_coord$diff1x = nodes[triangles[,2],1] - nodes[triangles[,1],1]
-  transf_coord$diff1y = nodes[triangles[,2],2] - nodes[triangles[,1],2]
-  transf_coord$diff2x = nodes[triangles[,3],1] - nodes[triangles[,1],1]
-  transf_coord$diff2y = nodes[triangles[,3],2] - nodes[triangles[,1],2]
-
-  #  Jacobian or double of the area of triangle
-  detJ = transf_coord$diff1x*transf_coord$diff2y - transf_coord$diff2x*transf_coord$diff1y
-
-  #Too slow, computed only for stiff from diff1x,diff1y,..
-  # for (i in 1:nele)
-  # {
-  #   #transf[i,,] = rbind(cbind(diff1x,diff2x),c(diff1y,diff2y))
-  #   #  Compute controvariant transformation matrix OSS: This is (tranf)^(-T)
-  #   Ael = matrix(c(diff2y, -diff1y, -diff2x,  diff1x),nrow=2,ncol=2,byrow=T)/detJ[i]
-  #
-  #   #  Compute metric matrix
-  #   metric[i,,] = t(Ael)%*%Ael
-  # }
-
-  #FEStruct <- list(detJ=detJ, metric=metric, transf=transf)
-  FEStruct <- list(detJ=detJ, transf_coord=transf_coord)
-  return(FEStruct)
 }

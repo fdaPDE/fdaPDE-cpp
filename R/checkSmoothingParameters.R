@@ -136,7 +136,7 @@ checkSmoothingParametersSize<-function(locations = NULL, observations, FEMbasis,
       if(nrow(observations) > nrow(FEMbasis$mesh$nodes))
         stop("Size of 'observations' is larger then the size of 'nodes' in the mesh")
     }else if(class(FEMbasis$mesh) == "mesh.2.5D" || class(FEMbasis$mesh) == "mesh.3D"){
-      if(nrow(observations) > FEMbasis$mesh$nnodes)
+      if(nrow(observations) > nrow(FEMbasis$mesh$nodes))
         stop("Size of 'observations' is larger then the size of 'nodes' in the mesh")
     }
   }
@@ -183,7 +183,7 @@ checkSmoothingParametersSize<-function(locations = NULL, observations, FEMbasis,
       if(sum(BC$BC_indices>nrow(nrow(FEMbasis$mesh$nodes))) > 0)
         stop("At least one index in 'BC_indices' larger then the number of 'nodes' in the mesh;")
     }else if((class(FEMbasis$mesh) == "mesh.2.5D" || class(FEMbasis$mesh) == "mesh.3D")){
-      if(sum(BC$BC_indices>FEMbasis$mesh$nnodes) > 0)
+      if(sum(BC$BC_indices>nrow(FEMbasis$mesh$nodes)) > 0)
         stop("At least one index in 'BC_indices' larger then the number of 'nodes' in the mesh;")
     }
   }

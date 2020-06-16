@@ -138,6 +138,9 @@ private:
 
   // A member initializing M_J_, M_invJ_ and element_measure at construction
   void computeProperties();
+
+  Real evaluate_point(const Eigen::Matrix<Real, mydim+1, 1>&, const Eigen::Matrix<Real,NNODES,1>&) const;
+
 };
 
 
@@ -239,6 +242,9 @@ private:
 
   // A member initializing M_J_, M_invJ_ and element_measure at construction
   void computeProperties();
+
+  Real evaluate_point(const Eigen::Matrix<Real, 3, 1>&, const Eigen::Matrix<Real,NNODES,1>&) const;
+
 
 };
 

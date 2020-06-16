@@ -3,10 +3,19 @@
 
 #include <type_traits>
 
-#include "mesh_objects.h"
+#include "point.h"
+
+struct IntegratorTriangleP1{
+	//Number of nodes
+	static constexpr UInt NNODES = 1;
+	static constexpr std::array<Real,NNODES> WEIGHTS{{1}};
+	//Point locations (in barycentric coordinates)
+	static constexpr std::array<Point<2>,NNODES> NODES{
+		Point<2>({1./3,1./3})
+	};
+};
 
 struct IntegratorTriangleP2{
-	static constexpr UInt ORDER = 1;
 	//Number of nodes
 	static constexpr UInt NNODES = 3;
 	static constexpr std::array<Real,NNODES> WEIGHTS{{1./3, 1./3, 1./3}};
@@ -19,7 +28,6 @@ struct IntegratorTriangleP2{
 };
 
 struct IntegratorTriangleP4{
-	static constexpr UInt ORDER = 2;
 	//Number of nodes
 	static constexpr UInt NNODES = 6;
 	static constexpr std::array<Real,NNODES> WEIGHTS{
@@ -41,9 +49,18 @@ struct IntegratorTriangleP4{
 	};
 };
 
+struct IntegratorTetrahedronP1{
+	//Number of nodes
+	static constexpr UInt NNODES = 1;
+	static constexpr std::array<Real,NNODES> WEIGHTS{{1}};
+	//Point locations (in barycentric coordinates)
+	static constexpr std::array<Point<3>,NNODES> NODES{
+		Point<3>({1./4, 1./4, 1./4})
+	};
+};
+
 
 struct IntegratorTetrahedronP2{
-	static constexpr UInt ORDER = 1;
 	//Number of nodes
 	static constexpr UInt NNODES = 4;
 	static constexpr std::array<Real,NNODES> WEIGHTS{{1./4, 1./4, 1./4, 1./4}};
@@ -57,7 +74,6 @@ struct IntegratorTetrahedronP2{
 };
 
 struct IntegratorTetrahedronP4{
-	static constexpr UInt ORDER = 2;
 	//Number of nodes
 	static constexpr UInt NNODES = 11;
 	static constexpr std::array<Real,NNODES> WEIGHTS{
@@ -87,6 +103,13 @@ struct IntegratorTetrahedronP4{
 		Point<3>({0.399403576166799,0.100596423833201,0.399403576166799}),
 		Point<3>({0.100596423833201,0.399403576166799,0.399403576166799})
 	};
+};
+
+struct ElementIntegratorHelper{
+	template<UInt NNODES, UInt mydim>
+	using Integrator = typename std::conditional<mydim==2,
+												typename std::conditional<NNODES==3, IntegratorTriangleP1, IntegratorTriangleP2>::type,
+												typename std::conditional<NNODES==4, IntegratorTetrahedronP1, IntegratorTetrahedronP2>::type>::type;
 };
 
 struct SpaceIntegratorHelper{

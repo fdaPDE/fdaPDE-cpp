@@ -133,7 +133,7 @@ SEXP CPP_SurfaceMeshOrder2(SEXP Rtriangles, SEXP Rnodes){
   return result;
 }
 
-SEXP CPP_SurfaceMeshSplit(SEXP Rtriangles, SEXP Rnodes){
+SEXP CPP_TriangleMeshSplit(SEXP Rtriangles, SEXP Rnodes){
 
   static constexpr std::array<UInt, 6> EDGES_ORDERING = {1,2,0,2,0,1};
 
@@ -313,7 +313,7 @@ SEXP CPP_VolumeMeshOrder2(SEXP Rtetrahedrons, SEXP Rnodes){
 }
 
 
-SEXP CPP_VolumeMeshSplit(SEXP Rtetrahedrons, SEXP Rnodes){
+SEXP CPP_TetraMeshSplit(SEXP Rtetrahedrons, SEXP Rnodes){
 
   static constexpr std::array<UInt, 12> EDGES_ORDERING = {0,1,0,2,0,3,1,2,2,3,1,3};
 

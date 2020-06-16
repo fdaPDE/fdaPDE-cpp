@@ -91,7 +91,7 @@ checkSmoothingParameters_time<-function(locations = NULL, time_locations=NULL, o
      stop("Locations are not same as the one in barycenter information.")
    }
  }  # end of bary.locations
- 
+
   space_varying=FALSE
 
   if(!is.null(PDE_parameters$u)){
@@ -161,19 +161,19 @@ checkSmoothingParametersSize_time<-function(locations = NULL, time_locations=NUL
   if(is.null(locations) && is.null(incidence_matrix))
   {
     if(!is.null(time_locations))
-      if(ifelse(class(FEMbasis$mesh) == "mesh.2D", nrow(FEMbasis$mesh$nodes),FEMbasis$mesh$nnodes) != nrow(observations) || ncol(observations) != nrow(time_locations))
+      if(nrow(FEMbasis$mesh$nodes) != nrow(observations) || ncol(observations) != nrow(time_locations))
         stop("'locations' and 'observations' have incompatible size;")
 
     if(is.null(time_locations))
     {
       if(FLAG_PARABOLIC && !is.null(IC))
       {
-        if(ifelse(class(FEMbasis$mesh) == "mesh.2D", nrow(FEMbasis$mesh$nodes),FEMbasis$mesh$nnodes) != nrow(observations) || (nrow(time_mesh)-1) != ncol(observations))
+        if(nrow(FEMbasis$mesh$nodes) != nrow(observations) || (nrow(time_mesh)-1) != ncol(observations))
           stop("'locations' and 'observations' have incompatible size;")
       }
       else
       {
-        if(ifelse(class(FEMbasis$mesh) == "mesh.2D", nrow(FEMbasis$mesh$nodes),FEMbasis$mesh$nnodes) != nrow(observations) || nrow(time_mesh) != ncol(observations))
+        if(nrow(FEMbasis$mesh$nodes) != nrow(observations) || nrow(time_mesh) != ncol(observations))
           stop("'locations' and 'observations' have incompatible size;")
       }
     }
@@ -255,16 +255,16 @@ checkSmoothingParametersSize_time<-function(locations = NULL, time_locations=NUL
       stop("'BC_indices' must be a column vector")
     if(ncol(BC$BC_values) != 1)
       stop("'BC_values' must be a column vector")
-    if(nrow(BC$BC_indices)>ifelse(class(FEMbasis$mesh)=='mesh.2D',nrow(FEMbasis$mesh$nodes),FEMbasis$mesh$nnodes))
+    if(nrow(BC$BC_indices)>nrow(FEMbasis$mesh$nodes))
       stop("'BC_indices' longer than the mesh")
     if(nrow(BC$BC_indices) != nrow(BC$BC_values))
       stop("'BC_indices' and 'BC_values' have incompatible size;")
 
-    N=ifelse(class(FEMbasis$mesh) == "mesh.2D",nrow(FEMbasis$mesh$nodes),FEMbasis$mesh$nnodes)
+    N=nrow(FEMbasis$mesh$nodes)
     #M=ifelse(FLAG_PARABOLIC==TRUE,length(time_mesh)-1,length(time_mesh)+2)
     if(any(BC$BC_indices)<0)
       stop("'BC_indices' elements must be non negative")
-    if(any(BC$BC_indices)>ifelse(class(FEMbasis$mesh)=='mesh.2D',nrow(FEMbasis$mesh$nodes),FEMbasis$mesh$nnodes))
+    if(any(BC$BC_indices)>nrow(FEMbasis$mesh$nodes))
       stop("At least one index in 'BC_indices' larger then the number of 'nodes' in the mesh")
   }
 

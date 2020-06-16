@@ -1,14 +1,12 @@
 CPP_smooth.volume.FEM.time<-function(locations, bary.locations, time_locations, observations, FEMbasis, time_mesh, lambdaS, lambdaT, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, FLAG_MASS, FLAG_PARABOLIC, IC, GCV,GCVMETHOD = 2, nrealizations = 100, DOF=TRUE, DOF_matrix=NULL, search)
 {
 
-  # C++ function for volumetric works with vectors not with matrices
-
-  FEMbasis$mesh$tetrahedrons=c(t(FEMbasis$mesh$tetrahedrons))
-  FEMbasis$mesh$nodes=c(t(FEMbasis$mesh$nodes))
-
   # Indexes in C++ starts from 0, in R from 1, opportune transformation
 
-  FEMbasis$mesh$tetrahedrons=FEMbasis$mesh$tetrahedrons-1
+  FEMbasis$mesh$tetrahedrons = FEMbasis$mesh$tetrahedrons - 1
+  FEMbasis$mesh$faces = FEMbasis$mesh$faces - 1
+  FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
+
 
   if(is.null(covariates))
   {
@@ -62,9 +60,9 @@ CPP_smooth.volume.FEM.time<-function(locations, bary.locations, time_locations, 
   observations <- as.vector(observations)
   storage.mode(observations) <- "double"
   storage.mode(FEMbasis$mesh$order) <- "integer"
-  storage.mode(FEMbasis$mesh$nnodes) <- "integer"
-  storage.mode(FEMbasis$mesh$ntetrahedrons) <- "integer"
   storage.mode(FEMbasis$mesh$nodes) <- "double"
+  storage.mode(FEMbasis$mesh$faces) <- "integer"
+  storage.mode(FEMbasis$mesh$neighbors) <- "integer"
   storage.mode(FEMbasis$mesh$tetrahedrons) <- "integer"
   covariates <- as.matrix(covariates)
   storage.mode(covariates) <- "double"
@@ -147,17 +145,17 @@ CPP_smooth.volume.FEM.time<-function(locations, bary.locations, time_locations, 
     if(nrow(covariates)!=0)
     {
       betaIC = ICsol[[5]]
-      IC = ICsol[[1]][1:FEMbasis$mesh$nnodes,ICsol[[4]][1]+1] ## best IC estimation
+      IC = ICsol[[1]][1:nrow(FEMbasis$mesh$nodes),ICsol[[4]][1]+1] ## best IC estimation
       covariates=covariates[(NobsIC+1):nrow(covariates),]
       covariates <- as.matrix(covariates)
     }
     else
     {
-      IC = ICsol[[1]][1:FEMbasis$mesh$nnodes,ICsol[[4]][1]+1] ## best IC estimation
+      IC = ICsol[[1]][1:nrow(FEMbasis$mesh$nodes),ICsol[[4]][1]+1] ## best IC estimation
       betaIC = NULL
     }
     ## return a FEM object containing IC estimates with best lambda and best lambda index
-    ICsol = list(IC.FEM=FEM(ICsol[[1]][1:FEMbasis$mesh$nnodes,],FEMbasis),bestlambdaindex=ICsol[[4]][1]+1,bestlambda=lambdaSIC[ICsol[[4]][1]+1],beta=betaIC)
+    ICsol = list(IC.FEM=FEM(ICsol[[1]][1:nrow(FEMbasis$mesh$nodes),],FEMbasis),bestlambdaindex=ICsol[[4]][1]+1,bestlambda=lambdaSIC[ICsol[[4]][1]+1],beta=betaIC)
     time_locations=time_locations[2:nrow(time_locations)]
     observations = observations[(NobsIC+1):length(observations)]
   }
@@ -165,7 +163,7 @@ CPP_smooth.volume.FEM.time<-function(locations, bary.locations, time_locations, 
   storage.mode(IC) <- "double"
 
   M = ifelse(FLAG_PARABOLIC,length(time_mesh)-1,length(time_mesh) + 2);
-  BC$BC_indices = rep((0:(M-1))*FEMbasis$mesh$nnodes,each=length(BC$BC_indices)) + rep(BC$BC_indices,M)
+  BC$BC_indices = rep((0:(M-1))*nrow(FEMbasis$mesh$nodes),each=length(BC$BC_indices)) + rep(BC$BC_indices,M)
   BC$BC_values = rep(BC$BC_values,M)
   storage.mode(BC$BC_indices) <- "integer"
   storage.mode(BC$BC_values) <-"double"
@@ -183,13 +181,10 @@ CPP_eval.volume.FEM.time = function(FEM.time, locations, time_locations, inciden
 {
   FEMbasis = FEM.time$FEMbasis
 
-  # C++ function for volumetric works with vectors not with matrices
 
-  FEMbasis$mesh$tetrahedrons=c(t(FEMbasis$mesh$tetrahedrons))
-  FEMbasis$mesh$nodes=c(t(FEMbasis$mesh$nodes))
-
-  #NEW: riporto shift indici in R
-  FEMbasis$mesh$tetrahedrons=FEMbasis$mesh$tetrahedrons-1
+  FEMbasis$mesh$tetrahedrons = FEMbasis$mesh$tetrahedrons - 1
+  FEMbasis$mesh$faces = FEMbasis$mesh$faces - 1
+  FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
 
   # Imposing types, this is necessary for correct reading from C++
   ## Set proper type for correct C++ reading
@@ -199,9 +194,11 @@ CPP_eval.volume.FEM.time = function(FEM.time, locations, time_locations, inciden
   storage.mode(time_locations) <- "double"
   incidence_matrix <- as.matrix(incidence_matrix)
   storage.mode(incidence_matrix) <- "integer"
+  storage.mode(FEMbasis$mesh$order) <- "integer"
   storage.mode(FEMbasis$mesh$nodes) <- "double"
+  storage.mode(FEMbasis$mesh$faces) <- "integer"
+  storage.mode(FEMbasis$mesh$neighbors) <- "integer"
   storage.mode(FEMbasis$mesh$tetrahedrons) <- "integer"
-  storage.mode(FEMbasis$order) <- "integer"
   storage.mode(FEM.time$mesh_time) <- "double"
   coeff <- as.matrix(FEM.time$coeff)
   storage.mode(coeff) <- "double"
@@ -219,14 +216,14 @@ CPP_eval.volume.FEM.time = function(FEM.time, locations, time_locations, inciden
     storage.mode(bary.locations$barycenters) <- "double"
     barycenters <- as.matrix(bary.locations$barycenters)
   }
-  
+
 
   # if (search == 1) { #use Naive search
   #   print('This is Naive Search')
   # } else if (search == 2)  { #use Tree search (default)
   #   print('This is Tree Search')
   # }
-  
+
   #Calling the C++ function "eval_FEM_fd" in RPDE_interface.cpp
   evalmat = matrix(0,max(nrow(locations),nrow(incidence_matrix)),ncol(coeff))
   for (i in 1:ncol(coeff)){

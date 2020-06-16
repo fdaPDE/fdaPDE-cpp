@@ -2,6 +2,7 @@
 #ifndef __MESH_OBJECTS_IMP_HPP__
 #define __MESH_OBJECTS_IMP_HPP__
 
+#include "integration.h"
 // Member functions for class Element
 
 // This function is called to construct elements in 2D and 3D
@@ -85,18 +86,17 @@ int Element<NNODES,mydim,ndim>::getPointDirection(const Point<ndim>& point) cons
 
 // Implementation of function evaluation at a point inside the element
 template <UInt NNODES, UInt mydim, UInt ndim>
-inline Real Element<NNODES,mydim,ndim>::evaluate_point(const Point<ndim>& point, const Eigen::Matrix<Real,NNODES,1>& coefficients) const
+inline Real Element<NNODES,mydim,ndim>::evaluate_point(const Eigen::Matrix<Real,mydim+1,1>& lambda, const Eigen::Matrix<Real,NNODES,1>& coefficients) const
 {
-  return coefficients.dot(getBaryCoordinates(point));
+  return coefficients.dot(lambda);
 }
 
 // Full specialization for order 2 in 2D
 // Note: needs to be declared inline because it is defined in a header file!
 // These formulas come from the book "The Finite Element Method: its Basis and Fundamentals" by Zienkiewicz, Taylor and Zhu
 template <>
-inline Real Element<6,2,2>::evaluate_point(const Point<2>& point, const Eigen::Matrix<Real,6,1>& coefficients) const
+inline Real Element<6,2,2>::evaluate_point(const Eigen::Matrix<Real,3,1>& lambda, const Eigen::Matrix<Real,6,1>& coefficients) const
 {
-	Eigen::Matrix<Real,3,1> lambda = getBaryCoordinates(point);
   return coefficients[0] * lambda[0] * (2*lambda[0]-1) +
          coefficients[1] * lambda[1] * (2*lambda[1]-1) +
          coefficients[2] * lambda[2] * (2*lambda[2]-1) +
@@ -108,9 +108,8 @@ inline Real Element<6,2,2>::evaluate_point(const Point<2>& point, const Eigen::M
 // Full specialization for order 2 in 3D
 // MEMO: this works assuming edges are ordered like so: (1,2), (1,3), (1,4), (2,3), (3,4), (2,4)
 template <>
-inline Real Element<10,3,3>::evaluate_point(const Point<3>& point, const Eigen::Matrix<Real,10,1>& coefficients) const
+inline Real Element<10,3,3>::evaluate_point(const Eigen::Matrix<Real,4,1>& lambda, const Eigen::Matrix<Real,10,1>& coefficients) const
 {
- Eigen::Matrix<Real,4,1> lambda = getBaryCoordinates(point);
  return coefficients[0] * lambda[0] * (2*lambda[0]-1) +
         coefficients[1] * lambda[1] * (2*lambda[1]-1) +
         coefficients[2] * lambda[2] * (2*lambda[2]-1) +
@@ -123,46 +122,27 @@ inline Real Element<10,3,3>::evaluate_point(const Point<3>& point, const Eigen::
         coefficients[9] * 4 * lambda[3] * lambda[1];
 }
 
+template <UInt NNODES, UInt mydim, UInt ndim>
+inline Real Element<NNODES,mydim,ndim>::evaluate_point(const Point<ndim>& point, const Eigen::Matrix<Real,NNODES,1>& coefficients) const
+{
+  return evaluate_point(getBaryCoordinates(point), coefficients);
+}
+
+
 // Implementation of integration on the element
 template <UInt NNODES, UInt mydim, UInt ndim>
 inline Real Element<NNODES,mydim,ndim>::integrate(const Eigen::Matrix<Real,NNODES,1>& coefficients) const
 {
-	// A 1-node quadrature formula is enough in the linear case
-	return getMeasure() * coefficients.mean();
-}
+	using Integrator = typename ElementIntegratorHelper::Integrator<NNODES,mydim>;
+	using EigenMap2Const_t = Eigen::Map<const Eigen::Matrix<Real, mydim, 1> >;
+	Real integral=0.;
+	for (UInt i=0; i<Integrator::NNODES; ++i){
+		EigenMap2Const_t node = EigenMap2Const_t(&Integrator::NODES[i][0]);
+		integral += Integrator::WEIGHTS[i]*evaluate_point((Eigen::Matrix<Real,mydim+1,1>() << 1-node.sum(), node).finished(), coefficients);
+	}
 
-// Full specialization for order 2 in 2D
-template <>
-inline Real Element<6,2,2>::integrate(const Eigen::Matrix<Real,6,1>& coefficients) const
-{
-	// A 3-node quadrature formula is needed for the quadratic case on the triangle
-	// Nodes: (2/3, 1/6, 1/6), (1/6, 2/3, 1/6), (1/6, 2/3, 1/6)
-  // Weights: 1/3, 1/3, 1/3
-	// Note: this is actually 9*basis_fun (hence we divide by 3*9=27 in the formula below)
-	static constexpr Real basis_fun[]={2, -1, -1, 1, 4, 4, //quadratic basis functions evaluated at node 0
-																		 -1, 2, -1, 4, 1, 4, //quadratic basis functions evaluated at node 1
-																		 -1, -1, 2, 4, 4, 1  //quadratic basis functions evaluated at node 2
-																		};
+	return getMeasure() * integral;
 
-	return getMeasure()/27 * coefficients.replicate<3,1>().dot(Eigen::Map<const Eigen::Matrix<Real,18,1> >(basis_fun));
-}
-
-
-// Full specialization for order 2 in 3D
-// MEMO: this works assuming edges are ordered like so: (1,2), (1,3), (1,4), (2,3), (3,4), (2,4)
-template <>
-inline Real Element<10,3,3>::integrate(const Eigen::Matrix<Real,10,1>& coefficients) const
-{
-	// A 4-node quadrature formula is needed for the quadratic case on the tetrahedron
-	// See Zienkiewicz, Taylor and Zhu p. 182 for the node coordinates
-	// Weights: 1/4, 1/4, 1/4, 1/4
-	static constexpr Real basis_fun[]={0.1, -0.1, -0.1, -0.1, 0.323606797749979, 0.323606797749979, 0.323606797749979, 0.076393202250021, 0.076393202250021, 0.076393202250021,
-																		 -0.1, 0.1, -0.1, -0.1, 0.323606797749979, 0.076393202250021, 0.076393202250021, 0.323606797749979, 0.076393202250021, 0.323606797749979,
-																		 -0.1, -0.1, 0.1, -0.1, 0.076393202250021, 0.323606797749979, 0.076393202250021, 0.323606797749979, 0.323606797749979, 0.076393202250021,
-																		 -0.1, -0.1, -0.1, 0.1, 0.076393202250021, 0.076393202250021, 0.323606797749979, 0.076393202250021, 0.323606797749979, 0.323606797749979
-																		};
-
-	return getMeasure() * 0.25*coefficients.replicate<4,1>().dot(Eigen::Map<const Eigen::Matrix<Real,40,1> >(basis_fun));
 }
 
 
@@ -311,48 +291,46 @@ Point<3> Element<NNODES,2,3>::computeProjection(const Point<3>& point) const
 
 // Implementation of function evaluation at a point inside the surface element
 template <>
-inline Real Element<3,2,3>::evaluate_point(const Point<3>& point, const Eigen::Matrix<Real,3,1>& coefficients) const
+inline Real Element<3,2,3>::evaluate_point(const Eigen::Matrix<Real,3,1>& lambda, const Eigen::Matrix<Real,3,1>& coefficients) const
 {
-  return coefficients.dot(getBaryCoordinates(point));
+  return coefficients.dot(lambda);
 }
 
  // Full specialization for order 2 in 2.5D
 template <>
-inline Real Element<6,2,3>::evaluate_point(const Point<3>& point, const Eigen::Matrix<Real,6,1>& coefficients) const
+inline Real Element<6,2,3>::evaluate_point(const Eigen::Matrix<Real,3,1>& lambda, const Eigen::Matrix<Real,6,1>& coefficients) const
 {
-	Eigen::Matrix<Real,3,1> lambda = getBaryCoordinates(point);
 	return coefficients[0] * lambda[0] * (2*lambda[0]-1) +
-         coefficients[1] * lambda[1] * (2*lambda[1]-1) +
-         coefficients[2] * lambda[2] * (2*lambda[2]-1) +
-         coefficients[3] * 4 * lambda[1]*lambda[2] +
-         coefficients[4] * 4 * lambda[2]*lambda[0] +
-         coefficients[5] * 4 * lambda[0]*lambda[1];
+           coefficients[1] * lambda[1] * (2*lambda[1]-1) +
+           coefficients[2] * lambda[2] * (2*lambda[2]-1) +
+           coefficients[3] * 4 * lambda[1]*lambda[2] +
+           coefficients[4] * 4 * lambda[2]*lambda[0] +
+           coefficients[5] * 4 * lambda[0]*lambda[1];
 }
+
+
+template <UInt NNODES>
+inline Real Element<NNODES,2,3>::evaluate_point(const Point<3>& point, const Eigen::Matrix<Real,NNODES,1>& coefficients) const
+{
+  return evaluate_point(getBaryCoordinates(point), coefficients);
+}
+
 
 
 // Implementation of integration on the surface element
-template<>
-inline Real Element<3,2,3>::integrate(const Eigen::Matrix<Real,3,1>& coefficients) const
+template <UInt NNODES>
+inline Real Element<NNODES,2,3>::integrate(const Eigen::Matrix<Real,NNODES,1>& coefficients) const
 {
-	// A 1-node quadrature formula is enough in the linear case
-	return getMeasure() * coefficients.mean();
-}
+	using Integrator = typename ElementIntegratorHelper::Integrator<NNODES,2>;
+	using EigenMap2Const_t = Eigen::Map<const Eigen::Matrix<Real, 2, 1> >;
+	Real integral=0.;
+	for (UInt i=0; i<Integrator::NNODES; ++i){
+		EigenMap2Const_t node = EigenMap2Const_t(&Integrator::NODES[i][0]);
+		integral += Integrator::WEIGHTS[i]*evaluate_point((Eigen::Matrix<Real,3,1>() << 1-node.sum(), node).finished(), coefficients);
+	}
 
-// Full specialization for order 2 in 2.5D
-template <>
-inline Real Element<6,2,3>::integrate(const Eigen::Matrix<Real,6,1>& coefficients) const
-{
-	// A 3-node quadrature formula is needed for the quadratic case on the triangle
-	// Nodes: (2/3, 1/6, 1/6), (1/6, 2/3, 1/6), (1/6, 2/3, 1/6)
-	// Weights: 1/3, 1/3, 1/3
-	// Note: this is actually 9*basis_fun (hence we divide by 3*9=27 in the formula below)
+	return getMeasure() * integral;
 
-	static constexpr Real basis_fun[]={2, -1, -1, 1, 4, 4,
-																		 -1, 2, -1, 4, 1, 4,
-																		 -1, -1, 2, 4, 4, 1
-																		};
-
-	return getMeasure()/27 * coefficients.replicate<3,1>().dot(Eigen::Map<const Eigen::Matrix<Real,18,1> >(basis_fun));
 }
 
 template <UInt nnodes, UInt MYDIM, UInt NDIM>
