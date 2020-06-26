@@ -29,10 +29,7 @@ inline Point<3>::Point(UInt id, const Real* const points, const UInt num_points)
 // This function returns the squared euclidean distance between "this" point and other
 template <UInt ndim>
 inline Real Point<ndim>::dist2(const Point<ndim> &other) const {
-	Real dist2{0.};
-	for (UInt i=0; i<ndim; ++i)
-		dist2+=(coord_[i]-other[i])*(coord_[i]-other[i]);
-	return dist2;
+	return (this->eigenView()-other.eigenView()).squaredNorm();
 }
 
 // This function returns the euclidean distance between "this" point and other
@@ -44,15 +41,13 @@ inline Real Point<ndim>::dist(const Point<ndim> &other) const {
 // Overloaded +=/-= operators
 template <UInt ndim>
 inline Point<ndim>& Point<ndim>::operator+=(const Point &other){
-	for (UInt i=0; i<ndim; ++i)
-		coord_[i]+=other[i];
+	this->eigenView()+=other.eigenView();
 	return *this;
 }
 
 template <UInt ndim>
 inline Point<ndim>& Point<ndim>::operator-=(const Point &other){
-	for (UInt i=0; i<ndim; ++i)
-		coord_[i]-=other[i];
+	this->eigenView()-=other.eigenView();
 	return *this;
 }
 

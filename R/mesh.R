@@ -478,7 +478,7 @@ create.mesh.2.5D<- function(nodes, triangles = NULL, order = 1, nodesattributes 
 
     out <- list(nodes=rbind(nodes, outCPP[[5]]), nodesmarkers=outCPP[[3]], nodesattributes=nodesattributes,
                 triangles=cbind(triangles+1, outCPP[[6]]), segments=segments, segmentsmarkers=segmentsmarkers,
-                edges=outCPP[[1]], edgesmarkers=outCPP[[2]], neighbors=outputCPP[[4]], holes=holes, order=order)
+                edges=outCPP[[1]], edgesmarkers=outCPP[[2]], neighbors=outCPP[[4]], holes=holes, order=order)
   }
   else{
     stop("The number of columns of triangles matrix is not consistent with the order parameter")
@@ -652,7 +652,7 @@ create.mesh.3D<- function(nodes, tetrahedrons, order = 1, nodesattributes = NULL
 
     out <- list(nodes=rbind(nodes, outCPP[[5]]), nodesmarkers=outCPP[[3]], nodesattributes=nodesattributes,
                tetrahedrons=cbind(tetrahedrons+1, outCPP[[6]]), segments=segments, segmentsmarkers=segmentsmarkers,
-               faces=outCPP[[1]], facesmarkers=outCPP[[2]], neighbors=outputCPP[[4]],
+               faces=outCPP[[1]], facesmarkers=outCPP[[2]], neighbors=outCPP[[4]],
                holes=holes, order=order)
   }
   else{

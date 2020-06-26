@@ -69,6 +69,11 @@ public:
   using iterator = typename elementPoints::iterator;
   using const_iterator = typename elementPoints::const_iterator;
 
+  static constexpr UInt numVertices=mydim+1;
+  static constexpr UInt numSides=mydim+1;
+  static constexpr UInt myDim=mydim; 
+  static constexpr UInt nDim=ndim; 
+
   // Note: these don't really mean anything, they're just here for compatibility
   // with the adtree implementation
   static constexpr UInt dp() {return ndim;}
@@ -171,6 +176,12 @@ public:
   using elementPoints = std::array<Point<3>, NNODES>;
   using iterator = typename elementPoints::iterator;
   using const_iterator = typename elementPoints::const_iterator;
+
+  static constexpr UInt numVertices=3;
+  static constexpr UInt numSides=3;
+  static constexpr UInt myDim=2; 
+  static constexpr UInt nDim=3; 
+
 
   // Note: these don't really mean anything, they're just here for compatibility
   // with the adtree implementation

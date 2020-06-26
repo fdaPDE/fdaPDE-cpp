@@ -103,10 +103,10 @@ struct FiniteElement : public FiniteElementData<ORDER, mydim, ndim> {
 		return this->elementPhiDer.col(iq*NBASES+i).dot(this->elementPhiDer.col(iq*NBASES+j));
 	}
 	Real stiff_impl(UInt iq, UInt i, UInt j, const Diff_matr& K) const {
-		return this->elementPhiDer.col(iq*NBASES+i).dot(K * this->elementPhiDer.col(iq*NBASES+j));
+		return this->elementPhiDer.col(iq*NBASES+i).dot(K.lazyProduct(this->elementPhiDer.col(iq*NBASES+j)));
 	}
 	Real stiff_impl(UInt iq, UInt i, UInt j, const EigenMap2Diff_matr& K) const {
-		return this->elementPhiDer.col(iq*NBASES+i).dot(K * this->elementPhiDer.col(iq*NBASES+j));
+		return this->elementPhiDer.col(iq*NBASES+i).dot(K.lazyProduct(this->elementPhiDer.col(iq*NBASES+j)));
 	}
 
 	Real grad_impl(UInt iq, UInt i, UInt j) const {

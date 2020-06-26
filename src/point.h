@@ -97,6 +97,9 @@ class Point : public Identifier{
   public:
     using pointCoords = std::array<Real,ndim>;
     using EigenCoords = Eigen::Matrix<Real,ndim,1>;
+    using EigenMap2Coords = Eigen::Map<EigenCoords>;
+    using EigenMap2ConstCoords = Eigen::Map<const EigenCoords>;
+
 
 		// Note: these don't really mean anything, they're just here for compatibility
 		// with the adtree implementation
@@ -133,6 +136,13 @@ class Point : public Identifier{
 
     // Additional constructor for convenience in dealing with R data (e.g. meshes)
     Point(UInt id, const Real* const points, const UInt num_points);
+
+    // Views!
+    EigenMap2Coords eigenView() {return EigenMap2Coords(&coord_[0]);}
+    EigenMap2ConstCoords eigenView() const {return EigenMap2ConstCoords(&coord_[0]);}
+
+    EigenMap2ConstCoords eigenConstView() const {return EigenMap2ConstCoords(&coord_[0]);}
+
 
     // Overloaded subscript operator
     Real& operator[](UInt i) {return coord_[i];}

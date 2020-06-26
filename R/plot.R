@@ -432,7 +432,7 @@ plot.mesh.3D<-function(x,...){
    }
  }
 
- R_plot.ORDN.FEM = function(FEM, num_refinements=10, ...)
+ R_plot.ORDN.FEM = function(FEM, num_refinements, ...)
  {
    # num_refinements sets the number od division on each triangle edge to be applied for rifenment
    coeff = FEM$coeff
@@ -444,6 +444,11 @@ plot.mesh.3D<-function(x,...){
    heat = heat.colors(100)
 
    coeff = FEM$coeff
+   
+   if(is.null(num_refinements))
+   {
+      num_refinements = 10
+   }
 
    # For the reference triangles we construct a regular mesh
    x = seq(from = 0, to = 1, length.out = num_refinements+1)
@@ -470,7 +475,7 @@ plot.mesh.3D<-function(x,...){
      transf<-rbind(cbind(properties$transf_coord$diff1x[i],properties$transf_coord$diff2x[i]),c(properties$transf_coord$diff1y[i],properties$transf_coord$diff2y[i]))
      pointsi = t(transf%*%t(meshi$nodes) + mesh$nodes[mesh$triangles[i,1],])
      #We evaluate the fine mesh OBS: we know the triangle we are working on no need for point location
-     z = R_eval_local.FEM(FEM, locations = pointsi, element_index = i)
+     z = R_eval_local.FEM(FEM, transf=properties, locations = pointsi, element_index = i)
 
      #We store the results
      locations[((i-1)*nrow(pointsi)+1):(i*nrow(pointsi)),] = cbind(pointsi,z)
@@ -758,7 +763,7 @@ plot.mesh.3D<-function(x,...){
      transf<-rbind(cbind(properties$transf_coord$diff1x[i],properties$transf_coord$diff2x[i]),c(properties$transf_coord$diff1y[i],properties$transf_coord$diff2y[i]))
      pointsi = t(transf%*%t(meshi$nodes) + mesh$nodes[mesh$triangles[i,1],])
      #We evaluate the fine mesh OBS: we know the triangle we are working on no need for point location
-     z = R_eval_local.FEM(FEM, locations = pointsi, element_index = i)
+     z = R_eval_local.FEM(FEM, transf=properties, locations = pointsi, element_index = i)
 
      #We store the results
      locations[((i-1)*nrow(pointsi)+1):(i*nrow(pointsi)),] = cbind(pointsi,z)
@@ -787,7 +792,7 @@ plot.mesh.3D<-function(x,...){
  }
 
 
- R_eval_local.FEM = function(FEM, locations, element_index)
+ R_eval_local.FEM = function(FEM, transf, locations, element_index)
  {
    N = nrow(locations)
    # Augment Xvec and Yvec by ones for computing barycentric coordinates
@@ -803,7 +808,7 @@ plot.mesh.3D<-function(x,...){
 
    order = FEMbasis$order
    #nodeindex = params$nodeindex
-   detJ = FEMbasis$detJ
+   detJ = transf$detJ
 
    # 1st, 2nd, 3rd vertices of triangles
 
@@ -818,7 +823,7 @@ plot.mesh.3D<-function(x,...){
 
    # Denominator of change of coordinates chsange matrix
 
-   modJ = FEMbasis$detJ[element_index]
+   modJ = transf$detJ[element_index]
    ones3 = matrix(1,3,1)
    #modJMat = modJ %*% t(ones3)
 

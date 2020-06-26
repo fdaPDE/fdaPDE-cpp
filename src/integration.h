@@ -126,7 +126,7 @@ struct IntegratorGaussP3{
 
 	static constexpr std::array<Real, NNODES> WEIGHTS{{1., 1.}};
 
-	static constexpr std::array<Real, NNODES> NODES{{-1./std::sqrt(3), 1./std::sqrt(3)}};
+	static constexpr std::array<Real, NNODES> NODES{{-0.577350269189626, 0.577350269189626}};
 	};
 
 struct IntegratorGaussP5{
@@ -135,7 +135,8 @@ struct IntegratorGaussP5{
 	static constexpr UInt NNODES = 3;
 	//Point locations
 	static constexpr std::array<Real, NNODES> NODES{{5./9, 8./9, 5./9}};
-	static constexpr std::array<Real, NNODES> WEIGHTS{{-std::sqrt(3)/std::sqrt(5), 0, std::sqrt(3)/std::sqrt(5)}};
+	
+	static constexpr std::array<Real, NNODES> WEIGHTS{{-0.774596669241483, 0, 0.774596669241483}};
 	};
 
 // Gauss Legendre quadrature rules for triangles (n=3)

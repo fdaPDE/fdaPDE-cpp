@@ -9,20 +9,16 @@
 template <UInt NNODES, UInt mydim, UInt ndim>
 void Element<NNODES,mydim,ndim>::computeProperties()
 {
-	// Note: with Eigen Map one can use non-eigen types as if they were eigen types
-	// It is rather useful and no copies are involved
-	// A map to const ensures that no change is performed on the underlying object
-	using EigenMap2Const_t = Eigen::Map<const Eigen::Matrix<Real,ndim,1> >;
-
 	{
 		// Note: the first point in the element is taken as a reference point
 		// Note: while this is an arbitrary choice other parts of the code rely on it
 		// so any change needs to be considered carefully
-		EigenMap2Const_t basePointCoord(&points_[0][0]);
+		auto basePointCoord=points_[0].eigenConstView();
 		// The columns of M_J_ are P_i - P_0, i=1,...,mydim
 		for (int i=0; i<mydim; ++i)
-			M_J_.col(i) = EigenMap2Const_t(&points_[i+1][0])-basePointCoord;
+			M_J_.col(i) = points_[i+1].eigenConstView()-basePointCoord;
 	}
+
 	// NOTE: for small (not bigger than 4x4) matrices eigen directly calculates
 	// determinants and inverses, it is very efficient (and much less error prone)!
 	M_invJ_ = M_J_.inverse();
@@ -36,20 +32,15 @@ void Element<NNODES,mydim,ndim>::computeProperties()
 template <UInt NNODES, UInt mydim, UInt ndim>
 Eigen::Matrix<Real,mydim+1,1> Element<NNODES,mydim,ndim>::getBaryCoordinates(const Point<ndim> &point) const
 {
-	// Note: with Eigen Map one can use non-eigen types as if they were eigen types
-	// It is rather useful and no copies are involved
-	// A map to const ensures that no change is performed on the underlying object
-	using EigenMap2Const_t = Eigen::Map<const Eigen::Matrix<Real,ndim,1> >;
-
 	Eigen::Matrix<Real,mydim+1,1> lambda;
 
 	// .template is needed! See Eigen documentation regarding
 	// the template and typename keywords in C++
 	// lambda = M_invJ_ * (P - P_0) where P is the given point and P_0 is the first point of the element
-	lambda.template tail<mydim>().noalias() = M_invJ_ * (EigenMap2Const_t(&point[0])-EigenMap2Const_t(&points_[0][0]));
+	lambda.template tail<mydim>().noalias() = M_invJ_ * (point.eigenConstView()-points_[0].eigenConstView());
 
 	// The barycentric coordinate corresponding to P_0 can be computed from the others
-  lambda(0) = 1 - lambda.template tail<mydim>().sum();
+  	lambda(0) = 1 - lambda.template tail<mydim>().sum();
 
 	return lambda;
 
@@ -134,10 +125,9 @@ template <UInt NNODES, UInt mydim, UInt ndim>
 inline Real Element<NNODES,mydim,ndim>::integrate(const Eigen::Matrix<Real,NNODES,1>& coefficients) const
 {
 	using Integrator = typename ElementIntegratorHelper::Integrator<NNODES,mydim>;
-	using EigenMap2Const_t = Eigen::Map<const Eigen::Matrix<Real, mydim, 1> >;
 	Real integral=0.;
 	for (UInt i=0; i<Integrator::NNODES; ++i){
-		EigenMap2Const_t node = EigenMap2Const_t(&Integrator::NODES[i][0]);
+		auto node = Integrator::NODES[i].eigenConstView();
 		integral += Integrator::WEIGHTS[i]*evaluate_point((Eigen::Matrix<Real,mydim+1,1>() << 1-node.sum(), node).finished(), coefficients);
 	}
 
@@ -151,19 +141,14 @@ inline Real Element<NNODES,mydim,ndim>::integrate(const Eigen::Matrix<Real,NNODE
 template <UInt NNODES>
 void Element<NNODES,2,3>::computeProperties()
 {
-	// Note: with Eigen Map one can use non-eigen types as if they were eigen types
-	// It is rather useful and no copies are involved
-	// A map to const ensures that no change is performed on the underlying object
-	using EigenMap2Const_t = Eigen::Map<const Eigen::Matrix<Real,3,1> >;
-
 	{
 		// Note: the first point in the element is taken as a reference point
 		// Note: while this is an arbitrary choice other parts of the code rely on it
 		// so any change needs to be considered carefully
-		EigenMap2Const_t basePointCoord(&points_[0][0]);
+		auto basePointCoord=points_[0].eigenConstView();
 		// The columns of M_J_ are P_i - P_0, i=1,2
 		for (int i=0; i<2; ++i)
-			M_J_.col(i) = EigenMap2Const_t(&points_[i+1][0])-basePointCoord;
+			M_J_.col(i) = points_[i+1].eigenConstView()-basePointCoord;
 	}
 
 	// NOTE: for small (not bigger than 4x4) matrices eigen directly calculates
@@ -177,20 +162,15 @@ void Element<NNODES,2,3>::computeProperties()
 template <UInt NNODES>
 Eigen::Matrix<Real,3,1> Element<NNODES,2,3>::getBaryCoordinates(const Point<3> &point) const
 {
-	// Note: with Eigen Map one can use non-eigen types as if they were eigen types
-	// It is rather useful and no copies are involved
-	// A map to const ensures that no change is performed on the underlying object
-	using EigenMap2Const_t = Eigen::Map<const Eigen::Matrix<Real,3,1> >;
-
 	Eigen::Matrix<Real,3,1> lambda;
 
 	// .template is needed! See Eigen documentation regarding
 	// the template and typename keywords in C++
 	// lambda = M_invJ_ * (P - P_0) where P is the given point and P_0 is the first point of the element
-	lambda.template tail<2>().noalias() = M_invJ_ * (EigenMap2Const_t(&point[0])-EigenMap2Const_t(&points_[0][0]));
+	lambda.template tail<2>().noalias() = M_invJ_ * (point.eigenConstView()-points_[0].eigenConstView());
 
 	// The barycentric coordinate corresponding to P_0 can be computed from the others
-  lambda(0) = 1 - lambda.template tail<2>().sum();
+  	lambda(0) = 1 - lambda.template tail<2>().sum();
 
 	return lambda;
 
@@ -204,32 +184,26 @@ bool Element<NNODES,2,3>::isPointInside(const Point<3>& point) const
 	static constexpr Real eps = std::numeric_limits<Real>::epsilon(),
 		 tolerance = 10 * eps;
 
-		 // Note: with Eigen Map one can use non-eigen types as if they were eigen types
-	 	// It is rather useful and no copies are involved
-	 	// A map to const ensures that no change is performed on the underlying object
-	 	using EigenMap2Const_t = Eigen::Map<const Eigen::Matrix<Real,3,1> >;
+	Eigen::Matrix<Real,3,1> lambda = getBaryCoordinates(point);
+
+	// If the point's projection onto the 3D triangle lies outside the triangle
+	// (i.e. there is at least one negative barycentric coordinate)
+	// then the point does not belong to the triangle
+	if ((lambda.array()<-tolerance).any())
+		return false;
 
 
-	 	Eigen::Matrix<Real,3,1> lambda = getBaryCoordinates(point);
+	Eigen::Matrix<Real,3,3> A;
+	A << M_J_, (point.eigenConstView()-points_[0].eigenConstView());
 
-		// If the point's projection onto the 3D triangle lies outside the triangle
-	 	// (i.e. there is at least one negative barycentric coordinate)
-		// then the point does not belong to the triangle
-	 	if ((-tolerance>lambda.array()).any())
-	 		return false;
-
-
-	 	Eigen::Matrix<Real,3,3> A;
-	 	A << M_J_, (EigenMap2Const_t(&point[0])-EigenMap2Const_t(&points_[0][0]));
-
-	 	Eigen::FullPivHouseholderQR<Eigen::Matrix<Real,3,3> > qr(A);
-	 	qr.setThreshold(tolerance);
-	 	// Note: the point is inside the element if it lies on the same plane as the 3D triangle
-	 	// (i.e. A is rank deficient) AND its projection onto the 3D triangle lies inside the triangle
-	 	// (i.e. all barycentric coordinates are positive)
-	  	// Note: fullPivHouseholderQr is as fast as ColPivHouseholderQR for such small matrices
-	  	// but this is optimized for rank computations (see eigen documentation)
-	 	return !qr.isInvertible();
+	Eigen::FullPivHouseholderQR<Eigen::Matrix<Real,3,3> > qr(A);
+	qr.setThreshold(tolerance);
+	// Note: the point is inside the element if it lies on the same plane as the 3D triangle
+	// (i.e. A is rank deficient) AND its projection onto the 3D triangle lies inside the triangle
+	// (i.e. all barycentric coordinates are positive)
+	// Note: fullPivHouseholderQr is as fast as ColPivHouseholderQR for such small matrices
+	// but this is optimized for rank computations (see eigen documentation)
+	return !qr.isInvertible();
 
 }
 
@@ -325,7 +299,7 @@ inline Real Element<NNODES,2,3>::integrate(const Eigen::Matrix<Real,NNODES,1>& c
 	using EigenMap2Const_t = Eigen::Map<const Eigen::Matrix<Real, 2, 1> >;
 	Real integral=0.;
 	for (UInt i=0; i<Integrator::NNODES; ++i){
-		EigenMap2Const_t node = EigenMap2Const_t(&Integrator::NODES[i][0]);
+		auto node = Integrator::NODES[i].eigenConstView();
 		integral += Integrator::WEIGHTS[i]*evaluate_point((Eigen::Matrix<Real,3,1>() << 1-node.sum(), node).finished(), coefficients);
 	}
 
