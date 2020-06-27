@@ -1,29 +1,26 @@
 #ifndef __POINT_IMP_HPP__
 #define __POINT_IMP_HPP__
 
-template <>
-constexpr Point<2>::Point(UInt id, UInt bcId, const Real(&coord)[2]) :
-    Identifier(id, bcId), coord_({coord[0], coord[1]}) {}
+template<UInt ndim>
+constexpr Point<ndim>::Point(UInt id, UInt bcId, const Real(&coord)[ndim]) : 
+  Identifier(id, bcId) {
+    for(UInt i=0; i<ndim; ++i)
+      coord_[i]=coord[i];
+  }
 
-template <>
-constexpr Point<3>::Point(UInt id, UInt bcId, const Real(&coord)[3]) :
-    Identifier(id, bcId), coord_({coord[0], coord[1], coord[2]}) {}
+template<UInt ndim>
+Point<ndim>::Point(UInt id, UInt bcId, const EigenCoords& coord) : 
+  Identifier(id, bcId) {
+    for(UInt i=0; i<ndim; ++i)
+      coord_[i]=coord[i];
+  }
 
-template <>
-inline Point<2>::Point(UInt id, UInt bcId, const EigenCoords& coord) :
-  Identifier(id, bcId), coord_({coord[0], coord[1]}) {}
-
-template <>
-inline Point<3>::Point(UInt id, UInt bcId, const EigenCoords& coord) :
-  Identifier(id, bcId), coord_({coord[0], coord[1], coord[2]}) {}
-
-template <>
-inline Point<2>::Point(UInt id, const Real* const points, const UInt num_points) :
-		Point(id, {points[id], points[id+num_points]}) {}
-
-template <>
-inline Point<3>::Point(UInt id, const Real* const points, const UInt num_points) :
-		Point(id, {points[id], points[id+num_points], points[id+2*num_points]}) {}
+template<UInt ndim>
+Point<ndim>::Point(UInt id, const Real* const points, const UInt num_points) : 
+  Identifier(id) {
+    for(UInt i=0; i<ndim; ++i)
+      coord_[i]=points[id+i*num_points];
+  }
 
 
 // This function returns the squared euclidean distance between "this" point and other

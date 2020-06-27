@@ -7,6 +7,7 @@
 #include "point.h"
 
 using Id=int;
+
 /*! \brief A function to evaluate factorial at compile time
  *
  *  This function evaluates the factorial of a given UInt n
@@ -42,7 +43,7 @@ constexpr UInt how_many_nodes(const UInt ORDER, const UInt mydim) {
  * 		  5 *	   * 4
  * 		  /	        \
  * 		 *_____*_____*
- * 		1	   6	  2
+ * 		1	     6      2
 */
 
 
