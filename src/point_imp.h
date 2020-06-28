@@ -1,12 +1,15 @@
 #ifndef __POINT_IMP_HPP__
 #define __POINT_IMP_HPP__
 
-template<UInt ndim>
-constexpr Point<ndim>::Point(UInt id, UInt bcId, const Real(&coord)[ndim]) : 
-  Identifier(id, bcId) {
-    for(UInt i=0; i<ndim; ++i)
-      coord_[i]=coord[i];
-  }
+// Note: has to be done like this because of constexpr!
+template<>
+constexpr Point<2>::Point(UInt id, UInt bcId, const Real(&coord)[2]) : 
+  Identifier(id, bcId), coord_({coord[0],coord[1]}) {}
+
+template<>
+constexpr Point<3>::Point(UInt id, UInt bcId, const Real(&coord)[3]) : 
+  Identifier(id, bcId), coord_({coord[0],coord[1],coord[2]}) {}
+
 
 template<UInt ndim>
 Point<ndim>::Point(UInt id, UInt bcId, const EigenCoords& coord) : 
