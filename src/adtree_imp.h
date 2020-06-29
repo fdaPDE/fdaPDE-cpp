@@ -23,7 +23,7 @@ ADTree<Shape>::ADTree(TreeHeader<Shape> const & header): header_(header) {
 template<class Shape>
 ADTree<Shape>::ADTree(Real const * const points, UInt const * const triangle, const UInt num_nodes, const UInt num_triangle) {
     int ndimp = Shape::dp(); //physical dimension
-    int nvertex = Shape::numVertices(); //number of nodes at each Element (not total number of nodes!)
+    int nvertex = Shape::numVertices; //number of nodes at each Element (not total number of nodes!)
 
     // Build the tree.
 

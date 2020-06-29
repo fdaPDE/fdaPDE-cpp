@@ -80,7 +80,6 @@ public:
   static constexpr UInt dp() {return ndim;}
   static constexpr UInt dt() {return 2*ndim;}
   static constexpr UInt coordsize() {return (ndim+1)*ndim;}
-  static constexpr UInt numVertices() {return mydim+1;}
 
   //! This constructor creates an "empty" Element, with an Id Not Valid
   Element()=default;
@@ -189,8 +188,6 @@ public:
   static constexpr UInt dp() {return 3;}
   static constexpr UInt dt() {return 6;}
   static constexpr UInt coordsize() {return 9;}
-  static constexpr UInt numVertices() {return 3;}
-
 
   //! This constructor creates an "empty" Element, with an Id Not Valid
   Element()=default;

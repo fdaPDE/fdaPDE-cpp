@@ -1,8 +1,45 @@
-//#include "mesh_objects.hpp"
 #ifndef __MESH_OBJECTS_IMP_HPP__
 #define __MESH_OBJECTS_IMP_HPP__
 
 #include "integration.h"
+
+// This is just a fancy way of transforming a vector of length n in a vector of length n+1
+// where the first element is 1 - sum of all the other elements
+// See Matrix manipulation via nullary-expressions in the eigen documentation
+
+template<class ArgType>
+struct BaryCoord_helper {
+	using VectorType = Eigen::Matrix<typename ArgType::Scalar,
+            		ArgType::SizeAtCompileTime+1, 1>;
+};
+
+
+template<class ArgType>
+class BaryCoord_functor {
+	const ArgType &m_vec;
+public:
+	BaryCoord_functor(const ArgType& arg) : m_vec(arg) {}
+ 
+  	typename ArgType::Scalar operator() (Eigen::Index i) const {
+    	if(i>0)
+      		return m_vec(i-1);
+    	return 1-m_vec.sum();
+  	}
+};
+
+
+template <class ArgType>
+Eigen::CwiseNullaryOp<BaryCoord_functor<ArgType>, typename BaryCoord_helper<ArgType>::VectorType>
+makeBaryCoord(const Eigen::MatrixBase<ArgType>& arg)
+{
+	static_assert(ArgType::SizeAtCompileTime==2 || ArgType::SizeAtCompileTime==3,
+		"ERROR! WRONG SIZE OF THE INPUT!");
+
+  	using VectorType = typename BaryCoord_helper<ArgType>::VectorType;
+  	return VectorType::NullaryExpr(arg.size()+1, 1, BaryCoord_functor<ArgType>(arg.derived()));
+}
+
+
 // Member functions for class Element
 
 // This function is called to construct elements in 2D and 3D
@@ -32,18 +69,7 @@ void Element<NNODES,mydim,ndim>::computeProperties()
 template <UInt NNODES, UInt mydim, UInt ndim>
 Eigen::Matrix<Real,mydim+1,1> Element<NNODES,mydim,ndim>::getBaryCoordinates(const Point<ndim> &point) const
 {
-	Eigen::Matrix<Real,mydim+1,1> lambda;
-
-	// .template is needed! See Eigen documentation regarding
-	// the template and typename keywords in C++
-	// lambda = M_invJ_ * (P - P_0) where P is the given point and P_0 is the first point of the element
-	lambda.template tail<mydim>().noalias() = M_invJ_ * (point.eigenConstView()-points_[0].eigenConstView());
-
-	// The barycentric coordinate corresponding to P_0 can be computed from the others
-  	lambda(0) = 1 - lambda.template tail<mydim>().sum();
-
-	return lambda;
-
+	return makeBaryCoord(M_invJ_ * (point.eigenConstView() - points_[0].eigenConstView()));
 }
 
 template <UInt NNODES, UInt mydim, UInt ndim>
@@ -122,13 +148,13 @@ inline Real Element<NNODES,mydim,ndim>::evaluate_point(const Point<ndim>& point,
 
 // Implementation of integration on the element
 template <UInt NNODES, UInt mydim, UInt ndim>
-inline Real Element<NNODES,mydim,ndim>::integrate(const Eigen::Matrix<Real,NNODES,1>& coefficients) const
+Real Element<NNODES,mydim,ndim>::integrate(const Eigen::Matrix<Real,NNODES,1>& coefficients) const
 {
 	using Integrator = typename ElementIntegratorHelper::Integrator<NNODES,mydim>;
 	Real integral=0.;
 	for (UInt i=0; i<Integrator::NNODES; ++i){
 		auto node = Integrator::NODES[i].eigenConstView();
-		integral += Integrator::WEIGHTS[i]*evaluate_point((Eigen::Matrix<Real,mydim+1,1>() << 1-node.sum(), node).finished(), coefficients);
+		integral += Integrator::WEIGHTS[i]*evaluate_point(makeBaryCoord(node), coefficients);
 	}
 
 	return getMeasure() * integral;
@@ -162,18 +188,7 @@ void Element<NNODES,2,3>::computeProperties()
 template <UInt NNODES>
 Eigen::Matrix<Real,3,1> Element<NNODES,2,3>::getBaryCoordinates(const Point<3> &point) const
 {
-	Eigen::Matrix<Real,3,1> lambda;
-
-	// .template is needed! See Eigen documentation regarding
-	// the template and typename keywords in C++
-	// lambda = M_invJ_ * (P - P_0) where P is the given point and P_0 is the first point of the element
-	lambda.template tail<2>().noalias() = M_invJ_ * (point.eigenConstView()-points_[0].eigenConstView());
-
-	// The barycentric coordinate corresponding to P_0 can be computed from the others
-  	lambda(0) = 1 - lambda.template tail<2>().sum();
-
-	return lambda;
-
+	return makeBaryCoord(M_invJ_ * (point.eigenConstView()-points_[0].eigenConstView()));
 }
 
 // Note: this function is more expensive for manifold data because one must check
@@ -300,7 +315,7 @@ inline Real Element<NNODES,2,3>::integrate(const Eigen::Matrix<Real,NNODES,1>& c
 	Real integral=0.;
 	for (UInt i=0; i<Integrator::NNODES; ++i){
 		auto node = Integrator::NODES[i].eigenConstView();
-		integral += Integrator::WEIGHTS[i]*evaluate_point((Eigen::Matrix<Real,3,1>() << 1-node.sum(), node).finished(), coefficients);
+		integral += Integrator::WEIGHTS[i]*evaluate_point(makeBaryCoord(node), coefficients);
 	}
 
 	return getMeasure() * integral;
