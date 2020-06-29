@@ -90,9 +90,9 @@ void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::apply( const Forci
     } //end while
     
     #ifdef R_VERSION_
-    Rprintf("\t n. iterations: %d\n \n", n_iterations[i]+1);
+    Rprintf("\t n. iterations: %d\n \n", n_iterations[i]);
     #else
-    std::cout<< "\t n. iterations: "<<n_iterations[i]+1<<"\n"<<std::endl;
+    std::cout<< "\t n. iterations: "<<n_iterations[i]<<"\n"<<std::endl;
     #endif
     
     _J_minima.push_back(current_J_values[i][0]+current_J_values[i][1]); // compute the minimum value of the J fuctional 
