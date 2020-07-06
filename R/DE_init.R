@@ -4,7 +4,7 @@
 #' the first column corresponds to the \code{x}-coordinates, the second column corresponds to the \code{y}-coordinates 
 #' and, if ndim=3, the third column corresponds to the \code{z}-coordinates. 
 #' @param FEMbasis A \code{FEMbasis} object describing the Finite Element basis, as created by \code{\link{create.FEM.basis}}.
-#' @param lambda A scalar or vector of smoothing parameters. 
+#' @param lambda A scalar or vector of smoothing parameters. Default is NULL. It is useful only if \code{init='Heat'}.
 #' @param heatStep Real specifying the time step for the discretized heat diffusionn process.
 #' @param heatIter Integer specifying the number of iteriations to perform the discretized heat diffusion process.
 #' @param init String. This parameter specifies the initialization procedure. It can be either 'Heat' or 'CV'.
@@ -46,7 +46,7 @@
 #' ## Visualization 
 #' plot(FEM(coeff=sol$f_init, FEMbasis=FEMbasis))
 
-DE.heat.FEM <- function(data, FEMbasis, lambda, heatStep=0.1, heatIter=500, init="Heat", nFolds=5, search=2) 
+DE.heat.FEM <- function(data, FEMbasis, lambda=NULL, heatStep=0.1, heatIter=500, init="Heat", nFolds=5, search=2) 
 { 
   if(class(FEMbasis$mesh) == "mesh.2D"){
     ndim = 2

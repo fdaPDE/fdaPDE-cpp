@@ -13,7 +13,7 @@ and, if ndim=3, the third column corresponds to the \code{z}-coordinates.}
 
 \item{FEMbasis}{A \code{FEMbasis} object describing the Finite Element basis, as created by \code{\link{create.FEM.basis}}.}
 
-\item{lambda}{A scalar or vector of smoothing parameters.}
+\item{lambda}{A scalar or vector of smoothing parameters. Default is NULL. It is useful only if \code{init='Heat'}.}
 
 \item{heatStep}{Real specifying the time step for the discretized heat diffusionn process.}
 
