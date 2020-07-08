@@ -8,7 +8,7 @@ Eigen::Matrix<Real, NBASES, 1> reference_eval_point(const Point<mydim> &node);
 
 // This function evaluate nabla ^phi_i's at quadrature nodes
 template<UInt NBASES, UInt mydim>
-Eigen::Matrix<Real, NBASES,mydim> reference_eval_der_point(const Point<mydim> &node);
+Eigen::Matrix<Real, NBASES, mydim> reference_eval_der_point(const Point<mydim> &node);
 
 //! FEData implementation
 template <UInt ORDER, UInt mydim, UInt ndim>
@@ -62,18 +62,12 @@ void FiniteElementData<ORDER, mydim, ndim>::setElementPhiDer()
 
 template<>
 inline Eigen::Matrix<Real, 3, 1> reference_eval_point(const Point<2> &node){
-	Eigen::Matrix<Real, 3, 1> phi;
-	phi.template tail<2>()=Eigen::Map<const Eigen::Matrix<Real,2,1> >(&node[0]);
-	phi(0) = 1 - phi.template tail<2>().sum();
-	return phi;
+	return makeBaryCoord(node.eigenConstView());
 }
 
 template<>
 inline Eigen::Matrix<Real, 4, 1> reference_eval_point(const Point<3> &node){
-	Eigen::Matrix<Real, 4, 1> phi;
-	phi.template tail<3>()=Eigen::Map<const Eigen::Matrix<Real,3,1> >(&node[0]);
-	phi(0) = 1 - phi.template tail<3>().sum();
-	return phi;
+	return makeBaryCoord(node.eigenConstView());
 }
 
 template<>

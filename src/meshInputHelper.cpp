@@ -143,6 +143,7 @@ SEXP CPP_TriangleMeshSplit(SEXP Rtriangles, SEXP Rnodes){
 
   UInt num_triangles = INTEGER(Rf_getAttrib(Rtriangles, R_DimSymbol))[0];
   UInt num_nodes = INTEGER(Rf_getAttrib(Rnodes, R_DimSymbol))[0];
+  UInt ndim = INTEGER(Rf_getAttrib(Rnodes, R_DimSymbol))[1];
 
   std::vector<double> midpoints;
   std::vector<UInt> splitted_triangles;
@@ -153,14 +154,18 @@ SEXP CPP_TriangleMeshSplit(SEXP Rtriangles, SEXP Rnodes){
   std::vector<UInt> extended_triangles{order2extend(edges_list)};
   std::vector<UInt> edges{edges_list.get_simplexes()};
 
-  midpoints=compute_midpoints(nodes, edges, num_nodes);
+  if(ndim==2)
+    midpoints=compute_midpoints2D(nodes, edges, num_nodes);
+  else
+    midpoints=compute_midpoints(nodes, edges, num_nodes);
+
   splitted_triangles=split(extended_triangles, triangles, num_triangles);
   }
 
   SEXP result = NILSXP;
 	result = PROTECT(Rf_allocVector(VECSXP, 2));
 	SET_VECTOR_ELT(result, 0, Rf_allocMatrix(INTSXP, splitted_triangles.size()/3, 3));
-  SET_VECTOR_ELT(result, 1, Rf_allocMatrix(REALSXP, midpoints.size()/3, 3));
+  SET_VECTOR_ELT(result, 1, Rf_allocMatrix(REALSXP, midpoints.size()/ndim, ndim));
 
 	int *rans = INTEGER(VECTOR_ELT(result, 0));
   for (UInt i=0; i<splitted_triangles.size(); ++i)

@@ -207,19 +207,7 @@ bool Element<NNODES,2,3>::isPointInside(const Point<3>& point) const
 	if ((lambda.array()<-tolerance).any())
 		return false;
 
-
-	Eigen::Matrix<Real,3,3> A;
-	A << M_J_, (point.eigenConstView()-points_[0].eigenConstView());
-
-	Eigen::FullPivHouseholderQR<Eigen::Matrix<Real,3,3> > qr(A);
-	qr.setThreshold(tolerance);
-	// Note: the point is inside the element if it lies on the same plane as the 3D triangle
-	// (i.e. A is rank deficient) AND its projection onto the 3D triangle lies inside the triangle
-	// (i.e. all barycentric coordinates are positive)
-	// Note: fullPivHouseholderQr is as fast as ColPivHouseholderQR for such small matrices
-	// but this is optimized for rank computations (see eigen documentation)
-	return !qr.isInvertible();
-
+	return (M_J_*lambda.template tail<2>() + points_[0].eigenConstView() - point.eigenConstView()).norm() < tolerance;
 }
 
 template <UInt NNODES>
@@ -230,7 +218,7 @@ Point<3> Element<NNODES,2,3>::computeProjection(const Point<3>& point) const
 	// Convention: (+,+,+) means that all lambda are positive and so on
   // For visual reference: (remember that edges are numbered wrt the opposing node)
   //
-	//\ (-,-,+)|
+  //\ (-,-,+)|
   //  \      |
   //    \    |
   //      \  |

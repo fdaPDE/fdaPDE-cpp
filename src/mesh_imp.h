@@ -28,7 +28,7 @@ MeshHandler<ORDER,mydim,ndim>::MeshHandler(SEXP Rmesh, UInt search) :
 #endif
 
 template <UInt ORDER, UInt mydim, UInt ndim>
-inline Point<ndim> MeshHandler<ORDER,mydim,ndim>::getPoint(const UInt id) const
+Point<ndim> MeshHandler<ORDER,mydim,ndim>::getPoint(const UInt id) const
 {
 	return Point<ndim>(id, points_, num_nodes_);
 }
@@ -94,7 +94,7 @@ typename MeshHandler<ORDER,mydim,ndim>::meshElement MeshHandler<ORDER,mydim,ndim
 
 	for (const auto &i : found) {
 		const UInt index = tree_ptr_->pointId(i);
-	  meshElement tmp = getElement(index);
+		meshElement tmp = getElement(index);
 		if(tmp.isPointInside(point)) {
 			return tmp;
 		}

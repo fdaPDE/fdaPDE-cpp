@@ -17,7 +17,7 @@ void simplex_container<mydim>::fill_container(const UInt* const elements, const 
        for(UInt k=0; k<mydim; ++k)
         curr[k]=elements[i+num_elements*ORDERING[mydim*j+k]];
        std::sort(curr.begin(), curr.end());
-       simplexes.emplace_back(simplex_t(i,j,curr));
+       simplexes.emplace_back(i,j,curr);
      }
    }
  }

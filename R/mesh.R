@@ -679,7 +679,7 @@ split.mesh.2D <- function (mesh=NULL){
 
   outCPP <- .Call("CPP_TriangleMeshSplit", mesh$triangles[,1:3], mesh$nodes)
 
-  splittedmesh<-create.mesh.2D(rbind(mesh$nodes, outCPP[[2]]), outCPP[[1]])
+  splittedmesh<-create.mesh.2D(nodes=rbind(mesh$nodes, outCPP[[2]]), triangles=outCPP[[1]])
 
   return(splittedmesh)
 

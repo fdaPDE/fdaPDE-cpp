@@ -97,11 +97,10 @@ std::vector<UInt> order2extend(const simplex_container<2> &edge_container){
   std::vector<UInt> edges_extended(edge_container.size());
   UInt offset{edge_container.get_num_points()};
   {
-    UInt i=0;
+    UInt pos=0;
     for(auto const &curr : edge_container){
-      offset += !edge_container.is_repeated(i);
+      offset += !edge_container.is_repeated(pos++);
       edges_extended[curr.i()+edge_container.get_num_elements()*curr.j()]=offset;
-      ++i;
     }
   }
   return edges_extended;
@@ -115,6 +114,16 @@ std::vector<double> compute_midpoints(const double* const points, const std::vec
       midpoints[i+j*num_edges]=(points[edges[i]+j*num_points]+points[edges[i+num_edges]+j*num_points])/2;
   return midpoints;
 }
+
+std::vector<double> compute_midpoints2D(const double* const points, const std::vector<UInt>& edges, const UInt num_points){
+  const UInt num_edges=edges.size()/2;
+  std::vector<double> midpoints(2*num_edges);
+  for (int i=0; i<num_edges; ++i)
+    for (int j=0; j<2; ++j)
+      midpoints[i+j*num_edges]=(points[edges[i]+j*num_points]+points[edges[i+num_edges]+j*num_points])/2;
+  return midpoints;
+}
+
 
 std::vector<UInt> split(const std::vector<UInt>& extended_triangles, const int* const triangles, const UInt num_triangles){
 

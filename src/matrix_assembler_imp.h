@@ -17,8 +17,6 @@ void Assembler::operKernel(EOExpr<A> oper, const MeshHandler<ORDER,mydim,ndim>& 
 	std::vector<UInt> identifiers;
 	identifiers.reserve(NBASES);
 
-	Eigen::Matrix<Real,NBASES,NBASES> loc_matr = Eigen::Matrix<Real,NBASES,NBASES>::Zero();
-
   for(int t=0; t<mesh.num_elements(); ++t){
 
 		fe.updateElement(mesh.getElement(t));
@@ -73,7 +71,6 @@ void Assembler::operKernel(EOExpr<A> oper, Spline<Integrator, DEGREE, ORDER_DERI
     }
 }
 
-// Pensarci di più!
 template<UInt ORDER, UInt mydim, UInt ndim>
 void Assembler::forcingTerm(const MeshHandler<ORDER,mydim,ndim>& mesh,
 	                     FiniteElement<ORDER,mydim,ndim>& fe, const ForcingTerm& u, VectorXr& forcingTerm)
@@ -83,7 +80,7 @@ void Assembler::forcingTerm(const MeshHandler<ORDER,mydim,ndim>& mesh,
 
 	forcingTerm = VectorXr::Zero(mesh.num_nodes());
 
-  for(int t=0; t<mesh.num_elements(); ++t){
+  	for(int t=0; t<mesh.num_elements(); ++t){
 
 		fe.updateElement(mesh.getElement(t));
 

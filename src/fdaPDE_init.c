@@ -33,7 +33,6 @@ extern SEXP CPP_VolumeMeshHelper(SEXP, SEXP);
 extern SEXP CPP_VolumeMeshOrder2(SEXP, SEXP);
 extern SEXP CPP_TriangleMeshSplit(SEXP, SEXP);
 extern SEXP CPP_TetraMeshSplit(SEXP, SEXP);
-extern SEXP meshQuality(SEXP, SEXP);
 
 static const R_CallMethodDef CallEntries[] = {
     {"Density_Estimation",                (DL_FUNC) &Density_Estimation,                19},
@@ -61,7 +60,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"CPP_VolumeMeshOrder2",              (DL_FUNC) &CPP_VolumeMeshOrder2,               2},
     {"CPP_TriangleMeshSplit",             (DL_FUNC) &CPP_TriangleMeshSplit, 	            2},
     {"CPP_TetraMeshSplit",                (DL_FUNC) &CPP_TetraMeshSplit,                 2},
-    {"meshQuality",                       (DL_FUNC) &meshQuality,                        2},
     {NULL, NULL, 0}
 };
 

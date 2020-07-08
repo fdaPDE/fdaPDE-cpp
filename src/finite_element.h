@@ -86,15 +86,10 @@ protected:
 // This class implements all the needed methods to assemble the FE matrix
 
 template <UInt ORDER, UInt mydim, UInt ndim>
-struct FiniteElement : public FiniteElementData<ORDER, mydim, ndim> {
-
+class FiniteElement : public FiniteElementData<ORDER, mydim, ndim> {
+	
+public:
 	using Integrator = typename FiniteElementData<ORDER, mydim, ndim>::Integrator;
-	using Diff_matr = Eigen::Matrix<Real, ndim, ndim>;
-	using EigenMap2Diff_matr = Eigen::Map<const Diff_matr>;
-	using Adv_vec = Eigen::Matrix<Real, ndim, 1>;
-	using EigenMap2Adv_vec = Eigen::Map<const Adv_vec>;
-	using EigenMap2Forcing_vec = Eigen::Map<const Eigen::Matrix<Real, Integrator::NNODES, 1> >;
-
 	static constexpr UInt NBASES = FiniteElementData<ORDER, mydim, ndim>::NBASES;
 
 	FiniteElement()=default;
@@ -102,21 +97,21 @@ struct FiniteElement : public FiniteElementData<ORDER, mydim, ndim> {
 	Real stiff_impl(UInt iq, UInt i, UInt j) const {
 		return this->elementPhiDer.col(iq*NBASES+i).dot(this->elementPhiDer.col(iq*NBASES+j));
 	}
-	Real stiff_impl(UInt iq, UInt i, UInt j, const Diff_matr& K) const {
-		return this->elementPhiDer.col(iq*NBASES+i).dot(K.lazyProduct(this->elementPhiDer.col(iq*NBASES+j)));
-	}
-	Real stiff_impl(UInt iq, UInt i, UInt j, const EigenMap2Diff_matr& K) const {
+	template <class ArgType>
+	Real stiff_impl(UInt iq, UInt i, UInt j, const Eigen::MatrixBase<ArgType>& K) const {
+		static_assert(ArgType::RowsAtCompileTime==ndim && ArgType::ColsAtCompileTime==ndim,
+			"ERROR! WRONG DIMENSIONS OF THE INPUT! See finite_element.h");
 		return this->elementPhiDer.col(iq*NBASES+i).dot(K.lazyProduct(this->elementPhiDer.col(iq*NBASES+j)));
 	}
 
 	Real grad_impl(UInt iq, UInt i, UInt j) const {
 		return this->referencePhi(iq,i) * this->elementPhiDer(0,iq*NBASES+j);
 	}
-	Real grad_impl(UInt iq, UInt i, UInt j, const Adv_vec& b) const {
-		return this->referencePhi(iq,i) * b.dot(this->elementPhiDer.col(iq*NBASES+j));
-	}
-	Real grad_impl(UInt iq, UInt i, UInt j, const EigenMap2Adv_vec& b) const {
-		return this->referencePhi(iq,i) * b.dot(this->elementPhiDer.col(iq*NBASES+j));
+	template <class ArgType>
+	Real grad_impl(UInt iq, UInt i, UInt j, const Eigen::MatrixBase<ArgType>& b) const {
+		static_assert(ArgType::RowsAtCompileTime==ndim && ArgType::ColsAtCompileTime==1,
+			"ERROR! WRONG DIMENSIONS OF THE INPUT! See finite_element.h");
+		return this->referencePhi(i,iq) * b.dot(this->elementPhiDer.col(iq*NBASES+j));
 	}
 
 	Real mass_impl(UInt iq, UInt i, UInt j) const {
@@ -124,6 +119,7 @@ struct FiniteElement : public FiniteElementData<ORDER, mydim, ndim> {
 	}
 
 	Real forcing_integrate(UInt i, const Real* const local_u) const {
+		using EigenMap2Forcing_vec = Eigen::Map<const Eigen::Matrix<Real, Integrator::NNODES, 1> >;
 		return this->referencePhi.col(i).dot(EigenMap2Forcing_vec(local_u).cwiseProduct(EigenMap2Forcing_vec(&Integrator::WEIGHTS[0])));
 	}
 

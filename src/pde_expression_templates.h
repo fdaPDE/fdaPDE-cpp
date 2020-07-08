@@ -119,7 +119,7 @@ public:
 	 * \param a is a constant reference to a generic type.
 	 * \param b is a constant reference to a generic type.
 	 */
-		EOBinOp(const A& a ,const B& b) : a_(a), b_(b) {};
+		EOBinOp(const A& a ,const B& b) : a_(a), b_(b) {}
 	 //! A definition of operator () taking two arguments.
 	 /*!
      * \param i is an unsigned int

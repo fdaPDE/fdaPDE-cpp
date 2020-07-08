@@ -17,10 +17,8 @@ class FiniteElement;
 enum class PDEParameterOptions{Constant, SpaceVarying};
 
 template<PDEParameterOptions OPTION>
-struct Diffusion;
-
-template<>
-struct Diffusion<PDEParameterOptions::Constant>{
+class Diffusion{
+public:
 
   Diffusion(const Real* const K_ptr) :
     K_ptr_(K_ptr) {}
@@ -31,41 +29,32 @@ struct Diffusion<PDEParameterOptions::Constant>{
   #endif
 
   template<UInt ORDER, UInt mydim, UInt ndim>
-  Real operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
-    using EigenMap2Diff_matr = Eigen::Map<const Eigen::Matrix<Real,ndim,ndim> >;
-    return fe_.stiff_impl(iq, i, j, EigenMap2Diff_matr(K_ptr_));
-  }
+  Real operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const;
+
 private:
   const Real* const K_ptr_;
 };
 
 template<>
-struct Diffusion<PDEParameterOptions::SpaceVarying>{
+template<UInt ORDER, UInt mydim, UInt ndim>
+Real Diffusion<PDEParameterOptions::Constant>::operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
+  using EigenMap2Diff_matr = Eigen::Map<const Eigen::Matrix<Real,ndim,ndim> >;
 
-  Diffusion(const Real* const K_ptr) :
-    K_ptr_(K_ptr) {}
+  return fe_.stiff_impl(iq, i, j, EigenMap2Diff_matr(K_ptr_));
+}
 
-  #ifdef R_VERSION_
-  Diffusion(SEXP RGlobalVector) :
-    K_ptr_(REAL(RGlobalVector)) {}
-  #endif
+template<>
+template<UInt ORDER, UInt mydim, UInt ndim>
+Real Diffusion<PDEParameterOptions::SpaceVarying>::operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
+  using EigenMap2Diff_matr = Eigen::Map<const Eigen::Matrix<Real,ndim,ndim> >;
 
-  template<UInt ORDER, UInt mydim, UInt ndim>
-  Real operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
-    using EigenMap2Diff_matr = Eigen::Map<const Eigen::Matrix<Real,ndim,ndim> >;
-    const UInt index = fe_.getGlobalIndex(iq)*ndim*ndim;
-    return fe_.stiff_impl(iq, i, j, EigenMap2Diff_matr(&K_ptr_[index]));
-  }
-private:
-  const Real* const K_ptr_;
-};
-
+  const UInt index = fe_.getGlobalIndex(iq) * EigenMap2Diff_matr::SizeAtCompileTime;
+  return fe_.stiff_impl(iq, i, j, EigenMap2Diff_matr(&K_ptr_[index]));
+}
 
 template<PDEParameterOptions OPTION>
-struct Advection;
-
-template<>
-struct Advection<PDEParameterOptions::Constant>{
+class Advection{
+public:
 
   Advection(const Real* const b_ptr) :
     b_ptr_(b_ptr) {}
@@ -76,10 +65,7 @@ struct Advection<PDEParameterOptions::Constant>{
   #endif
 
   template<UInt ORDER, UInt mydim, UInt ndim>
-  Real operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
-    using EigenMap2Adv_vec = Eigen::Map<const Eigen::Matrix<Real,ndim,1> >;
-    return fe_.grad_impl(iq, i, j, EigenMap2Adv_vec(b_ptr_));
-  }
+  Real operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const;
 
   EOExpr<const Advection&> dot(const EOExpr<Grad>& grad) const {
     typedef EOExpr<const Advection&> ExprT;
@@ -91,34 +77,25 @@ private:
 };
 
 template<>
-struct Advection<PDEParameterOptions::SpaceVarying>{
+template<UInt ORDER, UInt mydim, UInt ndim>
+Real Advection<PDEParameterOptions::Constant>::operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
+  using EigenMap2Adv_vec = Eigen::Map<const Eigen::Matrix<Real,ndim,1> >;
 
-  Advection(const Real* const b_ptr) :
-    b_ptr_(b_ptr) {}
+  return fe_.grad_impl(iq, i, j, EigenMap2Adv_vec(b_ptr_));
+}
 
-  #ifdef R_VERSION_
-  Advection(SEXP RGlobalVector) :
-    b_ptr_(REAL(RGlobalVector)) {}
-  #endif
+template<>
+template<UInt ORDER, UInt mydim, UInt ndim>
+Real Advection<PDEParameterOptions::SpaceVarying>::operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
+  using EigenMap2Adv_vec = Eigen::Map<const Eigen::Matrix<Real,ndim,1> >;
 
-  template<UInt ORDER, UInt mydim, UInt ndim>
-  Real operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
-    using EigenMap2Adv_vec = Eigen::Map<const Eigen::Matrix<Real,ndim,1> >;
-    const UInt index = fe_.getGlobalIndex(iq)*ndim;
-    return fe_.grad_impl(iq, i, j, EigenMap2Adv_vec(&b_ptr_[index]));
-  }
-
-  EOExpr<const Advection&> dot(const EOExpr<Grad>& grad) const {
-    typedef EOExpr<const Advection&> ExprT;
-    return ExprT(*this);
-  }
-
-private:
-  const Real* const b_ptr_;
-};
+  const UInt index = fe_.getGlobalIndex(iq) * EigenMap2Adv_vec::SizeAtCompileTime;
+  return fe_.grad_impl(iq, i, j, EigenMap2Adv_vec(&b_ptr_[index]));
+}
 
 
-struct Reaction{
+class Reaction{
+public:
 
 	Reaction(const Real* const  c_ptr) :
 		c_ptr_(c_ptr) {}
@@ -144,7 +121,8 @@ private:
 };
 
 
-struct ForcingTerm{
+class ForcingTerm{
+public:
 
   ForcingTerm() :
     u_ptr_(nullptr) {}
