@@ -13,12 +13,14 @@ checkParametersDE_init <- function(data, FEMbasis, lambda, heatStep, heatIter, i
   if(class(FEMbasis)!= "FEMbasis")
     stop("'FEMbasis' is not class 'FEMbasis'.")
   
-  if (is.null(lambda))  
-    stop("'lambda' required;  is NULL.")
-  else{
-    for(i in 1:length(lambda)){
-      if(lambda[i]<=0)
-        stop("'lambda' has to have positive members.")
+  if(init=="Heat"){
+    if (is.null(lambda))  
+      stop("'lambda' required if init='Heat'; is NULL.")
+    else{
+      for(i in 1:length(lambda)){
+        if(lambda[i]<=0)
+          stop("'lambda' has to have positive members.")
+      }
     }
   }
   

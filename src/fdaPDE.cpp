@@ -566,7 +566,7 @@ SEXP DE_init_skeleton(SEXP Rdata, SEXP Rorder, SEXP Rfvec, SEXP RheatStep, SEXP 
 
 		// fill fInit
 		VectorXr fInit;
-		fInit = *(densityInit->chooseInitialization(dataProblem.getLambda(0)));
+		fInit = *(densityInit->chooseInitialization(0));
 
 		// Copy result in R memory
 		SEXP result = NILSXP;

@@ -208,7 +208,7 @@ Heat_CV<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::perform_init_cv(){
     init_best_ = std::distance(cv_errors_.cbegin(), std::min_element(cv_errors_.cbegin(), cv_errors_.cend()));
 
     #ifdef R_VERSION_
-    Rprintf("The initialization selected for lambda %f is the number %d\n", this->dataProblem_.getLambda(0), init_best_);
+    Rprintf("The initialization selected is the number %d\n", init_best_);
     #endif
 
     // totale
