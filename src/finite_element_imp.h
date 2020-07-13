@@ -131,15 +131,18 @@ inline Eigen::Matrix<Real, 6,2> reference_eval_der_point<6,2>(const Point<2> &no
 template<>
 inline Eigen::Matrix<Real, 10,3> reference_eval_der_point<10,3>(const Point<3> &node){
 	Eigen::Matrix<Real,10,3> B2;
-	B2 << 1-4*(1-node[0]-node[1]-node[2]), 	1-4*(1-node[0]-node[1]-node[2]), 1-4*(1-node[0]-node[1]-node[2]),
-														4*node[0]-1, 		 			 						          0,															 0,
-																			0, 										  4*node[1]-1, 															 0,
-				4*(1-2*node[0]-node[1]-node[2]),  						  			 -4*node[0], 										  -4*node[0],
-														 -4*node[1],  4*(1-node[0]-2*node[1]-node[2]), 											-4*node[1],
-														 -4*node[2], 											 -4*node[2], 4*(1-node[0]-node[1]-2*node[2]),
-															4*node[1],												4*node[0], 															 0,
-																			0, 												4*node[2], 											 4*node[1],
-															4*node[2],																0,											 4*node[0];
+
+
+	B2 << 1-4*(1-node[0]-node[1]-node[2]), 	1-4*(1-node[0]-node[1]-node[2]), 	1-4*(1-node[0]-node[1]-node[2]),
+							  4*node[0]-1, 		 			 			  0,			                      0,
+										0, 						4*node[1]-1, 								  0,
+										0,								  0,						4*node[2]-1,
+		  4*(1-2*node[0]-node[1]-node[2]),  				     -4*node[0], 						 -4*node[0],
+							   -4*node[1],  4*(1-node[0]-2*node[1]-node[2]), 						 -4*node[1],
+							   -4*node[2], 			  			 -4*node[2],    4*(1-node[0]-node[1]-2*node[2]),
+								4*node[1],						  4*node[0], 					  			  0,
+										0, 						  4*node[2], 						  4*node[1],
+								4*node[2],								  0,						  4*node[0];
 	return B2;
 }
 
