@@ -3,12 +3,8 @@
 
 #include <array>
 #include <vector>
-#include <list>
 #include <iterator>
 #include <algorithm>
-#include <utility>
-#include <type_traits>
-
 
 template<UInt mydim>
 class simplex{

@@ -8,7 +8,6 @@
 #include "param_functors.h"
 #include "regressionData.h"
 #include "solver.h"
-#include "integratePsi.h"
 #include "kronecker_product.h"
 #include <memory>
 

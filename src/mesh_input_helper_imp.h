@@ -116,7 +116,7 @@ typename simplex_container<mydim>::OutputType simplex_container<mydim>::assemble
 
   std::vector<UInt> subsimplexes{assemble_subs()};
   std::vector<bool> submarkers{mark_boundary()};
-  std::vector<int> neighbors{this->compute_neighbors()};
+  std::vector<int> neighbors{compute_neighbors()};
 
   std::vector<bool> nodesmarkers(num_points);
 
@@ -151,6 +151,7 @@ std::vector<bool> simplex_container<mydim>::mark_boundary() const {
     boundarymarkers.push_back(!duplicates[i+1]);
   });
 
+  //Special attention for the last simplex!
   boundarymarkers.push_back(distinct_indexes.back()+1==duplicates.size() || !duplicates[distinct_indexes.back()+1]);
   return boundarymarkers;
 }

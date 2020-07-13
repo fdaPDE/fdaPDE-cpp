@@ -118,7 +118,7 @@ Real DataProblem<Integrator_noPoly, ORDER, mydim, ndim>::FEintegrate_exponential
 
     // mind we are using quadrature rules whom weights sum to the reference element measure (=1/(ndim!))
     // hence we need to multiply by factorial(ndim)
-    total_sum+=expg.dot(EigenMap2WEIGHTS(&Integrator_noPoly::WEIGHTS[0]))*factorial(ndim)*tri_activated.getMeasure();
+    total_sum+=expg.dot(EigenMap2WEIGHTS(&Integrator_noPoly::WEIGHTS[0]))*tri_activated.getMeasure();
 
   }
 

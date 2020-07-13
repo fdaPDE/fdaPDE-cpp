@@ -148,7 +148,7 @@ void MixedFEFPCABase<ORDER, mydim, ndim>::computeBasisEvaluations()
 					Element<Nodes, mydim, ndim> tri = mesh_.getElement(j); //can also be a tetrahedron
 					for (UInt k=0; k<Nodes; k++)
 					{
-						tab[tri[k].getId()] += integratePsi(tri,k); // integral over tri of psi_k
+						tab[tri[k].getId()] += tri.integrate(Eigen::Matrix<Real,Nodes,1>::Unit(k)); // integral over tri of psi_k
 					}
 				}
 			}

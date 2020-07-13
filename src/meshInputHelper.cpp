@@ -277,7 +277,7 @@ SEXP CPP_VolumeMeshOrder2(SEXP Rtetrahedrons, SEXP Rnodes){
 
 
   SEXP result = NILSXP;
-	result = PROTECT(Rf_allocVector(VECSXP, 4));
+	result = PROTECT(Rf_allocVector(VECSXP, 6));
 	SET_VECTOR_ELT(result, 0, Rf_allocMatrix(INTSXP, faces.size()/3, 3));
 	SET_VECTOR_ELT(result, 1, Rf_allocVector(LGLSXP, facesmarkers.size()));
 	SET_VECTOR_ELT(result, 2, Rf_allocVector(LGLSXP, nodesmarkers.size()));

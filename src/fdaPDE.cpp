@@ -625,13 +625,16 @@ SEXP regression_Laplace(SEXP Rlocations, SEXP RbaryLocations, SEXP Robservations
     if(regressionData.getOrder()==1 && mydim==2 && ndim==2)
     	return(regression_skeleton<RegressionData, 1, 2, 2>(regressionData, Rmesh));
     else if(regressionData.getOrder()==2 && mydim==2 && ndim==2)
-			return(regression_skeleton<RegressionData, 2, 2, 2>(regressionData, Rmesh));
+		return(regression_skeleton<RegressionData, 2, 2, 2>(regressionData, Rmesh));
     else if(regressionData.getOrder()==1 && mydim==2 && ndim==3)
-			return(regression_skeleton<RegressionData, 1, 2, 3>(regressionData, Rmesh));
+		return(regression_skeleton<RegressionData, 1, 2, 3>(regressionData, Rmesh));
     else if(regressionData.getOrder()==2 && mydim==2 && ndim==3)
-			return(regression_skeleton<RegressionData, 2, 2, 3>(regressionData, Rmesh));
-		else if(regressionData.getOrder()==1 && mydim==3 && ndim==3)
-			return(regression_skeleton<RegressionData, 1, 3, 3>(regressionData, Rmesh));
+		return(regression_skeleton<RegressionData, 2, 2, 3>(regressionData, Rmesh));
+	else if(regressionData.getOrder()==1 && mydim==3 && ndim==3)
+		return(regression_skeleton<RegressionData, 1, 3, 3>(regressionData, Rmesh));
+	else if(regressionData.getOrder()==2 && mydim==3 && ndim==3)
+		return(regression_skeleton<RegressionData, 2, 3, 3>(regressionData, Rmesh));
+
     return(NILSXP);
 }
 
@@ -1074,15 +1077,15 @@ SEXP Density_Estimation(SEXP Rdata, SEXP Rmesh, SEXP Rorder, SEXP Rmydim, SEXP R
 	std::string preprocess_method=CHAR(STRING_ELT(RpreprocessMethod, 0));
 
   if(order== 1 && mydim==2 && ndim==2)
-		return(DE_skeleton<IntegratorGaussTriangle3, 1, 2, 2>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
+		return(DE_skeleton<IntegratorTriangleP4, 1, 2, 2>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
 	else if(order== 2 && mydim==2 && ndim==2)
-		return(DE_skeleton<IntegratorGaussTriangle3, 2, 2, 2>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
+		return(DE_skeleton<IntegratorTriangleP4, 2, 2, 2>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
 	else if(order== 1 && mydim==2 && ndim==3)
-		return(DE_skeleton<IntegratorGaussTriangle3, 1, 2, 3>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
+		return(DE_skeleton<IntegratorTriangleP4, 1, 2, 3>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
 	else if(order== 2 && mydim==2 && ndim==3)
-		return(DE_skeleton<IntegratorGaussTriangle3, 2, 2, 3>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
+		return(DE_skeleton<IntegratorTriangleP4, 2, 2, 3>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
 	else if(order == 1 && mydim==3 && ndim==3)
-		return(DE_skeleton<IntegratorGaussTetra3, 1, 3, 3>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
+		return(DE_skeleton<IntegratorTetrahedronP4, 1, 3, 3>(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rmesh, Rsearch, step_method, direction_method, preprocess_method));
 
 	return(NILSXP);
 }

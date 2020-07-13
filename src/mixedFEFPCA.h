@@ -9,7 +9,6 @@
 #include "solver.h"
 #include "FPCAData.h"
 #include "FPCAObject.h"
-#include "integratePsi.h"
 #include <memory>
 
 //! A virtual Base class for the implementation of the SF-PCA algorithm: it contains some methods useful for the construction and the resolution of the linear system that has to be done iteratively in the algorithm.

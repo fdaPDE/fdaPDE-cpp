@@ -97,6 +97,7 @@ public:
 	Real stiff_impl(UInt iq, UInt i, UInt j) const {
 		return this->elementPhiDer.col(iq*NBASES+i).dot(this->elementPhiDer.col(iq*NBASES+j));
 	}
+
 	template <class ArgType>
 	Real stiff_impl(UInt iq, UInt i, UInt j, const Eigen::MatrixBase<ArgType>& K) const {
 		static_assert(ArgType::RowsAtCompileTime==ndim && ArgType::ColsAtCompileTime==ndim,
@@ -107,6 +108,7 @@ public:
 	Real grad_impl(UInt iq, UInt i, UInt j) const {
 		return this->referencePhi(iq,i) * this->elementPhiDer(0,iq*NBASES+j);
 	}
+	
 	template <class ArgType>
 	Real grad_impl(UInt iq, UInt i, UInt j, const Eigen::MatrixBase<ArgType>& b) const {
 		static_assert(ArgType::RowsAtCompileTime==ndim && ArgType::ColsAtCompileTime==1,

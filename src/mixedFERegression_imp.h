@@ -168,7 +168,7 @@ void MixedFERegressionBase<InputHandler,ORDER, IntegratorTime, SPLINE_DEGREE, OR
 					Element<Nodes, mydim, ndim> tri = mesh_.getElement(j);
 					for (UInt k=0; k<Nodes; k++)
 					{
-						tab[tri[k].getId()] += integratePsi(tri,k); // integral over tri of psi_k
+						tab[tri[k].getId()] += tri.integrate(Eigen::Matrix<Real,Nodes,1>::Unit(k)); // integral over tri of psi_k
 					}
 				}
 			}
