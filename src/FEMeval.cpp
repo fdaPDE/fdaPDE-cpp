@@ -19,7 +19,7 @@
 
 template<UInt ORDER, UInt mydim, UInt ndim>
 SEXP tree_mesh_skeleton(SEXP Rmesh) {
-	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh);
+	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh, 2);
 
 	//Copy result in R memory
 	SEXP result = NILSXP;

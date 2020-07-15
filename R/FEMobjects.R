@@ -70,13 +70,25 @@ create.FEM.basis = function(mesh=NULL, saveTree = FALSE)
       }
 
       orig_mesh = mesh
-      mesh$triangles = mesh$triangles - 1
-      mesh$edges = mesh$edges - 1
+      
       mesh$neighbors[mesh$neighbors != -1] = mesh$neighbors[mesh$neighbors != -1] - 1
 
       storage.mode(mesh$nodes) <- "double"
-      storage.mode(mesh$triangles) <- "integer"
-      storage.mode(mesh$edges) <- "integer"
+      
+      if(nDim==2){
+        mesh$triangles = mesh$triangles - 1
+        mesh$edges = mesh$edges - 1
+        storage.mode(mesh$triangles) <- "integer"
+        storage.mode(mesh$edges) <- "integer"
+      }
+      
+      if(nDim==3){
+        mesh$tetrahedrons = mesh$tetrahedrons - 1
+        mesh$faces = mesh$faces - 1
+        storage.mode(mesh$tetrahedrons) <- "integer"
+        storage.mode(mesh$faces) <- "integer"
+      }
+    
       storage.mode(mesh$neighbors) <- "integer"
       storage.mode(mesh$order) <- "integer"
       storage.mode(myDim) <- "integer"

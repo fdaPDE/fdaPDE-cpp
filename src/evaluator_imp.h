@@ -149,6 +149,14 @@ void Evaluator<ORDER,3,3>::eval(Real* X, Real *Y,  Real *Z, UInt length, const R
 			current_element = mesh_.findLocationNaive(current_point);
 		} else if (search == 2)  { //use Tree search (default)
 			current_element = mesh_.findLocationTree(current_point);
+		} else if (search == 3) { //use Walking search
+			Element<Nodes,3,3> starting_element;
+			starting_element = mesh_.getElement(0);
+			current_element = mesh_.findLocationWalking(current_point, starting_element);
+			if(current_element.getId() == Identifier::NVAL && redundancy == true) {
+				//To avoid problems with non convex mesh
+				current_element = mesh_.findLocationNaive(current_point);
+			}
 		}
 
 

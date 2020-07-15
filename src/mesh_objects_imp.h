@@ -33,11 +33,13 @@ Eigen::CwiseNullaryOp<BaryCoord_functor<ArgType>, typename BaryCoord_helper<ArgT
 makeBaryCoord(const Eigen::MatrixBase<ArgType>& arg)
 {
 	static_assert(ArgType::SizeAtCompileTime==2 || ArgType::SizeAtCompileTime==3,
-		"ERROR! WRONG SIZE OF THE INPUT!");
+		"ERROR! WRONG SIZE OF THE INPUT! See mesh_objects_imp.h!");
 
   	using VectorType = typename BaryCoord_helper<ArgType>::VectorType;
   	return VectorType::NullaryExpr(arg.size()+1, 1, BaryCoord_functor<ArgType>(arg.derived()));
 }
+
+
 
 
 // Member functions for class Element
@@ -152,13 +154,10 @@ Real Element<NNODES,mydim,ndim>::integrate(const Eigen::Matrix<Real,NNODES,1>& c
 {
 	using Integrator = typename ElementIntegratorHelper::Integrator<NNODES,mydim>;
 	Real integral=0.;
-	for (UInt i=0; i<Integrator::NNODES; ++i){
-		auto node = Integrator::NODES[i].eigenConstView();
-		integral += Integrator::WEIGHTS[i]*evaluate_point(makeBaryCoord(node), coefficients);
-	}
+	for (UInt i=0; i<Integrator::NNODES; ++i)
+		integral += Integrator::WEIGHTS[i] * evaluate_point(makeBaryCoord(Integrator::NODES[i].eigenView()), coefficients);
 
 	return getMeasure() * integral;
-
 }
 
 
@@ -299,12 +298,9 @@ template <UInt NNODES>
 inline Real Element<NNODES,2,3>::integrate(const Eigen::Matrix<Real,NNODES,1>& coefficients) const
 {
 	using Integrator = typename ElementIntegratorHelper::Integrator<NNODES,2>;
-	using EigenMap2Const_t = Eigen::Map<const Eigen::Matrix<Real, 2, 1> >;
 	Real integral=0.;
-	for (UInt i=0; i<Integrator::NNODES; ++i){
-		auto node = Integrator::NODES[i].eigenConstView();
-		integral += Integrator::WEIGHTS[i]*evaluate_point(makeBaryCoord(node), coefficients);
-	}
+	for (UInt i=0; i<Integrator::NNODES; ++i)
+		integral += Integrator::WEIGHTS[i]*evaluate_point(makeBaryCoord(Integrator::NODES[i].eigenView()), coefficients);
 
 	return getMeasure() * integral;
 

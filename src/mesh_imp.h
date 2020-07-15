@@ -7,7 +7,8 @@ MeshHandler<ORDER,mydim,ndim>::MeshHandler(Real* points, UInt* sides, UInt* elem
 		points_(points), sides_(sides), elements_(elements), neighbors_(neighbors),
 			num_nodes_(num_nodes), num_sides_(num_sides), num_elements_(num_elements),
 				search_(search) {
-					tree_ptr_.reset(new ADTree<meshElement>(points_, elements_, num_nodes_, num_elements_));
+					if (search==2)
+						tree_ptr_.reset(new ADTree<meshElement>(points_, elements_, num_nodes_, num_elements_));
 				}
 
 
