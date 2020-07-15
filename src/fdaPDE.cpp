@@ -52,12 +52,7 @@ SEXP regression_skeleton(InputHandler &regressionData, SEXP Rmesh)
 
 	//Copy result in R memory
 	SEXP result = NILSXP;
-
-	if(regressionData.getSearch()==2)
-		result = PROTECT(Rf_allocVector(VECSXP, 5+5+2));
-	else
-		result = PROTECT(Rf_allocVector(VECSXP, 5+2));
-
+	result = PROTECT(Rf_allocVector(VECSXP, 5+5+2));
 	SET_VECTOR_ELT(result, 0, Rf_allocMatrix(REALSXP, solution(0).size(), solution.size()));
 	SET_VECTOR_ELT(result, 1, Rf_allocVector(REALSXP, solution.size()));
 	SET_VECTOR_ELT(result, 2, Rf_allocVector(REALSXP, solution.size()));
@@ -187,10 +182,7 @@ SEXP regression_skeleton_time(InputHandler &regressionData, SEXP Rmesh, SEXP Rme
 	const VectorXi & elementIds = regression.getElementIds();
 	//!Copy result in R memory
 	SEXP result = NILSXP;
-	if(regressionData.getSearch()==2)
-		result = PROTECT(Rf_allocVector(VECSXP, 5+5+2));
-	else
-		result = PROTECT(Rf_allocVector(VECSXP, 5+2));
+	result = PROTECT(Rf_allocVector(VECSXP, 5+5+2));
 	SET_VECTOR_ELT(result, 0, Rf_allocMatrix(REALSXP, solution(0,0).size(), solution.rows()*solution.cols()));
 	SET_VECTOR_ELT(result, 1, Rf_allocMatrix(REALSXP, dof.rows(), dof.cols()));
 	SET_VECTOR_ELT(result, 2, Rf_allocMatrix(REALSXP, GCV.rows(), GCV.cols()));
@@ -320,10 +312,7 @@ SEXP FPCA_skeleton(FPCAData &fPCAData, SEXP Rmesh, std::string validation)
 	SEXP result = NILSXP;
 	//result = PROTECT(Rf_allocVector(VECSXP, 7));
 	//### why originally 7? Shouldn't it be 6?
-	if(fPCAData.getSearch()==2)
-		result = PROTECT(Rf_allocVector(VECSXP, 6+5+2));
-	else
-		result = PROTECT(Rf_allocVector(VECSXP, 6+2));
+	result = PROTECT(Rf_allocVector(VECSXP, 6+5+2));
 	SET_VECTOR_ELT(result, 0, Rf_allocMatrix(REALSXP, loadings[0].size(), loadings.size()));
 	SET_VECTOR_ELT(result, 1, Rf_allocMatrix(REALSXP, scores[0].size(), scores.size()));
 	SET_VECTOR_ELT(result, 2, Rf_allocVector(REALSXP, lambdas.size()));
@@ -461,10 +450,7 @@ SEXP DE_skeleton(SEXP Rdata, SEXP Rorder, SEXP Rfvec, SEXP RheatStep, SEXP Rheat
 
 	// Copy result in R memory
 	SEXP result = NILSXP;
-	if(dataProblem.getSearch()==2)
-		result = PROTECT(Rf_allocVector(VECSXP, 5+5));
-	else
-		result = PROTECT(Rf_allocVector(VECSXP, 5));
+	result = PROTECT(Rf_allocVector(VECSXP, 5 + 5));
 	SET_VECTOR_ELT(result, 0, Rf_allocVector(REALSXP, g_sol.size()));
 	SET_VECTOR_ELT(result, 1, Rf_allocMatrix(REALSXP, (*(f_init[0])).size(), f_init.size()));
 	SET_VECTOR_ELT(result, 2, Rf_allocVector(REALSXP, 1));
@@ -550,7 +536,7 @@ SEXP get_integration_points_skeleton(SEXP Rmesh)
 {
 	using Integrator = typename FiniteElement<ORDER, mydim, ndim>::Integrator;
 	using meshElement = typename MeshHandler<ORDER, mydim, ndim>::meshElement;
-	
+	using EigenMap2PointCoord = Eigen::Map<const Eigen::Matrix<Real,mydim,1> >;
 	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh);
 
 	SEXP result;
@@ -560,7 +546,7 @@ SEXP get_integration_points_skeleton(SEXP Rmesh)
 		meshElement el = mesh.getElement(i);
 		for(UInt l = 0; l < Integrator::NNODES; l++)
 		{
-			Point<ndim> p{el.getM_J() * Integrator::NODES[l].eigenView()};
+			Point<ndim> p{el.getM_J() * EigenMap2PointCoord(&Integrator::NODES[l][0])};
 			p += el[0];
 			REAL(result)[i*Integrator::NNODES + l] = p[0];
 			REAL(result)[mesh.num_elements()*Integrator::NNODES + i*Integrator::NNODES + l] = p[1];

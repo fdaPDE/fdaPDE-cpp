@@ -94,7 +94,7 @@ ADTree<Shape>::ADTree(SEXP Rmesh){
   scalingfactors_.assign(REAL(VECTOR_ELT(Rmesh, 13)), REAL(VECTOR_ELT(Rmesh, 13))+ndimt_);
 
   Domain<Shape> tree_domain(origin_, scalingfactors_);
-  TreeHeader<Shape> tree_header(tree_loc_, tree_lev_, ndimp_, ndimt_, nele_, iava_, iend_, tree_domain);
+  header_ = TreeHeader<Shape>(tree_loc_, tree_lev_, ndimp_, ndimt_, nele_, iava_, iend_, tree_domain);
 
 
   //treenode information (number of nodes = number of elements+1)
@@ -107,19 +107,20 @@ ADTree<Shape>::ADTree(SEXP Rmesh){
   Real* box_ = REAL(VECTOR_ELT(Rmesh, 17));
 
   UInt num_tree_nodes = id_.size();
-  std::vector<TreeNode<Shape> > tree_nodes;
+  data_ = std::vector<TreeNode<Shape> >();
+  data_.resize(num_tree_nodes);
+
+  std::vector<Real> coord;
+  coord.resize(ndimt_);
   for (UInt i=0; i<num_tree_nodes; i++) {
-    std::vector<Real> coord;
     for (UInt j=0; j<ndimt_; j++) {
       coord.push_back(box_[i + num_tree_nodes*j]);
     }
     Box<Shape::dp()> box(coord);
     TreeNode<Shape> tree_node(box, id_[i], node_left_child_[i], node_right_child_[i]);
-    tree_nodes.push_back(tree_node);
+    data_.push_back(tree_node);
+    coord.clear();
   }
-
-  header_=tree_header;
-  data_=tree_nodes;
 }
 #endif
 

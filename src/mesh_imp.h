@@ -21,7 +21,7 @@ MeshHandler<ORDER,mydim,ndim>::MeshHandler(SEXP Rmesh, UInt search) :
 				num_sides_(INTEGER(Rf_getAttrib(VECTOR_ELT(Rmesh, 6), R_DimSymbol))[0]),
 					num_elements_(INTEGER(Rf_getAttrib(VECTOR_ELT(Rmesh, 3), R_DimSymbol))[0]),
 					 	search_(search) {
-							if(XLENGTH(Rmesh)==11 && search==2)
+							if((XLENGTH(Rmesh)==11 || TYPEOF(VECTOR_ELT(Rmesh, 11))==0) && search==2)
 								tree_ptr_.reset(new ADTree<meshElement>(points_, elements_, num_nodes_, num_elements_));
 							else if (search==2)
 								tree_ptr_.reset(new ADTree<meshElement>(Rmesh));

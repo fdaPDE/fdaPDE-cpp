@@ -420,29 +420,31 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
     beta = matrix(data=bigsol[[5]],nrow=ncol(covariates),ncol=length(lambda))
   else
     beta = NULL
+  
 
-   # Save information of Tree Mesh
+  # Save information of Tree Mesh
     tree_mesh = list(
-    treelev = bigsol[[6]][1],
-    header_orig= bigsol[[7]],
-    header_scale = bigsol[[8]],
-    node_id = bigsol[[9]][,1],
-    node_left_child = bigsol[[9]][,2],
-    node_right_child = bigsol[[9]][,3],
-    node_box= bigsol[[10]])
-
-  # Reconstruct FEMbasis with tree mesh
-  mesh.class= class(FEMbasis$mesh)
-  if (is.null(FEMbasis$mesh$treelev)) { #if doesn't exist the tree information
-    FEMbasis$mesh = append(FEMbasis$mesh, tree_mesh)
-  } #if already exist the tree information, don't append
-  class(FEMbasis$mesh) = mesh.class
-
-  # Save information of Barycenter
-  if (is.null(bary.locations)) {
+      treelev = bigsol[[6]][1],
+      header_orig= bigsol[[7]],
+      header_scale = bigsol[[8]],
+      node_id = bigsol[[9]][,1],
+      node_left_child = bigsol[[9]][,2],
+      node_right_child = bigsol[[9]][,3],
+      node_box= bigsol[[10]])
+    # Reconstruct FEMbasis with tree mesh
+    mesh.class= class(FEMbasis$mesh)
+    if (is.null(FEMbasis$mesh$treelev)) { #if doesn't exist the tree information
+      FEMbasis$mesh = append(FEMbasis$mesh, tree_mesh)
+    } #if already exist the tree information, don't append
+    class(FEMbasis$mesh) = mesh.class
+    
+    # Save information of Barycenter
+    if (is.null(bary.locations)) {
       bary.locations = list(locations=locations, element_ids = bigsol[[11]], barycenters = bigsol[[12]])
-  }
-  class(bary.locations) = "bary.locations"
+    }
+    class(bary.locations) = "bary.locations"
+
+
 
   # Make Functional objects object
   fit.FEM  = FEM(f, FEMbasis)
