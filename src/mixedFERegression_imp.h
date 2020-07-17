@@ -467,7 +467,7 @@ void MixedFERegressionBase<InputHandler,IntegratorSpace,ORDER, IntegratorTime, S
 	}
 
 	X3 -= P;
-	Eigen::LDLT<MatrixXr> Dsolver(X3);
+	Eigen::PartialPivLU<MatrixXr> Dsolver(X3);
 
 	auto k = regressionData_.getObservationsIndices();
 
