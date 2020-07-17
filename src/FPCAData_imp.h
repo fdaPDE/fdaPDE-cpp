@@ -1,14 +1,14 @@
 #ifndef __FPCADATA_IMP_HPP__
 #define __FPCADATA_IMP_HPP__
 
-FPCAData::FPCAData(Real* locations, UInt n_locations, MatrixXr& datamatrix, UInt order, MatrixXi& incidenceMatrix,
+FPCAData::FPCAData(Real* locations, UInt n_locations, UInt ndim, MatrixXr& datamatrix, UInt order, MatrixXi& incidenceMatrix,
 					std::vector<Real> lambda, UInt nPC, UInt nFolds, UInt search):
-					locations_(locations), datamatrix_(datamatrix), order_(order),
+					locations_(locations, n_locations, ndim), datamatrix_(datamatrix), order_(order),
 					incidenceMatrix_(incidenceMatrix), lambda_(lambda),  nPC_(nPC),
 					nFolds_(nFolds), search_(search)
 {
 	nRegions_ = incidenceMatrix.rows();
-	if(n_locations_==0 && nRegions_==0)
+	if(locations_.nrows()==0 && nRegions_==0)
 	{
 		locations_by_nodes_ = true;
 		for(int i = 0; i<datamatrix_.cols();++i) observations_indices_.push_back(i);
@@ -18,11 +18,10 @@ FPCAData::FPCAData(Real* locations, UInt n_locations, MatrixXr& datamatrix, UInt
 
 #ifdef R_VERSION_
 FPCAData::FPCAData(SEXP Rlocations, SEXP RbaryLocations, SEXP Rdatamatrix, SEXP Rorder, SEXP RincidenceMatrix, SEXP Rlambda,
-					SEXP RnPC, SEXP RnFolds,SEXP RGCVmethod, SEXP Rnrealizations, SEXP Rsearch)
+					SEXP RnPC, SEXP RnFolds,SEXP RGCVmethod, SEXP Rnrealizations, SEXP Rsearch) :
+	locations_(Rlocations)
 {
 
-	locations_=REAL(Rlocations);
-	n_locations_=INTEGER(Rf_getAttrib(Rlocations, R_DimSymbol))[0];
 
 	setBaryLocations(RbaryLocations);
 	setIncidenceMatrix(RincidenceMatrix);
@@ -82,7 +81,7 @@ void FPCAData::setDatamatrix(SEXP Rdatamatrix)
 
 	nRegions_ = incidenceMatrix_.rows();
 
-	if(n_locations_ == 0 && nRegions_==0)
+	if(locations_.nrows() == 0 && nRegions_==0)
 	{
 		locations_by_nodes_ = true;
 		for(auto i=0; i<n_; ++i)
@@ -154,16 +153,16 @@ void FPCAData::printDatamatrix(std::ostream & out) const
 }
 */
 
-// void FPCAData::printLocations(std::ostream & out) const
-// {
-// 	if(INTEGER(Rf_getAttrib(Rlocations, R_DimSymbol))[1]==2)
-// 		for(UInt i=0; i<n_locations_; i++)
-// 			out<<getLocations<2>(i)<<std::endl;
-// 	else
-// 		for(UInt i=0; i<n_locations_; i++)
-// 			out<<getLocations<3>(i)<<std::endl;
-//
-// }
+void FPCAData::printLocations(std::ostream & out) const
+{
+	if(locations_.ncols()==2)
+		for(UInt i=0; i<locations_.nrows(); i++)
+			out<<getLocations<2>(i)<<std::endl;
+	else
+		for(UInt i=0; i<locations_.nrows(); i++)
+			out<<getLocations<3>(i)<<std::endl;
+
+}
 
 
 void FPCAData::printIncidenceMatrix(std::ostream & out) const

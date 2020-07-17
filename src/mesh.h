@@ -3,6 +3,8 @@
 
 #include <set>
 #include <memory>
+
+#include "fdaPDE.h"
 // Note: how_many_nodes constexpr function is defined in mesh_objects.h
 // Also Point and Element
 #include "mesh_objects.h"
@@ -39,26 +41,26 @@ public:
   MeshHandler& operator=(MeshHandler&&) = delete;
 
 	//! A member returning the number of nodes in the mesh
-	UInt num_nodes() const {return num_nodes_;}
+	UInt num_nodes() const {return points_.nrows();}
 
 	//! A member returning the number of elements in the mesh
-	UInt num_elements() const {return num_elements_;}
+	UInt num_elements() const {return elements_.nrows();}
 
 	//! A member returning the number of distinct sides
   // (edges for mydim=2,faces for mydim=3) in the mesh
   // All three implemented for convenience
-  UInt num_edges() const {return num_sides_;}
-  UInt num_faces() const {return num_sides_;}
+  UInt num_edges() const {return sides_.nrows();}
+  UInt num_faces() const {return sides_.nrows();}
 
 
-  const Real& nodes(const UInt i, const UInt j) const {return points_[i+j*num_nodes_];}
+  const Real& nodes(const UInt i, const UInt j) const {return points_(i,j);}
 
-  const UInt& elements(const UInt i, const UInt j) const {return elements_[i+j*num_elements_];}
+  const UInt& elements(const UInt i, const UInt j) const {return elements_(i,j);}
 
-  const UInt& edges(const UInt i, const UInt j) const {return sides_[i+j*num_sides_];}
-  const UInt& faces(const UInt i, const UInt j) const {return sides_[i+j*num_sides_];}
+  const UInt& edges(const UInt i, const UInt j) const {return sides_(i,j);}
+  const UInt& faces(const UInt i, const UInt j) const {return sides_(i,j);}
 
-  const UInt& neighbors(const UInt i, const UInt j) const {return neighbors_[i+j*num_elements_];}
+  const UInt& neighbors(const UInt i, const UInt j) const {return neighbors_(i,j);}
 
 	//! A member returning the ndim-dimensional Point with the specified ID
 	Point<ndim> getPoint(const UInt id) const;
@@ -71,6 +73,7 @@ public:
 
   UInt getSearch() const {return search_;}
 
+  bool hasTree() const {return tree_ptr_.get()!=nullptr;}
   const ADTree<meshElement>& getTree() const {return *tree_ptr_;}
   //! A member returning the "number"-th neighbor of element id_element,
   // i.e. the neighbor opposite the "number"-th vertex of the element id_element
@@ -103,14 +106,10 @@ public:
 
 private:
 
-  const Real * const points_;
-	const UInt * const sides_;
-	const UInt * const elements_;
-	const UInt * const neighbors_;
-
-	const UInt num_nodes_;
-  const UInt num_sides_;
-  const UInt num_elements_;
+  const RNumericMatrix points_;
+  const RIntegerMatrix sides_;
+  const RIntegerMatrix elements_;
+  const RIntegerMatrix neighbors_;
 
   const UInt search_;
 

@@ -15,8 +15,8 @@ class  RegressionData{
 	private:
 
 		// Design matrix pointer and dimensions
-		const Real* locations_;
-		UInt n_locations_;
+		const RNumericMatrix locations_;
+
 		//Vector of the time locations
 		std::vector<Real> time_locations_;
 
@@ -80,7 +80,7 @@ class  RegressionData{
 
 	public:
 
-		RegressionData(){};
+		// RegressionData()=default;
 
 //! A basic version of the constructor.
 
@@ -112,9 +112,9 @@ class  RegressionData{
 						SEXP Rnrealizations, SEXP DOF, SEXP RDOF_matrix, SEXP Rsearch);
 		#endif
 
-		explicit RegressionData(Real* locations, UInt n_locations, VectorXr& observations, UInt order, std::vector<Real> lambdaS, MatrixXr& covariates, MatrixXi& incidenceMatrix, std::vector<UInt>& bc_indices, std::vector<Real>& bc_values, bool DOF, bool GCV,  UInt search);
+		explicit RegressionData(Real* locations, UInt n_locations, UInt ndim, VectorXr& observations, UInt order, std::vector<Real> lambdaS, MatrixXr& covariates, MatrixXi& incidenceMatrix, std::vector<UInt>& bc_indices, std::vector<Real>& bc_values, bool DOF, bool GCV,  UInt search);
 
-		explicit RegressionData(Real* locations, UInt n_locations, std::vector<Real>& time_locations, VectorXr& observations, UInt order,
+		explicit RegressionData(Real* locations, UInt n_locations, UInt ndim, std::vector<Real>& time_locations, VectorXr& observations, UInt order,
 														std::vector<Real>& lambdaS, std::vector<Real>& lambdaT, MatrixXr& covariates, MatrixXi& incidenceMatrix,
 														std::vector<UInt>& bc_indices, std::vector<Real>& bc_values, VectorXr& ic, bool flag_mass, bool flag_parabolic, bool DOF, bool GCV,  UInt search);
 
@@ -138,7 +138,7 @@ class  RegressionData{
 		inline UInt const getNumberofTimeObservations() const {return time_locations_.size();}
 		//! A method returning the locations of the observations
 		template<UInt ndim>
-		inline Point<ndim> getLocations(UInt i) const {return Point<ndim>(i, locations_, n_locations_);}
+		inline Point<ndim> getLocations(UInt i) const {return Point<ndim>(i, locations_);}
 		//! A method returning the locations of the time observations
 		inline std::vector<Real> const & getTimeLocations() const {return time_locations_;}
 		//! A method returning the number of regions
@@ -220,13 +220,13 @@ class RegressionDataElliptic : public RegressionData
 				SEXP GCV,SEXP RGCVmethod, SEXP Rnrealizations, SEXP DOF, SEXP RDOF_matrix, SEXP Rsearch);
 		#endif
 
-		explicit RegressionDataElliptic(Real* locations, UInt n_locations, VectorXr& observations, UInt order,
+		explicit RegressionDataElliptic(Real* locations, UInt n_locations, UInt ndim, VectorXr& observations, UInt order,
 										std::vector<Real> lambdaS, Real* K,
 										Real* beta, Real c, MatrixXr& covariates,
 										MatrixXi& incidenceMatrix, std::vector<UInt>& bc_indices,
 										std::vector<Real>& bc_values, bool DOF, bool GCV, UInt search);
 
-		explicit RegressionDataElliptic(Real* locations, UInt n_locations, std::vector<Real>& time_locations, VectorXr& observations, UInt order,
+		explicit RegressionDataElliptic(Real* locations, UInt n_locations, UInt ndim, std::vector<Real>& time_locations, VectorXr& observations, UInt order,
 										std::vector<Real>& lambdaS, std::vector<Real>& lambdaT, Real* K,	Real* beta, Real c,
 										MatrixXr& covariates, MatrixXi& incidenceMatrix, std::vector<UInt>& bc_indices,	std::vector<Real>& bc_values, VectorXr& ic,
 										bool flag_mass, bool flag_parabolic, bool DOF, bool GCV, UInt search);
@@ -278,14 +278,14 @@ class RegressionDataEllipticSpaceVarying : public RegressionData
 		#endif
 
 
-		explicit RegressionDataEllipticSpaceVarying(Real* locations, UInt n_locations, VectorXr& observations,
+		explicit RegressionDataEllipticSpaceVarying(Real* locations, UInt n_locations, UInt ndim, VectorXr& observations,
 													UInt order, std::vector<Real> lambdaS,
 													Real* K, Real* beta, Real* c, Real* u,
 													MatrixXr& covariates, MatrixXi& incidenceMatrix,
 													std::vector<UInt>& bc_indices, std::vector<Real>& bc_values,
 													bool DOF, bool GCV, UInt search);
 
-		explicit RegressionDataEllipticSpaceVarying(Real* locations, UInt n_locations, std::vector<Real>& time_locations, VectorXr& observations, UInt order,
+		explicit RegressionDataEllipticSpaceVarying(Real* locations, UInt n_locations, UInt ndim, std::vector<Real>& time_locations, VectorXr& observations, UInt order,
 													std::vector<Real>& lambdaS, std::vector<Real>& lambdaT,
 													Real* K, Real* beta, Real* c, Real* u,
 													MatrixXr& covariates, MatrixXi& incidenceMatrix, std::vector<UInt>& bc_indices,	std::vector<Real>& bc_values, VectorXr& ic,

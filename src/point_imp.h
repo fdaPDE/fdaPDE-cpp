@@ -19,10 +19,10 @@ Point<ndim>::Point(UInt id, UInt bcId, const EigenCoords& coord) :
   }
 
 template<UInt ndim>
-Point<ndim>::Point(UInt id, const Real* const points, const UInt num_points) : 
+Point<ndim>::Point(UInt id, const RNumericMatrix& points) : 
   Identifier(id) {
     for(UInt i=0; i<ndim; ++i)
-      coord_[i]=points[id+i*num_points];
+      coord_[i]=points(id, i);
   }
 
 

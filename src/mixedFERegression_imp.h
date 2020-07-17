@@ -771,15 +771,6 @@ public:
 
 	void apply()
 	{
-	if(mydim!=2 || ndim !=2){
-
-	#ifdef R_VERSION_
-		Rprintf("ERROR: these dimensions are not yet implemented, for the moment smoothEllipticPDE is available for mydim=ndim=2");
-	#else
-		std::cout << "ERROR: these dimensions are not yet implemented, for the moment smoothEllipticPDE is available for mydim=ndim=2\n";
-	#endif
-
-	}else{
 		typedef EOExpr<Mass> ETMass;   Mass EMass;   ETMass mass(EMass);
 		typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
 		typedef EOExpr<Grad> ETGrad;   Grad EGrad;   ETGrad grad(EGrad);
@@ -790,7 +781,7 @@ public:
 
 	  MixedFERegressionBase<RegressionDataElliptic,ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim>::apply(c*mass+stiff[K]+b.dot(grad), ForcingTerm());
 	}
-	}
+	
 };
 
 template<UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
@@ -802,15 +793,6 @@ public:
 
 	void apply()
 	{
-	if(mydim!=2 || ndim !=2){
-
-	#ifdef R_VERSION_
-		Rprintf("ERROR: these dimensions are not yet implemented, for the moment smoothEllipticPDE is available for mydim=ndim=2");
-	#else
-		std::cout << "ERROR: these dimensions are not yet implemented, for the moment smoothEllipticPDE is available for mydim=ndim=2\n";
-	#endif
-
-	}else{
 		typedef EOExpr<Mass> ETMass;   Mass EMass;   ETMass mass(EMass);
 		typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
 		typedef EOExpr<Grad> ETGrad;   Grad EGrad;   ETGrad grad(EGrad);
@@ -824,7 +806,7 @@ public:
 
 		MixedFERegressionBase<RegressionDataEllipticSpaceVarying,ORDER, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE, mydim, ndim>::apply(c*mass+stiff[K]+b.dot(grad), u);
 	}
-	}
+
 };
 
 

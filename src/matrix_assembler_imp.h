@@ -44,6 +44,8 @@ void Assembler::operKernel(EOExpr<A> oper, const MeshHandler<ORDER,mydim,ndim>& 
 	OpMat.prune(tolerance);
 }
 
+
+
 template<UInt DEGREE, UInt ORDER_DERIVATIVE, typename Integrator, typename A>
 void Assembler::operKernel(EOExpr<A> oper, Spline<Integrator, DEGREE, ORDER_DERIVATIVE>& spline, SpMat& OpMat)
 {

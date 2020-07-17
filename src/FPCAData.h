@@ -14,8 +14,7 @@
 class  FPCAData{
 	private:
 
-		const Real* locations_;
-		UInt n_locations_;
+		const RNumericMatrix locations_;
 
 		//barycenter information
 		MatrixXr barycenters_; //barycenter information
@@ -87,7 +86,7 @@ class  FPCAData{
 
 		*/
 
-		FPCAData(){};
+		// FPCAData(){};
 
 		#ifdef R_VERSION_
 		explicit FPCAData(SEXP Rlocations, SEXP RbaryLocations, SEXP Rdatamatrix, SEXP Rorder, SEXP RincidenceMatrix,
@@ -95,7 +94,7 @@ class  FPCAData{
 		#endif
 
 
-		explicit FPCAData(Real* locations, UInt n_locations, MatrixXr& datamatrix,
+		explicit FPCAData(Real* locations, UInt n_locations, UInt ndim, MatrixXr& datamatrix,
 		UInt order, MatrixXi& incidenceMatrix, std::vector<Real> lambda, UInt nPC, UInt nFolds, UInt search);
 
 
@@ -105,7 +104,7 @@ class  FPCAData{
 
 		//! A method returning the locations of the observations
 		template<UInt ndim>
-		inline Point<ndim> getLocations(UInt i) const {return Point<ndim>(i, locations_, n_locations_);}
+		inline Point<ndim> getLocations(UInt i) const {return Point<ndim>(i, locations_);}
 		//! A method returning TRUE if the observations are located in the nodes of the mesh or FALSE otherwise
 		inline bool isLocationsByNodes() const {return locations_by_nodes_;}
 

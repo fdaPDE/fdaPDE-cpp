@@ -4,34 +4,31 @@
 
 template <UInt ORDER, UInt mydim, UInt ndim>
 MeshHandler<ORDER,mydim,ndim>::MeshHandler(Real* points, UInt* sides, UInt* elements, UInt* neighbors, UInt num_nodes, UInt num_sides, UInt num_elements, UInt search) :
-		points_(points), sides_(sides), elements_(elements), neighbors_(neighbors),
-			num_nodes_(num_nodes), num_sides_(num_sides), num_elements_(num_elements),
-				search_(search) {
+		points_(points, num_nodes, ndim), sides_(sides, num_sides, mydim), 
+			elements_(elements, num_elements, how_many_nodes(ORDER,mydim)), 
+				neighbors_(neighbors, num_elements, mydim+1), search_(search) {
 					if (search==2)
-						tree_ptr_.reset(new ADTree<meshElement>(points_, elements_, num_nodes_, num_elements_));
+						tree_ptr_.reset(new ADTree<meshElement>(points_, elements_));
 				}
 
 
 #ifdef R_VERSION_
 template <UInt ORDER, UInt mydim, UInt ndim>
 MeshHandler<ORDER,mydim,ndim>::MeshHandler(SEXP Rmesh, UInt search) :
-	points_(REAL(VECTOR_ELT(Rmesh, 0))), sides_(INTEGER(VECTOR_ELT(Rmesh, 6))),
-		elements_(INTEGER(VECTOR_ELT(Rmesh, 3))), neighbors_(INTEGER(VECTOR_ELT(Rmesh, 8))),
-			num_nodes_(INTEGER(Rf_getAttrib(VECTOR_ELT(Rmesh, 0), R_DimSymbol))[0]),
-				num_sides_(INTEGER(Rf_getAttrib(VECTOR_ELT(Rmesh, 6), R_DimSymbol))[0]),
-					num_elements_(INTEGER(Rf_getAttrib(VECTOR_ELT(Rmesh, 3), R_DimSymbol))[0]),
-					 	search_(search) {
-							if((XLENGTH(Rmesh)==11 || TYPEOF(VECTOR_ELT(Rmesh, 11))==0) && search==2)
-								tree_ptr_.reset(new ADTree<meshElement>(points_, elements_, num_nodes_, num_elements_));
-							else if (search==2)
-								tree_ptr_.reset(new ADTree<meshElement>(Rmesh));
-						}
+	points_(VECTOR_ELT(Rmesh, 0)), sides_(VECTOR_ELT(Rmesh, 6)),
+		elements_(VECTOR_ELT(Rmesh, 3)), neighbors_(VECTOR_ELT(Rmesh, 8)),
+		 	search_(search) {
+				if((XLENGTH(Rmesh)==11 || TYPEOF(VECTOR_ELT(Rmesh, 11))==0) && search==2)
+					tree_ptr_.reset(new ADTree<meshElement>(points_, elements_));
+				else if (search==2)
+					tree_ptr_.reset(new ADTree<meshElement>(Rmesh));
+				}
 #endif
 
 template <UInt ORDER, UInt mydim, UInt ndim>
 Point<ndim> MeshHandler<ORDER,mydim,ndim>::getPoint(const UInt id) const
 {
-	return Point<ndim>(id, points_, num_nodes_);
+	return Point<ndim>(id, points_);
 }
 
 template <UInt ORDER, UInt mydim, UInt ndim>
@@ -39,14 +36,14 @@ typename MeshHandler<ORDER,mydim,ndim>::meshElement MeshHandler<ORDER,mydim,ndim
 {
 	typename meshElement::elementPoints elPoints;
 	for (int j=0; j<how_many_nodes(ORDER,mydim); ++j)
-		elPoints[j] = getPoint(elements(id,j));
-	return meshElement(id,elPoints);
+		elPoints[j] = getPoint(elements_(id,j));
+	return meshElement(id, elPoints);
 }
 
 template <UInt ORDER, UInt mydim, UInt ndim>
 typename MeshHandler<ORDER,mydim,ndim>::meshElement MeshHandler<ORDER,mydim,ndim>::getNeighbors(const UInt id_element, const UInt number) const
 {
-	UInt id_neighbor{neighbors(id_element, number)};
+	int id_neighbor{neighbors_(id_element, number)};
 	//return empty element if "neighbor" not present (out of boundary!)
 	return (id_neighbor==-1) ? meshElement() : getElement(id_neighbor);
 }
@@ -54,7 +51,7 @@ typename MeshHandler<ORDER,mydim,ndim>::meshElement MeshHandler<ORDER,mydim,ndim
 template <UInt ORDER, UInt mydim, UInt ndim>
 typename MeshHandler<ORDER,mydim,ndim>::meshElement MeshHandler<ORDER,mydim,ndim>::findLocationNaive(const Point<ndim>& point) const
 {
-	for(UInt id=0; id < num_elements_; ++id){
+	for(UInt id=0; id < elements_.nrows(); ++id){
 		meshElement current_element{getElement(id)};
 		if(current_element.isPointInside(point))
 			return current_element;
@@ -107,8 +104,8 @@ typename MeshHandler<ORDER,mydim,ndim>::meshElement MeshHandler<ORDER,mydim,ndim
 template <UInt ORDER, UInt mydim, UInt ndim>
 void MeshHandler<ORDER,mydim,ndim>::printPoints(std::ostream& os) const
 {
-	os<<"# Nodes: "<<num_nodes_<<std::endl;
-	for(UInt i=0; i<num_nodes_; ++i)
+	os<<"# Nodes: "<<points_.nrows()<<std::endl;
+	for(UInt i=0; i<points_.nrows(); ++i)
 		os<<getPoint(i);
 }
 
@@ -116,16 +113,16 @@ void MeshHandler<ORDER,mydim,ndim>::printPoints(std::ostream& os) const
 template <UInt ORDER, UInt mydim, UInt ndim>
 void MeshHandler<ORDER,mydim,ndim>::printElements(std::ostream& os) const
 {
-	os << "# Triangles: "<< num_elements_ <<std::endl;
-	for (UInt i = 0; i < num_elements_; ++i )
+	os << "# Triangles: "<< elements_.nrows() <<std::endl;
+	for (UInt i = 0; i < elements_.nrows(); ++i )
 		os<<getElement(i);
 }
 
 template <UInt ORDER, UInt mydim, UInt ndim>
 void MeshHandler<ORDER,mydim,ndim>::printNeighbors(std::ostream& os) const
 {
-	os << "# Neighbors list: "<< num_elements_ <<std::endl;
-	for (UInt i = 0; i < num_elements_; ++i ){
+	os << "# Neighbors list: "<< elements_.nrows() <<std::endl;
+	for (UInt i = 0; i < elements_.nrows(); ++i ){
 		for( UInt j = 0; j < mydim+1; ++j)
 			os<<neighbors(i,j)<<" ";
 		os<<std::endl;

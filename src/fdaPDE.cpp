@@ -536,20 +536,18 @@ SEXP get_integration_points_skeleton(SEXP Rmesh)
 {
 	using Integrator = typename FiniteElement<ORDER, mydim, ndim>::Integrator;
 	using meshElement = typename MeshHandler<ORDER, mydim, ndim>::meshElement;
-	using EigenMap2PointCoord = Eigen::Map<const Eigen::Matrix<Real,mydim,1> >;
+
 	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh);
 
 	SEXP result;
-	PROTECT(result=Rf_allocVector(REALSXP, 2*Integrator::NNODES*mesh.num_elements()));
-	for(UInt i=0; i<mesh.num_elements(); i++)
-	{
+	PROTECT(result=Rf_allocVector(REALSXP, ndim * Integrator::NNODES * mesh.num_elements()));
+	for(UInt i=0; i<mesh.num_elements(); ++i){
 		meshElement el = mesh.getElement(i);
-		for(UInt l = 0; l < Integrator::NNODES; l++)
-		{
-			Point<ndim> p{el.getM_J() * EigenMap2PointCoord(&Integrator::NODES[l][0])};
+		for(UInt l = 0; l < Integrator::NNODES; ++l){
+			Point<ndim> p{el.getM_J() * Integrator::NODES[l].eigenView()};
 			p += el[0];
-			REAL(result)[i*Integrator::NNODES + l] = p[0];
-			REAL(result)[mesh.num_elements()*Integrator::NNODES + i*Integrator::NNODES + l] = p[1];
+			for(UInt j=0; j < ndim; ++j)
+				REAL(result)[j * mesh.num_elements() * Integrator::NNODES + i * Integrator::NNODES + l] = p[j];
 		}
 	}
 

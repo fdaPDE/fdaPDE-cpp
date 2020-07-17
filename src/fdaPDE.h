@@ -45,4 +45,6 @@ typedef Eigen::SparseMatrix<Real> SpMat;
 typedef Eigen::SparseVector<Real> SpVec;
 typedef Eigen::Triplet<Real> coeff;
 
+#include "RObjects.h"
+
 #endif /* FDAPDE_H_ */

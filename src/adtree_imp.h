@@ -21,10 +21,12 @@ ADTree<Shape>::ADTree(TreeHeader<Shape> const & header): header_(header) {
 
 //Shape is given as Element<NNODES,myDim,nDim> from mesh.h
 template<class Shape>
-ADTree<Shape>::ADTree(Real const * const points, UInt const * const triangle, const UInt num_nodes, const UInt num_triangle) {
+ADTree<Shape>::ADTree(const RNumericMatrix& points, const RIntegerMatrix& triangle) {
     int ndimp = Shape::dp(); //physical dimension
     int nvertex = Shape::numVertices; //number of nodes at each Element (not total number of nodes!)
 
+    const UInt num_nodes = points.nrows();
+    const UInt num_triangle = triangle.nrows();
     // Build the tree.
 
     // step1: Construct TreeHeader
@@ -35,7 +37,7 @@ ADTree<Shape>::ADTree(Real const * const points, UInt const * const triangle, co
     for (int i = 0; i < ndimp; i++) {
       vcoord[i].resize(num_nodes);
       for(int j = 0; j < num_nodes; j++)
-        vcoord[i][j] = points[i*num_nodes + j];
+        vcoord[i][j] = points(j,i);
     }
 
     Domain<Shape> mydom(vcoord);
@@ -61,14 +63,13 @@ ADTree<Shape>::ADTree(Real const * const points, UInt const * const triangle, co
 
 
     // Step 3: Fill the tree: Add each element to the Treenode
-    UInt idpt;
 
     std::vector<Real> elem(nvertex*ndimp); //'elem' is a single Element, composed of vector of points
     for ( int i = 0; i < num_triangle; i++ ) {
       for (int j = 0; j < nvertex ; j++) {
         for (int l = 0; l < ndimp ; l++) {
-          idpt = triangle[j*num_triangle + i];
-          elem[j*ndimp + l] =  points[idpt + l*num_nodes];
+          UInt idpt = triangle(i,j);
+          elem[j*ndimp + l] =  points(idpt, l);
         }
       }
       //insert Element into tree
@@ -107,11 +108,10 @@ ADTree<Shape>::ADTree(SEXP Rmesh){
   Real* box_ = REAL(VECTOR_ELT(Rmesh, 17));
 
   UInt num_tree_nodes = id_.size();
-  data_ = std::vector<TreeNode<Shape> >();
-  data_.resize(num_tree_nodes);
+  data_.reserve(num_tree_nodes);
 
   std::vector<Real> coord;
-  coord.resize(ndimt_);
+  coord.reserve(ndimt_);
   for (UInt i=0; i<num_tree_nodes; i++) {
     for (UInt j=0; j<ndimt_; j++) {
       coord.push_back(box_[i + num_tree_nodes*j]);

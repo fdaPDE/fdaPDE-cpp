@@ -54,11 +54,11 @@ DEData<ndim>::DEData(const std::vector<Point<ndim> >& data, const UInt& order, c
 template<UInt ndim>
 void DEData<ndim>::setData(SEXP Rdata)
 {
-  n_ = INTEGER(Rf_getAttrib(Rdata, R_DimSymbol))[0];
-  if(n_>0){
-    data_.reserve(n_);
-    for(int i=0; i<n_; ++i)
-      data_.emplace_back(i, REAL(Rdata), n_);
+  RNumericMatrix data(Rdata);
+  if(data.nrows()>0){
+    data_.reserve(data.nrows());
+    for(int i=0; i<data.nrows(); ++i)
+      data_.emplace_back(i, data);
   }
 }
 

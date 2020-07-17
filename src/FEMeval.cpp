@@ -148,6 +148,17 @@ SEXP CPP_eval_FEM_fd(SEXP Rmesh, double* X,  double* Y,  double* Z, UInt n_X, UI
 				evaluator.evalWithInfo(X, Y, Z, n_X, coef, fast, REAL(result), isinside, element_id, barycenters);
 			}
 		}
+		else if(order==2 && mydim==3 && ndim==3)
+		{
+			MeshHandler<2,3,3> mesh(Rmesh, search);
+			Evaluator<2,3,3> evaluator(mesh);
+			if (TYPEOF(RbaryLocations) == 0) { //doesn't have location information
+				evaluator.eval(X, Y, Z, n_X, coef, fast, REAL(result), isinside);
+			} else { //have location information
+				evaluator.evalWithInfo(X, Y, Z, n_X, coef, fast, REAL(result), isinside, element_id, barycenters);
+			}
+		}
+
 
 		for (int i=0; i<n_X; ++i)
 		{
@@ -191,6 +202,14 @@ SEXP CPP_eval_FEM_fd(SEXP Rmesh, double* X,  double* Y,  double* Z, UInt n_X, UI
 			evaluator.integrate(incidenceMatrix, nRegions, nElements, coef, REAL(result));
 
 		}
+		else if(order==2 && mydim==3 && ndim==3)
+		{
+			MeshHandler<2,3,3> mesh(Rmesh);
+			Evaluator<2,3,3> evaluator(mesh);
+			evaluator.integrate(incidenceMatrix, nRegions, nElements, coef, REAL(result));
+
+		}
+
 	}
 
 	UNPROTECT(1);
@@ -343,6 +362,17 @@ SEXP eval_FEM_fd(SEXP Rmesh, SEXP Rlocations, SEXP RincidenceMatrix, SEXP Rcoef,
 				evaluator.evalWithInfo(X, Y, Z, n_X, coef, fast, REAL(result), isinside, element_id, barycenters);
 			}
 		}
+		else if(order==2 && mydim==3 && ndim==3)
+		{
+			MeshHandler<2,3,3> mesh(Rmesh, search);
+			Evaluator<2,3,3> evaluator(mesh);
+			if (TYPEOF(RbaryLocations) == 0) { //doesn't have location information
+				evaluator.eval(X, Y, Z, n_X, coef, fast, REAL(result), isinside);
+			} else { //have location information
+				evaluator.evalWithInfo(X, Y, Z, n_X, coef, fast, REAL(result), isinside, element_id, barycenters);
+			}
+		}
+
 
 		for (int i=0; i<n_X; ++i)
 		{
@@ -386,6 +416,14 @@ SEXP eval_FEM_fd(SEXP Rmesh, SEXP Rlocations, SEXP RincidenceMatrix, SEXP Rcoef,
 			evaluator.integrate(incidenceMatrix, nRegions, nElements, coef, REAL(result));
 
 		}
+		else if(order==2 && mydim==3 && ndim==3)
+		{
+			MeshHandler<2,3,3> mesh(Rmesh);
+			Evaluator<2,3,3> evaluator(mesh);
+			evaluator.integrate(incidenceMatrix, nRegions, nElements, coef, REAL(result));
+
+		}
+
 	}
 
 	free(X); free(Y); free(Z);
@@ -764,6 +802,9 @@ SEXP tree_mesh_construction(SEXP Rmesh, SEXP Rorder, SEXP Rmydim, SEXP Rndim) {
 		return(tree_mesh_skeleton<2, 2, 3>(Rmesh));
 	else if(ORDER == 1 && mydim==3 && ndim==3)
 		return(tree_mesh_skeleton<1, 3, 3>(Rmesh));
+	else if(ORDER == 2 && mydim==3 && ndim==3)
+		return(tree_mesh_skeleton<2, 3, 3>(Rmesh));
+
 	return(NILSXP);
 }
 

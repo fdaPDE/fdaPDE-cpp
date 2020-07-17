@@ -135,7 +135,7 @@ class Point : public Identifier{
       Point(id, NVAL, coord) {}
 
     // Additional constructor for convenience in dealing with R data (e.g. meshes)
-    Point(UInt id, const Real* const points, const UInt num_points);
+    Point(UInt id, const RNumericMatrix& points);
 
     // Views!
     EigenMap2Coords eigenView() {return EigenMap2Coords(&coord_[0]);}
