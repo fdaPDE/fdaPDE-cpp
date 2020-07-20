@@ -303,10 +303,11 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
   }
 
   ## Converting to format for internal usage
+  observations = as.matrix(observations)
+  lambda = as.matrix(lambda)
+
   if(!is.null(locations))
     locations = as.matrix(locations)
-    observations = as.matrix(observations)
-    lambda = as.matrix(lambda)
   if(!is.null(covariates))
     covariates = as.matrix(covariates)
   if(!is.null(DOF_matrix))
@@ -405,6 +406,28 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
     bigsol = CPP_smooth.volume.FEM.basis(locations=locations, observations=observations, FEMbasis=FEMbasis, lambda=lambda,
                                         covariates=covariates, incidence_matrix=incidence_matrix, ndim=ndim, mydim=mydim,
                                         BC=BC, GCV=GCV, GCVMETHOD=GCVMETHOD, nrealizations=nrealizations, DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations)
+
+    numnodes = nrow(FEMbasis$mesh$nodes)
+
+  } else if(class(FEMbasis$mesh) == 'mesh.3D' & !is.null(PDE_parameters) & space_varying==FALSE){
+
+    bigsol = NULL
+    print('C++ Code Execution')
+    bigsol = CPP_smooth.volume.FEM.PDE.basis(locations=locations, observations=observations, FEMbasis=FEMbasis, lambda=lambda,
+                                      PDE_parameters = PDE_parameters,
+                                      covariates=covariates, incidence_matrix=incidence_matrix, ndim=ndim, mydim=mydim,
+                                      BC=BC, GCV=GCV,GCVMETHOD=GCVMETHOD, nrealizations=nrealizations,DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations)
+
+    numnodes = nrow(FEMbasis$mesh$nodes)
+
+  } else if(class(FEMbasis$mesh) == 'mesh.2D' & !is.null(PDE_parameters) & space_varying==TRUE){
+
+    bigsol = NULL
+    print('C++ Code Execution')
+    bigsol = CPP_smooth.volume.FEM.PDE.sv.basis(locations=locations, observations=observations, FEMbasis=FEMbasis, lambda=lambda,
+                                         PDE_parameters = PDE_parameters,
+                                         covariates=covariates, incidence_matrix=incidence_matrix, ndim=ndim, mydim=mydim,
+                                         BC=BC, GCV=GCV,GCVMETHOD=GCVMETHOD, nrealizations=nrealizations,DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations)
 
     numnodes = nrow(FEMbasis$mesh$nodes)
   }

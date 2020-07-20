@@ -4,17 +4,24 @@
 \alias{create.mesh.2.5D}
 \title{Create a \code{mesh.2.5D} object from the nodes locations and the connectivty matrix}
 \usage{
-create.mesh.2.5D(nodes, triangles, order = 1)
+create.mesh.2.5D(
+  nodes,
+  triangles = NULL,
+  order = 1,
+  nodesattributes = NULL,
+  segments = NULL,
+  holes = NULL
+)
 }
 \arguments{
 \item{nodes}{A #nodes-by-3 matrix specifying the locations of each node.}
 
-\item{triangles}{A #triangles-by-3 (when \code{order} = 1) or #triangles-by-6 (when \code{order} = 2) matrix, 
+\item{triangles}{A #triangles-by-3 (when \code{order} = 1) or #triangles-by-6 (when \code{order} = 2) matrix,
 specifying the indices of the nodes in each triangle.}
 
-\item{order}{Either '1' or '2'. It specifies wether each mesh triangle should be represented by 3 nodes 
-(the triangle' vertices) or by 6 nodes (the triangle's vertices and midpoints). 
-These are respectively used for linear (order = 1) and quadratic (order = 2) Finite Elements. 
+\item{order}{Either '1' or '2'. It specifies wether each mesh triangle should be represented by 3 nodes
+(the triangle' vertices) or by 6 nodes (the triangle's vertices and midpoints).
+These are respectively used for linear (order = 1) and quadratic (order = 2) Finite Elements.
 Default is \code{order} = 1.}
 }
 \value{
@@ -23,10 +30,10 @@ An object of the class \code{mesh.2.5D} with the following output:
 \item{\code{nnodes}}{The #nodes in the mesh.}
 \item{\code{ntriangles}}{The #triangles in the mesh.}
 \item{\code{nodes}}{A #nodes-by-3 matrix containing the x,y and z coordinate for each point of the mesh.}
-\item{\code{triangles}}{A #triangles-by-3 (when \code{order} = 1) or #triangles-by-6 (when \code{order} = 2) matrix, 
+\item{\code{triangles}}{A #triangles-by-3 (when \code{order} = 1) or #triangles-by-6 (when \code{order} = 2) matrix,
 specifying the indices of the nodes in each triangle.}
-\item{\code{order}}{Either '1' or '2'. It specifies wether each mesh triangle should be represented by 3 nodes 
-(the triangle' vertices) or by 6 nodes (the triangle's vertices and midpoints). 
+\item{\code{order}}{Either '1' or '2'. It specifies wether each mesh triangle should be represented by 3 nodes
+(the triangle' vertices) or by 6 nodes (the triangle's vertices and midpoints).
 It is passed unchanged from the input.}
 }
 }

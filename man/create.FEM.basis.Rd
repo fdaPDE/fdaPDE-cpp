@@ -39,7 +39,7 @@ If saveTree flag is TRUE, it saves the tree mesh information in advance inside m
 data(quasicircle2D)
 
 ## Create the 2D mesh
-mesh = create.mesh.2D(nodes = rbind(boundary_nodes, locations), segments = boundary_segments)
+mesh = create.mesh.2D(nodes = rbind(quasicircle2D$boundary_nodes, quasicircle2D$locations), segments = quasicircle2D$boundary_segments)
 ## Plot it
 plot(mesh)
 ## Create the basis

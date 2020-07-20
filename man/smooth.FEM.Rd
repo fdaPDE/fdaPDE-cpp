@@ -6,7 +6,7 @@
 \usage{
 smooth.FEM(locations = NULL, observations, FEMbasis, lambda,
                   covariates = NULL, PDE_parameters=NULL, incidence_matrix = NULL,
-                  BC = NULL, GCV = FALSE, GCVmethod = "Stochastic", nrealizations = 100, 
+                  BC = NULL, GCV = FALSE, GCVmethod = "Stochastic", nrealizations = 100,
                   DOF_matrix=NULL, search = "tree", bary.locations = NULL)
 }
 \arguments{
@@ -131,7 +131,7 @@ plot(solution$fit.FEM)
 covariate = covs.test(mesh$nodes[,1], mesh$nodes[,2])
 data = fs.test(mesh$nodes[,1], mesh$nodes[,2]) + 2*covariate + rnorm(nrow(mesh$nodes), sd = 0.5)
 
-solution = smooth.FEM(observations = data, covariates = covariate, 
+solution = smooth.FEM(observations = data, covariates = covariate,
                       FEMbasis = FEMbasis, lambda = lambda)
 # beta estimate:
 solution$beta

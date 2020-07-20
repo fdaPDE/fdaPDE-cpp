@@ -329,11 +329,15 @@ CPP_get_evaluations_points = function(mesh, order)
   #here we do not shift indices since this function is called inside CPP_smooth.FEM.PDE.sv.basis
 
   # Imposing types, this is necessary for correct reading from C++
-  if(class(mesh)=="mesh.2D"){
-    ndim=2
-    mydim=2
-  }else if(class(mesh) == "mesh.2.5D" || class(mesh) == "mesh.3D"){
-    stop('Function not yet implemented for this mesh class')
+  if(class(FEMbasis$mesh) == "mesh.2D"){
+    ndim = 2
+    mydim = 2
+  }else if(class(FEMbasis$mesh) == "mesh.2.5D"){
+    ndim = 3
+    mydim = 2
+  }else if(class(FEMbasis$mesh) == "mesh.3D"){
+    ndim = 3
+    mydim = 3
   }else{
     stop('Unknown mesh class')
   }
@@ -341,8 +345,15 @@ CPP_get_evaluations_points = function(mesh, order)
   storage.mode(ndim)<-"integer"
   storage.mode(mydim)<-"integer"
   storage.mode(mesh$nodes) <- "double"
-  storage.mode(mesh$triangles) <- "integer"
-  storage.mode(mesh$edges) <- "integer"
+  if(mydim==2){
+    storage.mode(mesh$triangles) <- "integer"
+    storage.mode(mesh$edges) <- "integer"
+  }
+  else if(mydim==3){
+    storage.mode(mesh$tetrahedrons) <- "integer"
+    storage.mode(mesh$faces) <- "integer"
+  }
+
   storage.mode(mesh$neighbors) <- "integer"
   storage.mode(order) <- "integer"
 

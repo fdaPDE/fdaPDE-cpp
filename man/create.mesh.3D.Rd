@@ -2,9 +2,16 @@
 % Please edit documentation in R/mesh.R
 \name{create.mesh.3D}
 \alias{create.mesh.3D}
-\title{Create a \code{mesh.3D} object from the connectivty matrix and nodes locations}
+\title{Create a \code{mesh.3D} object from the connectivity matrix and nodes locations}
 \usage{
-create.mesh.3D(nodes, tetrahedrons, order = 1)
+create.mesh.3D(
+  nodes,
+  tetrahedrons,
+  order = 1,
+  nodesattributes = NULL,
+  segments = NULL,
+  holes = NULL
+)
 }
 \arguments{
 \item{nodes}{A #nodes-by-3 matrix specifying the locations of each node.}
@@ -20,21 +27,21 @@ An object of the class \code{mesh.3D} with the following output:
 \item{\code{ntetrahedrons}}{The #tetrahedrons in the mesh.}
 \item{\code{nodes}}{A #nodes-by-3 matrix containing the x,y and z coordinate for each point of the mesh.}
 \item{\code{tetrahedrons}}{A #tetrahedrons-by-4 matrix specifying the indices of the nodes in each tetrahedron of the mesh.}
-\item{\code{order}}{It specifies the order of the associated Finite Element basis. When order = 1, each 
+\item{\code{order}}{It specifies the order of the associated Finite Element basis. When order = 1, each
 mesh tetrahedron is represented by 4 nodes (the tetrahedron vertices).}
 }
 }
 \description{
-Create a \code{mesh.3D} object from the connectivty matrix and nodes locations
+Create a \code{mesh.3D} object from the connectivity matrix and nodes locations
 }
 \examples{
-library(fdaPDE)
+library(PACSProject)
 
 ##Load the matrix nodes and tetrahedrons
 data(sphere3Ddata)
 
-nodes = sphere3Ddata$nodes
-tetrahedrons = sphere3Ddata$tetrahedrons
+nodes=sphere3Ddata$nodes
+tetrahedrons=sphere3Ddata$tetrahedrons
 
 ##Create the triangulated mesh from the connectivity matrix and nodes locations
 mesh=create.mesh.3D(nodes,tetrahedrons)

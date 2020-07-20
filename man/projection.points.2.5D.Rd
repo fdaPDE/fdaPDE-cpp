@@ -18,7 +18,7 @@ projection.points.2.5D(mesh, locations)
 This function projects any 3D points onto 2.5D triangular mesh.
 }
 \examples{
-library(fdaPDE)
+library(currentfdaPDE)
 
 ## Upload the hub2.5D the data
 data(hub2.5D)

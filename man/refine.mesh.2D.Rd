@@ -22,15 +22,15 @@ A mesh.2D object representing the refined triangular mesh,  with the following o
 \itemize{
 \item{\code{nodes}}{A #nodes-by-2 matrix containing the x and y coordinates of the mesh nodes.}
 \item{\code{nodesmarkers}}{A vector of length #nodes, with entries either '1' or '0'. An entry '1' indicates that the corresponding node is a boundary node; an entry '0' indicates that the corresponding node is not a boundary node.}
-\item{\code{nodesattributes}}{nodesattributes A matrix with #nodes rows containing nodes' attributes. 
-These are passed unchanged to the output. If a node is added during the triangulation process or mesh refinement, its attributes are computed  
-by linear interpolation using the attributes of neighboring nodes. This functionality is for instance used to compute the value 
+\item{\code{nodesattributes}}{nodesattributes A matrix with #nodes rows containing nodes' attributes.
+These are passed unchanged to the output. If a node is added during the triangulation process or mesh refinement, its attributes are computed
+by linear interpolation using the attributes of neighboring nodes. This functionality is for instance used to compute the value
 of a Dirichlet boundary condition at boundary nodes added during the triangulation process.}
 \item{\code{triangles}}{A #triangles-by-3 (when \code{order} = 1) or #triangles-by-6 (when \code{order} = 2) matrix.}
 \item{\code{edges}}{A #edges-by-2 matrix. Each row contains the row's indices of the nodes where the edge starts from and ends to.}
-\item{\code{edgesmarkers}}{A vector of lenght #edges with entries either '1' or '0'. An entry '1' indicates that the corresponding element in \code{edge} is a boundary edge;  
+\item{\code{edgesmarkers}}{A vector of lenght #edges with entries either '1' or '0'. An entry '1' indicates that the corresponding element in \code{edge} is a boundary edge;
 an entry '0' indicates that the corresponding edge is not a boundary edge.}
-\item{\code{neighbors}}{A #triangles-by-3 matrix. Each row contains the indices of the three neighbouring triangles. An entry '-1' indicates that 
+\item{\code{neighbors}}{A #triangles-by-3 matrix. Each row contains the indices of the three neighbouring triangles. An entry '-1' indicates that
 one edge of the triangle is a boundary edge.}
 \item{\code{holes}}{A #holes-by-2 matrix containing the x and y coordinates of a point internal to each hole of the mesh. These points are used to carve holes
 in the triangulation, when the domain has holes.}
@@ -39,7 +39,7 @@ These are respectively used for linear (order = 1) and quadratic (order = 2) Fin
 }
 }
 \description{
-This function refines a Constrained Delaunay triangulation into a Conforming Delaunay triangulation. This is a wrapper of the Triangle library (http://www.cs.cmu.edu/~quake/triangle.html). It can be used to 
+This function refines a Constrained Delaunay triangulation into a Conforming Delaunay triangulation. This is a wrapper of the Triangle library (http://www.cs.cmu.edu/~quake/triangle.html). It can be used to
 refine a mesh previously created with \link{create.mesh.2D}. The algorithm can add Steiner points (points through which the \code{segments} are splitted)
 in order to meet the imposed refinement conditions.
 }

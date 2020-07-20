@@ -79,6 +79,184 @@ CPP_smooth.volume.FEM.basis<-function(locations, bary.locations, observations, F
   return(bigsol)
 }
 
+CPP_smooth.volume.FEM.PDE.basis<-function(locations, bary.locations, observations, FEMbasis, lambda, PDE_parameters, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, GCV,GCVMETHOD = 2, nrealizations = 100, DOF=TRUE,DOF_matrix=NULL, search)
+{
+
+  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+
+  FEMbasis$mesh$tetrahedrons = FEMbasis$mesh$tetrahedrons - 1
+  FEMbasis$mesh$faces = FEMbasis$mesh$faces - 1
+  FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
+  #
+  if(is.null(covariates))
+  {
+    covariates<-matrix(nrow = 0, ncol = 1)
+  }
+
+  if(is.null(DOF_matrix))
+  {
+    DOF_matrix<-matrix(nrow = 0, ncol = 1)
+  }
+
+  if(is.null(locations))
+  {
+    locations<-matrix(nrow = 0, ncol = ndim)
+  }
+
+  if(is.null(incidence_matrix))
+  {
+    incidence_matrix<-matrix(nrow = 0, ncol = 1)
+  }
+
+  if(is.null(BC$BC_indices))
+  {
+    BC$BC_indices<-vector(length=0)
+  }else
+  {
+    BC$BC_indices<-as.vector(BC$BC_indices)-1
+  }
+
+  if(is.null(BC$BC_values))
+  {
+    BC$BC_values<-vector(length=0)
+  }else
+  {
+    BC$BC_values<-as.vector(BC$BC_values)
+  }
+
+  ## Set propr type for correct C++ reading
+
+  locations <- as.matrix(locations)
+  storage.mode(locations) <- "double"
+  storage.mode(FEMbasis$mesh$nodes) <- "double"
+  storage.mode(FEMbasis$mesh$tetrahedrons) <- "integer"
+  storage.mode(FEMbasis$mesh$faces) <- "integer"
+  storage.mode(FEMbasis$mesh$neighbors) <- "integer"
+  storage.mode(FEMbasis$order) <- "integer"
+  covariates <- as.matrix(covariates)
+  storage.mode(covariates) <- "double"
+  DOF_matrix <- as.matrix(DOF_matrix)
+  storage.mode(DOF_matrix) <- "double"
+  incidence_matrix <- as.matrix(incidence_matrix)
+  storage.mode(incidence_matrix) <- "integer"
+  storage.mode(ndim) <- "integer"
+  storage.mode(mydim) <- "integer"
+  storage.mode(lambda) <- "double"
+  storage.mode(BC$BC_indices) <- "integer"
+  storage.mode(BC$BC_values) <- "double"
+  storage.mode(GCV) <- "integer"
+  DOF <- as.integer(DOF)
+  storage.mode(DOF) <-"integer"
+
+  storage.mode(PDE_parameters$K) <- "double"
+  storage.mode(PDE_parameters$b) <- "double"
+  storage.mode(PDE_parameters$c) <- "double"
+
+  storage.mode(nrealizations) <- "integer"
+  storage.mode(GCVMETHOD) <- "integer"
+  storage.mode(search) <- "integer"
+
+  ## Call C++ function
+  bigsol <- .Call("regression_PDE", locations, bary.locations, observations, FEMbasis$mesh, FEMbasis$order, mydim, ndim,
+                  lambda, PDE_parameters$K, PDE_parameters$b, PDE_parameters$c, covariates, incidence_matrix,
+                  BC$BC_indices, BC$BC_values, GCV,GCVMETHOD, nrealizations, DOF, DOF_matrix, search, PACKAGE = "fdaPDE")
+  return(bigsol)
+}
+
+CPP_smooth.volume.FEM.PDE.sv.basis<-function(locations, bary.locations, observations, FEMbasis, lambda, PDE_parameters, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, GCV,GCVMETHOD = 2, nrealizations = 100, DOF=TRUE, DOF_matrix=NULL, search)
+{
+
+  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+
+  FEMbasis$mesh$tetrahedrons = FEMbasis$mesh$tetrahedrons - 1
+  FEMbasis$mesh$faces = FEMbasis$mesh$faces - 1
+  FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
+
+  if(is.null(covariates))
+  {
+    covariates<-matrix(nrow = 0, ncol = 1)
+  }
+
+  if(is.null(DOF_matrix))
+  {
+    DOF_matrix<-matrix(nrow = 0, ncol = 1)
+  }
+
+  if(is.null(locations))
+  {
+    locations<-matrix(nrow = 0, ncol = ndim)
+  }
+
+  if(is.null(incidence_matrix))
+  {
+    incidence_matrix<-matrix(nrow = 0, ncol = 1)
+  }
+
+  if(is.null(BC$BC_indices))
+  {
+    BC$BC_indices<-vector(length=0)
+  }else
+  {
+    BC$BC_indices<-as.vector(BC$BC_indices)-1
+  }
+
+  if(is.null(BC$BC_values))
+  {
+    BC$BC_values<-vector(length=0)
+  }else
+  {
+    BC$BC_values<-as.vector(BC$BC_values)
+  }
+
+
+  PDE_param_eval = NULL
+  points_eval = matrix(CPP_get_evaluations_points(mesh = FEMbasis$mesh, order = FEMbasis$order),ncol = 2)
+  PDE_param_eval$K = (PDE_parameters$K)(points_eval)
+  PDE_param_eval$b = (PDE_parameters$b)(points_eval)
+  PDE_param_eval$c = (PDE_parameters$c)(points_eval)
+  PDE_param_eval$u = (PDE_parameters$u)(points_eval)
+
+  ## Set propr type for correct C++ reading
+  locations <- as.matrix(locations)
+  storage.mode(locations) <- "double"
+  storage.mode(FEMbasis$mesh$nodes) <- "double"
+  storage.mode(FEMbasis$mesh$triangles) <- "integer"
+  storage.mode(FEMbasis$mesh$edges) <- "integer"
+  storage.mode(FEMbasis$mesh$neighbors) <- "integer"
+  storage.mode(FEMbasis$order) <- "integer"
+  covariates <- as.matrix(covariates)
+  storage.mode(covariates) <- "double"
+  incidence_matrix <- as.matrix(incidence_matrix)
+  DOF_matrix <- as.matrix(DOF_matrix)
+  storage.mode(DOF_matrix) <- "double"
+  storage.mode(incidence_matrix) <- "integer"
+  storage.mode(ndim) <- "integer"
+  storage.mode(mydim) <- "integer"
+  storage.mode(lambda) <- "double"
+  storage.mode(BC$BC_indices) <- "integer"
+  storage.mode(BC$BC_values) <- "double"
+  storage.mode(GCV) <- "integer"
+  DOF <- as.integer(DOF)
+  storage.mode(DOF) <-"integer"
+
+  storage.mode(PDE_param_eval$K) <- "double"
+  storage.mode(PDE_param_eval$b) <- "double"
+  storage.mode(PDE_param_eval$c) <- "double"
+  storage.mode(PDE_param_eval$u) <- "double"
+
+  storage.mode(nrealizations) <- "integer"
+  storage.mode(GCVMETHOD) <- "integer"
+  storage.mode(search) <- "integer"
+
+  ## Call C++ function
+  bigsol <- .Call("regression_PDE_space_varying", locations, bary.locations, observations, FEMbasis$mesh, FEMbasis$order,
+                  mydim, ndim, lambda, PDE_param_eval$K, PDE_param_eval$b, PDE_param_eval$c, PDE_param_eval$u,
+                  covariates, incidence_matrix, BC$BC_indices, BC$BC_values, GCV,GCVMETHOD, nrealizations, DOF, DOF_matrix, search, 
+                  PACKAGE = "fdaPDE")
+  return(bigsol)
+}
+
+
 CPP_eval.volume.FEM = function(FEM, locations, incidence_matrix, redundancy, ndim, mydim, search, bary.locations)
 {
   FEMbasis = FEM$FEMbasis
