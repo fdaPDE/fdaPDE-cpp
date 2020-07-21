@@ -4,7 +4,7 @@
 \alias{fs.test}
 \title{FELSPLINE test function}
 \usage{
-fs.test(x, y, r0 = 0.1, r = 0.5, l = 3, b = 1)
+fs.test(x, y, r0 = 0.1, r = 0.5, l = 3, b = 1, exclude = FALSE)
 }
 \arguments{
 \item{x, y}{Points at which to evaluate the test function.}
@@ -16,6 +16,8 @@ fs.test(x, y, r0 = 0.1, r = 0.5, l = 3, b = 1)
 \item{l}{The length of an arm of the sausage.}
 
 \item{b}{The rate at which the function increases per unit increase in distance along the centre line of the sausage.}
+
+\item{exclude}{Should exterior points be set to NA?}
 }
 \value{
 Returns function evaluations, or NAs for points outside the horseshoe domain.
@@ -31,7 +33,7 @@ library(fdaPDE)
 data(horseshoe2D)
 boundary_nodes = horseshoe2D$boundary_nodes
 boundary_segments = horseshoe2D$boundary_segments
-locations = horseshoe2D$locations
+locations = horseshoe2D$locations											  
 
 ## Create the 2D mesh
 mesh = create.mesh.2D(nodes = rbind(boundary_nodes, locations), segments = boundary_segments)
@@ -39,7 +41,7 @@ mesh = create.mesh.2D(nodes = rbind(boundary_nodes, locations), segments = bound
 FEMbasis = create.FEM.basis(mesh)
 ## Compute the coeff vector evaluating the desired function at the mesh nodes
 ## In this case we consider the fs.test() function introduced by Wood et al. 2008
-coeff = fs.test(mesh$nodes[,1], mesh$nodes[,2])
+coeff = fs.test(mesh$nodes[,1], mesh$nodes[,2], exclude = FALSE)
 ## Create the FEM object
 FEMfunction = FEM(coeff, FEMbasis)
 ## Plot it

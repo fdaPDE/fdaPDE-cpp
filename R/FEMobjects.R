@@ -26,6 +26,10 @@
 #' @examples
 #' ## Upload the quasicircle2D data
 #' data(quasicircle2D)
+#' boundary_nodes = quasicircle2D$boundary_nodes
+#' boundary_segments = quasicircle2D$boundary_segments
+#' locations = quasicircle2D$locations
+#' data = quasicircle2D$data												
 #'
 #' ## Create the 2D mesh
 #' mesh = create.mesh.2D(nodes = rbind(boundary_nodes, locations), segments = boundary_segments)
@@ -35,6 +39,8 @@
 #' FEMbasis = create.FEM.basis(mesh)
 #' ## Upload the hub2.5D data
 #' data(hub2.5D)
+#' hub2.5D.nodes = hub2.5D$hub2.5D.nodes
+#' hub2.5D.triangles = hub2.5D$hub2.5D.triangles										
 #'
 #' ## Create the 2.5D mesh
 #' mesh = create.mesh.2.5D(nodes = hub2.5D.nodes, triangles = hub2.5D.triangles)
@@ -177,6 +183,9 @@ create.FEM.basis = function(mesh, saveTree = FALSE)
 #' library(fdaPDE)
 #' ## Upload the horseshoe2D data
 #' data(horseshoe2D)
+#' boundary_nodes = horseshoe2D$boundary_nodes
+#' boundary_segments = horseshoe2D$boundary_segments
+#' locations = horseshoe2D$locations											  
 #'
 #' ## Create the 2D mesh
 #' mesh = create.mesh.2D(nodes = rbind(boundary_nodes, locations), segments = boundary_segments)
@@ -223,6 +232,9 @@ FEM<-function(coeff,FEMbasis)
 #' library(fdaPDE)
 #' ## Upload the horseshoe2D data
 #' data(horseshoe2D)
+#' boundary_nodes = horseshoe2D$boundary_nodes
+#' boundary_segments = horseshoe2D$boundary_segments
+#' locations = horseshoe2D$locations	
 #'
 #' ## Create the 2D mesh
 #' mesh = create.mesh.2D(nodes = rbind(boundary_nodes, locations), segments = boundary_segments)
@@ -240,7 +252,9 @@ FEM<-function(coeff,FEMbasis)
 
 FEM.time<-function(coeff,time_mesh,FEMbasis,FLAG_PARABOLIC=FALSE)
 {
-  coeff = as.matrix(coeff)
+  if(is.vector(coeff)){
+    coeff = array(coeff, dim = c(length(coeff),1,1))
+  }
   M = ifelse(FLAG_PARABOLIC,length(time_mesh),length(time_mesh)+2)
   if (is.null(coeff))
     stop("coeff required;  is NULL.")

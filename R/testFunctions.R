@@ -6,12 +6,10 @@
 #' @param l The length of an arm of the sausage.
 #' @param b The rate at which the function increases per unit increase in distance along the centre line of the sausage.
 #' @param exclude Should exterior points be set to NA?
-#' @param n.theta How many points to use in a piecewise linear representation of a quarter of a circle, when 
-#' generating the boundary curve.
 #' @description Implements a finite area test function based on one proposed by Tim Ramsay (2002) proposed by 
 #' Simon Wood (2008).
 #' @return Returns function evaluations, or NAs for points outside the horseshoe domain. 
-#' @usage fs.test(x, y, r0 = 0.1, r = 0.5, l = 3, b = 1, exclude = TRUE)  
+#' @usage fs.test(x, y, r0 = 0.1, r = 0.5, l = 3, b = 1, exclude = FALSE)  
 #' @references 
 #' \itemize{
 #'    \item{Ramsay, T. 2002. Spline smoothing over difficult regions. J.R.Statist. Soc. B 64(2):307-319}
@@ -23,6 +21,9 @@
 #' 
 #' ## Upload the horseshoe2D data
 #' data(horseshoe2D)
+#' boundary_nodes = horseshoe2D$boundary_nodes
+#' boundary_segments = horseshoe2D$boundary_segments
+#' locations = horseshoe2D$locations											  
 #' 
 #' ## Create the 2D mesh
 #' mesh = create.mesh.2D(nodes = rbind(boundary_nodes, locations), segments = boundary_segments)
@@ -37,7 +38,7 @@
 #' plot(FEMfunction)
 #' @export
 
-fs.test <- function (x, y, r0 = 0.1, r = 0.5, l = 3, b = 1, exclude = TRUE) 
+fs.test <- function (x, y, r0 = 0.1, r = 0.5, l = 3, b = 1, exclude = FALSE) 
 {
   
   q <- pi * r/2
@@ -53,7 +54,7 @@ fs.test <- function (x, y, r0 = 0.1, r = 0.5, l = 3, b = 1, exclude = TRUE)
   
   ind <- x < 0
   a[ind] <- -atan(y[ind]/x[ind]) * r 
-  d[ind] <-( sqrt(x[ind]^2 + y[ind]^2) - r )* (y[ind]/r0*(as.numeric(abs(y[ind])<=r0 & x[ind]>-0.5))+(as.numeric(abs(y[ind])>r0 || x[ind]<(-0.5))))
+  d[ind] <-( sqrt(x[ind]^2 + y[ind]^2) - r )* (y[ind]/r0*(as.numeric(abs(y[ind])<=r0 & x[ind]>-0.5))+(as.numeric(abs(y[ind])>r0 | x[ind]<(-0.5))))
   
   ind <- abs(d) > r - r0 | (x > l & (x - l)^2 + d^2 > (r - r0)^2)
   
@@ -95,8 +96,6 @@ covs.test = function(x,y){
 #' @param l The length of an arm of the sausage.
 #' @param b The rate at which the function increases per unit increase in distance along the centre line of the sausage.
 #' @param exclude Should exterior points be set to NA?
-#' @param n.theta How many points to use in a piecewise linear representation of a quarter of a circle, when 
-#' generating the boundary curve.
 #' @description Implements a finite area test function based on one proposed by Tim Ramsay (2002) and by 
 #' Simon Wood (2008) in 3D.
 #' @return Returns function evaluations, or NAs for points outside the horseshoe domain. 

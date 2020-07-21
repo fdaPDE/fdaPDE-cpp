@@ -6,6 +6,6 @@
 \description{
 The boundary and interior nodes and connectivity matrix of a triangular mesh of a quasicircular domain, together 
 with a non-stationary field observed over the nodes of the mesh.  
-This dataset can be used to create a \code{MESH.2D} object with the function \code{create.MESH.2D} and to test
+This dataset can be used to create a \code{mesh.2D} object with the function \code{create.mesh.2D} and to test
 the smooth.FEM function.
 }

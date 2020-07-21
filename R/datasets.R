@@ -1,7 +1,7 @@
 #' Horseshoe domain
 #'
 #' The boundary and interior nodes and connectivity matrix of a triangular mesh of the horseshoe domain. 
-#' This dataset can be used to create a \code{MESH.2D} object with the function \code{create.MESH.2D}.
+#' This dataset can be used to create a \code{mesh.2D} object with the function \code{create.mesh.2D}.
 #'
 #' @name horseshoe2D
 NULL
@@ -11,7 +11,7 @@ NULL
 #'
 #' The boundary and interior nodes and connectivity matrix of a triangular mesh of a quasicircular domain, together 
 #' with a non-stationary field observed over the nodes of the mesh.  
-#' This dataset can be used to create a \code{MESH.2D} object with the function \code{create.MESH.2D} and to test
+#' This dataset can be used to create a \code{mesh.2D} object with the function \code{create.mesh.2D} and to test
 #' the smooth.FEM function.
 #'
 #' @name quasicircle2D
@@ -37,6 +37,13 @@ NULL
 #' This dataset can be used to create a \code{MESH.2.5D} object with the function \code{create.MESH.2.5D}.
 #'
 #' @name hub2.5D
+NULL
+
+#' Horseshoe2.5D domain
+#'
+#' A \code{mesh2.5D} object with nodes and connectivity matrix of a triangular mesh of the horseshoe 2.5D domain. 
+#'
+#' @name horseshoe2.5D
 NULL
 
 

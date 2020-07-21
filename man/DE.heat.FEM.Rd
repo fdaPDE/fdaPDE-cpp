@@ -4,7 +4,8 @@
 \alias{DE.heat.FEM}
 \title{Density initialization}
 \usage{
-DE.heat.FEM(data, FEMbasis, lambda, heatStep=0.1, heatIter=500, init="Heat", nFolds=5, search = 2)
+DE.heat.FEM(data, FEMbasis, lambda, heatStep=0.1, heatIter=500, 
+                   init="Heat", nFolds=5, search = 2)
 }
 \arguments{
 \item{data}{A matrix of dimensions #observations-by-ndim. Data are locations: each row corresponds to one point, 

@@ -5,5 +5,5 @@
 \title{Horseshoe domain}
 \description{
 The boundary and interior nodes and connectivity matrix of a triangular mesh of the horseshoe domain. 
-This dataset can be used to create a \code{MESH.2D} object with the function \code{create.MESH.2D}.
+This dataset can be used to create a \code{mesh.2D} object with the function \code{create.mesh.2D}.
 }

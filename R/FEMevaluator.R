@@ -181,7 +181,8 @@ eval.FEM <- function(FEM, locations = NULL, incidence_matrix = NULL, search = "t
 #' ## Compute the coeff vector evaluating the desired function at the mesh nodes
 #' ## In this case we consider the fs.test() function introduced by Wood et al. 2008
 #' time = 1:5
-#' coeff = rep(fs.test(mesh$nodes[,1], mesh$nodes[,2]),5)*time
+#' coeff = rep(fs.test(mesh$nodes[,1], mesh$nodes[,2], exclude = FALSE),5)*
+#'              rep(time, each = nrow(mesh$nodes)) 
 #' ## Create the FEM.time object
 #' FEM_time_function = FEM.time(coeff=coeff, time_mesh=1:5, FEMbasis=FEMbasis, FLAG_PARABOLIC=TRUE)
 #'
@@ -195,6 +196,10 @@ eval.FEM.time <- function(FEM.time, locations = NULL, time.instants = NULL, spac
     stop("FEM.time required;  is NULL.")
   if(class(FEM.time) != "FEM.time")
     stop("'FEM.time' is not of class 'FEM.time'")
+  
+  if(is.vector(locations)){
+    locations = matrix(locations, ncol = 2)
+  }
   
   # save flag for areal evaluation
   FLAG_AREAL_EVALUATION = FALSE
