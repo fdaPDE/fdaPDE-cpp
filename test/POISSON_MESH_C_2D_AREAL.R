@@ -167,7 +167,7 @@ response <- rpois(length(mu), lambda = mu)
 
 
 output_CPP <- fdaPDE::smooth.FEM(observations = as.numeric(response), FEMbasis =FEMbasis, covariates = desmat, GCV=GCVFLAG, GCVmethod = GCVmethod,
-                                  lambda = lambda, max.steps=15, fam=FAMILY, mu0=NULL, scale.param=NULL, incidence_matrix = t(incidence_matrix), areal.data.avg = FALSE)
+                                  lambda = lambda, max.steps.FPIRLS =15, family=FAMILY, mu0=NULL, scale.param=NULL, incidence_matrix = t(incidence_matrix), areal.data.avg = FALSE)
 
 
 

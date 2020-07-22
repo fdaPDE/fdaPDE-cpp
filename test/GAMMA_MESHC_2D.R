@@ -123,9 +123,9 @@ response <- rgamma(length(mesh$nodes[,1]), shape=mu/scale.param, scale=scale.par
 
 # Fitting data --------------------------------------------
 output_CPP_exact <- smooth.FEM(location = loc, observations = as.numeric(response), FEMbasis =FEMbasis, covariates = desmat, GCV=GCVFLAG, GCVmethod = "Exact",
-                                    lambda = lambda, max.steps=15, fam=FAMILY, mu0=NULL, scale.param=NULL)
+                                    lambda = lambda, max.steps.FPIRLS=15, family=FAMILY, mu0=NULL, scale.param=NULL)
 output_CPP_stoc <- smooth.FEM(location = loc, observations = as.numeric(response), FEMbasis =FEMbasis, covariates = desmat, GCV=GCVFLAG, GCVmethod = "Stochastic",
-                                   lambda = lambda, max.steps=15, fam=FAMILY, mu0=NULL, scale.param=NULL)
+                                   lambda = lambda, max.steps.FPIRLS=15, family=FAMILY, mu0=NULL, scale.param=NULL)
 
 
 

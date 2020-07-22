@@ -778,6 +778,9 @@ extern "C" {
 	\param GCV an R boolean indicating whether dofs of the model have to be computed or not
 	\param RGCVmethod an R-integer indicating the method to use to compute the dofs when GCV is TRUE, can be either 1 (exact) or 2 (stochastic)
 	\param Rnrealizations the number of random points used in the stochastic computation of the dofs
+	\param Rtune a R-double, Tuning parameter used for the estimation of GCV. called 'GCV.inflation.factor' in R code.
+	\param RarealDataAvg an R boolean indicating whether the areal data are averaged or not.
+	
 	\return R-vector containg the coefficients of the solution
 */
 
@@ -822,6 +825,9 @@ SEXP regression_Laplace(SEXP Rlocations, SEXP RbaryLocations, SEXP Robservations
 	\param GCV an R boolean indicating whether dofs of the model have to be computed or not
 	\param RGCVmethod an R-integer indicating the method to use to compute the dofs when GCV is TRUE, can be either 1 (exact) or 2 (stochastic)
 	\param Rnrealizations the number of random points used in the stochastic computation of the dofs
+	\param Rtune a R-double, Tuning parameter used for the estimation of GCV. called 'GCV.inflation.factor' in R code.
+	\param RarealDataAvg an R boolean indicating whether the areal data are averaged or not.
+	
 	\return R-vector containg the coefficients of the solution
 */
 
@@ -863,7 +869,10 @@ SEXP regression_PDE(SEXP Rlocations, SEXP RbaryLocations, SEXP Robservations, SE
 	\param RBCValues an R-double containing the value to impose for the Dirichlet condition, on the indexes specified in RBCIndices
 	\param GCV an R boolean indicating whether dofs of the model have to be computed or not
 	\param RGCVmethod an R-integer indicating the method to use to compute the dofs when GCV is TRUE, can be either 1 (exact) or 2 (stochastic)
-	\param Rnrealizations the number of random points used in the stochastic computation of the dofs
+	\param Rnrealizations the number of random points used in the stochastic computation of the dofs	
+	\param Rtune a R-double, Tuning parameter used for the estimation of GCV. called 'GCV.inflation.factor' in R code.
+	\param RarealDataAvg an R boolean indicating whether the areal data are averaged or not.
+	
 	\return R-vector containg the coefficients of the solution
 */
 
@@ -919,6 +928,9 @@ SEXP regression_PDE_space_varying(SEXP Rlocations, SEXP RbaryLocations, SEXP Rob
 	\param DOF an R boolean indicating whether dofs of the model have to be computed or not
 	\param RDOF_matrix a R-matrix containing the dofs (for every combination of the values in RlambdaS and RlambdaT) if they are already known from precedent computations
 	\param Rnrealizations the number of random points used in the stochastic computation of the dofs
+	\param Rtune a R-double, Tuning parameter used for the estimation of GCV. called 'GCV.inflation.factor' in R code.
+	\param RarealDataAvg an R boolean indicating whether the areal data are averaged or not.
+	
 	\return R-vector containg the coefficients of the solution
 */
 
@@ -973,6 +985,9 @@ SEXP regression_Laplace_time(SEXP Rlocations, SEXP RbaryLocations, SEXP Rtime_lo
 	\param DOF an R boolean indicating whether dofs of the model have to be computed or not
 	\param RDOF_matrix a R-matrix containing the dofs (for every combination of the values in RlambdaS and RlambdaT) if they are already known from precedent computations
 	\param Rnrealizations the number of random points used in the stochastic computation of the dofs
+	\param Rtune a R-double, Tuning parameter used for the estimation of GCV. called 'GCV.inflation.factor' in R code.
+	\param RarealDataAvg an R boolean indicating whether the areal data are averaged or not.
+	
 	\return R-vector containg the coefficients of the solution
 */
 
@@ -1026,6 +1041,9 @@ SEXP regression_PDE_time(SEXP Rlocations, SEXP RbaryLocations, SEXP Rtime_locati
 	\param DOF an R boolean indicating whether dofs of the model have to be computed or not
 	\param RDOF_matrix a R-matrix containing the dofs (for every combination of the values in RlambdaS and RlambdaT) if they are already known from precedent computations
 	\param Rnrealizations the number of random points used in the stochastic computation of the dofs
+	\param Rtune a R-double, Tuning parameter used for the estimation of GCV. called 'GCV.inflation.factor' in R code.
+	\param RarealDataAvg an R boolean indicating whether the areal data are averaged or not.
+	
 	\return R-vector containg the coefficients of the solution
 */
 
@@ -1281,6 +1299,7 @@ SEXP Density_Estimation(SEXP Rdata, SEXP Rmesh, SEXP Rorder, SEXP Rmydim, SEXP R
 	\param Rmu0 Initial value of the mean (natural parameter). There exists a default value for each familiy
 	\param RscaleParam If necessary and not supplied, the scale parameter \phi is estimated. See method.phi for details.
 	\param Rsearch an R-integer to decide the search algorithm type (tree or naive search algorithm).
+	\param Rtune a R-double, Tuning parameter used for the estimation of GCV. called 'GCV.inflation.factor' in R code.
 	\param RarealDataAvg an R boolean indicating whether the areal data are averaged or not.
 
 	\return R-vector containg the outputs.
@@ -1336,10 +1355,10 @@ SEXP Density_Estimation(SEXP Rdata, SEXP Rmesh, SEXP Rorder, SEXP Rmydim, SEXP R
 	\param Rfamily Denotes the distribution of the data, within the exponential family.
 	\param Rmax_num_iteration Maximum number of steps run in the PIRLS algorithm, set to 15 by default.
 	\param Rtreshold an R-double used for arresting FPIRLS algorithm. Algorithm stops when two successive iterations lead to improvement in penalized log-likelihood smaller than threshold.
-	\param Rtune It is usually set to 1, but may be higher. It gives more weight to the equivalent degrees of freedom in the computation of the value of the GCV.
 	\param Rmu0 Initial value of the mean (natural parameter). There exists a default value for each familiy
 	\param RscaleParam If necessary and not supplied, the scale parameter \phi is estimated. See method.phi for details.
 	\param Rsearch an R-integer to decide the search algorithm type (tree or naive search algorithm).
+	\param Rtune a R-double, Tuning parameter used for the estimation of GCV. called 'GCV.inflation.factor' in R code.
 	\param RarealDataAvg an R boolean indicating whether the areal data are averaged or not.
 
 	\return R-vector containg the outputs.
@@ -1389,10 +1408,10 @@ SEXP Density_Estimation(SEXP Rdata, SEXP Rmesh, SEXP Rorder, SEXP Rmydim, SEXP R
 	\param Rfamily Denotes the distribution of the data, within the exponential family.
 	\param Rmax_num_iteration Maximum number of steps run in the PIRLS algorithm, set to 15 by default.
 	\param Rtreshold an R-double used for arresting FPIRLS algorithm. Algorithm stops when two successive iterations lead to improvement in penalized log-likelihood smaller than threshold.
-	\param Rtune It is usually set to 1, but may be higher. It gives more weight to the equivalent degrees of freedom in the computation of the value of the GCV.
 	\param Rmu0 Initial value of the mean (natural parameter). There exists a default value for each familiy
 	\param RscaleParam If necessary and not supplied, the scale parameter \phi is estimated. See method.phi for details.
 	\param Rsearch an R-integer to decide the search algorithm type (tree or naive search algorithm).
+	\param Rtune a R-double, Tuning parameter used for the estimation of GCV. called 'GCV.inflation.factor' in R code.
 	\param RarealDataAvg an R boolean indicating whether the areal data are averaged or not.
 
 	\return R-vector containg the outputs.

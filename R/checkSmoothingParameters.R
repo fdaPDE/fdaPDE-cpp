@@ -1,4 +1,4 @@
-checkSmoothingParameters<-function(locations = NULL, observations, FEMbasis, lambda, covariates = NULL, incidence_matrix = NULL, BC = NULL, GCV = FALSE, PDE_parameters=NULL, GCVmethod = 2, nrealizations = 100, search, bary.locations=bary.locations, tune = 1, areal.data.avg = TRUE)
+checkSmoothingParameters<-function(locations = NULL, observations, FEMbasis, lambda, covariates = NULL, incidence_matrix = NULL, BC = NULL, GCV = FALSE, PDE_parameters=NULL, GCVmethod = 2, nrealizations = 100, search, bary.locations=bary.locations, GCV.inflation.factor = 1, areal.data.avg = TRUE)
 {
   #################### Parameter Check #########################
 
@@ -24,8 +24,6 @@ checkSmoothingParameters<-function(locations = NULL, observations, FEMbasis, lam
       stop("Missing values not admitted in 'observations' when 'locations' are specified.")
   }
 
-  if(any(is.na(observations)))
-      stop("Missing values not admitted in 'observations'")
   if (is.null(observations))
     stop("observations required;  is NULL.")
 
@@ -110,11 +108,11 @@ checkSmoothingParameters<-function(locations = NULL, observations, FEMbasis, lam
   if( !is.numeric(nrealizations) || nrealizations < 1)
     stop("nrealizations must be a positive integer")
 
-    # check tune
-  if (is.null(tune)){ 
-    stop("'tune' required;  is NULL.")
-  }else if( !is.numeric(tune) || tune < 0){
-      stop("'tune' must be a real positive")
+    # check GCV.inflation.factor
+  if (is.null(GCV.inflation.factor)){ 
+    stop("'GCV.inflation.factor' required;  is NULL.")
+  }else if( !is.numeric(GCV.inflation.factor) || GCV.inflation.factor < 0){
+      stop("'GCV.inflation.factor' must be a real positive")
   }
 
   if (is.null(areal.data.avg))

@@ -92,10 +92,10 @@ FAMILY = "binomial"
 lambda = 10^seq(-5,0,length.out = 20)  
 
 output_CPP_exact <- fdaPDE::smooth.FEM(location = loc, observations = as.numeric(response), FEMbasis =FEMbasis, covariates = NULL, GCV=T, GCVmethod = "Exact",
-                                       lambda = lambda, max.steps=15, fam=FAMILY, mu0=NULL, scale.param=NULL)
+                                       lambda = lambda, max.steps.FPIRLS=15, family=FAMILY, mu0=NULL, scale.param=NULL)
 
 output_CPP_stoch <- fdaPDE::smooth.FEM(location = loc, observations = as.numeric(response), FEMbasis =FEMbasis, covariates = NULL, GCV=T, GCVmethod = "Stochastic",
-                                       lambda = lambda, max.steps=15, fam=FAMILY, mu0=NULL, scale.param=NULL)
+                                       lambda = lambda, max.steps.FPIRLS=15, family=FAMILY, mu0=NULL, scale.param=NULL)
 
 
 # plot the best lambda which minimize the GCV 

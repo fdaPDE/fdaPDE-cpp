@@ -1,13 +1,13 @@
 CPP_smooth.GAM.FEM<-function(locations, bary.locations ,observations, FEMbasis, lambda,
                                   covariates=NULL, incidence_matrix=NULL, ndim, mydim,
-                                  BC=NULL, GCV, GCVMETHOD = 2, nrealizations=100, mu0=NULL, max.steps=15, FAMILY, 
-                                  scale.param=NULL, tune=1.8, threshold=0.0002020, DOF, DOF_matrix=NULL, search, areal.data.avg = FALSE )
+                                  BC=NULL, GCV, GCVMETHOD = 2, nrealizations=100, mu0=NULL, max.steps.FPIRLS=15, FAMILY, 
+                                  scale.param=NULL, GCV.inflation.factor=1.8, threshold.FPIRLS=0.0002020, DOF, DOF_matrix=NULL, search, areal.data.avg = FALSE )
 {
-  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
   FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
   FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
   FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
-  max.steps = max.steps - 1
+  max.steps.FPIRLS = max.steps.FPIRLS - 1
   
   if(is.null(covariates))
   {
@@ -87,17 +87,17 @@ CPP_smooth.GAM.FEM<-function(locations, bary.locations ,observations, FEMbasis, 
   storage.mode(GCVMETHOD) <- "integer"
   storage.mode(FAMILY) <- "character"
   #storage.mode(FAMILY) <- "integer"
-  storage.mode(max.steps) <- "integer"
-  storage.mode(tune) <- "double"
+  storage.mode(max.steps.FPIRLS) <- "integer"
+  storage.mode(GCV.inflation.factor) <- "double"
   storage.mode(mu0) <- "double"
   storage.mode(scale.param) <- "double"
-  storage.mode(threshold) <- "double"
+  storage.mode(threshold.FPIRLS) <- "double"
   storage.mode(search) <- "integer"
 
   ## Call C++ function
   bigsol <- .Call("gam_Laplace", locations, bary.locations, observations, FEMbasis$mesh, FEMbasis$order,
                  mydim, ndim, lambda, covariates, incidence_matrix, BC$BC_indices, BC$BC_values,
-                 GCV, GCVMETHOD, nrealizations, FAMILY, max.steps, threshold, tune, mu0, scale.param, DOF, DOF_matrix, search, areal.data.avg, PACKAGE = "fdaPDE")
+                 GCV, GCVMETHOD, nrealizations, FAMILY, max.steps.FPIRLS, threshold.FPIRLS, GCV.inflation.factor, mu0, scale.param, DOF, DOF_matrix, search, areal.data.avg, PACKAGE = "fdaPDE")
   
   
   return(bigsol)
@@ -106,14 +106,14 @@ CPP_smooth.GAM.FEM<-function(locations, bary.locations ,observations, FEMbasis, 
 
 CPP_smooth.GAM.FEM.PDE.basis<-function(locations, bary.locations ,observations, FEMbasis, lambda, PDE_parameters,
                                   covariates=NULL, incidence_matrix=NULL, ndim, mydim,
-                                  BC=NULL, GCV, GCVMETHOD = 2, nrealizations=100, mu0=NULL, max.steps=15, FAMILY, 
-                                  scale.param=NULL, tune=1.8, threshold=0.0004, DOF, DOF_matrix=NULL, search, areal.data.avg = FALSE )
+                                  BC=NULL, GCV, GCVMETHOD = 2, nrealizations=100, mu0=NULL, max.steps.FPIRLS=15, FAMILY, 
+                                  scale.param=NULL, GCV.inflation.factor=1.8, threshold.FPIRLS=0.0004, DOF, DOF_matrix=NULL, search, areal.data.avg = FALSE )
 {
-  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
   FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
   FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
   FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
-  max.steps = max.steps - 1
+  max.steps.FPIRLS = max.steps.FPIRLS - 1
   if(is.null(covariates))
   {
     covariates<-matrix(nrow = 0, ncol = 1)
@@ -159,7 +159,7 @@ CPP_smooth.GAM.FEM.PDE.basis<-function(locations, bary.locations ,observations, 
     scale.param<- -1
   }
 
-  threshold<-0.0004
+  threshold.FPIRLS<-0.0004
   
   ## Set proper type for correct C++ reading
   locations <- as.matrix(locations)
@@ -191,12 +191,12 @@ CPP_smooth.GAM.FEM.PDE.basis<-function(locations, bary.locations ,observations, 
   storage.mode(GCVMETHOD) <- "integer"
   storage.mode(FAMILY) <- "character"
   #storage.mode(FAMILY) <- "integer"
-  storage.mode(max.steps) <- "integer"
-  storage.mode(tune) <- "double"
+  storage.mode(max.steps.FPIRLS) <- "integer"
+  storage.mode(GCV.inflation.factor) <- "double"
   storage.mode(mu0) <- "double"
 
   storage.mode(scale.param) <- "double"
-  storage.mode(threshold) <- "double"
+  storage.mode(threshold.FPIRLS) <- "double"
 
   storage.mode(PDE_parameters$K) <- "double"
   storage.mode(PDE_parameters$b) <- "double"
@@ -205,7 +205,7 @@ CPP_smooth.GAM.FEM.PDE.basis<-function(locations, bary.locations ,observations, 
   ## Call C++ function
   bigsol <- .Call("gam_PDE", locations, bary.locations, observations, FEMbasis$mesh, FEMbasis$order,
                  mydim, ndim, lambda, PDE_parameters$K, PDE_parameters$b, PDE_parameters$c, covariates, incidence_matrix, BC$BC_indices, BC$BC_values,
-                 GCV, GCVMETHOD, nrealizations, FAMILY, max.steps, threshold, tune, mu0, scale.param, DOF, DOF_matrix, search, areal.data.avg,PACKAGE = "fdaPDE")
+                 GCV, GCVMETHOD, nrealizations, FAMILY, max.steps.FPIRLS, threshold.FPIRLS, GCV.inflation.factor, mu0, scale.param, DOF, DOF_matrix, search, areal.data.avg,PACKAGE = "fdaPDE")
   # GCV became DOF variable in C++, the motivation is if GCV = TRUE we need to compute DoF otherwise no. 
   
   return(bigsol)
@@ -213,14 +213,14 @@ CPP_smooth.GAM.FEM.PDE.basis<-function(locations, bary.locations ,observations, 
 
 CPP_smooth.GAM.FEM.PDE.sv.basis<-function(locations, bary.locations, observations, FEMbasis, lambda, PDE_parameters,
                                   covariates=NULL, incidence_matrix=NULL, ndim, mydim,
-                                  BC=NULL, GCV, GCVMETHOD = 2, nrealizations=100, mu0=NULL, max.steps=15, FAMILY, 
-                                  scale.param=NULL, tune=1.8, threshold=0.0004, DOF, DOF_matrix=NULL, search, areal.data.avg = FALSE )
+                                  BC=NULL, GCV, GCVMETHOD = 2, nrealizations=100, mu0=NULL, max.steps.FPIRLS=15, FAMILY, 
+                                  scale.param=NULL, GCV.inflation.factor=1.8, threshold.FPIRLS=0.0004, DOF, DOF_matrix=NULL, search, areal.data.avg = FALSE )
 {
-  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
   FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
   FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
   FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
-  max.steps = max.steps - 1
+  max.steps.FPIRLS = max.steps.FPIRLS - 1
   if(is.null(covariates))
   {
     covariates<-matrix(nrow = 0, ncol = 1)
@@ -304,11 +304,11 @@ CPP_smooth.GAM.FEM.PDE.sv.basis<-function(locations, bary.locations, observation
   storage.mode(GCVMETHOD) <- "integer"
   storage.mode(FAMILY) <- "character"
   #storage.mode(FAMILY) <- "integer"
-  storage.mode(max.steps) <- "integer"
-  storage.mode(tune) <- "double"
+  storage.mode(max.steps.FPIRLS) <- "integer"
+  storage.mode(GCV.inflation.factor) <- "double"
   storage.mode(mu0) <- "double"
   storage.mode(scale.param) <- "double"
-  storage.mode(threshold) <- "double"
+  storage.mode(threshold.FPIRLS) <- "double"
 
   storage.mode(PDE_param_eval$K) <- "double"
   storage.mode(PDE_param_eval$b) <- "double"
@@ -319,7 +319,7 @@ CPP_smooth.GAM.FEM.PDE.sv.basis<-function(locations, bary.locations, observation
   ## Call C++ function
   bigsol <- .Call("gam_PDE_space_varying", locations, bary.locations, observations, FEMbasis$mesh, FEMbasis$order,
                  mydim, ndim, lambda, PDE_param_eval$K, PDE_param_eval$b, PDE_param_eval$c, PDE_param_eval$u, covariates, incidence_matrix, BC$BC_indices, BC$BC_values,
-                 GCV, GCVMETHOD, nrealizations, FAMILY, max.steps, threshold, tune, mu0, scale.param, DOF, DOF_matrix, search, areal.data.avg,PACKAGE = "fdaPDE")
+                 GCV, GCVMETHOD, nrealizations, FAMILY, max.steps.FPIRLS, threshold.FPIRLS, GCV.inflation.factor, mu0, scale.param, DOF, DOF_matrix, search, areal.data.avg,PACKAGE = "fdaPDE")
   # GCV became DOF variable in C++, the motivation is if GCV = TRUE we need to compute DoF otherwise no. 
   
   return(bigsol)
@@ -327,8 +327,8 @@ CPP_smooth.GAM.FEM.PDE.sv.basis<-function(locations, bary.locations, observation
 
 CPP_smooth.manifold.GAM.FEM.basis<-function(locations, bary.locations, observations, FEMbasis, lambda,
                                   covariates=NULL, incidence_matrix=NULL, ndim, mydim,
-                                  BC=NULL, GCV, GCVMETHOD = 2, nrealizations=100, mu0=NULL, max.steps=15, FAMILY, 
-                                  scale.param=NULL, tune=1.8, threshold=0.0004, DOF, DOF_matrix=NULL, search, areal.data.avg = FALSE )
+                                  BC=NULL, GCV, GCVMETHOD = 2, nrealizations=100, mu0=NULL, max.steps.FPIRLS=15, FAMILY, 
+                                  scale.param=NULL, GCV.inflation.factor=1.8, threshold.FPIRLS=0.0004, DOF, DOF_matrix=NULL, search, areal.data.avg = FALSE )
 {
   
   # C++ function for manifold works with vectors not with matrices
@@ -336,11 +336,11 @@ CPP_smooth.manifold.GAM.FEM.basis<-function(locations, bary.locations, observati
   FEMbasis$mesh$triangles=c(t(FEMbasis$mesh$triangles))
   FEMbasis$mesh$nodes=c(t(FEMbasis$mesh$nodes))
   
-  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
  
   FEMbasis$mesh$triangles=FEMbasis$mesh$triangles-1
 
-  max.steps = max.steps - 1
+  max.steps.FPIRLS = max.steps.FPIRLS - 1
   if(is.null(covariates))
   {
     covariates<-matrix(nrow = 0, ncol = 1)
@@ -418,16 +418,16 @@ CPP_smooth.manifold.GAM.FEM.basis<-function(locations, bary.locations, observati
   storage.mode(GCVMETHOD) <- "integer"
   storage.mode(FAMILY) <- "character"
   #storage.mode(FAMILY) <- "integer"
-  storage.mode(max.steps) <- "integer"
-  storage.mode(tune) <- "double"
+  storage.mode(max.steps.FPIRLS) <- "integer"
+  storage.mode(GCV.inflation.factor) <- "double"
   storage.mode(mu0) <- "double"
   storage.mode(scale.param) <- "double"
-  storage.mode(threshold) <- "double"
+  storage.mode(threshold.FPIRLS) <- "double"
   storage.mode(search) <- "integer"
   ## Call C++ function
   bigsol <- .Call("gam_Laplace", locations, bary.locations, observations, FEMbasis$mesh, FEMbasis$mesh$order,
                  mydim, ndim, lambda, covariates, incidence_matrix, BC$BC_indices, BC$BC_values,
-                 GCV, GCVMETHOD, nrealizations, FAMILY, max.steps, threshold, tune, mu0, scale.param, DOF, DOF_matrix, search, areal.data.avg,PACKAGE = "fdaPDE")
+                 GCV, GCVMETHOD, nrealizations, FAMILY, max.steps.FPIRLS, threshold.FPIRLS, GCV.inflation.factor, mu0, scale.param, DOF, DOF_matrix, search, areal.data.avg,PACKAGE = "fdaPDE")
   # GCV became DOF variable in C++, the motivation is if GCV = TRUE we need to compute DoF otherwise no. 
   
   return(bigsol)
@@ -435,8 +435,8 @@ CPP_smooth.manifold.GAM.FEM.basis<-function(locations, bary.locations, observati
 
 CPP_smooth.volume.GAM.FEM.basis<-function(locations, bary.locations, observations, FEMbasis, lambda,
                                   covariates=NULL, incidence_matrix=NULL, ndim, mydim,
-                                  BC=NULL, GCV, GCVMETHOD = 2, nrealizations=100, mu0=NULL, max.steps=15, FAMILY, 
-                                  scale.param=NULL, tune=1.8, threshold=0.0004, DOF, DOF_matrix=NULL, search, areal.data.avg = FALSE )
+                                  BC=NULL, GCV, GCVMETHOD = 2, nrealizations=100, mu0=NULL, max.steps.FPIRLS=15, FAMILY, 
+                                  scale.param=NULL, GCV.inflation.factor=1.8, threshold.FPIRLS=0.0004, DOF, DOF_matrix=NULL, search, areal.data.avg = FALSE )
 {
   
   # C++ function for volumetric works with vectors not with matrices
@@ -444,11 +444,11 @@ CPP_smooth.volume.GAM.FEM.basis<-function(locations, bary.locations, observation
   FEMbasis$mesh$tetrahedrons=c(t(FEMbasis$mesh$tetrahedrons))
   FEMbasis$mesh$nodes=c(t(FEMbasis$mesh$nodes))
   
-  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
 
   FEMbasis$mesh$tetrahedrons=FEMbasis$mesh$tetrahedrons-1
 
-  max.steps = max.steps - 1
+  max.steps.FPIRLS = max.steps.FPIRLS - 1
   if(is.null(covariates))
   {
     covariates<-matrix(nrow = 0, ncol = 1)
@@ -528,16 +528,16 @@ CPP_smooth.volume.GAM.FEM.basis<-function(locations, bary.locations, observation
   storage.mode(FAMILY) <- "character"
 
   #storage.mode(FAMILY) <- "integer"
-  storage.mode(max.steps) <- "integer"
-  storage.mode(tune) <- "double"
+  storage.mode(max.steps.FPIRLS) <- "integer"
+  storage.mode(GCV.inflation.factor) <- "double"
   storage.mode(mu0) <- "double"
   storage.mode(scale.param) <- "double"
-  storage.mode(threshold) <- "double"
+  storage.mode(threshold.FPIRLS) <- "double"
   storage.mode(search) <- "integer"
   ## Call C++ function
   bigsol <- .Call("gam_Laplace", locations, bary.locations, observations, FEMbasis$mesh, FEMbasis$mesh$order,
                  mydim, ndim, lambda, covariates, incidence_matrix, BC$BC_indices, BC$BC_values,
-                 GCV, GCVMETHOD, nrealizations, FAMILY, max.steps, threshold, tune, mu0, scale.param, DOF, DOF_matrix, search, areal.data.avg, PACKAGE = "fdaPDE")
+                 GCV, GCVMETHOD, nrealizations, FAMILY, max.steps.FPIRLS, threshold.FPIRLS, GCV.inflation.factor, mu0, scale.param, DOF, DOF_matrix, search, areal.data.avg, PACKAGE = "fdaPDE")
   # GCV became DOF variable in C++, the motivation is if GCV = TRUE we need to compute DoF otherwise no. 
   
   return(bigsol)

@@ -84,7 +84,7 @@ response <- rexp(nloc, rate = 1/mu)
 
 
 output_CPP <- fdaPDE::smooth.FEM(location = loc, observations = as.numeric(response), FEMbasis =FEMbasis, covariates = NULL, GCV=GCVFLAG, GCVmethod = GCVmethod,
-                                 lambda = lambda, max.steps=15, fam=FAMILY, mu0=NULL, scale.param=NULL)
+                                 lambda = lambda, max.steps.FPIRLS=15, family=FAMILY, mu0=NULL, scale.param=NULL)
 
 
 plot(log10(lambda),output_CPP$GCV)

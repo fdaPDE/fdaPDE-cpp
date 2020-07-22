@@ -1,34 +1,34 @@
-checkGAMParameters<-function(observations, max.steps, mu0, scale.param, threshold, fam)
+checkGAMParameters<-function(observations, max.steps.FPIRLS, mu0, scale.param, threshold.FPIRLS, family)
 {
   observations.len = length(observations)
 	  #################### Parameter Check #########################
-	# Check max.steps 
-	if(!all.equal(max.steps, as.integer(max.steps)) || max.steps <= 0 )
-		stop("max.steps must be a positive integer.")
+	# Check max.steps.FPIRLS 
+	if(!all.equal(max.steps.FPIRLS, as.integer(max.steps.FPIRLS)) || max.steps.FPIRLS <= 0 )
+		stop("'max.steps.FPIRLS' must be a positive integer.")
 	
   #check observations
-  if( fam == "binomial"){
+  if( family == "binomial"){
       if(length(c(which(observations==0),which(observations==1))) != observations.len )
         stop("'observations' must be composed by 0 and 1 values for your distribution.")
   }
-  if( length(c(which(observations==0),which(observations==1))) == observations.len && fam != "binomial"){
+  if( length(c(which(observations==0),which(observations==1))) == observations.len && family != "binomial"){
     stop("'observations' have only 0 and 1 values. Your distribution must be 'bernulli'.")
   }
-  if(fam == "gamma"){
+  if(family == "gamma"){
       if(any(observations<=0))
           stop("'observations' must be composed by real positive number for your distribution.")
   }
-  if(fam == "exponential"){
+  if(family == "exponential"){
       if(any(observations<0))
           stop("'observations' must be composed by real positive number for your distribution.")
   }
-  if(fam == "poisson"){
+  if(family == "poisson"){
       if(any(observations<0))
           stop("'observations' must be composed by real positive number for your distribution.")
       if(any(observations != floor(observations)))
           stop("'observations' must be composed by natural positive number for your distribution.")
   }
-  if( all(observations == floor(observations)) && sum(fam==c("binomial","poisson")) == 0 ){
+  if( all(observations == floor(observations)) && sum(family==c("binomial","poisson")) == 0 ){
       stop("'observations' is composed by natural positive number. Select a discrete distribution.")
   }
 
@@ -48,8 +48,8 @@ checkGAMParameters<-function(observations, max.steps, mu0, scale.param, threshol
   		if(length(mu0) != observations.len )
     		stop(" 'mu0' and 'observations' must have equal length")
 
-  		fam_positive = c("exponential", "gamma", "poisson")
-  		if(sum(fam==fam_positive)==1){
+  		family_positive = c("exponential", "gamma", "poisson")
+  		if(sum(family==family_positive)==1){
   			if(any(mu0<0))
   				stop("mu0 must be composed by real positive number for your distribution")
   		}
@@ -61,12 +61,15 @@ checkGAMParameters<-function(observations, max.steps, mu0, scale.param, threshol
     		stop("The dispersion parameter of your distribution ('scale.param') must be a positive real number")
 	}	
 
-	# check threshold
-	if (is.null(threshold)){ 
-		stop("'threshold' required;  is NULL.")
-	}else if( !is.numeric(threshold) || threshold <= 0){
-    	stop("'threshold' must be a real positive")
+	# check threshold.FPIRLS
+	if (is.null(threshold.FPIRLS)){ 
+		stop("'threshold.FPIRLS' required;  is NULL.")
+	}else if( !is.numeric(threshold.FPIRLS) || threshold.FPIRLS <= 0){
+    	stop("'threshold.FPIRLS' must be a real positive")
 	}
 
+  # observations check
+  if(any(is.na(observations)))
+    stop("Missing values not admitted in 'observations' in FPIRLS method")
 
 }

@@ -13,8 +13,8 @@ extern SEXP eval_FEM_fd(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SE
 extern SEXP eval_FEM_time(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP eval_FEM_time_nodes(SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP get_FEM_mass_matrix(SEXP, SEXP, SEXP, SEXP);
-extern SEXP get_FEM_PDE_matrix( SEXP,SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
-extern SEXP get_FEM_PDE_space_varying_matrix( SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP get_FEM_PDE_matrix( SEXP,SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP get_FEM_PDE_space_varying_matrix( SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP get_FEM_stiff_matrix(SEXP, SEXP, SEXP, SEXP);
 extern SEXP get_integration_points(SEXP, SEXP, SEXP, SEXP);
 extern SEXP points_projection(SEXP, SEXP);
@@ -38,8 +38,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"eval_FEM_time",                     (DL_FUNC) &eval_FEM_time,                     13},
     {"eval_FEM_time_nodes",               (DL_FUNC) &eval_FEM_time_nodes,                5},
     {"get_FEM_mass_matrix",               (DL_FUNC) &get_FEM_mass_matrix,                4},
-    {"get_FEM_PDE_matrix",                (DL_FUNC) &get_FEM_PDE_matrix,                18},
-    {"get_FEM_PDE_space_varying_matrix",  (DL_FUNC) &get_FEM_PDE_space_varying_matrix,  19},
+    {"get_FEM_PDE_matrix",                (DL_FUNC) &get_FEM_PDE_matrix,                19},
+    {"get_FEM_PDE_space_varying_matrix",  (DL_FUNC) &get_FEM_PDE_space_varying_matrix,  20},
     {"get_FEM_stiff_matrix",              (DL_FUNC) &get_FEM_stiff_matrix,               4},
     {"get_integration_points",            (DL_FUNC) &get_integration_points,             4},
     {"points_projection",                 (DL_FUNC) &points_projection,                  2},

@@ -1,6 +1,6 @@
-CPP_smooth.FEM.basis<-function(locations, bary.locations, observations, FEMbasis, lambda, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, GCV, GCVMETHOD = 2, nrealizations = 100, DOF=TRUE, DOF_matrix=NULL, search, tune = tune, areal.data.avg = TRUE)
+CPP_smooth.FEM.basis<-function(locations, bary.locations, observations, FEMbasis, lambda, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, GCV, GCVMETHOD = 2, nrealizations = 100, DOF=TRUE, DOF_matrix=NULL, search, GCV.inflation.factor = GCV.inflation.factor, areal.data.avg = TRUE)
 {
-  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
 
   FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
   FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
@@ -71,21 +71,21 @@ CPP_smooth.FEM.basis<-function(locations, bary.locations, observations, FEMbasis
   storage.mode(GCVMETHOD) <- "integer"
   storage.mode(search) <- "integer"
 
-  storage.mode(tune) <- "double"
+  storage.mode(GCV.inflation.factor) <- "double"
   areal.data.avg <- as.integer(areal.data.avg)
   storage.mode(areal.data.avg) <-"integer"
 
   ## Call C++ function
   bigsol <- .Call("regression_Laplace", locations, bary.locations, observations, FEMbasis$mesh, FEMbasis$order,
                   mydim, ndim, lambda, covariates, incidence_matrix, BC$BC_indices, BC$BC_values,
-                  GCV, GCVMETHOD, nrealizations, DOF, DOF_matrix, search, tune, areal.data.avg, PACKAGE = "fdaPDE")
+                  GCV, GCVMETHOD, nrealizations, DOF, DOF_matrix, search, GCV.inflation.factor, areal.data.avg, PACKAGE = "fdaPDE")
   return(bigsol)
 }
 
-CPP_smooth.FEM.PDE.basis<-function(locations, bary.locations, observations, FEMbasis, lambda, PDE_parameters, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, GCV,GCVMETHOD = 2, nrealizations = 100, DOF=TRUE,DOF_matrix=NULL, search, tune = tune, areal.data.avg = TRUE)
+CPP_smooth.FEM.PDE.basis<-function(locations, bary.locations, observations, FEMbasis, lambda, PDE_parameters, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, GCV,GCVMETHOD = 2, nrealizations = 100, DOF=TRUE,DOF_matrix=NULL, search, GCV.inflation.factor = GCV.inflation.factor, areal.data.avg = TRUE)
 {
 
-  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
 
   FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
   FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
@@ -159,21 +159,21 @@ CPP_smooth.FEM.PDE.basis<-function(locations, bary.locations, observations, FEMb
   storage.mode(GCVMETHOD) <- "integer"
   storage.mode(search) <- "integer"
 
-  storage.mode(tune) <- "double"
+  storage.mode(GCV.inflation.factor) <- "double"
   areal.data.avg <- as.integer(areal.data.avg)
   storage.mode(areal.data.avg) <-"integer"
 
   ## Call C++ function
   bigsol <- .Call("regression_PDE", locations, bary.locations, observations, FEMbasis$mesh, FEMbasis$order, mydim, ndim,
                   lambda, PDE_parameters$K, PDE_parameters$b, PDE_parameters$c, covariates, incidence_matrix,
-                  BC$BC_indices, BC$BC_values, GCV,GCVMETHOD, nrealizations, DOF, DOF_matrix, search, tune, areal.data.avg, PACKAGE = "fdaPDE")
+                  BC$BC_indices, BC$BC_values, GCV,GCVMETHOD, nrealizations, DOF, DOF_matrix, search, GCV.inflation.factor, areal.data.avg, PACKAGE = "fdaPDE")
   return(bigsol)
 }
 
-CPP_smooth.FEM.PDE.sv.basis<-function(locations, bary.locations, observations, FEMbasis, lambda, PDE_parameters, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, GCV,GCVMETHOD = 2, nrealizations = 100, DOF=TRUE, DOF_matrix=NULL, search, tune = tune, areal.data.avg = TRUE)
+CPP_smooth.FEM.PDE.sv.basis<-function(locations, bary.locations, observations, FEMbasis, lambda, PDE_parameters, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, GCV,GCVMETHOD = 2, nrealizations = 100, DOF=TRUE, DOF_matrix=NULL, search, GCV.inflation.factor = GCV.inflation.factor, areal.data.avg = TRUE)
 {
 
-  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
 
   FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
   FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
@@ -255,14 +255,14 @@ CPP_smooth.FEM.PDE.sv.basis<-function(locations, bary.locations, observations, F
   storage.mode(GCVMETHOD) <- "integer"
   storage.mode(search) <- "integer"
 
-  storage.mode(tune) <- "double"
+  storage.mode(GCV.inflation.factor) <- "double"
   areal.data.avg <- as.integer(areal.data.avg)
   storage.mode(areal.data.avg) <-"integer"
 
   ## Call C++ function
   bigsol <- .Call("regression_PDE_space_varying", locations, bary.locations, observations, FEMbasis$mesh, FEMbasis$order,
                   mydim, ndim, lambda, PDE_param_eval$K, PDE_param_eval$b, PDE_param_eval$c, PDE_param_eval$u,
-                  covariates, incidence_matrix, BC$BC_indices, BC$BC_values, GCV,GCVMETHOD, nrealizations, DOF, DOF_matrix, search, tune, areal.data.avg,
+                  covariates, incidence_matrix, BC$BC_indices, BC$BC_values, GCV,GCVMETHOD, nrealizations, DOF, DOF_matrix, search, GCV.inflation.factor, areal.data.avg,
                   PACKAGE = "fdaPDE")
   return(bigsol)
 }
@@ -282,7 +282,7 @@ CPP_eval.FEM = function(FEM, locations, incidence_matrix, redundancy, ndim, mydi
   #           FELSPLOBJ at (X,Y).
 
   FEMbasis = FEM$FEMbasis
-  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
 
   FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
   FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
@@ -377,7 +377,7 @@ CPP_get.FEM.Mass.Matrix<-function(FEMbasis)
   }
 
 
-  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
 
   FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
   FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
@@ -413,7 +413,7 @@ CPP_get.FEM.Stiff.Matrix<-function(FEMbasis)
     stop('Unknown mesh class')
   }
 
-  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
 
   FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
   FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
@@ -448,7 +448,7 @@ CPP_get.FEM.PDE.Matrix<-function(observations, FEMbasis, PDE_parameters)
   }else{
     stop('Unknown mesh class')
   }
-  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
 
   FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
   FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
@@ -463,7 +463,7 @@ CPP_get.FEM.PDE.Matrix<-function(observations, FEMbasis, PDE_parameters)
   GCV = 0
   GCVmethod = 0
   nrealizations = 0
-  tune = 1
+  GCV.inflation.factor = 1
   areal.data.avg = 1
 
   ## Set proper type for correct C++ reading
@@ -493,14 +493,14 @@ CPP_get.FEM.PDE.Matrix<-function(observations, FEMbasis, PDE_parameters)
   storage.mode(nrealizations) <- "integer"
   storage.mode(GCVmethod) <- "integer"
 
-  storage.mode(tune) <- "double"
+  storage.mode(GCV.inflation.factor) <- "double"
   areal.data.avg <- as.integer(areal.data.avg)
   storage.mode(areal.data.avg) <-"integer"
 
   ## Call C++ function
   triplets <- .Call("get_FEM_PDE_matrix", locations, observations, FEMbasis$mesh,
                     FEMbasis$order,mydim, ndim, lambda, PDE_parameters$K, PDE_parameters$b, PDE_parameters$c, covariates,
-                    incidence_matrix, BC$BC_indices, BC$BC_values, GCV,GCVmethod, nrealizations, tune, areal.data.avg,
+                    incidence_matrix, BC$BC_indices, BC$BC_values, GCV,GCVmethod, nrealizations, GCV.inflation.factor, areal.data.avg,
                     PACKAGE = "fdaPDE")
 
   A = sparseMatrix(i = triplets[[1]][,1], j=triplets[[1]][,2], x = triplets[[2]], dims = c(nrow(FEMbasis$mesh$nodes),nrow(FEMbasis$mesh$nodes)))
@@ -520,7 +520,7 @@ CPP_get.FEM.PDE.sv.Matrix<-function(observations, FEMbasis, PDE_parameters)
     stop('Unknown mesh class')
   }
 
-  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
 
   FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
   FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
@@ -535,7 +535,7 @@ CPP_get.FEM.PDE.sv.Matrix<-function(observations, FEMbasis, PDE_parameters)
   GCV = 0
   GCVmethod = 0
   nrealizations = 0
-  tune = 1
+  GCV.inflation.factor = 1
   areal.data.avg = 1
 
   PDE_param_eval = NULL
@@ -572,14 +572,14 @@ CPP_get.FEM.PDE.sv.Matrix<-function(observations, FEMbasis, PDE_parameters)
   storage.mode(nrealizations) <- "integer"
   storage.mode(GCVmethod) <- "integer"
 
-  storage.mode(tune) <- "double"
+  storage.mode(GCV.inflation.factor) <- "double"
   areal.data.avg <- as.integer(areal.data.avg)
   storage.mode(areal.data.avg) <-"integer"
   
   ## Call C++ function
   triplets <- .Call("get_FEM_PDE_space_varying_matrix", locations, observations, FEMbasis$mesh,
                     FEMbasis$order,mydim, ndim, lambda, PDE_param_eval$K, PDE_param_eval$b, PDE_param_eval$c, PDE_param_eval$u, covariates,
-                    incidence_matrix, BC$BC_indices, BC$BC_values, GCV,GCVmethod, nrealizations, tune, areal.data.avg,
+                    incidence_matrix, BC$BC_indices, BC$BC_values, GCV,GCVmethod, nrealizations, GCV.inflation.factor, areal.data.avg,
                     PACKAGE = "fdaPDE")
 
   A = sparseMatrix(i = triplets[[1]][,1], j=triplets[[1]][,2], x = triplets[[2]], dims = c(nrow(FEMbasis$mesh$nodes),nrow(FEMbasis$mesh$nodes)))

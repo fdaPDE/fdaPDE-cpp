@@ -1,4 +1,4 @@
-checkSmoothingParameters_time<-function(locations = NULL, time_locations=NULL, observations, FEMbasis, time_mesh=NULL, lambdaS, lambdaT = 1, covariates = NULL, PDE_parameters=NULL, incidence_matrix = NULL, BC = NULL, FLAG_MASS = FALSE, FLAG_PARABOLIC = FALSE, IC = NULL, GCV = FALSE,GCVmethod = 2,nrealizations = 100, DOF=NULL, DOF_matrix=NULL, search, bary.locations=bary.locations, tune = 1, areal.data.avg = TRUE)
+checkSmoothingParameters_time<-function(locations = NULL, time_locations=NULL, observations, FEMbasis, time_mesh=NULL, lambdaS, lambdaT = 1, covariates = NULL, PDE_parameters=NULL, incidence_matrix = NULL, BC = NULL, FLAG_MASS = FALSE, FLAG_PARABOLIC = FALSE, IC = NULL, GCV = FALSE,GCVmethod = 2,nrealizations = 100, DOF=NULL, DOF_matrix=NULL, search, bary.locations=bary.locations, GCV.inflation.factor = 1, areal.data.avg = TRUE)
 {
   #################### Parameter Check #########################
 
@@ -124,11 +124,11 @@ checkSmoothingParameters_time<-function(locations = NULL, time_locations=NULL, o
   if( !is.numeric(nrealizations) || nrealizations < 1)
     stop("nrealizations must be a positive integer")
 
-  # check tune
-  if (is.null(tune)){ 
-    stop("'tune' required;  is NULL.")
-  }else if( !is.numeric(tune) || tune < 0){
-      stop("'tune' must be a real positive")
+  # check GCV.inflation.factor
+  if (is.null(GCV.inflation.factor)){ 
+    stop("'GCV.inflation.factor' required;  is NULL.")
+  }else if( !is.numeric(GCV.inflation.factor) || GCV.inflation.factor < 0){
+      stop("'GCV.inflation.factor' must be a real positive")
   }
 
    if (is.null(areal.data.avg))

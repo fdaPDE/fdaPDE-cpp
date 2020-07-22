@@ -4,12 +4,12 @@
 \alias{smooth.FEM.time}
 \title{Space-time regression with differential regularization}
 \usage{
-smooth.FEM.time(locations = NULL, time_locations = NULL, observations, FEMbasis, 
-                       time_mesh = NULL, lambdaS, lambdaT = 1, covariates = NULL, 
-                       PDE_parameters = NULL, incidence_matrix = NULL, BC = NULL, 
-                       FLAG_MASS = FALSE, FLAG_PARABOLIC = FALSE, IC = NULL, GCV = FALSE, 
+smooth.FEM.time(locations = NULL, time_locations=NULL, observations, FEMbasis, 
+                       time_mesh=NULL, lambdaS, lambdaT = 1, covariates = NULL, 
+                       PDE_parameters=NULL, incidence_matrix = NULL, BC = NULL, FLAG_MASS = FALSE, 
+                       FLAG_PARABOLIC = FALSE, IC = NULL, GCV = FALSE,
                        GCVmethod = "Stochastic", nrealizations = 100, DOF_matrix=NULL, 
-                       search = "tree", bary.locations = NULL)
+                       search = "tree", bary.locations = NULL, GCV.inflation.factor= 1, areal.data.avg = TRUE)
 }
 \arguments{
 \item{locations}{A matrix where each row specifies the spatial coordinates \code{x} and \code{y} (and \code{z} if ndim=3) of the corresponding observations in the vector \code{observations}.
@@ -78,6 +78,11 @@ since the computation of the dof is the most expensive part of GCV.}
 \code{locations}, location points which are same as the given locations options. (checks whether both locations are the same);
 \code{element ids}, a vector of element id of the points from the mesh where they are located;
 \code{barycenters}, a vector of barycenter of points from the located element.}
+
+\item{GCV.inflation.factor}{Tuning parameter used for the estimation of GCV. Default value \code{GCV.inflation.factor = 1.8}.
+It is advised to set it grather than 1 to avoid overfitting.}
+
+\item{areal.data.avg}{Boolean. It involve the computation of Areal Data. If \code{TRUE} the areal data are averaged, otherwise not.}
 }
 \value{
 A list with the following variables:

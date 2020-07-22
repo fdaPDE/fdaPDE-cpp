@@ -130,9 +130,9 @@ response <- rpois(length(mu), lambda = mu)
   
 # Fitting -------------
 
-output_CPP_exact <- smooth.FEM(location = NULL, observations = as.numeric(response), FEMbasis =FEMbasis, covariates = NULL, GCV=GCVFLAG, GCVmethod = "Exact", BC =BC, PDE_parameters = PDE_parameters, lambda = lambda, max.steps=15, fam=FAMILY, mu0=NULL)
+output_CPP_exact <- smooth.FEM(location = NULL, observations = as.numeric(response), FEMbasis =FEMbasis, covariates = NULL, GCV=GCVFLAG, GCVmethod = "Exact", BC =BC, PDE_parameters = PDE_parameters, lambda = lambda, max.steps.FPIRLS=15, family=FAMILY, mu0=NULL)
   
-output_CPP_stoc <- smooth.FEM(location = NULL, observations = as.numeric(response), FEMbasis =FEMbasis, covariates = NULL, GCV=GCVFLAG, GCVmethod = "Stochastic", BC =BC, PDE_parameters = PDE_parameters, lambda = lambda, max.steps=15, fam=FAMILY, mu0=NULL)
+output_CPP_stoc <- smooth.FEM(location = NULL, observations = as.numeric(response), FEMbasis =FEMbasis, covariates = NULL, GCV=GCVFLAG, GCVmethod = "Stochastic", BC =BC, PDE_parameters = PDE_parameters, lambda = lambda, max.steps.FPIRLS=15, family=FAMILY, mu0=NULL)
 
 func_estimation_exact = output_CPP_exact$fit.FEM$coeff[, output_CPP_stoc$bestlambda]
 func_estimation_stoc = output_CPP_stoc$fit.FEM$coeff[, output_CPP_stoc$bestlambda]

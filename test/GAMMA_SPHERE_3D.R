@@ -144,7 +144,7 @@ plot(FEM(response[1:nnodes],FEMbasis))
 
 
 output_CPP <- fdaPDE::smooth.FEM(locations = loc, observations = as.numeric(response), FEMbasis =FEMbasis, covariates = W2, GCV=GCVFLAG, GCVmethod = GCVmethod,
-                                  lambda = lambda, max.steps=15, fam=FAMILY, mu0=NULL, scale.param=NULL,tune=1)
+                                  lambda = lambda, max.steps.FPIRLS=15, family=FAMILY, mu0=NULL, scale.param=NULL)
 
 plot(log10(lambda),output_CPP$GCV)
 

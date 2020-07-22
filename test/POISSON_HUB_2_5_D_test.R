@@ -80,9 +80,9 @@ response <- rpois(nloc, lambda = mu)
 
 # Fitting --------------------------------------------------------
 output_CPP_exact<- smooth.FEM(location = NULL, observations = as.numeric(response), FEMbasis =FEMbasis, covariates = desmat, GCV=GCVFLAG, GCVmethod = "Exact",
-                         lambda = lambda, max.steps=15, fam=FAMILY, mu0=NULL, scale.param=NULL)
+                         lambda = lambda, max.steps.FPIRLS=15, family=FAMILY, mu0=NULL, scale.param=NULL)
 output_CPP_stoc <- smooth.FEM(location = NULL, observations = as.numeric(response), FEMbasis =FEMbasis, covariates = desmat, GCV=GCVFLAG, GCVmethod = "Stochastic",
-                                 lambda = lambda, max.steps=15, fam=FAMILY, mu0=NULL, scale.param=NULL)
+                                 lambda = lambda, max.steps.FPIRLS=15, family=FAMILY, mu0=NULL, scale.param=NULL)
 
 beta_exact = output_CPP_exact$beta
 beta_stoc = output_CPP_stoc$beta

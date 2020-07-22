@@ -45,9 +45,9 @@ if(class(x$FEMbasis$mesh)=="mesh.2D"){
     R_plot.ORDN.FEM(x, num_refinements, ...)
   }
 }else if(class(x$FEMbasis$mesh)=="mesh.2.5D"){
-	R_plot_manifold(x,...)
+  R_plot_manifold(x,...)
 }else if(class(x$FEMbasis$mesh)=="mesh.3D"){
-	R_plot_volume(x,...)
+  R_plot_volume(x,...)
 }
 }
 
@@ -96,7 +96,8 @@ if(class(x$FEMbasis$mesh)=="mesh.2D"){
 #' ## Compute the coeff vector evaluating the desired function at the mesh nodes
 #' ## In this case we consider the fs.test() function introduced by Wood et al. 2008
 #' time = 1:5
-#' coeff = rep(fs.test(mesh$nodes[,1], mesh$nodes[,2]),5)*time
+#' coeff = rep(fs.test(mesh$nodes[,1], mesh$nodes[,2], exclude = FALSE),5)*
+#'              rep(time, each = nrow(mesh$nodes)) 
 #' ## Create the FEM.time object
 #' FEM_time_function = FEM.time(coeff=coeff, time_mesh=1:5, FEMbasis=FEMbasis, FLAG_PARABOLIC=TRUE)
 #'
@@ -621,7 +622,7 @@ plot.mesh.3D<-function(x,...){
    #p <- colorRampPalette(c("#0E1E44","#3E6DD8","#68D061","#ECAF53", "#EB5F5F","#E11F1C"))(128)
    ncolors=length(p)
    for (isurf in 1:nsurf)
-   {	col=rep(0,ntetrahedrons)
+   {  col=rep(0,ntetrahedrons)
    for(j in 1:ntetrahedrons)
      col[j]=mean(c(coeff[tetrahedrons[j,1],isurf],coeff[tetrahedrons[j,2],isurf],
                    coeff[tetrahedrons[j,3],isurf],coeff[tetrahedrons[j,4],isurf]))
@@ -728,7 +729,8 @@ plot.mesh.3D<-function(x,...){
  #' ## Compute the coeff vector evaluating the desired function at the mesh nodes
  #' ## In this case we consider the fs.test() function introduced by Wood et al. 2008
  #' time = 1:5
- #' coeff = rep(fs.test(mesh$nodes[,1], mesh$nodes[,2]),5)*time
+ #' coeff = rep(fs.test(mesh$nodes[,1], mesh$nodes[,2], exclude = FALSE),5)*
+ #'              rep(time, each = nrow(mesh$nodes)) 
  #' ## Create the FEM.time object
  #' FEM_time_function = FEM.time(coeff=coeff, time_mesh=1:5,FEMbasis=FEMbasis,FLAG_PARABOLIC=TRUE)
  #'
@@ -949,4 +951,3 @@ plot.mesh.3D<-function(x,...){
    }
    return(evalmat)
  }
-
