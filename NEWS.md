@@ -1,8 +1,8 @@
-# fdaPDE 1.2-0
+# fdaPDE 1.1-1
 
 ## New features
 
-1) smooth regression for non-gaussian data (GSR model)
+1) smooth regression for non-gaussian data (GLM model)
 
 # fdaPDE 1.1-0
 
