@@ -8,6 +8,8 @@ void simplex_container<mydim>::fill_container(const UInt* const elements, const 
  static_assert(SIZE==mydim*(mydim+1) || (mydim==2 && SIZE==12),
         "ERROR! ORDERING SIZE SHOULD BE EQUAL TO 2X THE NUMBER OF EDGES OR 3X THE NUMBER OF FACES! See: mesh_input_helper_imp.h");
 
+ const UInt num_elements=elements.nrows();
+
  simplexes.reserve(num_elements*ORDERING.size()/mydim);
 
  {
@@ -71,6 +73,9 @@ void simplex_container<mydim>::bin_sort_(const UInt index, std::vector<UInt> &po
 
 template<UInt mydim>
 std::vector<UInt> simplex_container<mydim>::compute_offsets(const UInt index, std::vector<UInt> &positions){
+  
+  const UInt num_points=nodes.nrows();
+
   std::vector<UInt> counts(num_points, 0);
   for(auto const &pos : positions)
     ++counts[simplexes[pos][index]];
@@ -111,67 +116,75 @@ void simplex_container<mydim>::store_indexes(){
 }
 
 
+
+#ifdef R_VERSION_
 template<UInt mydim>
-typename simplex_container<mydim>::OutputType simplex_container<mydim>::assemble_output() const {
-
-  std::vector<UInt> subsimplexes{assemble_subs()};
-  std::vector<bool> submarkers{mark_boundary()};
-  std::vector<int> neighbors{compute_neighbors()};
-
-  std::vector<bool> nodesmarkers(num_points);
-
-  for(UInt k=0; k<mydim; ++k)
-    for(UInt i=0; i<submarkers.size(); ){
-      nodesmarkers[subsimplexes[i+k*submarkers.size()]]=submarkers[i];
-      while(i<submarkers.size() && (!submarkers[i] || nodesmarkers[subsimplexes[i+k*submarkers.size()]]))
-        ++i;
-    }
-
-  return std::make_tuple(std::move(subsimplexes),std::move(submarkers),std::move(nodesmarkers),std::move(neighbors));
-}
-
-template<UInt mydim>
-std::vector<UInt> simplex_container<mydim>::assemble_subs() const {
-  std::vector<UInt> subsimplexes;
-  subsimplexes.reserve(mydim*distinct_indexes.size());
+void simplex_container<mydim>::assemble_subs(SEXP Routput, UInt index) const {
+  
+  SET_VECTOR_ELT(Routput, index, Rf_allocMatrix(INTSXP, distinct_indexes.size(), mydim));
+  RIntegerMatrix subsimplexes(VECTOR_ELT(Routput, index));
 
   for(UInt j=0; j<mydim; ++j)
-    for(auto const &pos : distinct_indexes)
-      subsimplexes.push_back(simplexes[pos][j]);
+    for(UInt i=0; i<distinct_indexes.size(); ++i)
+      subsimplexes(i,j) = simplexes[distinct_indexes[i]][j];
 
-  return subsimplexes;
 }
 
 template<UInt mydim>
-std::vector<bool> simplex_container<mydim>::mark_boundary() const {
-  std::vector<bool> boundarymarkers;
-  boundarymarkers.reserve(distinct_indexes.size());
+void simplex_container<mydim>::mark_boundary(SEXP Routput, UInt index) const {
+  
+  SET_VECTOR_ELT(Routput, index, Rf_allocMatrix(LGLSXP, distinct_indexes.size(), 1));
+  RIntegerMatrix boundarymarkers(VECTOR_ELT(Routput, index));
 
-  std::for_each(distinct_indexes.cbegin(), std::prev(distinct_indexes.cend()), [&] (UInt i) {
-    boundarymarkers.push_back(!duplicates[i+1]);
-  });
+  for(UInt i=0; i<distinct_indexes.size()-1; ++i)
+    boundarymarkers[i] = !duplicates[i+1];
 
   //Special attention for the last simplex!
-  boundarymarkers.push_back(distinct_indexes.back()+1==duplicates.size() || !duplicates[distinct_indexes.back()+1]);
-  return boundarymarkers;
+  boundarymarkers[distinct_indexes.size()-1] = distinct_indexes.back()+1==duplicates.size() || !duplicates[distinct_indexes.back()+1];
 }
 
+
 template<UInt mydim>
-std::vector<int> simplex_container<mydim>::compute_neighbors() const {
-  std::vector<int> neighbors(simplexes.size(), -2);
+void simplex_container<mydim>::compute_neighbors(SEXP Routput, UInt index) const {
+  
+  SET_VECTOR_ELT(Routput, index, Rf_allocMatrix(INTSXP, simplexes.size()/(mydim+1), mydim+1));
+  RIntegerMatrix neighbors(VECTOR_ELT(Routput, index));
+
+  for (UInt i=0; i<simplexes.size(); ++i)
+    neighbors[i]=-2;
 
   auto rep_it=duplicates.cbegin();
   simplex_t prev{simplexes.front()};
   for (auto const &curr : simplexes){
     // Note: the first simplex cannot be a duplicate!
     if (*(rep_it++)){
-      neighbors[curr.i()+curr.j()*num_elements]=prev.i();
-      neighbors[prev.i()+prev.j()*num_elements]=curr.i();
+      neighbors(curr.i(), curr.j()) = prev.i();
+      neighbors(prev.i(), prev.j()) = curr.i();
     }
     prev=curr;
   }
-  return neighbors;
 }
 
+template<UInt mydim>
+void order2extend(SEXP Routput, UInt index) const {
+  static_assert(mydim==2, 
+    "ERROR! ORDER 2 EXTENSIONS IS INTENDED FOR EDGE CONTAINERS ONLY! See mesh_input_helper_imp");
+  
+  static constexpr UInt num_extra_nodes = (isTriangleContainer) ? 3 : 6;
+
+  SET_VECTOR_ELT(Routput, index, Rf_allocMatrix(INTSXP, simplexes.size()/num_extra_nodes, num_extra_nodes));
+  RIntegerMatrix edges_extended(VECTOR_ELT(Routput, index));
+
+  {
+    UInt offset{nodes.nrows()};
+    UInt pos=0;
+    for(auto const &curr : simplexes){
+      offset += !duplicates[pos++];
+      edges_extended(curr.i(), curr.j()) = offset;
+    }
+  }
+}
+
+#endif
 
 #endif

@@ -15,14 +15,17 @@ public:
 				ncols_(INTEGER(Rf_getAttrib(matr, R_DimSymbol))[1]) {}
 	#endif
 
+	Real& operator()(UInt i, UInt j) {return matr_[i+nrows_*j];}
 	const Real& operator()(UInt i, UInt j) const {return matr_[i+nrows_*j];}
+	
+	Real& operator[](UInt i) {return matr_[i];}
 	const Real& operator[](UInt i) const {return matr_[i];}
 
 	const UInt& nrows() const {return nrows_;}
 	const UInt& ncols() const {return ncols_;}
 
 private:
-	const Real * const matr_;
+	Real * const matr_;
 	const UInt nrows_;
 	const UInt ncols_;
 
@@ -42,14 +45,17 @@ public:
 				ncols_(INTEGER(Rf_getAttrib(matr, R_DimSymbol))[1]) {}
 	#endif
 
-	const UInt& operator()(UInt i, UInt j) const {return matr_[i+nrows_*j];}
-	const UInt& operator[](UInt i) const {return matr_[i];}
+	Real& operator()(UInt i, UInt j) {return matr_[i+nrows_*j];}
+	const Real& operator()(UInt i, UInt j) const {return matr_[i+nrows_*j];}
+	
+	Real& operator[](UInt i) {return matr_[i];}
+	const Real& operator[](UInt i) const {return matr_[i];}
 
 	const UInt& nrows() const {return nrows_;}
 	const UInt& ncols() const {return ncols_;}
 
 private:
-	const UInt * const matr_;
+	UInt * const matr_;
 	const UInt nrows_;
 	const UInt ncols_;
 

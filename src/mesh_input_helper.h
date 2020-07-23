@@ -43,7 +43,6 @@ class simplex_container{
 
 public:
 
-  using OutputType=std::tuple<std::vector<UInt>, std::vector<bool>, std::vector<bool>, std::vector<int> >;
   using simplex_t = simplex<mydim>;
   using simplex_container_t = std::vector<simplex_t>;
   using const_iterator = typename simplex_container_t::const_iterator;
@@ -51,127 +50,179 @@ public:
   simplex_container()=delete;
 
   template<std::size_t SIZE>
-  simplex_container(const UInt* const elements_, UInt  num_elements_, UInt num_points_, const std::array<UInt, SIZE>& ORDERING) :
-      elements(elements_), num_elements(num_elements_), num_points(num_points_) {this->fill_container(elements_, ORDERING);}
+  simplex_container(RIntegerMatrix elements_, RNumericMatrix nodes_, const std::array<UInt, SIZE>& ORDERING) :
+      elements(elements_), nodes(nodes_), isTriangleContainer(SIZE==6) {this->fill_container(elements_, ORDERING);}
 
-  OutputType assemble_output() const;
-  std::vector<UInt> get_simplexes() const {return this->assemble_subs();};
+  #ifdef R_VERSION_
+  template<std::size_t SIZE>
+  simplex_container(SEXP Relements, SEXP Rnodes, const std::array<UInt, SIZE>& ORDERING) :
+      elements(Relements), nodes(Rnodes), isTriangleContainer(SIZE==6) {this->fill_container(elements_, ORDERING);}
+  #endif
 
   const simplex_t& operator[](UInt i) const {return simplexes[i];}
+  const simplex_t& distinct(UInt i, UInt j) const {return simplexes[distinct_indexes[i]][j];}
   const_iterator begin() const {return simplexes.begin();}
   const_iterator end() const {return simplexes.end();}
 
   bool is_repeated(UInt i) const {return duplicates[i];}
 
   UInt size() const {return simplexes.size();}
-  UInt get_num_points() const {return num_points;}
-  UInt get_num_elements() const {return num_elements;}
+  UInt num_distinct() const {return distinct_indexes.size();}
+  UInt get_num_points() const {return nodes.nrows();}
+  UInt get_num_elements() const {return elements.nrows();}
+
+  #ifdef R_VERSION_
+  void mark_boundary(SEXP Routput, UInt index) const;
+  void assemble_subs(SEXP Routput, UInt index) const;
+  void compute_neighbors(SEXP Routput, UInt index) const;
+  void order2extend(SEXP Routput, UInt index) const;
+  #endif
+
 
 private:
   simplex_container_t simplexes;
   std::vector<bool> duplicates;
   std::vector<UInt> distinct_indexes;
-  const UInt num_elements;
-  const UInt num_points;
-  const UInt* const elements;
+
+  const RNumericMatrix nodes;
+  const RIntegerMatrix elements;
+
+  const bool isTriangleContainer;
 
   template<std::size_t SIZE>
   void fill_container(const UInt* const, const std::array<UInt, SIZE>&);
+  
   std::vector<UInt> compute_offsets(const UInt, std::vector<UInt>&);
   void bin_sort_(const UInt, std::vector<UInt>&);
   void bin_sort();
+  
   void check_duplicates();
   void store_indexes();
-  std::vector<bool> mark_boundary() const;
-  std::vector<UInt> assemble_subs() const;
-  std::vector<int> compute_neighbors() const;
-
 
 };
 
-std::vector<UInt> order2extend(const simplex_container<2> &edge_container){
-  std::vector<UInt> edges_extended(edge_container.size());
-  UInt offset{edge_container.get_num_points()};
+
+#ifdef R_VERSION_
+void mark_boundary_nodes(SEXP Routput, SEXP Rnodes, UInt index, UInt index_subs, UInt index_markers) {
+  
+  const RNumericMatrix nodes(Rnodes);
+  SET_VECTOR_ELT(Routput, index, Rf_allocMatrix(LGLSXP, nodes.nrows(), 1));
+  const RIntegerMatrix subs(VECTOR_ELT(Routput, index_subs));
+  const RIntegerMatrix submarkers(VECTOR_ELT(Routput, index_markers));
+  RIntegerMatrix nodesmarkers(VECTOR_ELT(Routput, index));
+
+  for(UInt j=0; j<mydim; ++j)
+    for(UInt i=0; i<subs.nrows(); ){
+      nodesmarkers[subs(i,j)] = submarkers[i];
+      while(i<subs.nrows() && (!submarkers[i] || nodesmarkers[subs(i, j)]]))
+        ++i;
+    }
+}
+
+
+void compute_midpoints(SEXP Routput, SEXP Rnodes, UInt index, UInt index_edges){
+  
+  const RNumericMatrix nodes(Rnodes);
+  const RIntegerMatrix edges(VECTOR_ELT(Routput, index_edges));
+
+  SET_VECTOR_ELT(Routput, index, Rf_allocMatrix(REALSXP, edges.nrows(), nodes.ncols()));
+  RNumericMatrix midpoints(VECTOR_ELT(Routput, index));
+
+  for (int i=0; i<midpoints.nrows(); ++i)
+    for (int j=0; j<midpoints.ncol(); ++j)
+      midpoints(i,j) = .5*(nodes(edges(i,0), j)+nodes(edges(i,1), j));
+}
+
+void compute_midpoints(SEXP Routput, SEXP Rnodes, UInt index, const simplex_container<2> &edge_container){
+  
+  const RNumericMatrix nodes(Rnodes);
+
+  SET_VECTOR_ELT(Routput, index, Rf_allocMatrix(REALSXP, edge_container.num_distinct(), nodes.ncols()));
+  RNumericMatrix midpoints(VECTOR_ELT(Routput, index));
+
+  for (int i=0; i<midpoints.nrows(); ++i)
+    for (int j=0; j<midpoints.ncol(); ++j)
+      midpoints(i,j) = .5*(nodes(edge_container.distinct(i,0), j)+nodes(edge_container.distinct(i,1), j));
+}
+
+
+void split(SEXP Routput, SEXP Rtriangles, UInt index, const simplex_container<2> &edge_container){
+
+  std::vector<UInt> extended_triangles(edge_container.size());
   {
+    UInt offset{edge_container.get_num_points()};
     UInt pos=0;
     for(auto const &curr : edge_container){
       offset += !edge_container.is_repeated(pos++);
-      edges_extended[curr.i()+edge_container.get_num_elements()*curr.j()]=offset;
+      extended_triangles[curr.i()+edge_container.get_num_elements()*curr.j()]=offset;
     }
   }
-  return edges_extended;
-}
 
-std::vector<double> compute_midpoints(const double* const points, const std::vector<UInt>& edges, const UInt num_points){
-  const UInt num_edges=edges.size()/2;
-  std::vector<double> midpoints(3*num_edges);
-  for (int i=0; i<num_edges; ++i)
-    for (int j=0; j<3; ++j)
-      midpoints[i+j*num_edges]=(points[edges[i]+j*num_points]+points[edges[i+num_edges]+j*num_points])/2;
-  return midpoints;
-}
+  const RIntegerMatrix triangles(Rtriangles);
 
-std::vector<double> compute_midpoints2D(const double* const points, const std::vector<UInt>& edges, const UInt num_points){
-  const UInt num_edges=edges.size()/2;
-  std::vector<double> midpoints(2*num_edges);
-  for (int i=0; i<num_edges; ++i)
-    for (int j=0; j<2; ++j)
-      midpoints[i+j*num_edges]=(points[edges[i]+j*num_points]+points[edges[i+num_edges]+j*num_points])/2;
-  return midpoints;
-}
+  SET_VECTOR_ELT(Routput, index, Rf_allocMatrix(INTSXP, 4*triangles.nrows(), 3));
+  RIntegerMatrix splitted_triangles(VECTOR_ELT(Routput, index));
 
-
-std::vector<UInt> split(const std::vector<UInt>& extended_triangles, const int* const triangles, const UInt num_triangles){
-
-  std::vector<UInt> splitted_triangles;
-  splitted_triangles.reserve(12*num_triangles);
-
-  for(int i=0; i<3*num_triangles; ++i)
-    splitted_triangles.push_back(triangles[i]+1);
+  int i=0;
+  for( ; i<3*triangles.nrows(); ++i)
+    splitted_triangles[i] = triangles[i]+1;
 
   for (auto const j : {0,2,0,1,1,1,2,0,2})
-    for (int i=0; i<num_triangles; ++i)
-      splitted_triangles.push_back(extended_triangles[i+j*num_triangles]);
+    for (int k=0; k<triangles.nrows(); ++i, ++k)
+      splitted_triangles[i] = extended_triangles[k+j*num_triangles];
 
-  return splitted_triangles;
 }
 
-std::vector<UInt> split3D(const std::vector<UInt>& extended_tetrahedrons, const int* const tetrahedrons, const UInt num_tetrahedrons){
+void split3D(SEXP Routput, SEXP Rtetrahedrons, UInt index, const simplex_container<2> &edge_container){
 
-  std::vector<UInt> splitted_tetrahedrons;
-  splitted_tetrahedrons.reserve(32*num_tetrahedrons);
 
-  for(int i=0; i<num_tetrahedrons; ++i)
-    splitted_tetrahedrons.push_back(tetrahedrons[i]+1);
+  std::vector<UInt> extended_tetrahedrons(edge_container.size());
+  {
+    UInt offset{edge_container.get_num_points()};
+    UInt pos=0;
+    for(auto const &curr : edge_container){
+      offset += !edge_container.is_repeated(pos++);
+      extended_triangles[curr.i()+edge_container.get_num_elements()*curr.j()]=offset;
+    }
+  }
+
+  const RIntegerMatrix tetrahedrons(Rtetrahedrons);
+
+  SET_VECTOR_ELT(Routput, index, Rf_allocMatrix(INTSXP, 8*tetrahedrons.nrows(), 4));
+  RIntegerMatrix splitted_tetrahedrons(VECTOR_ELT(Routput, index));
+  
+  int i=0;
+  for( ; i<tetrahedrons.nrows(); ++i)
+    splitted_tetrahedrons[i] = tetrahedrons[i]+1;
 
   for (auto const j : {0,1,2,0,0,1,1,0})
-    for (int i=0; i<num_tetrahedrons; ++i)
-      splitted_tetrahedrons.push_back(extended_tetrahedrons[i+j*num_tetrahedrons]);
+    for (int k=0; k<tetrahedrons.nrows(); ++k, ++i)
+      splitted_tetrahedrons[i]=extended_tetrahedrons[k+j*num_tetrahedrons];
 
-  for(int i=0; i<num_tetrahedrons; ++i)
-    splitted_tetrahedrons.push_back(tetrahedrons[i+num_tetrahedrons]+1);
+  for(int k=0; k<tetrahedrons.nrows(); ++k, ++i)
+    splitted_tetrahedrons[i]=tetrahedrons[k+num_tetrahedrons]+1;
 
   for (auto const j : {3,5,1,1,2,3,1,3})
-    for (int i=0; i<num_tetrahedrons; ++i)
-      splitted_tetrahedrons.push_back(extended_tetrahedrons[i+j*num_tetrahedrons]);
+    for (int k=0; k<tetrahedrons.nrows(); ++k, ++i)
+      splitted_tetrahedrons[i]=extended_tetrahedrons[k+j*num_tetrahedrons];
 
-  for(int i=0; i<num_tetrahedrons; ++i)
-    splitted_tetrahedrons.push_back(tetrahedrons[i+2*num_tetrahedrons]+1);
+  for(int k=0; k<tetrahedrons.nrows(); ++k, ++i)
+    splitted_tetrahedrons[i]=tetrahedrons[k+2*num_tetrahedrons]+1;
 
   for (auto const j : {4,2,3,5,5,2,5,4})
-    for (int i=0; i<num_tetrahedrons; ++i)
-      splitted_tetrahedrons.push_back(extended_tetrahedrons[i+j*num_tetrahedrons]);
+    for (int k=0; k<tetrahedrons.nrows(); ++k, ++i)
+      splitted_tetrahedrons[i]=extended_tetrahedrons[k+j*num_tetrahedrons];
 
-  for(int i=0; i<num_tetrahedrons; ++i)
-    splitted_tetrahedrons.push_back(tetrahedrons[i+3*num_tetrahedrons]+1);
+  for(int k=0; k<tetrahedrons.nrows(); ++k, ++i)
+    splitted_tetrahedrons[i]=tetrahedrons[k+3*num_tetrahedrons]+1;
 
   for (auto const j : {5,5,4,4})
-    for (int i=0; i<num_tetrahedrons; ++i)
-      splitted_tetrahedrons.push_back(extended_tetrahedrons[i+j*num_tetrahedrons]);
+    for (int k=0; k<tetrahedrons.nrows(); ++k, ++i)
+      splitted_tetrahedrons[i]=extended_tetrahedrons[k+j*num_tetrahedrons];
 
-  return splitted_tetrahedrons;
 }
 
+#endif
 
 
 #include "mesh_input_helper_imp.h"
