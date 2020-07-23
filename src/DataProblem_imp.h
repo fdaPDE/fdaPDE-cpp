@@ -7,6 +7,7 @@ DataProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::DataProblem(SEXP
   deData_(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rsearch),
    mesh_(Rmesh){
 
+    // PROJECTION
     #ifdef R_VERSION_
       if(mydim == 2 && ndim == 3){
         Rprintf("##### DATA PROJECTION #####\n");
@@ -17,6 +18,38 @@ DataProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::DataProblem(SEXP
     std::vector<Point> new_data = projection.computeProjection();
     deData_.setNewData(new_data);
 
+
+    // REMOVE POINTS NOT IN THE DOMAIN
+    data = deData_.getData(); // for the 2.5D case
+    constexpr UInt Nodes = mydim ==2? 3*ORDER : 6*ORDER-2;
+    Element<Nodes, mydim, ndim> tri_activated;
+
+    bool check = false;
+    for(auto it = data.begin(); it != data.end(); ){
+      tri_activated = mesh_.findLocationNaive(data[it - data.begin()]); // cambiare ricerca
+      if(tri_activated.getId() == Identifier::NVAL)
+      {
+        it = data.erase(it);
+        #ifdef R_VERSION_
+        Rprintf("WARNING: an observation is not in the domain. It is removed and the algorithm proceeds.\n");
+        #else
+        std::cout << "WARNING: an observation is not in the domain. It is removed and the algorithm proceeds.\n";
+        #endif
+
+        if(!check) check = true;
+      }
+      else {
+        it++;
+      }
+    }
+
+    if(check){
+      deData_.setNewData(data);
+      deData_.updateN(data.size());
+    }
+
+
+    // FILL MATRICES
     fillFEMatrices();
     fillPsiQuad();
 

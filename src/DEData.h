@@ -86,6 +86,7 @@ class  DEData{
 		//! A method to set new data (needed for projection).
 		void setNewData(const std::vector<Point>& );
 		void setDatum(const Point& , UInt );
+		void updateN(UInt );
 
 		// Getters
 		//! A method returning the data.

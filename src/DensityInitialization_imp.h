@@ -33,6 +33,9 @@ HeatProcess<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::HeatProcess(cons
     llik_.resize(niter_);
     penTerm_.resize(niter_);
 
+    data_index_.resize(this->dataProblem_.getNumberofData());
+    std::iota(data_index_.begin(),data_index_.end(),0);
+
     computePatchAreas();
     computeStartingDensities();
 
@@ -69,7 +72,8 @@ HeatProcess<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::computeDensityOn
 
 	VectorXr x = VectorXr::Zero(this->dataProblem_.getNumNodes());
 
-	for(UInt i=0; i<this->dataProblem_.getNumberofData(); i++){
+	// for(UInt i=0; i<this->dataProblem_.getNumberofData(); i++){
+  for(UInt i : data_index_){
 
     Element<Nodes, mydim, ndim> current_element;
     if(this->dataProblem_.getSearch() == 1) { //use Naive search
@@ -149,5 +153,79 @@ HeatProcess<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::chooseInitializa
   return &(init_proposals_[index_min]);
 }
 
+template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+Heat_CV<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::Heat_CV(const DataProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim>& dp,
+  const FunctionalProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim>& fp, UInt K):
+  HeatProcess<Integrator, Integrator_noPoly, ORDER, mydim, ndim>(dp, fp), error_(dp), nFolds_(K){
+
+    cv_errors_.resize(this->niter_, 0);
+
+    K_folds_.resize(dp.getNumberofData());
+
+    perform_init_cv();
+
+}
+
+template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+void
+Heat_CV<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::perform_init_cv(){
+
+    UInt N = this->dataProblem_.getNumberofData();
+    UInt K = nFolds_;
+
+    for (UInt i = 0; i< N; i++){
+      UInt length = ((i % K) <= (N % K))? (i % K)*(N/K +1) : (N % K) + (i % K)*(N/K);
+      K_folds_[length + i/K] = i;
+    }
+
+    // cycle on the folds
+    for (UInt i = 0; i < K; i++){
+
+      std::vector<UInt> x_valid, x_train;
+
+      if (i < N % K){ // fold grossi
+        std::set_union(K_folds_.cbegin(), K_folds_.cbegin()+ i*(N/K +1), K_folds_.cbegin()+ (i + 1)*(N/K +1), K_folds_.cend(), std::back_inserter(x_train));
+        std::copy(K_folds_.cbegin()+ i*(N/K +1), K_folds_.cbegin()+ (i + 1)*(N/K +1), std::back_inserter(x_valid));
+      }
+      else{ //fold piccoli
+        std::set_union(K_folds_.cbegin(), K_folds_.cbegin()+ (N % K) + i*(N/K), K_folds_.cbegin()+ (N % K) + (i+1)*(N/K) , K_folds_.cend(), std::back_inserter(x_train));
+        std::copy(K_folds_.cbegin()+ (N % K) + i*(N/K), K_folds_.cbegin()+ (N % K) + (i+1)*(N/K), std::back_inserter(x_valid));
+      }
+
+      // train
+      this->data_index_ = x_train;
+      this-> computeStartingDensities();
+
+      // error
+      SpMat Psi_valid = this->dataProblem_.computePsi(x_valid);
+
+      for(UInt j=0; j<this->niter_; j++){
+        cv_errors_[j] += this->error_(Psi_valid, this->init_proposals_[j]);
+      }
+
+    }
+
+    init_best_ = std::distance(cv_errors_.cbegin(), std::min_element(cv_errors_.cbegin(), cv_errors_.cend()));
+
+    #ifdef R_VERSION_
+    Rprintf("The initialization selected is the number %d\n", init_best_);
+    #endif
+
+    // totale
+    this->data_index_.resize(this->dataProblem_.getNumberofData());
+    std::iota(this->data_index_.begin(),this->data_index_.end(),0);
+
+    this-> computeStartingDensities();
+
+}
+
+
+template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+const VectorXr*
+Heat_CV<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::chooseInitialization(Real lambda) const{
+
+  return &(this->init_proposals_[init_best_]);
+
+}
 
 #endif

@@ -14,16 +14,16 @@ create.FEM.basis(mesh, saveTree = FALSE)
 \value{
 A \code{FEMbasis} object. This contains the \code{mesh}, along with some additional quantities:
 \itemize{
- \item{\code{order}}{Either "1" or "2" for the 2D and 2.5D case, and "1" for the 3D case.
- Order of the Finite Element basis.}
- \item{\code{nbasis}}{Scalar. The number of basis.}
- \item{\code{transf_coord}}{It takes value only in the 2D case. It is a list of 4 vectors: diff1x, diff1y, diff2x and diff2y.
- Each vector has length #triangles and encodes the information for the tranformation matrix that transforms the
- nodes of the reference triangle to the nodes of the i-th triangle.
- The tranformation matrix for the i-th triangle has the form [diff1x[i] diff2x[i]; diff1y[i] diff2y[i]].}
- \item{\code{detJ}}{It takes value only in the 2D case. A vector of length #triangles. The ith element contains
- the determinant of the transformation from the reference triangle to the nodes of the i-th triangle.
- Its value is also the double of the area of each triangle of the basis.}
+	\item{\code{order}}{Either "1" or "2" for the 2D and 2.5D case, and "1" for the 3D case.
+	Order of the Finite Element basis.}
+	\item{\code{nbasis}}{Scalar. The number of basis.}
+	\item{\code{transf_coord}}{It takes value only in the 2D case. It is a list of 4 vectors: diff1x, diff1y, diff2x and diff2y.
+	Each vector has length #triangles and encodes the information for the tranformation matrix that transforms the
+	nodes of the reference triangle to the nodes of the i-th triangle.
+	The tranformation matrix for the i-th triangle has the form [diff1x[i] diff2x[i]; diff1y[i] diff2y[i]].}
+	\item{\code{detJ}}{It takes value only in the 2D case. A vector of length #triangles. The ith element contains
+	the determinant of the transformation from the reference triangle to the nodes of the i-th triangle.
+	Its value is also the double of the area of each triangle of the basis.}
 }
 }
 \description{
@@ -40,7 +40,7 @@ data(quasicircle2D)
 boundary_nodes = quasicircle2D$boundary_nodes
 boundary_segments = quasicircle2D$boundary_segments
 locations = quasicircle2D$locations
-data = quasicircle2D$data                        
+data = quasicircle2D$data												
 
 ## Create the 2D mesh
 mesh = create.mesh.2D(nodes = rbind(boundary_nodes, locations), segments = boundary_segments)
@@ -51,7 +51,7 @@ FEMbasis = create.FEM.basis(mesh)
 ## Upload the hub2.5D data
 data(hub2.5D)
 hub2.5D.nodes = hub2.5D$hub2.5D.nodes
-hub2.5D.triangles = hub2.5D$hub2.5D.triangles                    
+hub2.5D.triangles = hub2.5D$hub2.5D.triangles										
 
 ## Create the 2.5D mesh
 mesh = create.mesh.2.5D(nodes = hub2.5D.nodes, triangles = hub2.5D.triangles)
