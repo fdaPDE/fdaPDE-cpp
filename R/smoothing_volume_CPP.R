@@ -1,4 +1,4 @@
-CPP_smooth.volume.FEM.basis<-function(locations, bary.locations, observations, FEMbasis, lambda, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, GCV, GCVMETHOD = 2, nrealizations = 100, DOF=TRUE, DOF_matrix=NULL, search)
+CPP_smooth.volume.FEM.basis<-function(locations, bary.locations, observations, FEMbasis, lambda, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, GCV, GCVMETHOD = 2, nrealizations = 100, DOF=TRUE, DOF_matrix=NULL, search, GCV.inflation.factor = 1, areal.data.avg = TRUE)
 {
 
   # C++ function for volumetric works with vectors not with matrices
@@ -6,7 +6,7 @@ CPP_smooth.volume.FEM.basis<-function(locations, bary.locations, observations, F
   FEMbasis$mesh$tetrahedrons=c(t(FEMbasis$mesh$tetrahedrons))
   FEMbasis$mesh$nodes=c(t(FEMbasis$mesh$nodes))
 
-  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
 
   FEMbasis$mesh$tetrahedrons=FEMbasis$mesh$tetrahedrons-1
 
@@ -75,9 +75,13 @@ CPP_smooth.volume.FEM.basis<-function(locations, bary.locations, observations, F
   storage.mode(GCVMETHOD) <- "integer"
   storage.mode(search) <- "integer"
 
+  storage.mode(GCV.inflation.factor) <- "double"
+  areal.data.avg <- as.integer(areal.data.avg)
+  storage.mode(areal.data.avg) <-"integer"
+
   ## Call C++ function
   bigsol <- .Call("regression_Laplace", locations, bary.locations, data, FEMbasis$mesh, FEMbasis$mesh$order, mydim, ndim, lambda, covariates,
-                  incidence_matrix, BC$BC_indices, BC$BC_values, GCV, GCVMETHOD, nrealizations,  DOF, DOF_matrix, search, PACKAGE = "fdaPDE")
+                  incidence_matrix, BC$BC_indices, BC$BC_values, GCV, GCVMETHOD, nrealizations,  DOF, DOF_matrix, search, GCV.inflation.factor, areal.data.avg, PACKAGE = "fdaPDE")
 
   return(bigsol)
 }

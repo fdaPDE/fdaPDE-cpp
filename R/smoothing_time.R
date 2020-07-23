@@ -56,6 +56,9 @@ NULL
 #'  \code{locations}, location points which are same as the given locations options. (checks whether both locations are the same);
 #'  \code{element ids}, a vector of element id of the points from the mesh where they are located;
 #'  \code{barycenters}, a vector of barycenter of points from the located element.
+#' @param GCV.inflation.factor Tuning parameter used for the estimation of GCV. Default value \code{GCV.inflation.factor = 1.8}.
+#' It is advised to set it grather than 1 to avoid overfitting.
+#' @param areal.data.avg Boolean. It involve the computation of Areal Data. If \code{TRUE} the areal data are averaged, otherwise not.
 #' @return A list with the following variables:
 #' \item{\code{fit.FEM.time}}{A \code{FEM.time} object that represents the fitted spatio-temporal field.}
 #' \item{\code{PDEmisfit.FEM.time}}{A \code{FEM.time} object that represents the misfit of the penalized PDE.}
@@ -68,12 +71,12 @@ NULL
 #' \item{\code{ICestimated}}{If FLAG_PARABOLIC is \code{TRUE} and IC is \code{NULL}, a list containing a \code{FEM} object with the initial conditions, the value of the smoothing parameter lambda returning the lowest GCV and, in presence of covariates, the estimated beta coefficients}
 #' \item{\code{bary.locations}}{A barycenter information of the given locations if the locations are not mesh nodes.}
 #' @description Space-time regression  with differential regularization. Space-varying covariates can be included in the model. The technique accurately handle data distributed over irregularly shaped domains. Moreover, various conditions can be imposed at the domain boundaries.
-#' @usage smooth.FEM.time(locations = NULL, time_locations = NULL, observations, FEMbasis, 
-#'                        time_mesh = NULL, lambdaS, lambdaT = 1, covariates = NULL, 
-#'                        PDE_parameters = NULL, incidence_matrix = NULL, BC = NULL, 
-#'                        FLAG_MASS = FALSE, FLAG_PARABOLIC = FALSE, IC = NULL, GCV = FALSE, 
-#'                        GCVmethod = "Stochastic", nrealizations = 100, DOF_matrix=NULL, 
-#'                        search = "tree", bary.locations = NULL)
+#' @usage smooth.FEM.time(locations = NULL, time_locations=NULL, observations, FEMbasis, 
+#'                       time_mesh=NULL, lambdaS, lambdaT = 1, covariates = NULL, 
+#'                       PDE_parameters=NULL, incidence_matrix = NULL, BC = NULL, FLAG_MASS = FALSE, 
+#'                       FLAG_PARABOLIC = FALSE, IC = NULL, GCV = FALSE,
+#'                       GCVmethod = "Stochastic", nrealizations = 100, DOF_matrix=NULL, 
+#'                       search = "tree", bary.locations = NULL, GCV.inflation.factor= 1, areal.data.avg = TRUE)
 #' @export
 
 #' @references Sangalli, L.M., Ramsay, J.O. & Ramsay, T.O., 2013. Spatial spline regression models. Journal of the Royal Statistical Society. Series B: Statistical Methodology, 75(4), pp. 681-703.
@@ -103,7 +106,7 @@ NULL
 #'                            FEMbasis = FEMbasis, lambdaS = lambdaS, lambdaT = lambdaT)
 #' plot(solution$fit.FEM)
 
-smooth.FEM.time<-function(locations = NULL, time_locations=NULL, observations, FEMbasis, time_mesh=NULL, lambdaS, lambdaT = 1, covariates = NULL, PDE_parameters=NULL, incidence_matrix = NULL, BC = NULL, FLAG_MASS = FALSE, FLAG_PARABOLIC = FALSE, IC = NULL, GCV = FALSE, GCVmethod = "Stochastic", nrealizations = 100, DOF_matrix=NULL, search = "tree", bary.locations = NULL)
+smooth.FEM.time<-function(locations = NULL, time_locations=NULL, observations, FEMbasis, time_mesh=NULL, lambdaS, lambdaT = 1, covariates = NULL, PDE_parameters=NULL, incidence_matrix = NULL, BC = NULL, FLAG_MASS = FALSE, FLAG_PARABOLIC = FALSE, IC = NULL, GCV = FALSE, GCVmethod = "Stochastic", nrealizations = 100, DOF_matrix=NULL, search = "tree", bary.locations = NULL, GCV.inflation.factor= 1, areal.data.avg = TRUE)
 {
   if(class(FEMbasis$mesh) == "mesh.2D"){
     ndim = 2
@@ -145,7 +148,7 @@ smooth.FEM.time<-function(locations = NULL, time_locations=NULL, observations, F
   if(!is.null(DOF_matrix))
       DOF=FALSE
 
-  space_varying=checkSmoothingParameters_time(locations, time_locations, observations, FEMbasis, time_mesh, lambdaS, lambdaT, covariates, PDE_parameters, incidence_matrix, BC, FLAG_MASS, FLAG_PARABOLIC, IC, GCV, GCVMETHOD, nrealizations, DOF, DOF_matrix, search=search, bary.locations=bary.locations)
+  space_varying=checkSmoothingParameters_time(locations, time_locations, observations, FEMbasis, time_mesh, lambdaS, lambdaT, covariates, PDE_parameters, incidence_matrix, BC, FLAG_MASS, FLAG_PARABOLIC, IC, GCV, GCVMETHOD, nrealizations, DOF, DOF_matrix, search=search, bary.locations=bary.locations, GCV.inflation.factor = GCV.inflation.factor, areal.data.avg = areal.data.avg)
 
   ## Coverting to format for internal usage
   if(!is.null(locations))
@@ -224,7 +227,7 @@ smooth.FEM.time<-function(locations = NULL, time_locations=NULL, observations, F
     bigsol = CPP_smooth.FEM.time(locations=locations, time_locations=time_locations, observations=observations, FEMbasis=FEMbasis,
                                   time_mesh=time_mesh, lambdaS=lambdaS, lambdaT=lambdaT, covariates=covariates, incidence_matrix=incidence_matrix,
                                   ndim=ndim, mydim=mydim, BC=BC, FLAG_MASS=FLAG_MASS, FLAG_PARABOLIC=FLAG_PARABOLIC, IC=IC, GCV=GCV,
-                                  GCVMETHOD=GCVMETHOD, nrealizations=nrealizations,DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations)
+                                  GCVMETHOD=GCVMETHOD, nrealizations=nrealizations,DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations, GCV.inflation.factor = GCV.inflation.factor, areal.data.avg = areal.data.avg)
 
   } else if(class(FEMbasis$mesh) == 'mesh.2D' & !is.null(PDE_parameters) & space_varying==FALSE){
 
@@ -234,7 +237,7 @@ smooth.FEM.time<-function(locations = NULL, time_locations=NULL, observations, F
                                       time_mesh=time_mesh, lambdaS=lambdaS, lambdaT=lambdaT, PDE_parameters=PDE_parameters,
                                       covariates=covariates, incidence_matrix=incidence_matrix,
                                       ndim=ndim, mydim=mydim, BC=BC, FLAG_MASS=FLAG_MASS, FLAG_PARABOLIC=FLAG_PARABOLIC, IC=IC, GCV=GCV,
-                                      GCVMETHOD=GCVMETHOD, nrealizations=nrealizations,DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations)
+                                      GCVMETHOD=GCVMETHOD, nrealizations=nrealizations,DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations, GCV.inflation.factor = GCV.inflation.factor, areal.data.avg = areal.data.avg)
 
   } else if(class(FEMbasis$mesh) == 'mesh.2D' & !is.null(PDE_parameters) & space_varying==TRUE){
 
@@ -244,7 +247,7 @@ smooth.FEM.time<-function(locations = NULL, time_locations=NULL, observations, F
                                         time_mesh=time_mesh, lambdaS=lambdaS, lambdaT=lambdaT, PDE_parameters=PDE_parameters,
                                         covariates=covariates, incidence_matrix=incidence_matrix,
                                         ndim=ndim, mydim=mydim, BC=BC, FLAG_MASS=FLAG_MASS, FLAG_PARABOLIC=FLAG_PARABOLIC, IC=IC, GCV=GCV,
-                                        GCVMETHOD=GCVMETHOD, nrealizations=nrealizations,DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations)
+                                        GCVMETHOD=GCVMETHOD, nrealizations=nrealizations,DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations, GCV.inflation.factor = GCV.inflation.factor, areal.data.avg = areal.data.avg)
 
   }else if(class(FEMbasis$mesh) == 'mesh.2.5D'){
 
@@ -253,7 +256,7 @@ smooth.FEM.time<-function(locations = NULL, time_locations=NULL, observations, F
     bigsol = CPP_smooth.manifold.FEM.time(locations=locations, time_locations=time_locations, observations=observations, FEMbasis=FEMbasis,
                                           time_mesh=time_mesh, lambdaS=lambdaS, lambdaT=lambdaT, covariates=covariates, incidence_matrix=incidence_matrix,
                                           ndim=ndim, mydim=mydim, BC=BC, FLAG_MASS=FLAG_MASS, FLAG_PARABOLIC=FLAG_PARABOLIC, IC=IC, GCV=GCV,
-                                          GCVMETHOD=GCVMETHOD, nrealizations=nrealizations,DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations)
+                                          GCVMETHOD=GCVMETHOD, nrealizations=nrealizations,DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations, GCV.inflation.factor = GCV.inflation.factor, areal.data.avg = areal.data.avg)
 
   }else if(class(FEMbasis$mesh) == 'mesh.3D'){
 
@@ -262,7 +265,7 @@ smooth.FEM.time<-function(locations = NULL, time_locations=NULL, observations, F
     bigsol = CPP_smooth.volume.FEM.time(locations=locations, time_locations=time_locations, observations=observations, FEMbasis=FEMbasis,
                                         time_mesh=time_mesh, lambdaS=lambdaS, lambdaT=lambdaT, covariates=covariates, incidence_matrix=incidence_matrix,
                                         ndim=ndim, mydim=mydim, BC=BC, FLAG_MASS=FLAG_MASS, FLAG_PARABOLIC=FLAG_PARABOLIC, IC=IC, GCV=GCV,
-                                        GCVMETHOD=GCVMETHOD, nrealizations=nrealizations,DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations)
+                                        GCVMETHOD=GCVMETHOD, nrealizations=nrealizations,DOF=DOF,DOF_matrix=DOF_matrix, search=search, bary.locations=bary.locations, GCV.inflation.factor = GCV.inflation.factor, areal.data.avg = areal.data.avg)
 
   }
 

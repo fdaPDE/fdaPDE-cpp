@@ -45,9 +45,9 @@ if(class(x$FEMbasis$mesh)=="mesh.2D"){
     R_plot.ORDN.FEM(x, num_refinements, ...)
   }
 }else if(class(x$FEMbasis$mesh)=="mesh.2.5D"){
-	R_plot_manifold(x,...)
+  R_plot_manifold(x,...)
 }else if(class(x$FEMbasis$mesh)=="mesh.3D"){
-	R_plot_volume(x,...)
+  R_plot_volume(x,...)
 }
 }
 
@@ -622,7 +622,7 @@ plot.mesh.3D<-function(x,...){
    #p <- colorRampPalette(c("#0E1E44","#3E6DD8","#68D061","#ECAF53", "#EB5F5F","#E11F1C"))(128)
    ncolors=length(p)
    for (isurf in 1:nsurf)
-   {	col=rep(0,ntetrahedrons)
+   {  col=rep(0,ntetrahedrons)
    for(j in 1:ntetrahedrons)
      col[j]=mean(c(coeff[tetrahedrons[j,1],isurf],coeff[tetrahedrons[j,2],isurf],
                    coeff[tetrahedrons[j,3],isurf],coeff[tetrahedrons[j,4],isurf]))
@@ -951,4 +951,3 @@ plot.mesh.3D<-function(x,...){
    }
    return(evalmat)
  }
-
