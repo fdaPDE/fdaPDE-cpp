@@ -9,7 +9,7 @@
 ## New features
 
 1) smooth regression for space-time data
-2) density estimation on 2D, 2.5D and 3D domains 
+2) density estimation
 3) faster search algorithm 
 
 # fdaPDE 1.0-8
