@@ -210,7 +210,7 @@ CPP_smooth.FEM.PDE.sv.basis<-function(locations, bary.locations, observations, F
 
 
   PDE_param_eval = NULL
-  points_eval = matrix(CPP_get_evaluations_points(mesh = FEMbasis$mesh, order = FEMbasis$order),ncol = 2)
+  points_eval = matrix(CPP_get_evaluations_points(mesh = FEMbasis$mesh, order = FEMbasis$order), ncol = 2)
   PDE_param_eval$K = (PDE_parameters$K)(points_eval)
   PDE_param_eval$b = (PDE_parameters$b)(points_eval)
   PDE_param_eval$c = (PDE_parameters$c)(points_eval)
@@ -329,13 +329,13 @@ CPP_get_evaluations_points = function(mesh, order)
   #here we do not shift indices since this function is called inside CPP_smooth.FEM.PDE.sv.basis
 
   # Imposing types, this is necessary for correct reading from C++
-  if(class(FEMbasis$mesh) == "mesh.2D"){
+  if(class(mesh) == "mesh.2D"){
     ndim = 2
     mydim = 2
-  }else if(class(FEMbasis$mesh) == "mesh.2.5D"){
+  }else if(class(mesh) == "mesh.2.5D"){
     ndim = 3
     mydim = 2
-  }else if(class(FEMbasis$mesh) == "mesh.3D"){
+  }else if(class(mesh) == "mesh.3D"){
     ndim = 3
     mydim = 3
   }else{

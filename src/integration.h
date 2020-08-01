@@ -49,6 +49,31 @@ struct IntegratorTriangleP4{
 	};
 };
 
+struct IntegratorTriangleP5{
+	//Number of nodes
+	static constexpr UInt NNODES = 7;
+	static constexpr std::array<Real,NNODES> WEIGHTS{
+		{0.225000000000000,
+		 0.125939180544827,
+		 0.125939180544827,
+		 0.125939180544827,
+		 0.132394152788506,
+		 0.132394152788506,
+		 0.132394152788506}
+	 };
+	//Point locations (in barycentric coordinates)
+	static constexpr std::array<Point<2>,NNODES> NODES{
+		Point<2>({0.333333333333333,0.333333333333333}),
+		Point<2>({0.101286507323456,0.101286507323456}),
+		Point<2>({0.101286507323456,0.797426985353087}),
+		Point<2>({0.797426985353087,0.101286507323456}),
+		Point<2>({0.470142064105115,0.470142064105115}),
+		Point<2>({0.470142064105115,0.059715871789770}),
+		Point<2>({0.059715871789770,0.470142064105115}),
+	};
+};
+
+
 struct IntegratorTetrahedronP1{
 	//Number of nodes
 	static constexpr UInt NNODES = 1;

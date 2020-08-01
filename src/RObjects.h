@@ -5,7 +5,7 @@
 class RNumericMatrix{
 public:
 
-	RNumericMatrix(const Real * const matr, const UInt nrows, const UInt ncols) :
+	RNumericMatrix(Real * const matr, const UInt nrows, const UInt ncols) :
 		matr_(matr), nrows_(nrows), ncols_(ncols) {}
 
 	#ifdef R_VERSION_
@@ -34,7 +34,7 @@ private:
 class RIntegerMatrix{
 public:
 
-	RIntegerMatrix(const UInt * const matr, const UInt nrows, const UInt ncols) :
+	RIntegerMatrix(UInt * const matr, const UInt nrows, const UInt ncols) :
 		matr_(matr), nrows_(nrows), ncols_(ncols) {}
 
 
@@ -45,11 +45,11 @@ public:
 				ncols_(INTEGER(Rf_getAttrib(matr, R_DimSymbol))[1]) {}
 	#endif
 
-	Real& operator()(UInt i, UInt j) {return matr_[i+nrows_*j];}
-	const Real& operator()(UInt i, UInt j) const {return matr_[i+nrows_*j];}
+	UInt& operator()(UInt i, UInt j) {return matr_[i+nrows_*j];}
+	const UInt& operator()(UInt i, UInt j) const {return matr_[i+nrows_*j];}
 	
-	Real& operator[](UInt i) {return matr_[i];}
-	const Real& operator[](UInt i) const {return matr_[i];}
+	UInt& operator[](UInt i) {return matr_[i];}
+	const UInt& operator[](UInt i) const {return matr_[i];}
 
 	const UInt& nrows() const {return nrows_;}
 	const UInt& ncols() const {return ncols_;}

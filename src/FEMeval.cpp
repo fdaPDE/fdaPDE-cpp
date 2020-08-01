@@ -272,29 +272,19 @@ SEXP eval_FEM_fd(SEXP Rmesh, SEXP Rlocations, SEXP RincidenceMatrix, SEXP Rcoef,
 	ndim  = INTEGER(Rndim)[0];
 	search  = INTEGER(Rsearch)[0];
 
-	X = (double*) malloc(sizeof(double)*n_X);
-	Y = (double*) malloc(sizeof(double)*n_X);
-	Z = (double*) malloc(sizeof(double)*n_X);
 	incidenceMatrix = (UInt**) malloc(sizeof(UInt*)*nRegions);
 
     // Cast all computation parameters
 	if (ndim==3)
 	{
-		for (int i=0; i<n_X; i++)
-		{
-			X[i] = REAL(Rlocations)[i + n_X*0];
-			Y[i] = REAL(Rlocations)[i + n_X*1];
-			Z[i] = REAL(Rlocations)[i + n_X*2];
-		}
+		X = REAL(Rlocations);
+		Y = REAL(Rlocations)+n_X;
+		Z = REAL(Rlocations)+2*n_X;
 	}
 	else //ndim==2
 	{
-		for (int i=0; i<n_X; i++)
-		{
-			X[i] = REAL(Rlocations)[i + n_X*0];
-			Y[i] = REAL(Rlocations)[i + n_X*1];
-			Z[i] = 0;
-		}
+		X = REAL(Rlocations);
+		Y = REAL(Rlocations)+n_X;
 	}
 	for (int i=0; i<nRegions; i++)
 	{
@@ -426,7 +416,6 @@ SEXP eval_FEM_fd(SEXP Rmesh, SEXP Rlocations, SEXP RincidenceMatrix, SEXP Rcoef,
 
 	}
 
-	free(X); free(Y); free(Z);
 	for (int i=0; i<nRegions; i++)
 	{
 		free(incidenceMatrix[i]);
@@ -461,12 +450,10 @@ SEXP eval_FEM_time(SEXP Rmesh, SEXP Rmesh_time, SEXP Rlocations, SEXP Rtime_loca
 {
   UInt mydim = INTEGER(Rmydim)[0];
   UInt ndim  = INTEGER(Rndim)[0];
-	UInt n = INTEGER(Rf_getAttrib(Rlocations, R_DimSymbol))[0];
-  UInt ns;
-  if(ndim==2)
-  	ns = INTEGER(Rf_getAttrib(VECTOR_ELT(Rmesh, 0), R_DimSymbol))[0];
-  else
-    ns = INTEGER(VECTOR_ELT(Rmesh,0))[0];
+  UInt n = INTEGER(Rf_getAttrib(Rlocations, R_DimSymbol))[0];
+  
+  UInt ns = INTEGER(Rf_getAttrib(VECTOR_ELT(Rmesh, 0), R_DimSymbol))[0];
+
   UInt nt = Rf_length(Rmesh_time);
 	UInt nRegions = INTEGER(Rf_getAttrib(RincidenceMatrix, R_DimSymbol))[0];
 	UInt nElements = INTEGER(Rf_getAttrib(RincidenceMatrix, R_DimSymbol))[1]; //number of triangles/tetrahedron if areal data
@@ -485,9 +472,6 @@ SEXP eval_FEM_time(SEXP Rmesh, SEXP Rmesh_time, SEXP Rlocations, SEXP Rtime_loca
 	mesh_time = REAL(Rmesh_time);
 	t = REAL(Rtime_locations);
 
-	X = (double*) malloc(sizeof(double)*n);
-	Y = (double*) malloc(sizeof(double)*n);
-	Z = (double*) malloc(sizeof(double)*n);
 	incidenceMatrix = (UInt**) malloc(sizeof(UInt*)*nRegions);
 
     // Cast all computation parameters
@@ -495,18 +479,17 @@ SEXP eval_FEM_time(SEXP Rmesh, SEXP Rmesh_time, SEXP Rlocations, SEXP Rtime_loca
 	{
 		for (int i=0; i<n; i++)
 		{
-			X[i] = REAL(Rlocations)[i + n*0];
-			Y[i] = REAL(Rlocations)[i + n*1];
-			Z[i] = REAL(Rlocations)[i + n*2];
+			X = REAL(Rlocations);
+			Y = REAL(Rlocations)+n;
+			Z = REAL(Rlocations)+2*n;
 		}
 	}
 	else //ndim==2
 	{
 		for (int i=0; i<n; i++)
 		{
-			X[i] = REAL(Rlocations)[i + n*0];
-			Y[i] = REAL(Rlocations)[i + n*1];
-			Z[i] = 0;
+			X = REAL(Rlocations);
+			Y = REAL(Rlocations)+n;
 		}
 	}
 	for (int i=0; i<nRegions; i++)
@@ -647,7 +630,7 @@ SEXP eval_FEM_time(SEXP Rmesh, SEXP Rmesh_time, SEXP Rlocations, SEXP Rtime_loca
     free(INCIDENCE_MATRIX);
 	}
 
-	free(X); free(Y); free(Z); free(COEFF);
+	free(COEFF);
 	for (int i=0; i<nRegions; i++)
 	{
 		free(incidenceMatrix[i]);
@@ -760,7 +743,7 @@ SEXP eval_FEM_time(SEXP Rmesh, SEXP Rmesh_time, SEXP Rlocations, SEXP Rtime_loca
 	if (n_X>0) //pointwise data
 	{
 		PROTECT(result = Rf_allocMatrix(REALSXP, n_X, 3));
-		UInt order = INTEGER(VECTOR_ELT(Rmesh,4))[0];
+		UInt order = INTEGER(VECTOR_ELT(Rmesh,10))[0];
 
 		if (order == 1) {
 			MeshHandler<1,2,3> mesh(Rmesh);

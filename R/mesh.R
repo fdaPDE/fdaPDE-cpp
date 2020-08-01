@@ -525,19 +525,19 @@ projection.points.2.5D<-function(mesh, locations) {
   if (mesh$order == 2)
     stop("Data projection is only available for order 1 ")
 
-  FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
-  FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
-  FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
+  mesh$triangles = mesh$triangles - 1
+  mesh$edges = mesh$edges - 1
+  mesh$neighbors[mesh$neighbors != -1] = mesh$neighbors[mesh$neighbors != -1] - 1
 
   # Imposing types, this is necessary for correct reading from C++
   ## Set proper type for correct C++ reading
   locations <- as.matrix(locations)
   storage.mode(locations) <- "double"
-  storage.mode(FEMbasis$mesh$nodes) <- "double"
-  storage.mode(FEMbasis$mesh$triangles) <- "integer"
-  storage.mode(FEMbasis$mesh$edges) <- "integer"
-  storage.mode(FEMbasis$mesh$neighbors) <- "integer"
-  storage.mode(FEMbasis$order) <- "integer"
+  storage.mode(mesh$nodes) <- "double"
+  storage.mode(mesh$triangles) <- "integer"
+  storage.mode(mesh$edges) <- "integer"
+  storage.mode(mesh$neighbors) <- "integer"
+  storage.mode(mesh$order) <- "integer"
 
   ## Call C++ function
   evalmat <- .Call("points_projection", mesh, locations, PACKAGE = "fdaPDE")
@@ -678,10 +678,15 @@ split.mesh.2D <- function (mesh=NULL){
   
   storage.mode(mesh$triangles) <- "integer"
   storage.mode(mesh$nodes) <- "double"
+  if(mesh$order==1){
+    outCPP <- .Call("CPP_TriangleMeshSplit", mesh$triangles[,1:3], mesh$nodes)
+    splittedmesh<-create.mesh.2D(nodes=rbind(mesh$nodes, outCPP[[2]]), triangles=outCPP[[1]])
+  }
+  else if(mesh$order==2){
+    outCPP <- .Call("CPP_TriangleMeshSplitOrder2", mesh$triangles[,1:3], mesh$nodes)
+    splittedmesh<-create.mesh.2D(nodes=mesh$nodes, triangles=outCPP[[1]], order=2)
+  }
 
-  outCPP <- .Call("CPP_TriangleMeshSplit", mesh$triangles[,1:3], mesh$nodes)
-
-  splittedmesh<-create.mesh.2D(nodes=rbind(mesh$nodes, outCPP[[2]]), triangles=outCPP[[1]])
 
   return(splittedmesh)
 
@@ -701,9 +706,14 @@ split.mesh.2.5D <- function (mesh=NULL){
   storage.mode(mesh$triangles) <- "integer"
   storage.mode(mesh$nodes) <- "double"
 
-  outCPP <- .Call("CPP_TriangleMeshSplit", mesh$triangles[,1:3], mesh$nodes)
-
-  splittedmesh<-create.mesh.2.5D(rbind(mesh$nodes, outCPP[[2]]), outCPP[[1]])
+  if(mesh$order==1){
+    outCPP <- .Call("CPP_TriangleMeshSplit", mesh$triangles[,1:3], mesh$nodes)
+    splittedmesh<-create.mesh.2.5D(nodes=rbind(mesh$nodes, outCPP[[2]]), triangles=outCPP[[1]])
+  }
+  else if(mesh$order==2){
+    outCPP <- .Call("CPP_TriangleMeshSplitOrder2", mesh$triangles[,1:3], mesh$nodes)
+    splittedmesh<-create.mesh.2.5D(nodes=mesh$nodes, triangles=outCPP[[1]], order=2)
+  }
 
   return(splittedmesh)
 
@@ -722,9 +732,15 @@ split.mesh.3D <- function (mesh=NULL){
   storage.mode(mesh$tetrahedrons) <- "integer"
   storage.mode(mesh$nodes) <- "double"
 
-  outCPP <- .Call("CPP_TetraMeshSplit", mesh$tetrahedrons[,1:4], mesh$nodes)
-  
-  splittedmesh<-create.mesh.3D(rbind(mesh$nodes, outCPP[[2]]), outCPP[[1]])
+  if(mesh$order==1){
+    outCPP <- .Call("CPP_TetraMeshSplit", mesh$tetrahedrons[,1:4], mesh$nodes)
+    splittedmesh<-create.mesh.3D(nodes=rbind(mesh$nodes, outCPP[[2]]), tetrahedrons=outCPP[[1]])
+  }
+  else if(mesh$order==2){
+    outCPP <- .Call("CPP_TetraMeshSplitOrder2", mesh$tetrahedrons[,1:4], mesh$nodes)
+    splittedmesh<-create.mesh.3D(nodes=mesh$nodes, tetrahedrons=outCPP[[1]], order=2)
+  }
+
 
   return(splittedmesh)
 

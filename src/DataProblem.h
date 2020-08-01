@@ -22,7 +22,7 @@ class DataProblem{
     MeshHandler<ORDER, mydim, ndim> mesh_;
     SpMat R0_, R1_, GlobalPsi_;
     MatrixXr P_, PsiQuad_;
-    static constexpr UInt Nodes = mydim==2? 3*ORDER : 6*ORDER-2;
+    static constexpr UInt Nodes = (mydim==2) ? 3*ORDER : 6*ORDER-2;
 
     //! A method to compute the finite element matrices.
     void fillFEMatrices();

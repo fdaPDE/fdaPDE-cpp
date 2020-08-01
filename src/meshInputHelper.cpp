@@ -73,6 +73,24 @@ SEXP CPP_TriangleMeshSplit(SEXP Rtriangles, SEXP Rnodes){
   return result;
 }
 
+SEXP CPP_TriangleMeshSplitOrder2(SEXP Rtriangles, SEXP Rnodes){
+
+  static constexpr std::array<UInt, 6> EDGES_ORDERING = {1,2,0,2,0,1};
+
+  SEXP result = NILSXP;
+  result = PROTECT(Rf_allocVector(VECSXP, 1));
+
+  {
+    simplex_container<2> edges_list(Rtriangles, Rnodes, EDGES_ORDERING);
+    split(result, Rtriangles, 0, edges_list);
+  }
+
+  UNPROTECT(1);
+
+  return result;
+}
+
+
 
 SEXP CPP_VolumeMeshHelper(SEXP Rtetrahedrons, SEXP Rnodes){
 
@@ -143,6 +161,24 @@ SEXP CPP_TetraMeshSplit(SEXP Rtetrahedrons, SEXP Rnodes){
 
   return result;
 }
+
+SEXP CPP_TetraMeshSplitOrder2(SEXP Rtetrahedrons, SEXP Rnodes){
+
+  static constexpr std::array<UInt, 12> EDGES_ORDERING = {0,1,0,2,0,3,1,2,2,3,1,3};
+
+  SEXP result = NILSXP;
+  result = PROTECT(Rf_allocVector(VECSXP, 1));
+
+  {
+    simplex_container<2> edges_list(Rtetrahedrons, Rnodes, EDGES_ORDERING);
+    split3D(result, Rtetrahedrons, 0, edges_list);
+  }
+
+  UNPROTECT(1);
+
+  return result;
+}
+
 
 
 }

@@ -4,7 +4,7 @@
 
 template<UInt mydim>
 template<std::size_t SIZE>
-void simplex_container<mydim>::fill_container(const UInt* const elements, const std::array<UInt, SIZE>& ORDERING){
+void simplex_container<mydim>::fill_container(const std::array<UInt, SIZE>& ORDERING){
  static_assert(SIZE==mydim*(mydim+1) || (mydim==2 && SIZE==12),
         "ERROR! ORDERING SIZE SHOULD BE EQUAL TO 2X THE NUMBER OF EDGES OR 3X THE NUMBER OF FACES! See: mesh_input_helper_imp.h");
 
@@ -16,10 +16,10 @@ void simplex_container<mydim>::fill_container(const UInt* const elements, const 
    std::array<UInt,mydim> curr;
    for(UInt i=0; i<num_elements; ++i){
      for(UInt j=0; j<ORDERING.size()/mydim; ++j){
-       for(UInt k=0; k<mydim; ++k)
-        curr[k]=elements[i+num_elements*ORDERING[mydim*j+k]];
-       std::sort(curr.begin(), curr.end());
-       simplexes.emplace_back(i,j,curr);
+        for(UInt k=0; k<mydim; ++k)
+          curr[k]=elements(i, ORDERING[mydim*j+k]);
+        std::sort(curr.begin(), curr.end());
+        simplexes.emplace_back(i,j,curr);
      }
    }
  }
@@ -166,11 +166,11 @@ void simplex_container<mydim>::compute_neighbors(SEXP Routput, UInt index) const
 }
 
 template<UInt mydim>
-void order2extend(SEXP Routput, UInt index) const {
+void simplex_container<mydim>::order2extend(SEXP Routput, UInt index) const {
   static_assert(mydim==2, 
     "ERROR! ORDER 2 EXTENSIONS IS INTENDED FOR EDGE CONTAINERS ONLY! See mesh_input_helper_imp");
   
-  static constexpr UInt num_extra_nodes = (isTriangleContainer) ? 3 : 6;
+  const UInt num_extra_nodes = (isTriangleContainer) ? 3 : 6;
 
   SET_VECTOR_ELT(Routput, index, Rf_allocMatrix(INTSXP, simplexes.size()/num_extra_nodes, num_extra_nodes));
   RIntegerMatrix edges_extended(VECTOR_ELT(Routput, index));

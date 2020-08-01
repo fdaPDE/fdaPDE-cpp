@@ -21,7 +21,7 @@ DataProblem<Integrator_noPoly, ORDER, mydim, ndim>::DataProblem(SEXP Rdata, SEXP
 
     // REMOVE POINTS NOT IN THE DOMAIN
     data = deData_.getData(); // for the 2.5D case
-    constexpr UInt Nodes = mydim ==2? 3*ORDER : 6*ORDER-2;
+    constexpr UInt Nodes = (mydim==2) ? 3*ORDER : 6*ORDER-2;
     Element<Nodes, mydim, ndim> tri_activated;
 
     bool check = false;
@@ -99,9 +99,9 @@ template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
 Real DataProblem<Integrator_noPoly, ORDER, mydim, ndim>::FEintegrate_exponential(const VectorXr& g) const{
 
   using EigenMap2WEIGHTS = Eigen::Map<const Eigen::Matrix<Real, Integrator_noPoly::NNODES, 1> >;
-  Real total_sum = 0.;
-
   constexpr UInt Nodes = mydim==2? 3*ORDER : 6*ORDER-2;
+
+  Real total_sum = 0.;
 
   for(UInt triangle=0; triangle<mesh_.num_elements(); triangle++){
 

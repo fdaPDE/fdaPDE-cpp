@@ -9,6 +9,8 @@ constexpr std::array<Point<2>,IntegratorTriangleP2::NNODES> IntegratorTriangleP2
 
 constexpr std::array<Point<2>,IntegratorTriangleP4::NNODES> IntegratorTriangleP4::NODES;
 
+constexpr std::array<Point<2>,IntegratorTriangleP5::NNODES> IntegratorTriangleP5::NODES;
+
 constexpr std::array<Point<3>,IntegratorTetrahedronP1::NNODES> IntegratorTetrahedronP1::NODES;
 
 constexpr std::array<Point<3>,IntegratorTetrahedronP2::NNODES> IntegratorTetrahedronP2::NODES;
@@ -29,6 +31,8 @@ constexpr std::array<Real,IntegratorTriangleP1::NNODES> IntegratorTriangleP1::WE
 constexpr std::array<Real,IntegratorTriangleP2::NNODES> IntegratorTriangleP2::WEIGHTS;
 
 constexpr std::array<Real,IntegratorTriangleP4::NNODES> IntegratorTriangleP4::WEIGHTS;
+
+constexpr std::array<Real,IntegratorTriangleP5::NNODES> IntegratorTriangleP5::WEIGHTS;
 
 constexpr std::array<Real,IntegratorTetrahedronP1::NNODES> IntegratorTetrahedronP1::WEIGHTS;
 

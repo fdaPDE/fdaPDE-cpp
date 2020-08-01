@@ -51,16 +51,16 @@ public:
 
   template<std::size_t SIZE>
   simplex_container(RIntegerMatrix elements_, RNumericMatrix nodes_, const std::array<UInt, SIZE>& ORDERING) :
-      elements(elements_), nodes(nodes_), isTriangleContainer(SIZE==6) {this->fill_container(elements_, ORDERING);}
+      elements(elements_), nodes(nodes_), isTriangleContainer(SIZE==6) {this->fill_container(ORDERING);}
 
   #ifdef R_VERSION_
   template<std::size_t SIZE>
   simplex_container(SEXP Relements, SEXP Rnodes, const std::array<UInt, SIZE>& ORDERING) :
-      elements(Relements), nodes(Rnodes), isTriangleContainer(SIZE==6) {this->fill_container(elements_, ORDERING);}
+      elements(Relements), nodes(Rnodes), isTriangleContainer(SIZE==6) {this->fill_container(ORDERING);}
   #endif
 
   const simplex_t& operator[](UInt i) const {return simplexes[i];}
-  const simplex_t& distinct(UInt i, UInt j) const {return simplexes[distinct_indexes[i]][j];}
+  const UInt& distinct(UInt i, UInt j) const {return simplexes[distinct_indexes[i]][j];}
   const_iterator begin() const {return simplexes.begin();}
   const_iterator end() const {return simplexes.end();}
 
@@ -90,7 +90,7 @@ private:
   const bool isTriangleContainer;
 
   template<std::size_t SIZE>
-  void fill_container(const UInt* const, const std::array<UInt, SIZE>&);
+  void fill_container(const std::array<UInt, SIZE>&);
   
   std::vector<UInt> compute_offsets(const UInt, std::vector<UInt>&);
   void bin_sort_(const UInt, std::vector<UInt>&);
@@ -111,10 +111,10 @@ void mark_boundary_nodes(SEXP Routput, SEXP Rnodes, UInt index, UInt index_subs,
   const RIntegerMatrix submarkers(VECTOR_ELT(Routput, index_markers));
   RIntegerMatrix nodesmarkers(VECTOR_ELT(Routput, index));
 
-  for(UInt j=0; j<mydim; ++j)
+  for(UInt j=0; j<subs.ncols(); ++j)
     for(UInt i=0; i<subs.nrows(); ){
       nodesmarkers[subs(i,j)] = submarkers[i];
-      while(i<subs.nrows() && (!submarkers[i] || nodesmarkers[subs(i, j)]]))
+      while(i<subs.nrows() && (!submarkers[i] || nodesmarkers[subs(i, j)]))
         ++i;
     }
 }
@@ -129,7 +129,7 @@ void compute_midpoints(SEXP Routput, SEXP Rnodes, UInt index, UInt index_edges){
   RNumericMatrix midpoints(VECTOR_ELT(Routput, index));
 
   for (int i=0; i<midpoints.nrows(); ++i)
-    for (int j=0; j<midpoints.ncol(); ++j)
+    for (int j=0; j<midpoints.ncols(); ++j)
       midpoints(i,j) = .5*(nodes(edges(i,0), j)+nodes(edges(i,1), j));
 }
 
@@ -141,7 +141,7 @@ void compute_midpoints(SEXP Routput, SEXP Rnodes, UInt index, const simplex_cont
   RNumericMatrix midpoints(VECTOR_ELT(Routput, index));
 
   for (int i=0; i<midpoints.nrows(); ++i)
-    for (int j=0; j<midpoints.ncol(); ++j)
+    for (int j=0; j<midpoints.ncols(); ++j)
       midpoints(i,j) = .5*(nodes(edge_container.distinct(i,0), j)+nodes(edge_container.distinct(i,1), j));
 }
 
@@ -169,7 +169,7 @@ void split(SEXP Routput, SEXP Rtriangles, UInt index, const simplex_container<2>
 
   for (auto const j : {0,2,0,1,1,1,2,0,2})
     for (int k=0; k<triangles.nrows(); ++i, ++k)
-      splitted_triangles[i] = extended_triangles[k+j*num_triangles];
+      splitted_triangles[i] = extended_triangles[k+j*triangles.nrows()];
 
 }
 
@@ -182,7 +182,7 @@ void split3D(SEXP Routput, SEXP Rtetrahedrons, UInt index, const simplex_contain
     UInt pos=0;
     for(auto const &curr : edge_container){
       offset += !edge_container.is_repeated(pos++);
-      extended_triangles[curr.i()+edge_container.get_num_elements()*curr.j()]=offset;
+      extended_tetrahedrons[curr.i()+edge_container.get_num_elements()*curr.j()]=offset;
     }
   }
 
@@ -197,28 +197,28 @@ void split3D(SEXP Routput, SEXP Rtetrahedrons, UInt index, const simplex_contain
 
   for (auto const j : {0,1,2,0,0,1,1,0})
     for (int k=0; k<tetrahedrons.nrows(); ++k, ++i)
-      splitted_tetrahedrons[i]=extended_tetrahedrons[k+j*num_tetrahedrons];
+      splitted_tetrahedrons[i]=extended_tetrahedrons[k+j*tetrahedrons.nrows()];
 
   for(int k=0; k<tetrahedrons.nrows(); ++k, ++i)
-    splitted_tetrahedrons[i]=tetrahedrons[k+num_tetrahedrons]+1;
+    splitted_tetrahedrons[i]=tetrahedrons[k+tetrahedrons.nrows()]+1;
 
   for (auto const j : {3,5,1,1,2,3,1,3})
     for (int k=0; k<tetrahedrons.nrows(); ++k, ++i)
-      splitted_tetrahedrons[i]=extended_tetrahedrons[k+j*num_tetrahedrons];
+      splitted_tetrahedrons[i]=extended_tetrahedrons[k+j*tetrahedrons.nrows()];
 
   for(int k=0; k<tetrahedrons.nrows(); ++k, ++i)
-    splitted_tetrahedrons[i]=tetrahedrons[k+2*num_tetrahedrons]+1;
+    splitted_tetrahedrons[i]=tetrahedrons[k+2*tetrahedrons.nrows()]+1;
 
   for (auto const j : {4,2,3,5,5,2,5,4})
     for (int k=0; k<tetrahedrons.nrows(); ++k, ++i)
-      splitted_tetrahedrons[i]=extended_tetrahedrons[k+j*num_tetrahedrons];
+      splitted_tetrahedrons[i]=extended_tetrahedrons[k+j*tetrahedrons.nrows()];
 
   for(int k=0; k<tetrahedrons.nrows(); ++k, ++i)
-    splitted_tetrahedrons[i]=tetrahedrons[k+3*num_tetrahedrons]+1;
+    splitted_tetrahedrons[i]=tetrahedrons[k+3*tetrahedrons.nrows()]+1;
 
   for (auto const j : {5,5,4,4})
     for (int k=0; k<tetrahedrons.nrows(); ++k, ++i)
-      splitted_tetrahedrons[i]=extended_tetrahedrons[k+j*num_tetrahedrons];
+      splitted_tetrahedrons[i]=extended_tetrahedrons[k+j*tetrahedrons.nrows()];
 
 }
 

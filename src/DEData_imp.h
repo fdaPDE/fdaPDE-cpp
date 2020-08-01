@@ -54,10 +54,11 @@ DEData<ndim>::DEData(const std::vector<Point<ndim> >& data, const UInt& order, c
 template<UInt ndim>
 void DEData<ndim>::setData(SEXP Rdata)
 {
-  RNumericMatrix data(Rdata);
-  if(data.nrows()>0){
-    data_.reserve(data.nrows());
-    for(int i=0; i<data.nrows(); ++i)
+  const RNumericMatrix data(Rdata);
+  n_=data.nrows();
+  if(n_>0){
+    data_.reserve(n_);
+    for(int i=0; i<n_; ++i)
       data_.emplace_back(i, data);
   }
 }
@@ -100,10 +101,7 @@ void DEData<ndim>::setStepProposals(SEXP RstepProposals)
 template<UInt ndim>
 void DEData<ndim>::setNewData(const std::vector<Point<ndim> >& p)
 {
-  data_.resize(p.size());
-  for(UInt i = 0; i < p.size(); i++){
-    data_[i] = p[i];
-  }
+  data_=p;
 }
 
 template<UInt ndim>
