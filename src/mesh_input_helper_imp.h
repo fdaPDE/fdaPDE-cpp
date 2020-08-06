@@ -126,7 +126,7 @@ void simplex_container<mydim>::assemble_subs(SEXP Routput, UInt index) const {
 
   for(UInt j=0; j<mydim; ++j)
     for(UInt i=0; i<distinct_indexes.size(); ++i)
-      subsimplexes(i,j) = simplexes[distinct_indexes[i]][j];
+      subsimplexes(i,j) = simplexes[distinct_indexes[i]][j] + 1;
 
 }
 
@@ -151,15 +151,15 @@ void simplex_container<mydim>::compute_neighbors(SEXP Routput, UInt index) const
   RIntegerMatrix neighbors(VECTOR_ELT(Routput, index));
 
   for (UInt i=0; i<simplexes.size(); ++i)
-    neighbors[i]=-2;
+    neighbors[i]=-1;
 
   auto rep_it=duplicates.cbegin();
   simplex_t prev{simplexes.front()};
   for (auto const &curr : simplexes){
     // Note: the first simplex cannot be a duplicate!
     if (*(rep_it++)){
-      neighbors(curr.i(), curr.j()) = prev.i();
-      neighbors(prev.i(), prev.j()) = curr.i();
+      neighbors(curr.i(), curr.j()) = prev.i()+1;
+      neighbors(prev.i(), prev.j()) = curr.i()+1;
     }
     prev=curr;
   }

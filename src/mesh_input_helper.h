@@ -130,7 +130,7 @@ void compute_midpoints(SEXP Routput, SEXP Rnodes, UInt index, UInt index_edges){
 
   for (int i=0; i<midpoints.nrows(); ++i)
     for (int j=0; j<midpoints.ncols(); ++j)
-      midpoints(i,j) = .5*(nodes(edges(i,0), j)+nodes(edges(i,1), j));
+      midpoints(i,j) = .5*(nodes(edges(i,0)-1, j)+nodes(edges(i,1)-1, j));
 }
 
 void compute_midpoints(SEXP Routput, SEXP Rnodes, UInt index, const simplex_container<2> &edge_container){

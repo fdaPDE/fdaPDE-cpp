@@ -160,7 +160,6 @@ Real Element<NNODES,mydim,ndim>::integrate(const Eigen::Matrix<Real,NNODES,1>& c
 	return getMeasure() * integral;
 }
 
-
 // Member functions for class Element (Surface element specialization)
 
 template <UInt NNODES>
@@ -179,6 +178,7 @@ void Element<NNODES,2,3>::computeProperties()
 	// NOTE: for small (not bigger than 4x4) matrices eigen directly calculates
 	// determinants and inverses, it is very efficient!
 	M_invJ_.noalias() = (M_J_.transpose()*M_J_).inverse() * M_J_.transpose();
+
 	// Area of 3D triangle is half the norm of cross product of two sides!
 	element_measure = .5 * M_J_.col(0).cross(M_J_.col(1)).norm();
 }
@@ -237,28 +237,28 @@ Point<3> Element<NNODES,2,3>::computeProjection(const Point<3>& point) const
 
 	// If (+,-,-) the projection lies beyond node 1
 	// Simply return node 1 (same for the others)
-	if(lambda(0)>0 && lambda(1)<0 && lambda(2)<0)
+	if(lambda[0]>0 && lambda[1]<0 && lambda[2]<0)
 		return points_[0];
-	else if (lambda(0)<0 && lambda(1)>0 && lambda(2)<0)
+	else if (lambda[0]<0 && lambda[1]>0 && lambda[2]<0)
 		return points_[1];
-	else if (lambda(0)<0 && lambda(1)<0 && lambda(2)>0)
+	else if (lambda[0]<0 && lambda[1]<0 && lambda[2]>0)
 		return points_[2];
 
 	Eigen::Matrix<Real,3,1> coords3D;
 	// If (+,+,+) the projection lies inside the element
 	// So just convert back to 3D coords
-	if(lambda(0)>0 && lambda(1)>0 && lambda(2)>0)
-		coords3D = M_J_ * lambda.tail<2>();
+	if(lambda[0]>0 && lambda[1]>0 && lambda[2]>0)
+		coords3D.noalias() = M_J_ * lambda.tail<2>();
 	// If (+,+,-) the projection lies beyond edge 3
 	// Simply scale it back on the edge and convert
-	else if(lambda(0)>0 && lambda(1)>0)
-		coords3D = M_J_.col(0)/lambda.head<2>().sum();
+	else if(lambda[0]>0 && lambda[1]>0)
+		coords3D.noalias() = M_J_ * Eigen::Matrix<Real,2,1>::Unit(0)*lambda[1]/lambda.head<2>().sum();
 	// If (+,-,+) the projection lies beyond edge 2
-	else if (lambda(0)>0 && lambda(2)>0)
-		coords3D = M_J_.col(1)/(lambda(0)+lambda(2));
+	else if (lambda[0]>0 && lambda[2]>0)
+		coords3D.noalias() = M_J_ * Eigen::Matrix<Real,2,1>::Unit(1)*lambda[2]/(lambda[0]+lambda[2]);
 	// If (-,+,+) the projection lies beyond edge 1
 	else
-		coords3D = M_J_ * lambda.tail<2>()/lambda.tail<2>().sum();
+		coords3D.noalias() = M_J_ * lambda.tail<2>()/lambda.tail<2>().sum();
 
 	// Translate back by the first point and return
 	return Point<3>(coords3D)+=points_[0];

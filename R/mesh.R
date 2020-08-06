@@ -478,9 +478,14 @@ create.mesh.2.5D<- function(nodes, triangles = NULL, order = 1, nodesattributes 
 
     outCPP <- .Call("CPP_SurfaceMeshOrder2", triangles, nodes, PACKAGE = "fdaPDE")
 
-    out <- list(nodes=rbind(nodes, outCPP[[5]]), nodesmarkers=outCPP[[3]], nodesattributes=nodesattributes,
+    out <- list(nodes=rbind(nodes, outCPP[[5]]), nodesmarkers=c(outCPP[[3]], outCPP[[2]]), nodesattributes=nodesattributes,
                 triangles=cbind(triangles+1, outCPP[[6]]), segments=segments, segmentsmarkers=segmentsmarkers,
                 edges=outCPP[[1]], edgesmarkers=outCPP[[2]], neighbors=outCPP[[4]], holes=holes, order=order)
+    
+    if (ncol(out$nodesattributes)==0) {
+      out$nodesattributes <- matrix(0, nrow(out$nodes), 0)
+    }
+      
   }
   else{
     stop("The number of columns of triangles matrix is not consistent with the order parameter")
@@ -652,10 +657,15 @@ create.mesh.3D<- function(nodes, tetrahedrons, order = 1, nodesattributes = NULL
 
     outCPP <- .Call("CPP_VolumeMeshOrder2", tetrahedrons, nodes, PACKAGE = "fdaPDE")
 
-    out <- list(nodes=rbind(nodes, outCPP[[5]]), nodesmarkers=outCPP[[3]], nodesattributes=nodesattributes,
+    out <- list(nodes=rbind(nodes, outCPP[[5]]), nodesmarkers=c(outCPP[[3]], outCPP[[2]]), nodesattributes=nodesattributes,
                tetrahedrons=cbind(tetrahedrons+1, outCPP[[6]]), segments=segments, segmentsmarkers=segmentsmarkers,
                faces=outCPP[[1]], facesmarkers=outCPP[[2]], neighbors=outCPP[[4]],
                holes=holes, order=order)
+    
+    if (ncol(out$nodesattributes)==0) {
+      out$nodesattributes <- matrix(0, nrow(out$nodes), 0)
+    }
+    
   }
   else{
     stop("The number of columns of tetrahedrons matrix is not consistent with the order parameter")
