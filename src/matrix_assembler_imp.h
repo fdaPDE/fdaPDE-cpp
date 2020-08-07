@@ -78,7 +78,6 @@ void Assembler::forcingTerm(const MeshHandler<ORDER,mydim,ndim>& mesh,
 	                     FiniteElement<ORDER,mydim,ndim>& fe, const ForcingTerm& u, VectorXr& forcingTerm)
 {
 	static constexpr UInt NBASES = FiniteElement<ORDER,mydim,ndim>::NBASES;
-	using Integrator = typename FiniteElement<ORDER, mydim, ndim>::Integrator;
 
 	forcingTerm = VectorXr::Zero(mesh.num_nodes());
 

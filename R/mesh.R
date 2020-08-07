@@ -371,25 +371,42 @@ refine.mesh.2D<-function(mesh, minimum_angle = NA, maximum_area = NA, delaunay =
   return(out)
 }
 
-#' Create a \code{mesh.2.5D} object from the nodes locations and the connectivty matrix
+#' Create a \code{mesh.2.5D} object from the nodes locations and the connectivity matrix
 #'
-#' @param nodes A #nodes-by-3 matrix specifying the locations of each node.
-#' @param triangles A #triangles-by-3 (when \code{order} = 1) or #triangles-by-6 (when \code{order} = 2) matrix,
-#' specifying the indices of the nodes in each triangle.
-#' @param order Either '1' or '2'. It specifies wether each mesh triangle should be represented by 3 nodes
-#' (the triangle' vertices) or by 6 nodes (the triangle's vertices and midpoints).
-#' These are respectively used for linear (order = 1) and quadratic (order = 2) Finite Elements.
-#' Default is \code{order} = 1.
-#' @return An object of the class \code{mesh.2.5D} with the following output:
+#' @param nodes A #nodes-by-3 matrix containing the x, y, z coordinates of the mesh nodes.
+#' @param triangles A #triangles-by-3 (when \code{order} = 1) or #triangles-by-6 (when \code{order} = 2) matrix.
+#' It specifies the triangles giving the row's indices in \code{nodes} of the triangles' vertices and (when \code{nodes} = 2) also if the triangles' edges midpoints. The triangles' vertices and midpoints are ordered as described
+#' at \cr https://www.cs.cmu.edu/~quake/triangle.highorder.html.
+#' @param order Either '1' or '2'. It specifies wether each mesh triangle should be represented by 3 nodes (the triangle' vertices) or by 6 nodes (the triangle's vertices and midpoints).
+#' These are
+#' respectively used for linear (order = 1) and quadratic (order = 2) Finite Elements. Default is \code{order} = 1.
+#' @param nodesattributes A matrix with #nodes rows containing nodes' attributes.
+#' These are passed unchanged to the output. This has been added for consistency with the function \code{create.mesh.2D}.
+#' @param segments A #segments-by-2 matrix. Each row contains the row's indices in \code{nodes} of the vertices where the segment starts from and ends to.
+#' Segments are edges that are not splitted during the triangulation process. These are for instance used to define the boundaries
+#' of the domain. This has been added for consistency with the function \code{create.mesh.2D}.
+#' @param holes A #holes-by-3 matrix containing the x, y, z coordinates of a point internal to each hole of the mesh. These points are used to carve holes
+#' in the triangulation, when the domain has holes. This has been added for consistency with the function \code{create.mesh.2D}.
+#' @return An object of the class mesh.2.5D with the following output:
 #' \itemize{
-#' \item{\code{nnodes}}{The #nodes in the mesh.}
-#' \item{\code{ntriangles}}{The #triangles in the mesh.}
-#' \item{\code{nodes}}{A #nodes-by-3 matrix containing the x,y and z coordinate for each point of the mesh.}
-#' \item{\code{triangles}}{A #triangles-by-3 (when \code{order} = 1) or #triangles-by-6 (when \code{order} = 2) matrix,
-#' specifying the indices of the nodes in each triangle.}
-#' \item{\code{order}}{Either '1' or '2'. It specifies wether each mesh triangle should be represented by 3 nodes
-#' (the triangle' vertices) or by 6 nodes (the triangle's vertices and midpoints).
-#' It is passed unchanged from the input.}
+#' \item{\code{nodes}}{A #nodes-by-3 matrix containing the x, y, z coordinates of the mesh nodes.}
+#' \item{\code{nodesmarkers}}{A vector of length #nodes, with entries either '1' or '0'. An entry '1' indicates that the corresponding node is a boundary node; an entry '0' indicates that the corresponding node is not a boundary node.}
+#' \item{\code{nodesattributes}}{A matrix with #nodes rows containing nodes' attributes.
+#' These are passed unchanged from the input.}
+#' \item{\code{triangles}}{A #triangles-by-3 (when \code{order} = 1) or #triangles-by-6 (when \code{order} = 2) matrix.
+#' It specifies the triangles giving the indices in \code{nodes} of the triangles' vertices and (when \code{nodes} = 2) also if the triangles' edges midpoints. The triangles' vertices and midpoints are ordered as described
+#' at  \cr https://www.cs.cmu.edu/~quake/triangle.highorder.html.}
+#' \item{\code{segmentsmarker}}{A vector of length #segments with entries either '1' or '0'. An entry '1' indicates that the corresponding element in \code{segments} is a boundary segment;
+#' an entry '0' indicates that the corresponding segment is not a boundary segment.}
+#' \item{\code{edges}}{A #edges-by-2 matrix containing all the edges of the triangles in the output triangulation. Each row contains the row's indices in \code{nodes}, indicating the nodes where the edge starts from and ends to.}
+#' \item{\code{edgesmarkers}}{A vector of lenght #edges with entries either '1' or '0'. An entry '1' indicates that the corresponding element in \code{edge} is a boundary edge;
+#' an entry '0' indicates that the corresponding edge is not a boundary edge.}
+#' \item{\code{neighbors}}{A #triangles-by-3 matrix. Each row contains the indices of the three neighbouring triangles. An entry '-1' indicates that
+#' one edge of the triangle is a boundary edge.}
+#' \item{\code{holes}}{A #holes-by-3 matrix containing the x, y, z coordinates of a point internal to each hole of the mesh. These points are used to carve holes
+#' in the triangulation, when the domain has holes. These are passed unchanged from the input.}
+#' \item{\code{order}}{Either '1' or '2'. It specifies wether each mesh triangle should be represented by 3 nodes (the triangle' vertices) or by 6 nodes (the triangle's vertices and midpoints).
+#' These are respectively used for linear (order = 1) and quadratic (order = 2) Finite Elements.}
 #' }
 #' @export
 #' @examples
@@ -557,17 +574,39 @@ projection.points.2.5D<-function(mesh, locations) {
 
 #' Create a \code{mesh.3D} object from the connectivity matrix and nodes locations
 #'
-#' @param nodes A #nodes-by-3 matrix specifying the locations of each node.
-#' @param tetrahedrons A #tetrahedrons-by-4 matrix specifying the indices of the nodes in each tetrahedrons.
-#' @param order Order of the Finite Element basis. Only order = 1 is currently implemented.
-#' @return An object of the class \code{mesh.3D} with the following output:
+#' @param nodes A #nodes-by-3 matrix containing the x, y, z coordinates of the mesh nodes.
+#' @param tetrahedrons A #tetrahedrons-by-4 (when \code{order} = 1) or #tetrahedrons-by-10 (when \code{order} = 2) matrix.
+#' It specifies the tetrahedrons giving the row's indices in \code{nodes} of the tetrahedrons' vertices and (when \code{nodes} = 2) also if the tetrahedrons' edges midpoints. The tetrahedrons' vertices and midpoints are ordered as described
+#' in "The Finite Element Method its Basis and Fundamentals" by O. C. Zienkiewicz, R. L. Taylor and J.Z. Zhu
+#' @param order Either '1' or '2'. It specifies wether each mesh tetrahedron should be represented by 4 nodes (the tetrahedron's vertices) or by 10 nodes (the tetrahedron's vertices and edge midpoints).
+#' These are
+#' respectively used for linear (order = 1) and quadratic (order = 2) Finite Elements. Default is \code{order} = 1.
+#' @param nodesattributes A matrix with #nodes rows containing nodes' attributes.
+#' These are passed unchanged to the output. This has been added for consistency with the function \code{create.mesh.2D}.
+#' @param segments A #segments-by-2 matrix. Each row contains the row's indices in \code{nodes} of the vertices where the segment starts from and ends to.
+#' Segments are edges that are not splitted during the triangulation process. These are for instance used to define the boundaries
+#' of the domain. This has been added for consistency with the function \code{create.mesh.2D}.
+#' @param holes A #holes-by-3 matrix containing the x, y, z coordinates of a point internal to each hole of the mesh. These points are used to carve holes
+#' in the triangulation, when the domain has holes. This has been added for consistency with the function \code{create.mesh.2D}.
+#' @return An object of the class mesh.3D with the following output:
 #' \itemize{
-#' \item{\code{nnodes}}{The #nodes in the mesh.}
-#' \item{\code{ntetrahedrons}}{The #tetrahedrons in the mesh.}
-#' \item{\code{nodes}}{A #nodes-by-3 matrix containing the x,y and z coordinate for each point of the mesh.}
-#' \item{\code{tetrahedrons}}{A #tetrahedrons-by-4 matrix specifying the indices of the nodes in each tetrahedron of the mesh.}
-#' \item{\code{order}}{It specifies the order of the associated Finite Element basis. When order = 1, each
-#' mesh tetrahedron is represented by 4 nodes (the tetrahedron vertices).}
+#' \item{\code{nodes}}{A #nodes-by-3 matrix containing the x, y, z coordinates of the mesh nodes.}
+#' \item{\code{nodesmarkers}}{A vector of length #nodes, with entries either '1' or '0'. An entry '1' indicates that the corresponding node is a boundary node; an entry '0' indicates that the corresponding node is not a boundary node.}
+#' \item{\code{nodesattributes}}{A matrix with #nodes rows containing nodes' attributes.
+#' These are passed unchanged from the input.}
+#' \item{\code{tetrahedrons}}{A #tetrahedrons-by-4 (when \code{order} = 1) or #tetrahedrons-by-10 (when \code{order} = 2) matrix.
+#' It specifies the tetrahedrons giving the indices in \code{nodes} of the tetrahedrons' vertices and (when \code{nodes} = 2) also if the tetrahedrons' edges midpoints.} 
+#' \item{\code{segmentsmarker}}{A vector of length #segments with entries either '1' or '0'. An entry '1' indicates that the corresponding element in \code{segments} is a boundary segment;
+#' an entry '0' indicates that the corresponding segment is not a boundary segment.}
+#' \item{\code{faces}}{A #faces-by-3 matrix containing all the faces of the tetrahedrons in the output triangulation. Each row contains the row's indices in \code{nodes}, indicating the nodes where the face starts from and ends to.}
+#' \item{\code{facesmarkers}}{A vector of lenght #faces with entries either '1' or '0'. An entry '1' indicates that the corresponding element in \code{faces} is a boundary face;
+#' an entry '0' indicates that the corresponding edge is not a boundary face.}
+#' \item{\code{neighbors}}{A #triangles-by-4 matrix. Each row contains the indices of the four neighbouring tetrahedrons An entry '-1' indicates that
+#' one face of the tetrahedrons is a boundary face.}
+#' \item{\code{holes}}{A #holes-by-3 matrix containing the x, y, z coordinates of a point internal to each hole of the mesh. These points are used to carve holes
+#' in the triangulation, when the domain has holes. These are passed unchanged from the input.}
+#' \item{\code{order}}{Either '1' or '2'. It specifies wether each mesh tetrahedron should be represented by 3 nodes (the tetrahedron's vertices) or by 6 nodes (the tetrahedron's vertices and midpoints).
+#' These are respectively used for linear (order = 1) and quadratic (order = 2) Finite Elements.}
 #' }
 #' @export
 #' @examples
@@ -676,7 +715,12 @@ create.mesh.3D<- function(nodes, tetrahedrons, order = 1, nodesattributes = NULL
   return(out)
 }
 
+#' Create a \code{mesh.2D} object by splitting each triangle of a given mesh into four subtriangles.
+#'
+#' @param mesh a \code{mesh.2D} object to split
+#' @return An object of class mesh.2D with splitted triangles
 #' @export
+
 split.mesh.2D <- function (mesh=NULL){
   if(is.null(mesh))
     stop("No mesh passed as input!")
@@ -702,6 +746,10 @@ split.mesh.2D <- function (mesh=NULL){
 
 }
 
+#' Create a \code{mesh.2.5D} object by splitting each triangle of a given mesh into four subtriangles.
+#'
+#' @param mesh a \code{mesh.2.5D} object to split
+#' @return An object of class mesh.2.5D with splitted triangles
 #' @export
 split.mesh.2.5D <- function (mesh=NULL){
   if(is.null(mesh))
@@ -729,6 +777,10 @@ split.mesh.2.5D <- function (mesh=NULL){
 
 }
 
+#' Create a \code{mesh.3D} object by splitting each tetrahedron of a given mesh into eight subtetrahedrons.
+#'
+#' @param mesh a \code{mesh.3D} object to split
+#' @return An object of class mesh.3D with splitted tetrahedrons
 #' @export
 split.mesh.3D <- function (mesh=NULL){
   if(is.null(mesh))
