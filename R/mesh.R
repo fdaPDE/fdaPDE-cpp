@@ -521,7 +521,7 @@ create.mesh.2.5D<- function(nodes, triangles = NULL, order = 1, nodesattributes 
 #' @return 3D points projected onto 2.5D triangluar mesh.
 #' @export
 #' @examples
-#' library(currentfdaPDE)
+#' library(fdaPDE)
 #'
 #' ## Upload the hub2.5D the data
 #' data(hub2.5D)
@@ -610,7 +610,7 @@ projection.points.2.5D<-function(mesh, locations) {
 #' }
 #' @export
 #' @examples
-#' library(PACSProject)
+#' library(fdaPDE)
 #'
 #' ##Load the matrix nodes and tetrahedrons
 #' data(sphere3Ddata)
