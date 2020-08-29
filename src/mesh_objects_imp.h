@@ -203,10 +203,8 @@ bool Element<NNODES,2,3>::isPointInside(const Point<3>& point) const
 	// If the point's projection onto the 3D triangle lies outside the triangle
 	// (i.e. there is at least one negative barycentric coordinate)
 	// then the point does not belong to the triangle
-	if ((lambda.array()<-tolerance).any())
-		return false;
-
-	return (M_J_*lambda.template tail<2>() + points_[0].eigenConstView() - point.eigenConstView()).norm() < tolerance;
+	return ((lambda.array() > -tolerance).all()) &&
+				(M_J_*lambda.template tail<2>() + points_[0].eigenConstView() - point.eigenConstView()).squaredNorm() < tolerance;
 }
 
 template <UInt NNODES>
@@ -245,23 +243,33 @@ Point<3> Element<NNODES,2,3>::computeProjection(const Point<3>& point) const
 		return points_[2];
 
 	Eigen::Matrix<Real,3,1> coords3D;
-	// If (+,+,+) the projection lies inside the element
-	// So just convert back to 3D coords
-	if(lambda[0]>0 && lambda[1]>0 && lambda[2]>0)
-		coords3D.noalias() = M_J_ * lambda.tail<2>();
 	// If (+,+,-) the projection lies beyond edge 3
 	// Simply scale it back on the edge and convert
-	else if(lambda[0]>0 && lambda[1]>0)
-		coords3D.noalias() = M_J_ * Eigen::Matrix<Real,2,1>::Unit(0)*lambda[1]/lambda.head<2>().sum();
+	if (lambda[2]<0)
+		coords3D = (lambda[0] * points_[0].eigenConstView() +
+					lambda[1] * points_[1].eigenConstView())/(1-lambda[2]);
 	// If (+,-,+) the projection lies beyond edge 2
-	else if (lambda[0]>0 && lambda[2]>0)
-		coords3D.noalias() = M_J_ * Eigen::Matrix<Real,2,1>::Unit(1)*lambda[2]/(lambda[0]+lambda[2]);
+	else if (lambda[1]<0)
+		coords3D = (lambda[0] * points_[0].eigenConstView() +
+					lambda[2] * points_[2].eigenConstView())/(1-lambda[1]);
 	// If (-,+,+) the projection lies beyond edge 1
-	else
-		coords3D.noalias() = M_J_ * lambda.tail<2>()/lambda.tail<2>().sum();
+	else if (lambda[0]<0)
+		coords3D = (lambda[1] * points_[1].eigenConstView() +
+					lambda[2] * points_[2].eigenConstView())/(1-lambda[0]);
+	// If (+,+,+) the projection lies inside the element
+	// So just convert back to 3D coords
+	else 
+		coords3D.noalias() = M_J_ * lambda.tail<2>() + points_[0].eigenConstView();
 
-	// Translate back by the first point and return
-	return Point<3>(coords3D)+=points_[0];
+	Point<3> res(coords3D);
+
+	if(isPointInside(res))	
+		return res;
+	else {
+		UInt max_index;
+		lambda.maxCoeff(&max_index);
+		return points_[max_index];
+	}
 }
 
 

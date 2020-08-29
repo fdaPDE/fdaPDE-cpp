@@ -355,6 +355,10 @@ void ADTree<Shape>::gettri(int const & loc, std::vector<Real> & coord, Id & id) 
 template<class Shape>
 bool ADTree<Shape>::search(std::vector<Real> const & region, std::set<int> & found) const {
 
+  
+    static constexpr Real eps = std::numeric_limits<Real>::epsilon(),
+     tolerance = 10 * eps;
+
   // This function returns true if it has completed successfully, false otherwise.
 
   // Start preorder traversal at level 0 (root).
@@ -424,8 +428,8 @@ bool ADTree<Shape>::search(std::vector<Real> const & region, std::set<int> & fou
       // Does the element intersect box?
       int flag = 0;
       for(int i = 0; i < dimp; ++i) {
-        if(box[i] > xel[i+dimp]) { flag = 1; }
-        if(box[i+dimp] < xel[i]) { flag = 1; }
+        if(box[i] > xel[i+dimp]+tolerance) { flag = 1; }
+        if(box[i+dimp] < xel[i]-tolerance) { flag = 1; }
       }
 
       if(flag == 0) {
