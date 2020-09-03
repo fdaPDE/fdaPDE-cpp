@@ -137,7 +137,7 @@ void simplex_container<mydim>::mark_boundary(SEXP Routput, UInt index) const {
   RIntegerMatrix boundarymarkers(VECTOR_ELT(Routput, index));
 
   for(UInt i=0; i<distinct_indexes.size()-1; ++i)
-    boundarymarkers[i] = !duplicates[i+1];
+    boundarymarkers[i] = !duplicates[distinct_indexes[i]+1];
 
   //Special attention for the last simplex!
   boundarymarkers[distinct_indexes.size()-1] = distinct_indexes.back()+1==duplicates.size() || !duplicates[distinct_indexes.back()+1];

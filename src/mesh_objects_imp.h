@@ -259,17 +259,18 @@ Point<3> Element<NNODES,2,3>::computeProjection(const Point<3>& point) const
 	// If (+,+,+) the projection lies inside the element
 	// So just convert back to 3D coords
 	else 
-		coords3D.noalias() = M_J_ * lambda.tail<2>() + points_[0].eigenConstView();
+		coords3D = lambda[0] * points_[0].eigenConstView() +
+				   lambda[1] * points_[1].eigenConstView() +
+				   lambda[2] * points_[2].eigenConstView();
 
 	Point<3> res(coords3D);
 
 	if(isPointInside(res))	
 		return res;
-	else {
-		UInt max_index;
-		lambda.maxCoeff(&max_index);
-		return points_[max_index];
-	}
+
+	UInt max_index;
+	lambda.maxCoeff(&max_index);
+	return points_[max_index];
 }
 
 

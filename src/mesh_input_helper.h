@@ -111,12 +111,14 @@ void mark_boundary_nodes(SEXP Routput, SEXP Rnodes, UInt index, UInt index_subs,
   const RIntegerMatrix submarkers(VECTOR_ELT(Routput, index_markers));
   RIntegerMatrix nodesmarkers(VECTOR_ELT(Routput, index));
 
+  for (UInt i=0; i<nodes.nrows(); ++i)
+    nodesmarkers[i]=0;
+
   for(UInt j=0; j<subs.ncols(); ++j)
-    for(UInt i=0; i<subs.nrows(); ){
-      nodesmarkers[subs(i,j)] = submarkers[i];
-      while(i<subs.nrows() && (!submarkers[i] || nodesmarkers[subs(i, j)]))
-        ++i;
-    }
+    for(UInt i=0; i<subs.nrows(); ++i)
+      if(nodesmarkers[subs(i,j)-1]==0)
+        nodesmarkers[subs(i,j)-1] = submarkers[i];
+    
 }
 
 
