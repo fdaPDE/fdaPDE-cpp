@@ -384,8 +384,10 @@ plot.mesh.2.5D<-function(x,...){
 plot.mesh.3D<-function(x,...){
 
   nodes <- x$nodes
-  faces <- as.vector(t(x$faces[as.logical(x$facesmarkers),]))
-  # edges <- as.vector(t(mesh$edges[as.logical(mesh$edgesmarkers),]))
+  faces <- as.vector(t(x$faces[x$facesmarkers,]))
+  
+  aux_mesh <- create.mesh.2.5D(nodes=nodes, triangles=x$faces[x$facesmarkers,], order=1)
+  edges <- as.vector(t(aux_mesh$edges))
 
   open3d()
   axes3d()
@@ -394,7 +396,7 @@ plot.mesh.3D<-function(x,...){
 
   rgl.triangles(nodes[faces,1],nodes[faces,2],nodes[faces,3],col="white",...)
   rgl.points(nodes[,1], nodes[,2], nodes[,3], col="black", ...)
-  # rgl.lines(nodes[edges,1], nodes[edges,2], nodes[edges,3], col="black",...)
+  rgl.lines(nodes[edges,1], nodes[edges,2], nodes[edges,3], col="black",...)
 
   aspect3d("iso")
   rgl.viewpoint(0,-45)

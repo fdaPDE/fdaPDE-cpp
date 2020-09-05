@@ -696,7 +696,7 @@ create.mesh.3D<- function(nodes, tetrahedrons, order = 1, nodesattributes = NULL
 
     outCPP <- .Call("CPP_VolumeMeshOrder2", tetrahedrons, nodes, PACKAGE = "fdaPDE")
 
-    out <- list(nodes=rbind(nodes, outCPP[[5]]), nodesmarkers=c(outCPP[[3]], outCPP[[2]]), nodesattributes=nodesattributes,
+    out <- list(nodes=rbind(nodes, outCPP[[5]]), nodesmarkers=c(outCPP[[3]], rep(FALSE, nrow(outCPP[[5]]))), nodesattributes=nodesattributes,
                tetrahedrons=cbind(tetrahedrons+1, outCPP[[6]]), segments=segments, segmentsmarkers=segmentsmarkers,
                faces=outCPP[[1]], facesmarkers=outCPP[[2]], neighbors=outCPP[[4]],
                holes=holes, order=order)
@@ -737,7 +737,8 @@ split.mesh.2D <- function (mesh=NULL){
     splittedmesh<-create.mesh.2D(nodes=rbind(mesh$nodes, outCPP[[2]]), triangles=outCPP[[1]])
   }
   else if(mesh$order==2){
-    outCPP <- .Call("CPP_TriangleMeshSplitOrder2", mesh$triangles[,1:3], mesh$nodes)
+    nnodes<-nrow(mesh$nodes)-nrow(mesh$edges)
+    outCPP <- .Call("CPP_TriangleMeshSplitOrder2", mesh$triangles[,1:3],  mesh$nodes[1:nnodes,])
     splittedmesh<-create.mesh.2D(nodes=mesh$nodes, triangles=outCPP[[1]], order=2)
   }
 
@@ -769,7 +770,8 @@ split.mesh.2.5D <- function (mesh=NULL){
     splittedmesh<-create.mesh.2.5D(nodes=rbind(mesh$nodes, outCPP[[2]]), triangles=outCPP[[1]])
   }
   else if(mesh$order==2){
-    outCPP <- .Call("CPP_TriangleMeshSplitOrder2", mesh$triangles[,1:3], mesh$nodes)
+    nnodes<-nrow(mesh$nodes)-nrow(mesh$edges)
+    outCPP <- .Call("CPP_TriangleMeshSplitOrder2", mesh$triangles[,1:3], mesh$nodes[1:nnodes,])
     splittedmesh<-create.mesh.2.5D(nodes=mesh$nodes, triangles=outCPP[[1]], order=2)
   }
 
@@ -799,7 +801,8 @@ split.mesh.3D <- function (mesh=NULL){
     splittedmesh<-create.mesh.3D(nodes=rbind(mesh$nodes, outCPP[[2]]), tetrahedrons=outCPP[[1]])
   }
   else if(mesh$order==2){
-    outCPP <- .Call("CPP_TetraMeshSplitOrder2", mesh$tetrahedrons[,1:4], mesh$nodes)
+    nnodes<-max(mesh$tetrahedrons[,1:4])+1
+    outCPP <- .Call("CPP_TetraMeshSplitOrder2", mesh$tetrahedrons[,1:4], mesh$nodes[1:nnodes,])
     splittedmesh<-create.mesh.3D(nodes=mesh$nodes, tetrahedrons=outCPP[[1]], order=2)
   }
 
