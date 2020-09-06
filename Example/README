@@ -1,0 +1,16 @@
+The source code for the project can be found at:
+https://github.com/gmrinaldi/fdaPDE
+
+Compilation instructions (on linux)
+With R already installed (along with dependencies RcppEigen, geometry, rgl, Matrix, plot3D and plot3Drgl) it is enough to run from the terminal the following two commands (in the folder containing the dowloaded fdaPDE repository):
+
+$ R CMD build fdaPDE
+$ R CMD INSTALL fdaPDE_1.1-0.tar.gz
+
+Due to some annoying issues with RcppEigen the compiler used to issue a lot of warnings during compilation. These have been hidden adding a one-line Makevars file in folder src containing the following:
+PKG_CXXFLAGS = -Wno-ignored-attributes
+
+Unfortunately it seems unlikely that this solution can be permanently added to the library because of CRAN constraints.
+
+
+
