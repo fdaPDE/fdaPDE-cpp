@@ -7,6 +7,10 @@ With R already installed (along with dependencies RcppEigen, geometry, rgl, Matr
 $ R CMD build fdaPDE
 $ R CMD INSTALL fdaPDE_1.1-0.tar.gz
 
+Compilation instructions (on windows)
+From within R use the following command (update path to downloaded repository):
+install.packages("/path/to/fdaPDE/folder", type="source", repos=NULL)
+
 Due to some annoying issues with RcppEigen the compiler used to issue a lot of warnings during compilation. These have been hidden adding a one-line Makevars file in folder src containing the following:
 PKG_CXXFLAGS = -Wno-ignored-attributes
 
