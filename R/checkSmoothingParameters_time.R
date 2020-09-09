@@ -140,10 +140,10 @@ checkSmoothingParametersSize_time<-function(locations = NULL, time_locations=NUL
   if(!is.null(time_locations)){
     if(ncol(time_locations) != 1)
       stop("'time_locations' must be a column vector")
-    if (ncol(observations) != nrow(time_locations))
+    if (ncol(observations) != ifelse(is.null(IC), nrow(time_locations), nrow(time_locations)-1))
       stop("'observations' must be a #locations x #time_locations matrix")
   }else{
-    if (ncol(observations) != nrow(time_mesh))
+    if (ncol(observations) != ifelse(is.null(IC), nrow(time_mesh), nrow(time_mesh)-1))
       stop("'observations' must be a #locations x #time_locations matrix")
   }
 
@@ -160,9 +160,17 @@ checkSmoothingParametersSize_time<-function(locations = NULL, time_locations=NUL
 
   if(is.null(locations) && is.null(incidence_matrix))
   {
-    if(!is.null(time_locations))
-      if(ifelse(class(FEMbasis$mesh) == "mesh.2D", nrow(FEMbasis$mesh$nodes),FEMbasis$mesh$nnodes) != nrow(observations) || ncol(observations) != nrow(time_locations))
-        stop("'locations' and 'observations' have incompatible size;")
+    if(!is.null(time_locations)){
+      if(!FLAG_PARABOLIC || is.null(IC)){
+        if(ifelse(class(FEMbasis$mesh) == "mesh.2D", nrow(FEMbasis$mesh$nodes),FEMbasis$mesh$nnodes) != nrow(observations) || ncol(observations) != nrow(time_locations))
+          stop("'locations' and 'observations' have incompatible size;")
+      }
+      else{
+        if(ifelse(class(FEMbasis$mesh) == "mesh.2D", nrow(FEMbasis$mesh$nodes),FEMbasis$mesh$nnodes) != nrow(observations) || ncol(observations) != (nrow(time_locations)-1))
+          stop("'locations' and 'observations' have incompatible size;")
+      }
+    }
+    
 
     if(is.null(time_locations))
     {

@@ -42,8 +42,9 @@ NULL
 #'  \code{BC_values}, a vector with the values that the spatial field must take at the nodes indicated in \code{BC_indices}.
 #' @param FLAG_MASS Boolean. This parameter is considerd only for separable problems i.e. when \code{FLAG_PARABOLIC==FALSE}. If \code{TRUE} the mass matrix in space and in time are used, if \code{FALSE} they are substituted with proper identity matrices.
 #' @param FLAG_PARABOLIC Boolean. If \code{TRUE} the parabolic problem problem is selected, if \code{FALSE} the separable one.
-#' @param IC Initial condition needed in case of parabolic problem i.e. when \code{FLAG_PARABOLIC==FALSE}.This parameter has to be set only for parabolic. If \code{FLAG_PARABOLIC=TRUE} and \code{IC=NULL} it is necessary to provide
-#' also data at the initial time. IC will be estimated from it
+#' @param IC Initial condition needed in case of parabolic problem i.e. when \code{FLAG_PARABOLIC==TRUE}. 
+#' If \code{FLAG_PARABOLIC==FALSE} this parameter is ignored. If \code{FLAG_PARABOLIC=TRUE} and \code{IC=NULL} it is necessary to provide
+#' also data at the initial time. IC will be estimated from them. 
 #' @param GCV Boolean. If \code{TRUE} the following quantities are computed: the trace of the smoothing matrix, the estimated error standard deviation,  and
 #'        the Generalized Cross Validation criterion, for each combination of the smoothing parameters specified in \code{lambdaS} and \code{lambdaT}.
 #' @param GCVmethod either "Exact" or "Stochastic". If set to "Exact" perform an exact (but possibly slow) computation of the GCV index. If set to "Stochastic" approximate the GCV with a stochastic algorithm.
@@ -76,7 +77,13 @@ NULL
 #'                        search = "tree", bary.locations = NULL)
 #' @export
 
-#' @references Sangalli, L.M., Ramsay, J.O. & Ramsay, T.O., 2013. Spatial spline regression models. Journal of the Royal Statistical Society. Series B: Statistical Methodology, 75(4), pp. 681-703.
+#' @references Arnone, E., Azzimonti, L., Nobile, F., & Sangalli, L. M. (2019). Modeling 
+#' spatially dependent functional data via regression with differential regularization. 
+#' Journal of Multivariate Analysis, 170, 275-295.
+#' Bernardi, M. S., Sangalli, L. M., Mazza, G., & Ramsay, J. O. (2017). A penalized 
+#' regression model for spatial functional data with application to the analysis of the 
+#' production of waste in Venice province. 
+#' Stochastic Environmental Research and Risk Assessment, 31(1), 23-38.
 #' @examples
 #' library(fdaPDE)
 #' 
@@ -103,7 +110,12 @@ NULL
 #'                            FEMbasis = FEMbasis, lambdaS = lambdaS, lambdaT = lambdaT)
 #' plot(solution$fit.FEM)
 
-smooth.FEM.time<-function(locations = NULL, time_locations=NULL, observations, FEMbasis, time_mesh=NULL, lambdaS, lambdaT = 1, covariates = NULL, PDE_parameters=NULL, incidence_matrix = NULL, BC = NULL, FLAG_MASS = FALSE, FLAG_PARABOLIC = FALSE, IC = NULL, GCV = FALSE, GCVmethod = "Stochastic", nrealizations = 100, DOF_matrix=NULL, search = "tree", bary.locations = NULL)
+smooth.FEM.time<-function(locations = NULL, time_locations=NULL, observations, FEMbasis, 
+                          time_mesh=NULL, lambdaS, lambdaT = 1, covariates = NULL, 
+                          PDE_parameters=NULL, incidence_matrix = NULL, BC = NULL, 
+                          FLAG_MASS = FALSE, FLAG_PARABOLIC = FALSE, IC = NULL, GCV = FALSE, 
+                          GCVmethod = "Stochastic", nrealizations = 100, DOF_matrix=NULL, 
+                          search = "tree", bary.locations = NULL)
 {
   if(class(FEMbasis$mesh) == "mesh.2D"){
     ndim = 2

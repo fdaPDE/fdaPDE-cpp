@@ -58,8 +58,9 @@ This is only for areal data. In case of pointwise data, this parameter is set to
 
 \item{FLAG_PARABOLIC}{Boolean. If \code{TRUE} the parabolic problem problem is selected, if \code{FALSE} the separable one.}
 
-\item{IC}{Initial condition needed in case of parabolic problem i.e. when \code{FLAG_PARABOLIC==FALSE}.This parameter has to be set only for parabolic. If \code{FLAG_PARABOLIC=TRUE} and \code{IC=NULL} it is necessary to provide
-also data at the initial time. IC will be estimated from it}
+\item{IC}{Initial condition needed in case of parabolic problem i.e. when \code{FLAG_PARABOLIC==TRUE}. 
+If \code{FLAG_PARABOLIC==FALSE} this parameter is ignored. If \code{FLAG_PARABOLIC=TRUE} and \code{IC=NULL} it is necessary to provide
+also data at the initial time. IC will be estimated from them.}
 
 \item{GCV}{Boolean. If \code{TRUE} the following quantities are computed: the trace of the smoothing matrix, the estimated error standard deviation,  and
 the Generalized Cross Validation criterion, for each combination of the smoothing parameters specified in \code{lambdaS} and \code{lambdaT}.}
@@ -122,5 +123,11 @@ solution = smooth.FEM.time(observations = data, time_locations = time_locations,
 plot(solution$fit.FEM)
 }
 \references{
-Sangalli, L.M., Ramsay, J.O. & Ramsay, T.O., 2013. Spatial spline regression models. Journal of the Royal Statistical Society. Series B: Statistical Methodology, 75(4), pp. 681-703.
+Arnone, E., Azzimonti, L., Nobile, F., & Sangalli, L. M. (2019). Modeling 
+spatially dependent functional data via regression with differential regularization. 
+Journal of Multivariate Analysis, 170, 275-295.
+Bernardi, M. S., Sangalli, L. M., Mazza, G., & Ramsay, J. O. (2017). A penalized 
+regression model for spatial functional data with application to the analysis of the 
+production of waste in Venice province. 
+Stochastic Environmental Research and Risk Assessment, 31(1), 23-38.
 }
