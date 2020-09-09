@@ -347,7 +347,7 @@ smooth.FEM.time<-function(locations = NULL, time_locations=NULL, observations, F
 
   if(GCV == TRUE)
   {
-    stderr=sqrt(GCV_*(length(observations)-dof)/length(observations))
+    stderr=sqrt(GCV_*(sum(!is.na(observations))-dof)/sum(!is.na(observations)))
     reslist=list(fit.FEM.time = fit.FEM.time, PDEmisfit.FEM.time = PDEmisfit.FEM.time,
             beta = beta, edf = dof, GCV = GCV_, stderr=stderr, bestlambda = bestlambda, ICestimated=ICestimated, bary.locations = bary.locations)
   }else{

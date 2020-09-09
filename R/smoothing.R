@@ -453,7 +453,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
 
   if(GCV == TRUE)
   {
-    stderr=sqrt(GCV_*(length(observations)-dof)/length(observations))
+    stderr=sqrt(GCV_*(sum(!is.na(observations))-dof)/sum(!is.na(observations)))
     reslist=list(fit.FEM = fit.FEM, PDEmisfit.FEM = PDEmisfit.FEM,
             beta = beta, edf = dof, GCV = GCV_, stderr=stderr, bestlambda = bestlambda, bary.locations = bary.locations)
   }else{
