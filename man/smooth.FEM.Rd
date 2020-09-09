@@ -6,8 +6,10 @@
 \usage{
 smooth.FEM(locations = NULL, observations, FEMbasis, lambda,
                   covariates = NULL, PDE_parameters=NULL, incidence_matrix = NULL,
-                  BC = NULL, GCV = FALSE, GCVmethod = "Stochastic", nrealizations = 100, 
-                  DOF_matrix=NULL, search = "tree", bary.locations = NULL)
+                  BC = NULL, GCV = FALSE, GCVmethod = "Stochastic", nrealizations = 100,
+                  DOF_matrix=NULL, search = "tree", bary.locations = NULL,
+                  family="gaussian", mu0 = NULL, scale.param=NULL, threshold.FPIRLS=0.0002020, 
+                  max.steps.FPIRLS=15, GCV.inflation.factor=1, areal.data.avg = TRUE)
 }
 \arguments{
 \item{locations}{A #observations-by-2 matrix in the 2D case and #observations-by-3 matrix in the 2.5D and 3D case, where
@@ -86,6 +88,27 @@ since the computation of the dof is the most expensive part of GCV.}
 \code{locations}, location points which are same as the given locations options. (checks whether both locations are the same);
 \code{element ids}, a vector of element id of the points from the mesh where they are located;
 \code{barycenters}, a vector of barycenter of points from the located element.}
+
+\item{family}{This parameter specify the distibution within exponential family used for GLM model.
+The following distribution are implemented: "binomial", "exponential", "gamma", "poisson", "gaussian", "invgaussian".
+The default link function for binomial is \code{logit} if you want either \code{probit} or \code{clogloc} set \code{family = "probit"}, \code{family = "cloglog"}.}
+
+\item{mu0}{This parameter is a vector that set the starting point for FPIRLS algorithm. It represent an initial guess of the location parameter.
+Default is set to observation for non binary distribution while equal to \code{0.5(observations + 0.5)} for binary data.}
+
+\item{scale.param}{Dispersion parameter of the chosen distribution. This is only required for "gamma", "gaussian", "invgaussian".
+User may specify the parameter as a positive real number. If the parameter is not supplied, it is estimated from data according to Wilhelm Sangalli 2016.}
+
+\item{threshold.FPIRLS}{This parameter is used for arresting algorithm iterations. Algorithm stops when two successive iterations lead to improvement in penalized log-likelihood smaller than threshold.FPIRLS.
+Default value \code{threshold.FPIRLS = 0.0002020}.}
+
+\item{max.steps.FPIRLS}{This parameter is used to limit the maximum number of iteration.
+Default value \code{max.steps.FPIRLS=15}.}
+
+\item{GCV.inflation.factor}{Tuning parameter used for the estimation of GCV. Default value \code{GCV.inflation.factor = 1.8}.
+It is advised to set it grather than 1 to avoid overfitting.}
+
+\item{areal.data.avg}{Boolean. It involves the computation of Areal Data. If \code{TRUE} the areal data are averaged, otherwise not.}
 }
 \value{
 A list with the following variables:
@@ -98,6 +121,9 @@ the smoothing parameter is equal to \code{lambda[j]}.}
    \item{\code{stderr}}{If GCV is \code{TRUE}, a scalar or vector with the estimate of the standard deviation of the error for each value of the smoothing parameter specified in \code{lambda}.}
    \item{\code{GCV}}{If GCV is \code{TRUE}, a  scalar or vector with the value of the GCV criterion for each value of the smoothing parameter specified in \code{lambda}.}
    \item{\code{bary.locations}}{A barycenter information of the given locations if the locations are not mesh nodes.}
+   \item{\code{fn_hat}}{ A matrix with number of rows equal to number of locations and number of columns equal to length of lambda. Each column contain the evaluaton of the spatial field in the location points.}
+   \item{\code{J_minima}}{A vector of the same length of lambda, containing the reached minima for each value of the smoothing parameter.}
+   \item {\code{variance.est}}{ A vector which return the variance estimates for the Generative Additive Models}
 }
 }
 \description{
@@ -270,6 +296,7 @@ solution = smooth.FEM(observations = data,
                             BC = BC)
 plot(solution$fit.FEM)
 image(solution$fit.FEM)
+
 }
 \references{
 \itemize{
@@ -277,5 +304,7 @@ image(solution$fit.FEM)
 Journal of the Royal Statistical Society: Series B (Statistical Methodology), 75(4), 681-703.}
    \item{Azzimonti, L., Sangalli, L. M., Secchi, P., Domanin, M., Nobile, F. (2015). Blood flow velocity field estimation
 via spatial regression with PDE penalization. Journal of the American Statistical Association, 110(511), 1057-1071.}
+   \item{Matthieu Wilhelm & Laura M. Sangalli (2016). Generalized spatial regression with differential regularization. 
+ Journal of Statistical Computation and Simulation, 86:13, 2497-2518.}
 }
 }

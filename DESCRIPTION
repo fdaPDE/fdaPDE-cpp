@@ -1,20 +1,29 @@
 Package: fdaPDE
-Version: 1.1-0
-Date: 2020-04-30
+Version: 1.1-1
+Date: 2020-07-27
 Title: Functional Data Analysis and Partial Differential Equations (PDE); Statistical Analysis of Functional and Spatial Data, Based on Regression with PDE Regularization
-Authors@R: c(person("Eardi", "Lila", role = c("aut"),
-		     email = "elila@uw.edu"),
-	      person("Laura M.", "Sangalli", role = c("aut"),
-		     email = "laura.sangalli@polimi.it"),
-		    person("Eleonora", "Arnone", role = c("aut", "cre"),
+Authors@R: c(person("Eleonora", "Arnone", role = c("aut", "cre"),
 		     email = "eleonora.arnone@polimi.it"),
-	      person("Jim", "Ramsay", role = "aut",
+	     person("Laura M.", "Sangalli", role = c("aut"),
+		     email = "laura.sangalli@polimi.it"),
+	     person("Eardi", "Lila", role = c("aut"),
+		     email = "elila@uw.edu"),
+	     person("Jim", "Ramsay", role = "aut",
 		     email = " ramsay@psych.mcgill.ca"),
-		    person("Luca", "Formaggia", role = "aut",
+	     person("Luca", "Formaggia", role = "aut",
 		     email = " luca.formaggia@polimi.it"),
+	     person("Carlo", "de Falco", role = "aut",
+		     email = " carlo.defalco@polimi.it"),
+		    person("Giovanni", "Ardenghi", role = "ctb"),
 		    person("Alessandra", "Colli", role = "ctb"),
+		    person("Alberto", "Colombo", role = "ctb"),
 		    person("Luca", "Colombo", role = "ctb"),
-		    person("Carlo", "de Falco", role = "ctb"))
+		    person("Lorenzo", "Ghilotti", role = "ctb"),
+		    person("Jiyoung", "Kim", role = "ctb"),
+		    person("Giulio", "Perin", role = "ctb"),
+		    person("Clara", "Pigolotti", role = "ctb"),
+		    person("Andrea", "Vicini", role = "ctb")
+		    )
 Maintainer: Eleonora Arnone <eleonora.arnone@polimi.it>
 Depends: 
     R (>= 3.5.0),
@@ -30,5 +39,5 @@ License: CC BY-NC-SA 4.0
 Copyright: See the individual source files for copyrights information
 NeedsCompilation: yes
 SystemRequirements: C++11
-RoxygenNote: 7.1.0
+RoxygenNote: 7.1.1
 Encoding: UTF-8
