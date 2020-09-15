@@ -399,7 +399,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis, lambda,
 
     numnodes = nrow(FEMbasis$mesh$nodes)
 
-  }else if(class(FEMbasis$mesh) == 'mesh.3D'){
+  }else if(class(FEMbasis$mesh) == 'mesh.3D' & is.null(PDE_parameters)){
 
     bigsol = NULL
     print('C++ Code Execution')

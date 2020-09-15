@@ -670,10 +670,15 @@ SEXP regression_PDE(SEXP Rlocations, SEXP RbaryLocations, SEXP Robservations, SE
 		return(regression_skeleton<RegressionDataElliptic, 1, 2, 2>(regressionData, Rmesh));
 	else if(regressionData.getOrder() == 2 && ndim==2)
 		return(regression_skeleton<RegressionDataElliptic, 2, 2, 2>(regressionData, Rmesh));
-	else if(regressionData.getOrder() == 1 && ndim==3)
+	else if(regressionData.getOrder() == 1 && mydim==2 && ndim==3)
 		return(regression_skeleton<RegressionDataElliptic, 1, 2, 3>(regressionData, Rmesh));
-	else if(regressionData.getOrder() == 2 && ndim==3)
+	else if(regressionData.getOrder() == 2 && mydim==2 && ndim==3)
 		return(regression_skeleton<RegressionDataElliptic, 2, 2, 3>(regressionData, Rmesh));
+	else if(regressionData.getOrder() == 1 && mydim==3 && ndim==3)
+		return(regression_skeleton<RegressionDataElliptic, 1, 3, 3>(regressionData, Rmesh));
+	else if(regressionData.getOrder() == 2 && mydim==3 && ndim==3)
+		return(regression_skeleton<RegressionDataElliptic, 2, 3, 3>(regressionData, Rmesh));
+
 	return(NILSXP);
 }
 
@@ -714,10 +719,15 @@ SEXP regression_PDE_space_varying(SEXP Rlocations, SEXP RbaryLocations, SEXP Rob
 		return(regression_skeleton<RegressionDataEllipticSpaceVarying, 1, 2, 2>(regressionData, Rmesh));
 	else if(regressionData.getOrder() == 2 && ndim==2)
 		return(regression_skeleton<RegressionDataEllipticSpaceVarying, 2, 2, 2>(regressionData, Rmesh));
-	else if(regressionData.getOrder() == 1 && ndim==3)
+	else if(regressionData.getOrder() == 1 && mydim==2 && ndim==3)
 		return(regression_skeleton<RegressionDataEllipticSpaceVarying, 1, 2, 3>(regressionData, Rmesh));
-	else if(regressionData.getOrder() == 2 && ndim==3)
+	else if(regressionData.getOrder() == 2 && mydim==2 && ndim==3)
 		return(regression_skeleton<RegressionDataEllipticSpaceVarying, 2, 2, 3>(regressionData, Rmesh));
+	else if(regressionData.getOrder() == 1 && mydim==3 && ndim==3)
+		return(regression_skeleton<RegressionDataEllipticSpaceVarying, 1, 3, 3>(regressionData, Rmesh));
+	else if(regressionData.getOrder() == 2 && mydim==3 && ndim==3)
+		return(regression_skeleton<RegressionDataEllipticSpaceVarying, 2, 3, 3>(regressionData, Rmesh));
+
 	return(NILSXP);
 }
 
