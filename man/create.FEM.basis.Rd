@@ -14,16 +14,16 @@ create.FEM.basis(mesh, saveTree = FALSE)
 \value{
 A \code{FEMbasis} object. This contains the \code{mesh}, along with some additional quantities:
 \itemize{
-	\item{\code{order}}{Either "1" or "2" for the 2D and 2.5D case, and "1" for the 3D case.
-	Order of the Finite Element basis.}
-	\item{\code{nbasis}}{Scalar. The number of basis.}
-	\item{\code{transf_coord}}{It takes value only in the 2D case. It is a list of 4 vectors: diff1x, diff1y, diff2x and diff2y.
-	Each vector has length #triangles and encodes the information for the tranformation matrix that transforms the
-	nodes of the reference triangle to the nodes of the i-th triangle.
-	The tranformation matrix for the i-th triangle has the form [diff1x[i] diff2x[i]; diff1y[i] diff2y[i]].}
-	\item{\code{detJ}}{It takes value only in the 2D case. A vector of length #triangles. The ith element contains
-	the determinant of the transformation from the reference triangle to the nodes of the i-th triangle.
-	Its value is also the double of the area of each triangle of the basis.}
+ \item{\code{order}}{Either "1" or "2" for the 2D and 2.5D case, and "1" for the 3D case.
+ Order of the Finite Element basis.}
+ \item{\code{nbasis}}{Scalar. The number of basis.}
+ \item{\code{transf_coord}}{It takes value only in the 2D case. It is a list of 4 vectors: diff1x, diff1y, diff2x and diff2y.
+ Each vector has length #triangles and encodes the information for the tranformation matrix that transforms the
+ nodes of the reference triangle to the nodes of the i-th triangle.
+ The tranformation matrix for the i-th triangle has the form [diff1x[i] diff2x[i]; diff1y[i] diff2y[i]].}
+ \item{\code{detJ}}{It takes value only in the 2D case. A vector of length #triangles. The ith element contains
+ the determinant of the transformation from the reference triangle to the nodes of the i-th triangle.
+ Its value is also the double of the area of each triangle of the basis.}
 }
 }
 \description{

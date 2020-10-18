@@ -1,0 +1,14 @@
+#Makevars to make the compiler compile in the subdirectories (do not need to modify)
+
+#Use c++11
+CXX_STD = CXX11
+
+# Group the source files
+SOURCES =  $(wildcard */*.cpp) #subfolders cpp files
+SOURCES_C= $(wildcard */*.c)   #subfolders c files
+SOURCES_SUB =  $(wildcard */*/*.cpp) #sub-subfolders cpp files
+SOURCES_SRC= $(wildcard ./*.cpp)     #current directory cpp files
+SOURCES_C_SRC= $(wildcard ./*.c)       #current directory c files
+
+# Obtain the object files
+OBJECTS=$(SOURCES:.cpp=.o) $(SOURCES_SUB:.cpp=.o) $(SOURCES_C:.c=.o) $(SOURCES_SRC:.cpp=.o) $(SOURCES_C_SRC:.c=.o)
