@@ -20,8 +20,10 @@ Authors@R: c(person("Eleonora", "Arnone", role = c("aut", "cre"),
 		    person("Luca", "Colombo", role = "ctb"),
 		    person("Lorenzo", "Ghilotti", role = "ctb"),
 		    person("Jiyoung", "Kim", role = "ctb"),
+		    person("Giorgio", "Meretti", role = "ctb"),
 		    person("Giulio", "Perin", role = "ctb"),
 		    person("Clara", "Pigolotti", role = "ctb"),
+		    person("Andrea", "Poiatti", role = "ctb"),
 		    person("Andrea", "Vicini", role = "ctb")
 		    )
 Maintainer: Eleonora Arnone <eleonora.arnone@polimi.it>
@@ -38,6 +40,6 @@ Description: An implementation of regression models with partial differential re
 License: CC BY-NC-SA 4.0
 Copyright: See the individual source files for copyrights information
 NeedsCompilation: yes
-SystemRequirements: C++11
+SystemRequirements: C++11, GNU make
 RoxygenNote: 7.1.1
 Encoding: UTF-8
