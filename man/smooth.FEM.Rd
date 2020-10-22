@@ -8,8 +8,11 @@ smooth.FEM(locations = NULL, observations, FEMbasis,
  covariates = NULL, PDE_parameters = NULL, BC = NULL,
  incidence_matrix = NULL, areal.data.avg = TRUE,
  search = "tree", bary.locations = NULL,
- family = "gaussian", mu0 = NULL, scale.param = NULL, threshold.FPIRLS = 0.0002020, max.steps.FPIRLS = 15,
- lambda.selection.criterion = "grid", DOF.evaluation = NULL, lambda.selection.lossfunction = NULL, lambda = NULL, DOF.stochastic.realizations = 100, DOF.stochastic.seed = 0, DOF.matrix = NULL, GCV.inflation.factor = 1, lambda.optimization.tolerance = 0.05)
+ family = "gaussian", mu0 = NULL, scale.param = NULL, threshold.FPIRLS = 0.0002020, 
+ max.steps.FPIRLS = 15, lambda.selection.criterion = "grid", DOF.evaluation = NULL, 
+ lambda.selection.lossfunction = NULL, lambda = NULL, DOF.stochastic.realizations = 100,
+ DOF.stochastic.seed = 0, DOF.matrix = NULL, GCV.inflation.factor = 1, 
+ lambda.optimization.tolerance = 0.05)
 }
 \arguments{
 \item{locations}{A #observations-by-2 matrix in the 2D case and #observations-by-3 matrix in the 2.5D and 3D case, where
@@ -202,7 +205,8 @@ plot(solution$fit.FEM)
 covariate = covs.test(mesh$nodes[,1], mesh$nodes[,2])
 data = fs.test(mesh$nodes[,1], mesh$nodes[,2]) + 2*covariate + rnorm(nrow(mesh$nodes), sd = 0.5)
 
-solution = smooth.FEM(observations = data, covariates = covariate, FEMbasis = FEMbasis, lambda = lambda)
+solution = smooth.FEM(observations = data, covariates = covariate, 
+                      FEMbasis = FEMbasis, lambda = lambda)
 
 # beta estimate:
 solution$solution$beta
@@ -210,11 +214,12 @@ solution$solution$beta
 plot(solution$fit.FEM)
 
 # Choose lambda with GCV - stochastic grid evaluation:
-lambda = 10^(-2:2)
+lambda = 10^(-2:0)
 solution = smooth.FEM(observations = data,
                             covariates = covariate,
                             FEMbasis = FEMbasis,
-                            lambda = lambda, DOF.evaluation = 'stochastic', lambda.selection.lossfunction = 'GCV')
+                            lambda = lambda, DOF.evaluation = 'stochastic', 
+                            lambda.selection.lossfunction = 'GCV')
 bestLambda = solution$optimization$lambda_solution
 # Choose lambda with GCV - Newton finite differences stochastic evaluation -:
 solution = smooth.FEM(observations = data,

@@ -114,9 +114,8 @@ points(data, col="red", pch=19, cex=0.5)
 lambda = 0.1
 sol <- DE.FEM(data = data, FEMbasis = FEMbasis, lambda = lambda, fvec=NULL, heatStep=0.1,
                   heatIter=500, stepProposals=NULL, tol1=1e-4, tol2=0, print=FALSE, 
-                  nfolds=NULL, nsimulations=500,step_method = "Fixed_Step", 
-                  direction_method = "BFGS",preprocess_method="NoCrossValidation", 
-                  search = 2)
+                  nfolds=NULL, nsimulations=300,step_method = "Fixed_Step", 
+                  direction_method = "BFGS",preprocess_method="NoCrossValidation")
 
 ## Visualization 
 n = 100

@@ -4,13 +4,15 @@
 \alias{smooth.FEM.time}
 \title{Space-time regression with differential regularization}
 \usage{
-smooth.FEM.time(locations = NULL, time_locations = NULL, observations, FEMbasis, time_mesh=NULL,
-covariates = NULL, PDE_parameters = NULL,  BC = NULL,
+smooth.FEM.time(locations = NULL, time_locations = NULL, observations, FEMbasis, 
+time_mesh=NULL, covariates = NULL, PDE_parameters = NULL,  BC = NULL,
 incidence_matrix = NULL, areal.data.avg = TRUE,
 FLAG_MASS = FALSE, FLAG_PARABOLIC = FALSE, IC = NULL,
 search = "tree", bary.locations = NULL,
-lambda.selection.criterion = "grid", DOF.evaluation = NULL, lambda.selection.lossfunction = NULL,
-lambdaS = NULL, lambdaT = NULL, DOF.stochastic.realizations = 100, DOF.stochastic.seed = 0, DOF.matrix = NULL, GCV.inflation.factor = 1, lambda.optimization.tolerance = 0.05)
+lambda.selection.criterion = "grid", DOF.evaluation = NULL, 
+lambda.selection.lossfunction = NULL, lambdaS = NULL, lambdaT = NULL, 
+DOF.stochastic.realizations = 100, DOF.stochastic.seed = 0, 
+DOF.matrix = NULL, GCV.inflation.factor = 1, lambda.optimization.tolerance = 0.05)
 }
 \arguments{
 \item{locations}{A matrix where each row specifies the spatial coordinates \code{x} and \code{y} (and \code{z} if ndim=3) of the corresponding observations in the vector \code{observations}.
