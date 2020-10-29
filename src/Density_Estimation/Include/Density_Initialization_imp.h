@@ -151,10 +151,10 @@ HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>::chooseInitialization(Real la
   return &(init_proposals_[index_min]);
 }
 
-template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-Heat_CV<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::Heat_CV(const DataProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim>& dp,
-  const FunctionalProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim>& fp, UInt K):
-  HeatProcess<Integrator, Integrator_noPoly, ORDER, mydim, ndim>(dp, fp), error_(dp), nFolds_(K){
+template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+Heat_CV<Integrator_noPoly, ORDER, mydim, ndim>::Heat_CV(const DataProblem<Integrator_noPoly, ORDER, mydim, ndim>& dp,
+  const FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>& fp, UInt K):
+  HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>(dp, fp), error_(dp), nFolds_(K){
 
     cv_errors_.resize(this->niter_, 0);
 
@@ -164,9 +164,9 @@ Heat_CV<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::Heat_CV(const DataPr
 
 }
 
-template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
 void
-Heat_CV<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::perform_init_cv(){
+Heat_CV<Integrator_noPoly, ORDER, mydim, ndim>::perform_init_cv(){
 
     UInt N = this->dataProblem_.getNumberofData();
     UInt K = nFolds_;
@@ -216,9 +216,9 @@ Heat_CV<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::perform_init_cv(){
 }
 
 
-template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
 const VectorXr*
-Heat_CV<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::chooseInitialization(Real lambda) const{
+Heat_CV<Integrator_noPoly, ORDER, mydim, ndim>::chooseInitialization(Real lambda) const{
 
   return &(this->init_proposals_[init_best_]);
 

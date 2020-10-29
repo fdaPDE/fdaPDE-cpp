@@ -184,17 +184,17 @@ extern "C"
           	std::string family = CHAR(STRING_ELT(Rfamily,0));
 
                 if(regressionData.getOrder()==1 && mydim==2 && ndim==2)
-                	return(GAM_skeleton<GAMDataElliptic,IntegratorTriangleP2, 1, 2, 2>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
+                	return(GAM_skeleton<GAMDataElliptic, 1, 2, 2>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
                 else if(regressionData.getOrder()==2 && mydim==2 && ndim==2)
-                	return(GAM_skeleton<GAMDataElliptic,IntegratorTriangleP4, 2, 2, 2>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
+                	return(GAM_skeleton<GAMDataElliptic, 2, 2, 2>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
                 else if(regressionData.getOrder()==1 && mydim==2 && ndim==3)
-                    return(GAM_skeleton<GAMDataElliptic,IntegratorTriangleP2, 1, 2, 3>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
+                    return(GAM_skeleton<GAMDataElliptic, 1, 2, 3>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
                 else if(regressionData.getOrder()==2 && mydim==2 && ndim==3)
-                    return(GAM_skeleton<GAMDataElliptic,IntegratorTriangleP4, 2, 2, 3>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
+                    return(GAM_skeleton<GAMDataElliptic, 2, 2, 3>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
                 else if(regressionData.getOrder()==1 && mydim==3 && ndim==3)
-                    return(GAM_skeleton<GAMDataElliptic,IntegratorTriangleP2, 1, 3, 3>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
+                    return(GAM_skeleton<GAMDataElliptic, 1, 3, 3>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
                 else if(regressionData.getOrder()==2 && mydim==3 && ndim==3)
-                    return(GAM_skeleton<GAMDataElliptic,IntegratorTriangleP4, 2, 3, 3>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
+                    return(GAM_skeleton<GAMDataElliptic, 2, 3, 3>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
 
                 return(R_NilValue);
         }
@@ -242,9 +242,9 @@ extern "C"
                 const Advection<PDEParameterOptions::Constant>& beta = regressionData.getBeta();
 
                 if(regressionData.getOrder()==1 && ndim==2)
-                        return(get_FEM_Matrix_skeleton<IntegratorTriangleP2, 1,2,2>(Rmesh, c*mass+stiff[K]+dot(beta,grad)));
+                        return(get_FEM_Matrix_skeleton<1,2,2>(Rmesh, c*mass+stiff[K]+beta.dot(grad)));
                 if(regressionData.getOrder()==2 && ndim==2)
-                        return(get_FEM_Matrix_skeleton<IntegratorTriangleP4, 2,2,2>(Rmesh, c*mass+stiff[K]+dot(beta,grad)));
+                        return(get_FEM_Matrix_skeleton<2,2,2>(Rmesh, c*mass+stiff[K]+beta.dot(grad)));
                 return(NILSXP);
         }
 }

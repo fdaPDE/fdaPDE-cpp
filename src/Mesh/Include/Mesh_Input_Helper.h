@@ -53,11 +53,9 @@ public:
   simplex_container(RIntegerMatrix elements_, RNumericMatrix nodes_, const std::array<UInt, SIZE>& ORDERING) :
       elements(elements_), nodes(nodes_), isTriangleContainer(SIZE==6) {this->fill_container(ORDERING);}
 
-  #ifdef R_VERSION_
   template<std::size_t SIZE>
   simplex_container(SEXP Relements, SEXP Rnodes, const std::array<UInt, SIZE>& ORDERING) :
       elements(Relements), nodes(Rnodes), isTriangleContainer(SIZE==6) {this->fill_container(ORDERING);}
-  #endif
 
   const simplex_t& operator[](UInt i) const {return simplexes[i];}
   const UInt& distinct(UInt i, UInt j) const {return simplexes[distinct_indexes[i]][j];}
@@ -71,12 +69,10 @@ public:
   UInt get_num_points() const {return nodes.nrows();}
   UInt get_num_elements() const {return elements.nrows();}
 
-  #ifdef R_VERSION_
   void mark_boundary(SEXP Routput, UInt index) const;
   void assemble_subs(SEXP Routput, UInt index) const;
   void compute_neighbors(SEXP Routput, UInt index) const;
   void order2extend(SEXP Routput, UInt index) const;
-  #endif
 
 
 private:
@@ -102,7 +98,6 @@ private:
 };
 
 
-#ifdef R_VERSION_
 void mark_boundary_nodes(SEXP Routput, SEXP Rnodes, UInt index, UInt index_subs, UInt index_markers) {
   
   const RNumericMatrix nodes(Rnodes);
@@ -224,9 +219,6 @@ void split3D(SEXP Routput, SEXP Rtetrahedrons, UInt index, const simplex_contain
 
 }
 
-#endif
-
-
-#include "mesh_input_helper_imp.h"
+#include "Mesh_Input_Helper_imp.h"
 
 #endif

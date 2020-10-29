@@ -19,9 +19,6 @@ class MeshHandler{
 public:
   using meshElement = Element<how_many_nodes(ORDER,mydim),mydim,ndim>;
 
-  // A constructor
-  // Note: this constructor is never actually used in practice outside of debug
-  MeshHandler(Real* points, UInt* sides, UInt* elements, UInt* neighbors, UInt num_nodes, UInt num_sides, UInt num_elements, UInt search);
 
   //! A constructor.
     /*!
@@ -31,9 +28,7 @@ public:
       * triangulation is already available)
     */
 
-  #ifdef R_VERSION_
   MeshHandler(SEXP Rmesh, UInt search=1);
-  #endif
 
   MeshHandler(const MeshHandler&) = delete;
   MeshHandler(MeshHandler&&) = delete;

@@ -42,7 +42,7 @@ class UserInitialization : public DensityInitialization<Integrator_noPoly, ORDER
 */
 template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
 class HeatProcess : public DensityInitialization<Integrator_noPoly, ORDER, mydim, ndim>{
-  private:
+  protected:
     // A member to access functional methods
     const FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>& funcProblem_;
     // A vector of vectors containing all the possibile initial densities given by the heat diffusion process
@@ -77,11 +77,11 @@ class HeatProcess : public DensityInitialization<Integrator_noPoly, ORDER, mydim
 };
 
 
-template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-class Heat_CV : public HeatProcess<Integrator, Integrator_noPoly, ORDER, mydim, ndim>{
+template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+class Heat_CV : public HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>{
 
 private:
-  KfoldCV_L2_error<Integrator, Integrator_noPoly, ORDER, mydim, ndim> error_;
+  KfoldCV_L2_error<Integrator_noPoly, ORDER, mydim, ndim> error_;
 
   UInt nFolds_;
   std::vector<Real> cv_errors_;
@@ -91,7 +91,7 @@ private:
   void perform_init_cv();
 public:
   //! A Constructor.
-  Heat_CV(const DataProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim>& dp,  const FunctionalProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim>& fp, UInt K);
+  Heat_CV(const DataProblem<Integrator_noPoly, ORDER, mydim, ndim>& dp,  const FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>& fp, UInt K);
 
   const VectorXr* chooseInitialization(Real lambda) const override;
 };

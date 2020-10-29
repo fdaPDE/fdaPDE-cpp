@@ -8,6 +8,7 @@
 
 #include "../../FdaPDE.h"
 //#include "IO_handler.h"
+#include "../../FE_Assemblers_Solvers/Include/Spline.h"
 #include "../../Mesh/Include/Mesh_Objects.h"
 #include "../../Mesh/Include/Mesh.h"
 #include "../Include/Evaluator.h"

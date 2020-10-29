@@ -11,7 +11,7 @@
 
 
 //! @brief An abstract class that implement the apply method for the FPIRLS algorithm.
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
+template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
 class FPIRLS_Base {
 
   protected:
@@ -122,13 +122,13 @@ class FPIRLS_Base {
 
 
 //! @brief A class used for the FPIRLS_base template specialization: Laplace or Elliptic cases.
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-class FPIRLS: public FPIRLS_Base< InputHandler,  Integrator,  ORDER,  mydim,  ndim>{
+template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
+class FPIRLS: public FPIRLS_Base< InputHandler, ORDER,  mydim,  ndim>{
 
   public:
 
     FPIRLS(const MeshHandler<ORDER,mydim,ndim>& mesh, InputHandler& inputData, OptimizationData & optimizationData, VectorXr mu0, bool scale_parameter_flag, Real scale_param):
-      FPIRLS_Base<InputHandler, Integrator, ORDER, mydim, ndim>(mesh, inputData, optimizationData, mu0, scale_parameter_flag, scale_param){};
+      FPIRLS_Base<InputHandler, ORDER, mydim, ndim>(mesh, inputData, optimizationData, mu0, scale_parameter_flag, scale_param){};
      //! A virtual destructor
    virtual ~FPIRLS(){};
 
@@ -136,13 +136,13 @@ class FPIRLS: public FPIRLS_Base< InputHandler,  Integrator,  ORDER,  mydim,  nd
 };
 
 //! @brief A class used for the FPIRLS_base template specialization: EllipticSpaceVarying case.
-template <typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-class FPIRLS< GAMDataEllipticSpaceVarying,  Integrator,  ORDER,  mydim,  ndim>: public FPIRLS_Base< GAMDataEllipticSpaceVarying,  Integrator,  ORDER,  mydim,  ndim>{
+template <UInt ORDER, UInt mydim, UInt ndim>
+class FPIRLS< GAMDataEllipticSpaceVarying, ORDER,  mydim,  ndim>: public FPIRLS_Base< GAMDataEllipticSpaceVarying, ORDER,  mydim,  ndim>{
 
   public:
 
     FPIRLS(const MeshHandler<ORDER,mydim,ndim>& mesh, GAMDataEllipticSpaceVarying& inputData, OptimizationData & optimizationData,  VectorXr mu0, bool scale_parameter_flag, Real scale_param):
-      FPIRLS_Base<GAMDataEllipticSpaceVarying, Integrator, ORDER, mydim, ndim>(mesh, inputData, optimizationData, mu0, scale_parameter_flag, scale_param){};
+      FPIRLS_Base<GAMDataEllipticSpaceVarying, ORDER, mydim, ndim>(mesh, inputData, optimizationData, mu0, scale_parameter_flag, scale_param){};
 
     virtual ~FPIRLS(){};
 
@@ -154,8 +154,8 @@ class FPIRLS< GAMDataEllipticSpaceVarying,  Integrator,  ORDER,  mydim,  ndim>: 
 //------------- Family Distributions Spcecification ----------------
 
 //! @brief A class that specify the Bernoulli distribution for the FPIRLS class.
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-class FPIRLS_Bernoulli : public FPIRLS <InputHandler, Integrator, ORDER, mydim, ndim> {
+template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
+class FPIRLS_Bernoulli : public FPIRLS <InputHandler, ORDER, mydim, ndim> {
 
   protected:
     inline Real link(const Real& mu)const{ return log(mu/(1 - mu)); }
@@ -171,13 +171,13 @@ class FPIRLS_Bernoulli : public FPIRLS <InputHandler, Integrator, ORDER, mydim, 
   public:
 
     FPIRLS_Bernoulli(const MeshHandler<ORDER,mydim,ndim>& mesh, InputHandler& inputData, OptimizationData & optimizationData, VectorXr mu0):
-      FPIRLS<InputHandler, Integrator, ORDER, mydim, ndim>(mesh, inputData, optimizationData, mu0, false, 1){};
+      FPIRLS<InputHandler, ORDER, mydim, ndim>(mesh, inputData, optimizationData, mu0, false, 1){};
 };
 
 
 //! @brief A class that specify the Poisson distribution for the FPIRLS class.
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-class FPIRLS_Poisson : public FPIRLS <InputHandler, Integrator, ORDER, mydim, ndim> {
+template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
+class FPIRLS_Poisson : public FPIRLS <InputHandler, ORDER, mydim, ndim> {
 
     protected:
 
@@ -194,13 +194,13 @@ class FPIRLS_Poisson : public FPIRLS <InputHandler, Integrator, ORDER, mydim, nd
     public:
 
     FPIRLS_Poisson(const MeshHandler<ORDER,mydim,ndim>& mesh, InputHandler& inputData, OptimizationData & optimizationData, VectorXr mu0):
-      FPIRLS<InputHandler, Integrator, ORDER, mydim, ndim>(mesh, inputData, optimizationData, mu0, false, 1){};
+      FPIRLS<InputHandler, ORDER, mydim, ndim>(mesh, inputData, optimizationData, mu0, false, 1){};
 
 };
 
 //! @brief A class that specify the Exponential distribution for the FPIRLS class.
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-class FPIRLS_Exponential : public FPIRLS <InputHandler, Integrator, ORDER, mydim, ndim>
+template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
+class FPIRLS_Exponential : public FPIRLS <InputHandler, ORDER, mydim, ndim>
 {
 
     protected:
@@ -218,15 +218,15 @@ class FPIRLS_Exponential : public FPIRLS <InputHandler, Integrator, ORDER, mydim
     public:
 
     FPIRLS_Exponential(const MeshHandler<ORDER,mydim,ndim>& mesh, InputHandler& inputData, OptimizationData & optimizationData, VectorXr mu0):
-      FPIRLS<InputHandler, Integrator, ORDER, mydim, ndim>(mesh, inputData, optimizationData, mu0, false, 1){};
+      FPIRLS<InputHandler, ORDER, mydim, ndim>(mesh, inputData, optimizationData, mu0, false, 1){};
 
 };
 
 //------------- Scaled Distributions ----------
 
 //! @brief A class that specify the Gamma distribution for the FPIRLS class.
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-class FPIRLS_Gamma : public FPIRLS <InputHandler, Integrator, ORDER, mydim, ndim> {
+template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
+class FPIRLS_Gamma : public FPIRLS <InputHandler, ORDER, mydim, ndim> {
 
     protected:
 
@@ -243,7 +243,7 @@ class FPIRLS_Gamma : public FPIRLS <InputHandler, Integrator, ORDER, mydim, ndim
     public:
 
     FPIRLS_Gamma(const MeshHandler<ORDER,mydim,ndim>& mesh, InputHandler& inputData, OptimizationData & optimizationData, VectorXr mu0, bool scale_parameter_flag, Real scale_param):
-      FPIRLS<InputHandler, Integrator, ORDER, mydim, ndim>(mesh, inputData, optimizationData, mu0, scale_parameter_flag, scale_param){};
+      FPIRLS<InputHandler, ORDER, mydim, ndim>(mesh, inputData, optimizationData, mu0, scale_parameter_flag, scale_param){};
 
 };
 

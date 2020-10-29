@@ -77,7 +77,6 @@ ADTree<Shape>::ADTree(const RNumericMatrix& points, const RIntegerMatrix& triang
 }
 
 
-#ifdef R_VERSION_
 template<class Shape>
 ADTree<Shape>::ADTree(SEXP Rmesh){
   int tree_loc_ = INTEGER(Rf_getAttrib(VECTOR_ELT(Rmesh, 3), R_DimSymbol))[0];
@@ -121,7 +120,6 @@ ADTree<Shape>::ADTree(SEXP Rmesh){
     coord.clear();
   }
 }
-#endif
 
 
 template<class Shape>

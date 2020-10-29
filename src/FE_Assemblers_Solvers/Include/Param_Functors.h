@@ -17,10 +17,8 @@ public:
   Diffusion(const Real* const K_ptr) :
     K_ptr_(K_ptr) {}
 
-  #ifdef R_VERSION_
   Diffusion(SEXP RGlobalVector) :
     K_ptr_(REAL(RGlobalVector)) {}
-  #endif
 
   template<UInt ORDER, UInt mydim, UInt ndim>
   Real operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const;
@@ -53,10 +51,8 @@ public:
   Advection(const Real* const b_ptr) :
     b_ptr_(b_ptr) {}
 
-  #ifdef R_VERSION_
   Advection(SEXP RGlobalVector) :
     b_ptr_(REAL(RGlobalVector)) {}
-  #endif
 
   template<UInt ORDER, UInt mydim, UInt ndim>
   Real operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const;
@@ -94,10 +90,8 @@ public:
 	Reaction(const Real* const  c_ptr) :
 		c_ptr_(c_ptr) {}
 
-  #ifdef R_VERSION_
 	Reaction(SEXP RGlobalVector) :
     c_ptr_(REAL(RGlobalVector)) {}
-	#endif
 
   template<UInt ORDER, UInt mydim, UInt ndim>
   Real operator() (const FiniteElement<ORDER, mydim, ndim>& fe_, UInt iq, UInt i, UInt j) const {
@@ -123,10 +117,8 @@ public:
 	ForcingTerm(const Real* const u_ptr) :
 		u_ptr_(u_ptr) {}
 
-	#ifdef R_VERSION_
 	ForcingTerm(SEXP RGlobalVector) :
     u_ptr_(REAL(RGlobalVector)) {}
-	#endif
 
   template<UInt ORDER, UInt mydim, UInt ndim>
   Real integrate (const FiniteElement<ORDER, mydim, ndim>& fe_, UInt i) const {

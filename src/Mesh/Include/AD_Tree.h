@@ -99,9 +99,7 @@ public:
    */
   ADTree(const RNumericMatrix& points, const RIntegerMatrix& triangle);
 
-  #ifdef R_VERSION_
 	ADTree(SEXP Rmesh);
-	#endif
 
   /// Returns a reference to the tree header.
   inline TreeHeader<Shape> gettreeheader() const { return header_; }

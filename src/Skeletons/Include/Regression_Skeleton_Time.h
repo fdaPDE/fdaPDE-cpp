@@ -146,22 +146,4 @@ SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & 
 	return(result);
 }
 
-	//SEND BARYCENTER INFORMATION TO R
-	SET_VECTOR_ELT(result, 10, Rf_allocVector(INTSXP, elementIds.rows())); //element id of the locations point (vector)
-	int *rans10 = INTEGER(VECTOR_ELT(result, 10));
-	for(UInt i = 0; i < elementIds.rows(); i++)
-		rans10[i] = elementIds(i);
-
-	SET_VECTOR_ELT(result, 11, Rf_allocMatrix(REALSXP, barycenters.rows(), barycenters.cols())); //barycenter information (matrix)
-	Real *rans11 = REAL(VECTOR_ELT(result, 11));
-	for(UInt j = 0; j < barycenters.cols(); j++)
-	{
-		for(UInt i = 0; i < barycenters.rows(); i++)
-			rans11[i + barycenters.rows()*j] = barycenters(i,j);
-	}
-
-	UNPROTECT(1);
-	return(result);
-}
-
 #endif

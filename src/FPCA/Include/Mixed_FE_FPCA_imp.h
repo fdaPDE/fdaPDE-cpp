@@ -97,9 +97,9 @@ void MixedFEFPCABase::computeBasisEvaluations(const MeshHandler<ORDER, mydim, nd
 		{
 
 			if (fpcaData_.getSearch() == 1) { //use Naive search
-				tri_activated = mesh.findLocationNaive(fpcaData_.getLocations()[i]);
+				tri_activated = mesh.findLocationNaive(fpcaData_.template getLocations<ndim>(i));
 			} else if (fpcaData_.getSearch() == 2) { //use Tree search (default)
-				tri_activated = mesh.findLocationTree(fpcaData_.getLocations()[i]);
+				tri_activated = mesh.findLocationTree(fpcaData_.template getLocations<ndim>(i));
 			}
 
 			if(tri_activated.getId() == Identifier::NVAL)
@@ -113,7 +113,7 @@ void MixedFEFPCABase::computeBasisEvaluations(const MeshHandler<ORDER, mydim, nd
 				{
 					coefficients = Eigen::Matrix<Real,Nodes,1>::Zero();
 					coefficients(node) = 1; //Activates only current base
-					evaluator = evaluate_point<Nodes, mydim, ndim>(tri_activated, fpcaData_.getLocations()[i], coefficients);
+					evaluator = tri_activated.evaluate_point(fpcaData_.template getLocations<ndim>(i), coefficients);
 					barycenters_(i,node)=evaluator;
 					Psi_.insert(i, tri_activated[node].getId()) = evaluator;
 				}
@@ -139,8 +139,8 @@ void MixedFEFPCABase::computeBasisEvaluations(const MeshHandler<ORDER, mydim, nd
 					Element<Nodes, mydim, ndim> tri = mesh.getElement(j); //can also be a tetrahedron
 					for (UInt k=0; k<Nodes; k++)
 					{
-						tab[tri[k].getId()] += integratePsi(tri,k); // integral over tri of psi_k
-					}
+						tab[tri[k].getId()] += tri.integrate(Eigen::Matrix<Real,Nodes,1>::Unit(k)); // integral over tri of psi_k	
+					}				
 				}
 			}
 			for (int k=0; k<nnodes; k++)
@@ -156,10 +156,10 @@ void MixedFEFPCABase::computeBasisEvaluations(const MeshHandler<ORDER, mydim, nd
 	}
 }
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 void MixedFEFPCABase::SetAndFixParameters(const MeshHandler<ORDER, mydim, ndim> & mesh)
 {
-	FiniteElement<Integrator, ORDER, mydim, ndim> fe;
+	FiniteElement<ORDER, mydim, ndim> fe;
 	this->nnodes_ = mesh.num_nodes();
 
 	this-> template computeDelta<ORDER,mydim,ndim>(mesh);

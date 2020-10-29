@@ -1,6 +1,5 @@
 #include "../Include/FPCA_Data.h"
 
-<<<<<<< HEAD:src/FPCAData_imp.h
 FPCAData::FPCAData(Real* locations, UInt n_locations, UInt ndim, MatrixXr& datamatrix, UInt order, MatrixXi& incidenceMatrix,
 					std::vector<Real> lambda, UInt nPC, UInt nFolds, UInt search):
 					locations_(locations, n_locations, ndim), datamatrix_(datamatrix), order_(order),
@@ -171,5 +170,3 @@ void FPCAData::printIncidenceMatrix(std::ostream & out) const
 	}
 }
 
-
-#endif

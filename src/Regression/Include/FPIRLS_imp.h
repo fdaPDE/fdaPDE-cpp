@@ -7,8 +7,8 @@
 /*********** FPIRLS_base Methods ************/
 
 // Constructor
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::FPIRLS_Base(const MeshHandler<ORDER,mydim,ndim> & mesh, InputHandler & inputData, OptimizationData & optimizationData,  VectorXr mu0, bool scale_parameter_flag, Real scale_param):
+template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
+FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::FPIRLS_Base(const MeshHandler<ORDER,mydim,ndim> & mesh, InputHandler & inputData, OptimizationData & optimizationData,  VectorXr mu0, bool scale_parameter_flag, Real scale_param):
   mesh_(mesh), inputData_(inputData), optimizationData_(optimizationData), regression_(inputData, optimizationData, mesh.num_nodes()), scale_parameter_flag_(scale_parameter_flag), _scale_param(scale_param)
 {
   //initialization of mu, current_J_values and past_J_values.
@@ -20,8 +20,8 @@ FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::FPIRLS_Base(const MeshH
 };
 
 // FPIRLS_base methods
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::apply( const ForcingTerm& u){
+template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
+void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::apply( const ForcingTerm& u){
   // f-PRILS implementation
 
   //Initialize the containers size, as LambdaS_len
@@ -44,7 +44,7 @@ void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::apply( const Forci
 
   if(isSpaceVarying)
   {
-    FiniteElement<Integrator, ORDER, mydim, ndim> fe;
+    FiniteElement<ORDER, mydim, ndim> fe;
   	Assembler::forcingTerm(mesh_, fe, u, forcingTerm);
   }
 
@@ -98,13 +98,13 @@ void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::apply( const Forci
   compute_variance_est();
 }
 
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::update_solution(UInt& lambda_index){
+template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
+void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::update_solution(UInt& lambda_index){
   // performs step (2) of PIRLS. It requires pseudo data after step(1) and mimic regression skeleton behaviour
 
   // Here we have to solve a weighted regression problem.
   regression_.recomputeWTW(); // at each iteration of FPIRLS W is updated, so WTW has to be recomputed as well.
-  regression_. template preapply<ORDER,mydim,ndim, Integrator, IntegratorGaussP3, 0, 0>(this->mesh_);
+  regression_. template preapply<ORDER,mydim,ndim, IntegratorGaussP3, 0, 0>(this->mesh_);
   regression_.apply();
   const SpMat * Psi = regression_.getpsi_(); // get Psi matrix. It is used for the computation of fn_hat.
 
@@ -122,8 +122,8 @@ void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::update_solution(UI
 }
 
 
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::compute_pseudoObs(UInt& lambda_index){
+template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
+void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_pseudoObs(UInt& lambda_index){
   // compute pseudodata observations
 
   VectorXr first_addendum; // G_ii( z_i - mu_i)
@@ -145,8 +145,8 @@ void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::compute_pseudoObs(
 }
 
 
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::compute_G(UInt& lambda_index){
+template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
+void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_G(UInt& lambda_index){
   // compute the G matrix as G_ii = diag( g'(mu_i))
 
   G_[lambda_index].resize(mu_[lambda_index].size());
@@ -158,8 +158,8 @@ void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::compute_G(UInt& la
 }
 
 
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::compute_Weights(UInt& lambda_index){
+template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
+void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_Weights(UInt& lambda_index){
   // computed W elementwise (it is a diagonal matrix)
 
   WeightsMatrix_[lambda_index].resize( mu_[lambda_index].size());
@@ -171,8 +171,8 @@ void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::compute_Weights(UI
 }
 
 
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::compute_mu(UInt& lambda_index){
+template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
+void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_mu(UInt& lambda_index){
   //compute mu as mu_i = g-1( w_ii*beta + fn_hat)
 
   VectorXr W_beta = VectorXr::Zero(mu_[lambda_index].size()); // initialize the vector w_ii*beta
@@ -188,8 +188,8 @@ void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::compute_mu(UInt& l
 }
 
 
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-bool FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::stopping_criterion(UInt& lambda_index){
+template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
+bool FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::stopping_criterion(UInt& lambda_index){
   // return true if the f-PIRLS has to perform another iteration, false if it has to be stopped
 
   bool do_stop_by_iteration = false;  // Do I need to stop becouse n_it > n_max?
@@ -208,8 +208,8 @@ bool FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::stopping_criterion
   return !(do_stop_by_iteration || do_stop_by_treshold );
 }
 
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-std::array<Real,2> FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::compute_J(UInt& lambda_index){
+template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
+std::array<Real,2> FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_J(UInt& lambda_index){
   // compute the functional J: it is divided in parametric and non parametric part
   Real parametric_value = 0;
   Real non_parametric_value = 0;
@@ -244,8 +244,8 @@ std::array<Real,2> FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::comp
 }
 
 
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::compute_GCV(UInt & lambda_index){
+template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
+void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_GCV(UInt & lambda_index){
 
         if (optimizationData_.get_DOF_evaluation() != "not_required") //in this case surely we have already the dofs
         { // is DOF_matrix to be computed?
@@ -275,8 +275,8 @@ void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::compute_GCV(UInt &
 
 }
 
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::compute_variance_est(){
+template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
+void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_variance_est(){
   Real phi;
   if(this->scale_parameter_flag_ && this->optimizationData_.get_loss_function()!="GCV"){// if scale param should be
     _variance_estimates.resize(this->mu_.size(),0);
@@ -298,19 +298,19 @@ void FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::compute_variance_e
 /*********** FPIRLS apply template specialization ************/
 
 // Laplace or Elliptic case
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void FPIRLS<InputHandler,Integrator,ORDER, mydim, ndim>::apply(){
+template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
+void FPIRLS<InputHandler,ORDER, mydim, ndim>::apply(){
 
-  FPIRLS_Base<InputHandler,Integrator,ORDER, mydim, ndim>::apply(ForcingTerm(std::vector<Real>(1)));
+  FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::apply(ForcingTerm());
 
 }
 
 // SpaceVarying case
-template <typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
-void FPIRLS<GAMDataEllipticSpaceVarying,Integrator,ORDER, mydim, ndim>::apply(){
+template <UInt ORDER, UInt mydim, UInt ndim>
+void FPIRLS<GAMDataEllipticSpaceVarying,ORDER, mydim, ndim>::apply(){
 
   this->isSpaceVarying = true;
-  FPIRLS_Base<GAMDataEllipticSpaceVarying,Integrator,ORDER, mydim, ndim>::apply(this->inputData_.getU());
+  FPIRLS_Base<GAMDataEllipticSpaceVarying,ORDER, mydim, ndim>::apply(this->inputData_.getU());
 
 }
 

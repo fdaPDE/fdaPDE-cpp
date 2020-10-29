@@ -42,7 +42,7 @@ SEXP DE_skeleton(SEXP Rdata, SEXP Rorder, SEXP Rfvec, SEXP RheatStep, SEXP Rheat
 	Real lambda_sol = fede.getBestLambda();
 	std::vector<Real> CV_errors = fede.getCvError();
 
-	std::vector<Point> data = dataProblem.getData();
+	std::vector<Point<ndim> > data = dataProblem.getData();
 
 	// Copy result in R memory
 	SEXP result = NILSXP;

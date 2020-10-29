@@ -9,7 +9,6 @@
 #include "../../FE_Assemblers_Solvers/Include/Solver.h"
 #include "FPCA_Data.h"
 #include "FPCA_Object.h"
-#include "../../FE_Assemblers_Solvers/Include/Integrate_Psi.h"
 #include "../../Global_Utilities/Include/Solver_Definitions.h"
 #include <memory>
 
@@ -95,7 +94,7 @@ public:
 	MixedFEFPCABase(const FPCAData& fpcaData): fpcaData_(fpcaData),isRcomputed_(false) {};
 
 	//! A method for the initialization of all the parameters used in the iteration of the SF-PCA algorithm.
-	template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
+	template<UInt ORDER, UInt mydim, UInt ndim>
 	void SetAndFixParameters(const MeshHandler<ORDER, mydim, ndim> & mesh);
 
 	//!A destructor.

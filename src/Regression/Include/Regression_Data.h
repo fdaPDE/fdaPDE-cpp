@@ -66,7 +66,6 @@ class  RegressionData
 
 	public:
 		// -- CONSTRUCTORS --
-		RegressionData(){};
 
 		//! A basic version of the constructor.
 		/*!

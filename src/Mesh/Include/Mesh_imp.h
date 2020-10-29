@@ -3,17 +3,6 @@
 
 
 template <UInt ORDER, UInt mydim, UInt ndim>
-MeshHandler<ORDER,mydim,ndim>::MeshHandler(Real* points, UInt* sides, UInt* elements, UInt* neighbors, UInt num_nodes, UInt num_sides, UInt num_elements, UInt search) :
-		points_(points, num_nodes, ndim), sides_(sides, num_sides, mydim), 
-			elements_(elements, num_elements, how_many_nodes(ORDER,mydim)), 
-				neighbors_(neighbors, num_elements, mydim+1), search_(search) {
-					if (search==2)
-						tree_ptr_.reset(new ADTree<meshElement>(points_, elements_));
-				}
-
-
-#ifdef R_VERSION_
-template <UInt ORDER, UInt mydim, UInt ndim>
 MeshHandler<ORDER,mydim,ndim>::MeshHandler(SEXP Rmesh, UInt search) :
 	points_(VECTOR_ELT(Rmesh, 0)), sides_(VECTOR_ELT(Rmesh, 6)),
 		elements_(VECTOR_ELT(Rmesh, 3)), neighbors_(VECTOR_ELT(Rmesh, 8)),
@@ -23,7 +12,6 @@ MeshHandler<ORDER,mydim,ndim>::MeshHandler(SEXP Rmesh, UInt search) :
 				else if (search==2)
 					tree_ptr_.reset(new ADTree<meshElement>(Rmesh));
 				}
-#endif
 
 template <UInt ORDER, UInt mydim, UInt ndim>
 Point<ndim> MeshHandler<ORDER,mydim,ndim>::getPoint(const UInt id) const

@@ -117,7 +117,6 @@ void simplex_container<mydim>::store_indexes(){
 
 
 
-#ifdef R_VERSION_
 template<UInt mydim>
 void simplex_container<mydim>::assemble_subs(SEXP Routput, UInt index) const {
   
@@ -185,6 +184,5 @@ void simplex_container<mydim>::order2extend(SEXP Routput, UInt index) const {
   }
 }
 
-#endif
 
 #endif

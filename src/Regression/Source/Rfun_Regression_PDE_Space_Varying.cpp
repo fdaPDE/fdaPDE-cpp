@@ -246,9 +246,9 @@ extern "C"
                 const Advection<PDEParameterOptions::SpaceVarying>& beta = regressionData.getBeta();
 
                 if(regressionData.getOrder()==1 && ndim==2)
-                        return(get_FEM_Matrix_skeleton<IntegratorTriangleP2, 1,2,2>(Rmesh, c*mass+stiff[K]+dot(beta,grad)));
+                        return(get_FEM_Matrix_skeleton<1,2,2>(Rmesh, c*mass+stiff[K]+beta.dot(grad)));
                 if(regressionData.getOrder()==2 && ndim==2)
-                        return(get_FEM_Matrix_skeleton<IntegratorTriangleP4, 2,2,2>(Rmesh, c*mass+stiff[K]+dot(beta,grad)));
+                        return(get_FEM_Matrix_skeleton<2,2,2>(Rmesh, c*mass+stiff[K]+beta.dot(grad)));
                 return(NILSXP);
         }
 }

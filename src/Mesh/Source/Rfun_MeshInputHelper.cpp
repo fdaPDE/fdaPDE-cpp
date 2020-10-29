@@ -1,8 +1,6 @@
-#define R_VERSION_
+#include "../../FdaPDE.h"
 
-#include "fdaPDE.h"
-
-#include "mesh_input_helper.h"
+#include "../Include/Mesh_Input_Helper.h"
 
 #include <array>
 
@@ -178,7 +176,5 @@ SEXP CPP_TetraMeshSplitOrder2(SEXP Rtetrahedrons, SEXP Rnodes){
 
   return result;
 }
-
-
 
 }

@@ -8,12 +8,10 @@ public:
 	RNumericMatrix(Real * const matr, const UInt nrows, const UInt ncols) :
 		matr_(matr), nrows_(nrows), ncols_(ncols) {}
 
-	#ifdef R_VERSION_
 	RNumericMatrix(SEXP matr) : 
 		matr_(REAL(matr)), 
 			nrows_(INTEGER(Rf_getAttrib(matr, R_DimSymbol))[0]), 
 				ncols_(INTEGER(Rf_getAttrib(matr, R_DimSymbol))[1]) {}
-	#endif
 
 	Real& operator()(UInt i, UInt j) {return matr_[i+nrows_*j];}
 	const Real& operator()(UInt i, UInt j) const {return matr_[i+nrows_*j];}
@@ -38,12 +36,11 @@ public:
 		matr_(matr), nrows_(nrows), ncols_(ncols) {}
 
 
-	#ifdef R_VERSION_
 	RIntegerMatrix(SEXP matr) : 
 		matr_(INTEGER(matr)), 
 			nrows_(INTEGER(Rf_getAttrib(matr, R_DimSymbol))[0]), 
 				ncols_(INTEGER(Rf_getAttrib(matr, R_DimSymbol))[1]) {}
-	#endif
+	
 
 	UInt& operator()(UInt i, UInt j) {return matr_[i+nrows_*j];}
 	const UInt& operator()(UInt i, UInt j) const {return matr_[i+nrows_*j];}

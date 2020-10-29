@@ -78,14 +78,14 @@ RegressionDataElliptic::RegressionDataElliptic(SEXP Rlocations, SEXP RbaryLocati
 	SEXP RK, SEXP Rbeta, SEXP Rc, SEXP Rcovariates, SEXP RBCIndices, SEXP RBCValues,
 	SEXP RincidenceMatrix, SEXP RarealDataAvg, SEXP Rsearch):
 	RegressionData(Rlocations, RbaryLocations, Robservations, Rorder, Rcovariates,
-		RBCIndices, RBCValues, RincidenceMatrix, RarealDataAvg, Rsearch)
+		RBCIndices, RBCValues, RincidenceMatrix, RarealDataAvg, Rsearch),
 			K_(RK), beta_(Rbeta), c_(REAL(Rc)[0]) {}
 
 RegressionDataElliptic::RegressionDataElliptic(SEXP Rlocations, SEXP RbaryLocations, SEXP Rtime_locations, SEXP Robservations, SEXP Rorder,
 	SEXP RK, SEXP Rbeta, SEXP Rc, SEXP Rcovariates, SEXP RBCIndices, SEXP RBCValues,
 	SEXP RincidenceMatrix, SEXP RarealDataAvg, SEXP Rflag_mass, SEXP Rflag_parabolic, SEXP Ric, SEXP Rsearch):
 	RegressionData(Rlocations, RbaryLocations, Rtime_locations, Robservations, Rorder, Rcovariates,
-		RBCIndices, RBCValues, RincidenceMatrix, RarealDataAvg, Rflag_mass, Rflag_parabolic, Ric, Rsearch)
+		RBCIndices, RBCValues, RincidenceMatrix, RarealDataAvg, Rflag_mass, Rflag_parabolic, Ric, Rsearch),
 			K_(RK), beta_(Rbeta), c_(REAL(Rc)[0]) {}
 
 RegressionDataEllipticSpaceVarying::RegressionDataEllipticSpaceVarying(SEXP Rlocations, SEXP RbaryLocations, SEXP Robservations, SEXP Rorder,
@@ -145,7 +145,7 @@ void RegressionData::setObservationsTime(SEXP Robservations)
 	observations_indices_.reserve(n_obs_);
 
 	UInt count = 0;
-	locations_by_nodes_ = (locations_.size() == 0 && nRegions_ == 0) ? true : false;
+	locations_by_nodes_ = (locations_.nrows() == 0 && nRegions_ == 0) ? true : false;
 
 	for(auto i=0;i<n_obs_;++i)
 	{

@@ -193,7 +193,6 @@ Eigen::Matrix<Real,3,1> Element<NNODES,2,3>::getBaryCoordinates(const Point<3> &
 // Note: this function is more expensive for manifold data because one must check
 // that the point actually lies on the same plane as the 3D triangle
 template <UInt NNODES>
-<<<<<<< HEAD:src/mesh_objects_imp.h
 bool Element<NNODES,2,3>::isPointInside(const Point<3>& point) const
 {
 	static constexpr Real eps = std::numeric_limits<Real>::epsilon(),

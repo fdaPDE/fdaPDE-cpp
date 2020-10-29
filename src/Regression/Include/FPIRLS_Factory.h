@@ -17,12 +17,12 @@
 
 
 //! A Factory class. It is used for the choice of the exponential family distribution for the f-PIRLS.
-template <typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
+template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
 class FPIRLSfactory
 {
 	public:
 	//! A method that takes as parameter a string and builds a pointer to the right object for the data distribution
-	static std::unique_ptr<FPIRLS<InputHandler, Integrator, ORDER,  mydim,  ndim>> createFPIRLSsolver(const std::string &family, const MeshHandler<ORDER,mydim,ndim> & mesh, InputHandler & inputData, OptimizationData & optimizationData, VectorXr& mu0, Real scale_parameter)
+	static std::unique_ptr<FPIRLS<InputHandler, ORDER,  mydim,  ndim>> createFPIRLSsolver(const std::string &family, const MeshHandler<ORDER,mydim,ndim> & mesh, InputHandler & inputData, OptimizationData & optimizationData, VectorXr& mu0, Real scale_parameter)
 	{
 		//initial checks: m0 must be initialized correctly for the different distributions
 
@@ -51,16 +51,16 @@ class FPIRLSfactory
 		}
 
 		if(family=="binomial"){
-		    return make_unique<FPIRLS_Bernoulli<InputHandler, Integrator, ORDER,  mydim, ndim>>(mesh, inputData, optimizationData, mu0);
+		    return make_unique<FPIRLS_Bernoulli<InputHandler, ORDER,  mydim, ndim>>(mesh, inputData, optimizationData, mu0);
 		}else if(family=="poisson"){
-		    return make_unique<FPIRLS_Poisson<InputHandler, Integrator, ORDER,  mydim, ndim>>(mesh, inputData, optimizationData, mu0);
+		    return make_unique<FPIRLS_Poisson<InputHandler, ORDER,  mydim, ndim>>(mesh, inputData, optimizationData, mu0);
 		}else if(family=="exponential"){
-		    return make_unique<FPIRLS_Exponential<InputHandler, Integrator, ORDER,  mydim, ndim>>(mesh, inputData, optimizationData, mu0);
+		    return make_unique<FPIRLS_Exponential<InputHandler, ORDER,  mydim, ndim>>(mesh, inputData, optimizationData, mu0);
 		}else if(family=="gamma"){
-		    return make_unique<FPIRLS_Gamma<InputHandler, Integrator, ORDER,  mydim, ndim>>(mesh,inputData, optimizationData, mu0, scale_parameter, scale_parameter_flag);
+		    return make_unique<FPIRLS_Gamma<InputHandler, ORDER,  mydim, ndim>>(mesh,inputData, optimizationData, mu0, scale_parameter, scale_parameter_flag);
 		}
 
-		return std::unique_ptr<FPIRLS<InputHandler, Integrator, ORDER,  mydim,  ndim>>(nullptr);
+		return std::unique_ptr<FPIRLS<InputHandler, ORDER,  mydim,  ndim>>(nullptr);
 	}
 
 

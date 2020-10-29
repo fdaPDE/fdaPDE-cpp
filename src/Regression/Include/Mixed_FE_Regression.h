@@ -5,6 +5,7 @@
 #include <type_traits>
 #include "../../FdaPDE.h"
 #include "../../FE_Assemblers_Solvers/Include/Finite_Element.h"
+#include "../../FE_Assemblers_Solvers/Include/Spline.h"
 #include "../../FE_Assemblers_Solvers/Include/Kronecker_Product.h"
 #include "../../FE_Assemblers_Solvers/Include/Matrix_Assembler.h"
 #include "../../FE_Assemblers_Solvers/Include/Param_Functors.h"
@@ -202,7 +203,7 @@ class MixedFERegressionBase
 		    \param u the forcing term, will be used only in case of anysotropic nonstationary regression
 		*/
 		//! A method which builds all the space matrices
-		template<UInt ORDER, UInt mydim, UInt ndim, typename IntegratorSpace, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, typename A>
+		template<UInt ORDER, UInt mydim, UInt ndim, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, typename A>
 		void preapply(EOExpr<A> oper,const ForcingTerm & u, const MeshHandler<ORDER, mydim, ndim> & mesh_ );
 
 		MatrixXv apply(void);
