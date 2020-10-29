@@ -17,13 +17,13 @@ std::pair<MatrixXr, output_Data> optimizer_method_selection(CarrierType & carrie
 template<typename EvaluationType, typename CarrierType>
 std::pair<MatrixXr, output_Data> optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier);
 
-template<typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
+template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
 SEXP regression_skeleton(InputHandler & regressionData, OptimizationData & optimizationData, SEXP Rmesh)
 {
 	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh);	// Create the mesh
 	MixedFERegression<InputHandler> regression(regressionData, optimizationData, mesh.num_nodes()); // Define the mixed object
 
-	regression.template preapply<ORDER,mydim,ndim, Integrator, IntegratorGaussP3, 0, 0>(mesh); // preliminary apply (preapply) to store all problem matrices
+	regression.template preapply<ORDER,mydim,ndim, IntegratorGaussP3, 0, 0>(mesh); // preliminary apply (preapply) to store all problem matrices
 
         std::pair<MatrixXr, output_Data> solution_bricks;	// Prepare solution to be filled
 

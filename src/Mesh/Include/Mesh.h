@@ -1,14 +1,14 @@
-#ifndef MESH_H_
-#define MESH_H_
+#ifndef __MESH_H__
+#define __MESH_H__
 
 #include <set>
 #include <memory>
 
-#include "fdaPDE.h"
+#include "../../FdaPDE.h"
 // Note: how_many_nodes constexpr function is defined in mesh_objects.h
 // Also Point and Element
-#include "mesh_objects.h"
-#include "adtree.h"
+#include "Mesh_Objects.h"
+#include "AD_Tree.h"
 
 template <UInt ORDER, UInt mydim, UInt ndim>
 class MeshHandler{
@@ -117,6 +117,6 @@ private:
 
 };
 
-#include "mesh_imp.h"
+#include "Mesh_imp.h"
 
 #endif

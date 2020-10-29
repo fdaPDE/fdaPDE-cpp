@@ -6,7 +6,7 @@
 #include "../../Regression/Include/Mixed_FE_Regression.h"
 #include "../../Lambda_Optimization/Include/Optimization_Data.h"
 
-template<typename InputHandler, typename IntegratorSpace, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
+template<typename InputHandler, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
 SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & optimizationData, SEXP Rmesh, SEXP Rmesh_time)
 {
 	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh);//! load the mesh
@@ -18,7 +18,7 @@ SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & 
 	}
 	MixedFERegression<InputHandler> regression(mesh_time, regressionData, optimizationData, mesh.num_nodes(), SPLINE_DEGREE);//! load data in a C++ object
 
-	regression.template preapply<ORDER,mydim,ndim, IntegratorSpace, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE>(mesh); //! solve the problem (compute the _solution, _dof, _GCV, _beta)
+	regression.template preapply<ORDER,mydim,ndim, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE>(mesh); //! solve the problem (compute the _solution, _dof, _GCV, _beta)
         regression.apply();
 
 	//! copy result in R memory
@@ -90,41 +90,61 @@ SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & 
 				rans4[k + beta(0,0).size()*i + beta(0,0).size()*beta.rows()*j] = beta.coeff(i,j)(k);
 		}
 	}
-	//SEND TREE INFORMATION TO R
-	SET_VECTOR_ELT(result, 5, Rf_allocVector(INTSXP, 1)); //tree_header information
-	int *rans5 = INTEGER(VECTOR_ELT(result, 5));
-	rans5[0] = mesh.getTree().gettreeheader().gettreelev();
+	if(regressionData.getSearch()==2){
+		//SEND TREE INFORMATION TO R
+		SET_VECTOR_ELT(result, 5, Rf_allocVector(INTSXP, 1)); //tree_header information
+		int *rans5 = INTEGER(VECTOR_ELT(result, 5));
+		rans5[0] = mesh.getTree().gettreeheader().gettreelev();
 
-	SET_VECTOR_ELT(result, 6, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain origin
-	Real *rans6 = REAL(VECTOR_ELT(result, 6));
-	for(UInt i = 0; i < ndim*2; i++)
-		rans6[i] = mesh.getTree().gettreeheader().domainorig(i);
+		SET_VECTOR_ELT(result, 6, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain origin
+		Real *rans6 = REAL(VECTOR_ELT(result, 6));
+		for(UInt i = 0; i < ndim*2; i++)
+			rans6[i] = mesh.getTree().gettreeheader().domainorig(i);
 
-	SET_VECTOR_ELT(result, 7, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain scale
-	Real *rans7 = REAL(VECTOR_ELT(result, 7));
-	for(UInt i = 0; i < ndim*2; i++)
-		rans7[i] = mesh.getTree().gettreeheader().domainscal(i);
+		SET_VECTOR_ELT(result, 7, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain scale
+		Real *rans7 = REAL(VECTOR_ELT(result, 7));
+		for(UInt i = 0; i < ndim*2; i++)
+			rans7[i] = mesh.getTree().gettreeheader().domainscal(i);
 
 
-	UInt num_tree_nodes = mesh.num_elements()+1; //Be careful! This is not equal to number of elements
-	SET_VECTOR_ELT(result, 8, Rf_allocMatrix(INTSXP, num_tree_nodes, 3)); //treenode information
-	int *rans8 = INTEGER(VECTOR_ELT(result, 8));
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		UInt num_tree_nodes = mesh.num_elements()+1; //Be careful! This is not equal to number of elements
+		SET_VECTOR_ELT(result, 8, Rf_allocMatrix(INTSXP, num_tree_nodes, 3)); //treenode information
+		int *rans8 = INTEGER(VECTOR_ELT(result, 8));
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans8[i] = mesh.getTree().gettreenode(i).getid();
 
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans8[i + num_tree_nodes*1] = mesh.getTree().gettreenode(i).getchild(0);
 
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans8[i + num_tree_nodes*2] = mesh.getTree().gettreenode(i).getchild(1);
 
-	SET_VECTOR_ELT(result, 9, Rf_allocMatrix(REALSXP, num_tree_nodes, ndim*2)); //treenode box coordinate
-	Real *rans9 = REAL(VECTOR_ELT(result, 9));
-	for(UInt j = 0; j < ndim*2; j++)
-	{
-		for(UInt i = 0; i < num_tree_nodes; i++)
-			rans9[i + num_tree_nodes*j] = mesh.getTree().gettreenode(i).getbox().get()[j];
+		SET_VECTOR_ELT(result, 9, Rf_allocMatrix(REALSXP, num_tree_nodes, ndim*2)); //treenode box coordinate
+		Real *rans9 = REAL(VECTOR_ELT(result, 9));
+		for(UInt j = 0; j < ndim*2; j++)
+		{
+			for(UInt i = 0; i < num_tree_nodes; i++)
+				rans9[i + num_tree_nodes*j] = mesh.getTree().gettreenode(i).getbox().get()[j];
+		}
 	}
+
+	//SEND BARYCENTER INFORMATION TO R
+	SET_VECTOR_ELT(result, 10, Rf_allocVector(INTSXP, elementIds.rows())); //element id of the locations point (vector)
+	int *rans10 = INTEGER(VECTOR_ELT(result, 10));
+	for(UInt i = 0; i < elementIds.rows(); i++)
+		rans10[i] = elementIds(i);
+
+	SET_VECTOR_ELT(result, 11, Rf_allocMatrix(REALSXP, barycenters.rows(), barycenters.cols())); //barycenter information (matrix)
+	Real *rans11 = REAL(VECTOR_ELT(result, 11));
+	for(UInt j = 0; j < barycenters.cols(); j++)
+	{
+		for(UInt i = 0; i < barycenters.rows(); i++)
+			rans11[i + barycenters.rows()*j] = barycenters(i,j);
+	}
+
+	UNPROTECT(1);
+	return(result);
+}
 
 	//SEND BARYCENTER INFORMATION TO R
 	SET_VECTOR_ELT(result, 10, Rf_allocVector(INTSXP, elementIds.rows())); //element id of the locations point (vector)

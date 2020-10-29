@@ -1,5 +1,5 @@
-#ifndef __MESH_INPUT_HELPER_IMP_HPP__
-#define __MESH_INPUT_HELPER_IMP_HPP__
+#ifndef __MESH_INPUT_HELPER_IMP_H__
+#define __MESH_INPUT_HELPER_IMP_H__
 
 
 template<UInt mydim>

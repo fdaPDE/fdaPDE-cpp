@@ -1,7 +1,7 @@
 #ifndef __MESH_OBJECTS_IMP_HPP__
 #define __MESH_OBJECTS_IMP_HPP__
 
-#include "integration.h"
+#include "../../FE_Assemblers_Solvers/Include/Integration.h"
 
 // This is just a fancy way of transforming a vector of length n in a vector of length n+1
 // where the first element is 1 - sum of all the other elements

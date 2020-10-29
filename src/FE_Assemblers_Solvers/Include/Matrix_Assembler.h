@@ -1,10 +1,12 @@
-#ifndef MATRIX_ASSEMBLER_H_
-#define MATRIX_ASSEMBLER_H_
+#ifndef __MATRIX_ASSEMBLER_H__
+#define __MATRIX_ASSEMBLER_H__
 
-#include "param_functors.h"
 
-#include "mesh_objects.h"
+#include "../../FdaPDE.h"
+#include "../../Mesh/Include/Mesh_Objects.h"
+#include "Param_Functors.h"
 
+//Forward declarations to avoid unnecessary includes
 template <UInt ORDER, UInt mydim, UInt ndim>
 class MeshHandler;
 
@@ -39,6 +41,6 @@ struct Assembler{
 
 };
 
-#include "matrix_assembler_imp.h"
+#include "Matrix_Assembler_imp.h"
 
 #endif

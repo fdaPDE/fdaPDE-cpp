@@ -1,5 +1,5 @@
-#ifndef __POINT_IMP_HPP__
-#define __POINT_IMP_HPP__
+#ifndef __POINT_IMP_H__
+#define __POINT_IMP_H__
 
 // Note: has to be done like this because of constexpr!
 template<>

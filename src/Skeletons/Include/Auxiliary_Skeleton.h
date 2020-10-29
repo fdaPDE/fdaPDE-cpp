@@ -6,22 +6,23 @@
 #include "../../FE_Assemblers_Solvers/Include/Matrix_Assembler.h"
 #include "../../Mesh/Include/Mesh.h"
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 SEXP get_integration_points_skeleton(SEXP Rmesh)
 {
+	using Integrator = typename FiniteElement<ORDER, mydim, ndim>::Integrator;
+	using meshElement = typename MeshHandler<ORDER, mydim, ndim>::meshElement;
+
 	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh);
-	FiniteElement<Integrator,ORDER, mydim, ndim> fe;
 
 	SEXP result;
-	PROTECT(result=Rf_allocVector(REALSXP, 2*Integrator::NNODES*mesh.num_elements()));
-	for(UInt i=0; i<mesh.num_elements(); i++)
-	{
-		fe.updateElement(mesh.getElement(i));
-		for(UInt l = 0;l < Integrator::NNODES; l++)
-		{
-			Point p = fe.coorQuadPt(l);
-			REAL(result)[i*Integrator::NNODES + l] = p[0];
-			REAL(result)[mesh.num_elements()*Integrator::NNODES + i*Integrator::NNODES + l] = p[1];
+	PROTECT(result=Rf_allocVector(REALSXP, ndim * Integrator::NNODES * mesh.num_elements()));
+	for(UInt i=0; i<mesh.num_elements(); ++i){
+		meshElement el = mesh.getElement(i);
+		for(UInt l = 0; l < Integrator::NNODES; ++l){
+			Point<ndim> p{el.getM_J() * Integrator::NODES[l].eigenView()};
+			p += el[0];
+			for(UInt j=0; j < ndim; ++j)
+				REAL(result)[j * mesh.num_elements() * Integrator::NNODES + i * Integrator::NNODES + l] = p[j];
 		}
 	}
 
@@ -29,12 +30,12 @@ SEXP get_integration_points_skeleton(SEXP Rmesh)
 	return(result);
 }
 
-template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim, typename A>
+template<UInt ORDER, UInt mydim, UInt ndim, typename A>
 SEXP get_FEM_Matrix_skeleton(SEXP Rmesh, EOExpr<A> oper)
 {
 	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh);
 
-	FiniteElement<Integrator, ORDER, mydim, ndim> fe;
+	FiniteElement<ORDER, mydim, ndim> fe;
 
 	SpMat AMat;
 	Assembler::operKernel(oper, mesh, fe, AMat);

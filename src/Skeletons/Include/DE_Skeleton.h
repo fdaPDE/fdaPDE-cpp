@@ -15,23 +15,23 @@
 #include "../../Density_Estimation/Include/Optimization_Algorithm_Factory.h"
 #include "../../Density_Estimation/Include/FE_Density_Estimation.h"
 
-template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
 SEXP DE_skeleton(SEXP Rdata, SEXP Rorder, SEXP Rfvec, SEXP RheatStep, SEXP RheatIter, SEXP Rlambda, SEXP Rnfolds, SEXP Rnsim, SEXP RstepProposals,
 	SEXP Rtol1, SEXP Rtol2, SEXP Rprint, SEXP Rmesh, SEXP Rsearch,
 	const std::string & step_method, const std::string & direction_method, const std::string & preprocess_method)
 {
 	// Construct data problem object
-	DataProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim> dataProblem(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rsearch, Rmesh);
+	DataProblem<Integrator_noPoly, ORDER, mydim, ndim> dataProblem(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rsearch, Rmesh);
 
 	// Construct functional problem object
-	FunctionalProblem<Integrator, Integrator_noPoly, ORDER, mydim, ndim> functionalProblem(dataProblem);
+	FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim> functionalProblem(dataProblem);
 
 	// Construct minimization algorithm object
-	std::shared_ptr<MinimizationAlgorithm<Integrator, Integrator_noPoly, ORDER, mydim, ndim>> minimizationAlgo =
-		MinimizationAlgorithm_factory<Integrator, Integrator_noPoly, ORDER, mydim, ndim>::createStepSolver(dataProblem, functionalProblem, direction_method, step_method);
+	std::shared_ptr<MinimizationAlgorithm<Integrator_noPoly, ORDER, mydim, ndim>> minimizationAlgo =
+		MinimizationAlgorithm_factory<Integrator_noPoly, ORDER, mydim, ndim>::createStepSolver(dataProblem, functionalProblem, direction_method, step_method);
 
 	// Construct FEDE object
-	FEDE<Integrator, Integrator_noPoly, ORDER, mydim, ndim> fede(dataProblem, functionalProblem, minimizationAlgo, preprocess_method);
+	FEDE<Integrator_noPoly, ORDER, mydim, ndim> fede(dataProblem, functionalProblem, minimizationAlgo, preprocess_method);
 
   	// Perform the whole task
 	fede.apply();
@@ -83,40 +83,42 @@ SEXP DE_skeleton(SEXP Rdata, SEXP Rorder, SEXP Rfvec, SEXP RheatStep, SEXP Rheat
 		rans4[i] = CV_errors[i];
 	}
 
-	//SEND TREE INFORMATION TO R
-	SET_VECTOR_ELT(result, 5, Rf_allocVector(INTSXP, 1)); //tree_header information
-	int *rans5 = INTEGER(VECTOR_ELT(result, 5));
-	rans5[0] = dataProblem.getMesh().getTree().gettreeheader().gettreelev();
+	if(dataProblem.getSearch()==2){
+		//SEND TREE INFORMATION TO R
+		SET_VECTOR_ELT(result, 5, Rf_allocVector(INTSXP, 1)); //tree_header information
+		int *rans5 = INTEGER(VECTOR_ELT(result, 5));
+		rans5[0] = dataProblem.getMesh().getTree().gettreeheader().gettreelev();
 
-	SET_VECTOR_ELT(result, 6, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain origin
-	Real *rans6 = REAL(VECTOR_ELT(result, 6));
-	for(UInt i = 0; i < ndim*2; i++)
-		rans6[i] = dataProblem.getMesh().getTree().gettreeheader().domainorig(i);
+		SET_VECTOR_ELT(result, 6, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain origin
+		Real *rans6 = REAL(VECTOR_ELT(result, 6));
+		for(UInt i = 0; i < ndim*2; i++)
+			rans6[i] = dataProblem.getMesh().getTree().gettreeheader().domainorig(i);
 
-	SET_VECTOR_ELT(result, 7, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain scale
-	Real *rans7 = REAL(VECTOR_ELT(result, 7));
-	for(UInt i = 0; i < ndim*2; i++)
-		rans7[i] = dataProblem.getMesh().getTree().gettreeheader().domainscal(i);
+		SET_VECTOR_ELT(result, 7, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain scale
+		Real *rans7 = REAL(VECTOR_ELT(result, 7));
+		for(UInt i = 0; i < ndim*2; i++)
+			rans7[i] = dataProblem.getMesh().getTree().gettreeheader().domainscal(i);
 
 
-	UInt num_tree_nodes = dataProblem.getMesh().num_elements()+1; //Be careful! This is not equal to number of elements
-	SET_VECTOR_ELT(result, 8, Rf_allocMatrix(INTSXP, num_tree_nodes, 3)); //treenode information
-	int *rans8 = INTEGER(VECTOR_ELT(result, 8));
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		UInt num_tree_nodes = dataProblem.getMesh().num_elements()+1; //Be careful! This is not equal to number of elements
+		SET_VECTOR_ELT(result, 8, Rf_allocMatrix(INTSXP, num_tree_nodes, 3)); //treenode information
+		int *rans8 = INTEGER(VECTOR_ELT(result, 8));
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans8[i] = dataProblem.getMesh().getTree().gettreenode(i).getid();
 
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans8[i + num_tree_nodes*1] = dataProblem.getMesh().getTree().gettreenode(i).getchild(0);
 
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans8[i + num_tree_nodes*2] = dataProblem.getMesh().getTree().gettreenode(i).getchild(1);
 
-	SET_VECTOR_ELT(result, 9, Rf_allocMatrix(REALSXP, num_tree_nodes, ndim*2)); //treenode box coordinate
-	Real *rans9 = REAL(VECTOR_ELT(result, 9));
-	for(UInt j = 0; j < ndim*2; j++)
-	{
-		for(UInt i = 0; i < num_tree_nodes; i++)
-			rans9[i + num_tree_nodes*j] = dataProblem.getMesh().getTree().gettreenode(i).getbox().get()[j];
+		SET_VECTOR_ELT(result, 9, Rf_allocMatrix(REALSXP, num_tree_nodes, ndim*2)); //treenode box coordinate
+		Real *rans9 = REAL(VECTOR_ELT(result, 9));
+		for(UInt j = 0; j < ndim*2; j++)
+		{
+			for(UInt i = 0; i < num_tree_nodes; i++)
+				rans9[i + num_tree_nodes*j] = dataProblem.getMesh().getTree().gettreenode(i).getbox().get()[j];
+		}
 	}
 
 	UNPROTECT(1);

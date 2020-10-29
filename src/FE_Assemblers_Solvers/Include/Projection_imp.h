@@ -1,10 +1,10 @@
-#ifndef _PROJECTION_IMP_H
-#define _PROJECTION_IMP_H
+#ifndef __PROJECTION_IMP_H__
+#define __PROJECTION_IMP_H__
 
 #include <cmath>
 #include <utility>
 #include <limits>
-#include "mesh_objects.h"
+#include "../../Mesh/Include/Mesh_Objects.h"
 
 
 template<UInt ORDER>

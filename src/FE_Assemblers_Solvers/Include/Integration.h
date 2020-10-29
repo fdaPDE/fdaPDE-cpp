@@ -1,9 +1,10 @@
-#ifndef __INTEGRATION_HPP__
-#define __INTEGRATION_HPP__
+#ifndef __INTEGRATION_H__
+#define __INTEGRATION_H__
 
 #include <type_traits>
 
-#include "point.h"
+#include "../../FdaPDE.h"
+#include "../../Mesh/Include/Point.h"
 
 struct IntegratorTriangleP1{
 	//Number of nodes

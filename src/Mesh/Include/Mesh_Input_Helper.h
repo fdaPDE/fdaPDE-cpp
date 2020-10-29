@@ -1,5 +1,5 @@
-#ifndef __MESH_INPUT_HELPER_HPP__
-#define __MESH_INPUT_HELPER_HPP__
+#ifndef __MESH_INPUT_HELPER_H__
+#define __MESH_INPUT_HELPER_H__
 
 #include <array>
 #include <vector>

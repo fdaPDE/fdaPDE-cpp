@@ -1,5 +1,5 @@
-#ifndef __EVALUATOR_IMP_HPP__
-#define __EVALUATOR_IMP_HPP__
+#ifndef __EVALUATOR_IMP_H__
+#define __EVALUATOR_IMP_H__
 
 template <UInt ORDER>
 void Evaluator<ORDER,2,2>::eval(Real* X, Real *Y, UInt length, const Real *coef, bool redundancy, Real* result, std::vector<bool>& isinside)

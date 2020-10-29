@@ -5,7 +5,6 @@
 #include <type_traits>
 #include "../../FdaPDE.h"
 #include "../../FE_Assemblers_Solvers/Include/Finite_Element.h"
-#include "../../FE_Assemblers_Solvers/Include/Integrate_Psi.h"
 #include "../../FE_Assemblers_Solvers/Include/Kronecker_Product.h"
 #include "../../FE_Assemblers_Solvers/Include/Matrix_Assembler.h"
 #include "../../FE_Assemblers_Solvers/Include/Param_Functors.h"

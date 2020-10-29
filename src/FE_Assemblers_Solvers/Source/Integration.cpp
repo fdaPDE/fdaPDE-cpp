@@ -1,4 +1,4 @@
-#include "integration.h"
+#include "../Include/Integration.h"
 
 // Out of class definition is needed because these arrays are odr-used
 // Not needed anymore from C++17

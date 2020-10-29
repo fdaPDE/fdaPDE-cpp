@@ -1,7 +1,7 @@
-#ifndef PARAM_FUNCTORS_H_
-#define PARAM_FUNCTORS_H_
+#ifndef __PARAM_FUNCTORS_H__
+#define __PARAM_FUNCTORS_H__
 
-#include "pde_expression_templates.h"
+#include "Pde_Expression_Templates.h"
 
 // Forward declaration!
 template <UInt ORDER, UInt mydim, UInt ndim>

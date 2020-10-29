@@ -4,7 +4,7 @@
 
 #include "../../FdaPDE.h"
 
-#include "point.h"
+#include "Point.h"
 
 using Id=int;
 

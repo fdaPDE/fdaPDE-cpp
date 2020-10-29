@@ -1,6 +1,7 @@
-#ifndef EXPRESSION_HH
-#define EXPRESSION_HH
+#ifndef __EXPRESSION_H__
+#define __EXPRESSION_H__
 
+//Forward declarations!
 template <UInt ORDER, UInt mydim, UInt ndim>
 class FiniteElement;
 

@@ -1,11 +1,9 @@
-#ifndef __FINITE_ELEMENT_HPP__
-#define __FINITE_ELEMENT_HPP__
+#ifndef __FINITE_ELEMENT_H__
+#define __FINITE_ELEMENT_H__
 
-// Needed for IntegratorHelper
-#include "integration.h"
-
-// Needed for element, point and how_many_nodes
-#include "mesh_objects.h"
+#include "../../FdaPDE.h"
+#include "Integration.h"
+#include "../../Mesh/Include/Mesh_Objects.h"
 
 // This is an abstract base class that wraps Element objects
 // It stores the data needed by a triangular or tetrahedral finite element
@@ -127,6 +125,6 @@ public:
 
 };
 
-#include "finite_element_imp.h"
+#include "Finite_Element_imp.h"
 
 #endif

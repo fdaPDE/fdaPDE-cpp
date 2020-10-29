@@ -1,7 +1,7 @@
-#ifndef __POINT_HPP__
-#define __POINT_HPP__
+#ifndef __POINT_H__
+#define __POINT_H__
 
-#include "fdaPDE.h"
+#include "../../FdaPDE.h"
 
 /*! \brief A class storing an ID and providing the relevant methods
  *
@@ -181,6 +181,6 @@ class Point : public Identifier{
   };
 
 
-#include "point_imp.h"
+#include "Point_imp.h"
 
 #endif
