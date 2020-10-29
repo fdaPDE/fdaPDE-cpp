@@ -110,7 +110,8 @@ create.FEM.basis = function(mesh=NULL, saveTree = FALSE)
 
   return(FEMbasis)
 
- }
+}
+
 #' Define a surface or spatial field by a Finite Element basis expansion
 #'
 #' @param coeff A vector or a matrix containing the coefficients for the Finite Element basis expansion. The number of rows
@@ -187,7 +188,11 @@ FEM<-function(coeff,FEMbasis)
 
 FEM.time<-function(coeff,time_mesh,FEMbasis,FLAG_PARABOLIC=FALSE)
 {
-  coeff = as.matrix(coeff)
+
+  if(is.vector(coeff)){
+    coeff = array(coeff, dim = c(length(coeff),1,1))
+  }
+
   M = ifelse(FLAG_PARABOLIC,length(time_mesh),length(time_mesh)+2)
   if (is.null(coeff))
     stop("coeff required;  is NULL.")

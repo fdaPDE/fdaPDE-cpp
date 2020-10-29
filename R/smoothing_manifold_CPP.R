@@ -1,21 +1,20 @@
-CPP_smooth.manifold.FEM.basis<-function(locations, bary.locations, observations, FEMbasis, lambda, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, GCV, GCVMETHOD = 2, nrealizations = 100, DOF=TRUE, DOF_matrix=NULL, search)
+CPP_smooth.manifold.FEM.basis<-function(locations, observations, FEMbasis, covariates = NULL, ndim, mydim, BC = NULL, incidence_matrix = NULL, areal.data.avg = TRUE, search, bary.locations, optim, lambda = NULL, DOF.stochastic.realizations = 100, DOF.stochastic.seed = 0, DOF.matrix = NULL, GCV.inflation.factor = 1, lambda.optimization.tolerance = 0.05)
 {
 
-  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
 
   FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
   FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
   FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
-
 
   if(is.null(covariates))
   {
     covariates<-matrix(nrow = 0, ncol = 1)
   }
 
-  if(is.null(DOF_matrix))
+  if(is.null(DOF.matrix))
   {
-    DOF_matrix<-matrix(nrow = 0, ncol = 1)
+    DOF.matrix<-matrix(nrow = 0, ncol = 1)
   }
 
   if(is.null(locations))
@@ -45,10 +44,18 @@ CPP_smooth.manifold.FEM.basis<-function(locations, bary.locations, observations,
     BC$BC_values<-as.vector(BC$BC_values)
   }
 
+  if(is.null(lambda))
+  {
+    lambda<-vector(length=0)
+  }else
+  {
+    lambda<-as.vector(lambda)
+  }
+
   ## Set propr type for correct C++ reading
   locations <- as.matrix(locations)
   storage.mode(locations) <- "double"
-  observations <- as.vector(observations)
+  data <- as.vector(observations)
   storage.mode(observations) <- "double"
   storage.mode(FEMbasis$mesh$nodes) <- "double"
   storage.mode(FEMbasis$mesh$triangles) <- "integer"
@@ -57,25 +64,28 @@ CPP_smooth.manifold.FEM.basis<-function(locations, bary.locations, observations,
   storage.mode(FEMbasis$mesh$order) <- "integer"
   covariates <- as.matrix(covariates)
   storage.mode(covariates) <- "double"
-  incidence_matrix <- as.matrix(incidence_matrix)
-  storage.mode(incidence_matrix) <- "integer"
-  storage.mode(lambda) <- "double"
   storage.mode(ndim) <- "integer"
   storage.mode(mydim) <- "integer"
   storage.mode(BC$BC_indices) <- "integer"
-  storage.mode(BC$BC_values)  <- "double"
-  GCV <- as.integer(GCV)
-  storage.mode(GCV) <- "integer"
-  DOF <- as.integer(DOF)
-  storage.mode(DOF) <- "integer"
-
-  storage.mode(nrealizations) <- "integer"
-  storage.mode(GCVMETHOD) <- "integer"
+  storage.mode(BC$BC_values) <-"double"
+  incidence_matrix <- as.matrix(incidence_matrix)
+  storage.mode(incidence_matrix) <- "integer"
+  areal.data.avg <- as.integer(areal.data.avg)
+  storage.mode(areal.data.avg) <-"integer"
   storage.mode(search) <- "integer"
+  storage.mode(optim) <- "integer"  
+  storage.mode(lambda) <- "double"
+  DOF.matrix <- as.matrix(DOF.matrix)
+  storage.mode(DOF.matrix) <- "double"
+  storage.mode(DOF.stochastic.realizations) <- "integer"
+  storage.mode(DOF.stochastic.seed) <- "integer"
+  storage.mode(GCV.inflation.factor) <- "double"
+  storage.mode(lambda.optimization.tolerance) <- "double"
 
   ## Call C++ function
-  bigsol <- .Call("regression_Laplace", locations, bary.locations, observations, FEMbasis$mesh, FEMbasis$mesh$order, mydim, ndim, lambda, covariates,
-                  incidence_matrix, BC$BC_indices, BC$BC_values, GCV, GCVMETHOD, nrealizations, DOF, DOF_matrix, search, PACKAGE = "fdaPDE")
+  bigsol <- .Call("regression_Laplace", locations, bary.locations, data, FEMbasis$mesh, FEMbasis$mesh$order, mydim, ndim, covariates,
+                  BC$BC_indices, BC$BC_values, incidence_matrix, areal.data.avg, search, 
+                  optim, lambda, DOF.stochastic.realizations, DOF.stochastic.seed, DOF.matrix, GCV.inflation.factor, lambda.optimization.tolerance, PACKAGE = "fdaPDE")
 
   return(bigsol)
 }

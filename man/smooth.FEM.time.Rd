@@ -5,11 +5,14 @@
 \title{Space-time regression with differential regularization}
 \usage{
 smooth.FEM.time(locations = NULL, time_locations = NULL, observations, FEMbasis, 
-                       time_mesh = NULL, lambdaS, lambdaT = 1, covariates = NULL, 
-                       PDE_parameters = NULL, incidence_matrix = NULL, BC = NULL, 
-                       FLAG_MASS = FALSE, FLAG_PARABOLIC = FALSE, IC = NULL, GCV = FALSE, 
-                       GCVmethod = "Stochastic", nrealizations = 100, DOF_matrix=NULL, 
-                       search = "tree", bary.locations = NULL)
+time_mesh=NULL, covariates = NULL, PDE_parameters = NULL,  BC = NULL,
+incidence_matrix = NULL, areal.data.avg = TRUE,
+FLAG_MASS = FALSE, FLAG_PARABOLIC = FALSE, IC = NULL,
+search = "tree", bary.locations = NULL,
+lambda.selection.criterion = "grid", DOF.evaluation = NULL, 
+lambda.selection.lossfunction = NULL, lambdaS = NULL, lambdaT = NULL, 
+DOF.stochastic.realizations = 100, DOF.stochastic.seed = 0, 
+DOF.matrix = NULL, GCV.inflation.factor = 1, lambda.optimization.tolerance = 0.05)
 }
 \arguments{
 \item{locations}{A matrix where each row specifies the spatial coordinates \code{x} and \code{y} (and \code{z} if ndim=3) of the corresponding observations in the vector \code{observations}.
@@ -24,10 +27,6 @@ The spatial locations of the observations can be specified with the \code{locati
 \item{FEMbasis}{A \code{FEMbasis} object describing the Finite Element basis, as created by \code{\link{create.FEM.basis}}.}
 
 \item{time_mesh}{A vector specifying the time mesh.}
-
-\item{lambdaS}{A scalar or vector of smoothing parameters.}
-
-\item{lambdaT}{A scalar or vector of smoothing parameters.}
 
 \item{covariates}{A #observations-by-#covariates matrix where each row represents the covariates associated with the corresponding observed data value in \code{observations}.}
 
@@ -47,30 +46,22 @@ a vector with length #points; \code{u}, a function that for each spatial locatio
 a vector with length #points.
 For 2.5D and 3D only the Laplacian is available (\code{PDE_parameters=NULL})}
 
-\item{incidence_matrix}{A #regions-by-#triangles/tetrahedrons matrix where the element (i,j) equals 1 if the j-th triangle/tetrahedron is in the i-th region and 0 otherwise.
-This is only for areal data. In case of pointwise data, this parameter is set to \code{NULL}.}
-
 \item{BC}{A list with two vectors:
 \code{BC_indices}, a vector with the indices in \code{nodes} of boundary nodes where a Dirichlet Boundary Condition should be applied;
 \code{BC_values}, a vector with the values that the spatial field must take at the nodes indicated in \code{BC_indices}.}
+
+\item{incidence_matrix}{A #regions-by-#triangles/tetrahedrons matrix where the element (i,j) equals 1 if the j-th triangle/tetrahedron is in the i-th region and 0 otherwise.
+This is only for areal data. In case of pointwise data, this parameter is set to \code{NULL}.}
+
+\item{areal.data.avg}{Boolean. It involves the computation of Areal Data. If \code{TRUE} the areal data are averaged, otherwise not.}
 
 \item{FLAG_MASS}{Boolean. This parameter is considerd only for separable problems i.e. when \code{FLAG_PARABOLIC==FALSE}. If \code{TRUE} the mass matrix in space and in time are used, if \code{FALSE} they are substituted with proper identity matrices.}
 
 \item{FLAG_PARABOLIC}{Boolean. If \code{TRUE} the parabolic problem problem is selected, if \code{FALSE} the separable one.}
 
-\item{IC}{Initial condition needed in case of parabolic problem i.e. when \code{FLAG_PARABOLIC==FALSE}.This parameter has to be set only for parabolic. If \code{FLAG_PARABOLIC=TRUE} and \code{IC=NULL} it is necessary to provide
-also data at the initial time. IC will be estimated from it}
-
-\item{GCV}{Boolean. If \code{TRUE} the following quantities are computed: the trace of the smoothing matrix, the estimated error standard deviation,  and
-the Generalized Cross Validation criterion, for each combination of the smoothing parameters specified in \code{lambdaS} and \code{lambdaT}.}
-
-\item{GCVmethod}{either "Exact" or "Stochastic". If set to "Exact" perform an exact (but possibly slow) computation of the GCV index. If set to "Stochastic" approximate the GCV with a stochastic algorithm.
-This parameter is considered only when \code{GCV=TRUE}}
-
-\item{nrealizations}{Number of random points used in the stochastic computation of the dofs}
-
-\item{DOF_matrix}{Matrix of degrees of freedom. This parameter can be used if the DOF_matrix corresponding to \code{lambdaS} and \code{lambdaT} is available from precedent computation. This allows to save time
-since the computation of the dof is the most expensive part of GCV.}
+\item{IC}{Initial condition needed in case of parabolic problem i.e. when \code{FLAG_PARABOLIC==TRUE}. 
+If \code{FLAG_PARABOLIC==FALSE} this parameter is ignored. If \code{FLAG_PARABOLIC=TRUE} and \code{IC=NULL} it is necessary to provide
+also data at the initial time. IC will be estimated from them.}
 
 \item{search}{a flag to decide the search algorithm type (tree or naive or walking search algorithm).}
 
@@ -78,6 +69,44 @@ since the computation of the dof is the most expensive part of GCV.}
 \code{locations}, location points which are same as the given locations options. (checks whether both locations are the same);
 \code{element ids}, a vector of element id of the points from the mesh where they are located;
 \code{barycenters}, a vector of barycenter of points from the located element.}
+
+\item{lambda.selection.criterion}{This parameter is used to select the optimization method related to smoothing parameter \code{lambda}.
+The following methods are implemented: 'grid', further optimization methods are yet to come. 
+The 'grid' is a pure evaluation method, therefore a vector of \code{lambda} testing penalizations must be provided.
+Default value \code{lambda.selection.criterion='grid'}}
+
+\item{DOF.evaluation}{This parameter is used to identify if and how degrees of freedom computation has to be performed.
+The following possibilities are allowed: NULL, 'exact' and 'stochastic'
+In the former case no degree of freedom is computed, while the other two methods enable computation.
+Stochastic computation of DOFs may be slightly less accurate than its deterministic counterpart, but is highly suggested for meshes of more than 5000 nodes, being fairly less time consuming.
+Default value \code{DOF.evaluation=NULL}}
+
+\item{lambda.selection.lossfunction}{This parameter is used to understand if some loss function has to be evaluated.
+The following possibilities are allowed: NULL and 'GCV' (generalized cross validation)
+The former case is that of \code{lambda.selection.criterion='grid'} pure evaluation, while the second can be employed for optimization methods.
+Default value \code{lambda.selection.lossfunction=NULL}}
+
+\item{lambdaS}{A scalar or vector of spatial smoothing parameters.}
+
+\item{lambdaT}{A scalar or vector of temporal smoothing parameters.}
+
+\item{DOF.stochastic.realizations}{This parameter is considered only when \code{DOF.evaluation = 'stochastic'}.
+It is a positive integer that represents the number of uniform random variables used in stochastic GCV computation.
+Default value \code{DOF.stochastic.realizations=100}.}
+
+\item{DOF.stochastic.seed}{This parameter is considered only when \code{DOF.evaluation = 'stochastic'}.
+It is a positive integer that represents user defined seed employed in stochastic GCV computation.
+Default value \code{DOF.stochastic.seed=0}.}
+
+\item{DOF.matrix}{Matrix of degrees of freedom. This parameter can be used if the DOF.matrix corresponding to \code{lambdaS} and \code{lambdaT} is available from precedent computation. This allows to save time
+since the computation of the DOFs is the most expensive part of GCV.}
+
+\item{GCV.inflation.factor}{Tuning parameter used for the estimation of GCV. Default value \code{GCV.inflation.factor = 1.0}.
+It is advised to set it grather than 1 to avoid overfitting.}
+
+\item{lambda.optimization.tolerance}{Tolerance parameter, a double between 0 and 1 that fixes how much precision is required by the optimization method: the smaller the parameter, the higher the accuracy.
+Used only if \code{lambda.selection.criterion='newton'} or \code{lambda.selection.criterion='newton_fd'}, thus ot implemented yet.
+Default value \code{lambda.optimization.tolerance=0.05}.}
 }
 \value{
 A list with the following variables:
@@ -122,5 +151,11 @@ solution = smooth.FEM.time(observations = data, time_locations = time_locations,
 plot(solution$fit.FEM)
 }
 \references{
-Sangalli, L.M., Ramsay, J.O. & Ramsay, T.O., 2013. Spatial spline regression models. Journal of the Royal Statistical Society. Series B: Statistical Methodology, 75(4), pp. 681-703.
+#' @references Arnone, E., Azzimonti, L., Nobile, F., & Sangalli, L. M. (2019). Modeling 
+spatially dependent functional data via regression with differential regularization. 
+Journal of Multivariate Analysis, 170, 275-295.
+Bernardi, M. S., Sangalli, L. M., Mazza, G., & Ramsay, J. O. (2017). A penalized 
+regression model for spatial functional data with application to the analysis of the 
+production of waste in Venice province. 
+Stochastic Environmental Research and Risk Assessment, 31(1), 23-38.
 }

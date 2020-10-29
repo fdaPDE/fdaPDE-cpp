@@ -1,8 +1,9 @@
-CPP_smooth.manifold.FEM.time<-function(locations, bary.locations, time_locations, observations, FEMbasis, time_mesh, lambdaS, lambdaT,
-                                    covariates=NULL, incidence_matrix=NULL, ndim, mydim, BC=NULL, FLAG_MASS, FLAG_PARABOLIC, IC, GCV, GCVMETHOD=2, nrealizations=100, DOF=TRUE, DOF_matrix=NULL, search)
+CPP_smooth.manifold.FEM.time<-function(locations, time_locations, observations, FEMbasis, time_mesh,
+                                       covariates = NULL, ndim, mydim, BC = NULL,
+                                       incidence_matrix = NULL, areal.data.avg = TRUE,
+                                       FLAG_MASS, FLAG_PARABOLIC, IC,
+                                       search, bary.locations, optim , lambdaS = NULL, lambdaT = NULL, DOF.stochastic.realizations = 100, DOF.stochastic.seed = 0, DOF.matrix = NULL, GCV.inflation.factor = 1, lambda.optimization.tolerance = 0.05)
 {
-
-  # Indexes in C++ starts from 0, in R from 1, opportune transformation
 
   FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
   FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
@@ -14,9 +15,9 @@ CPP_smooth.manifold.FEM.time<-function(locations, bary.locations, time_locations
     covariates<-matrix(nrow = 0, ncol = 1)
   }
 
-  if(is.null(DOF_matrix))
+  if(is.null(DOF.matrix))
   {
-    DOF_matrix<-matrix(nrow = 0, ncol = 1)
+    DOF.matrix<-matrix(nrow = 0, ncol = 1)
   }
 
   if(is.null(locations))
@@ -50,6 +51,21 @@ CPP_smooth.manifold.FEM.time<-function(locations, bary.locations, time_locations
   {
     BC$BC_values<-as.vector(BC$BC_values)
   }
+  if(is.null(lambdaS))
+  {
+    lambdaS<-vector(length=0)
+  }else
+  {
+    lambdaS<-as.vector(lambdaS)
+  }
+
+  if(is.null(lambdaT))
+  {
+    lambdaT<-vector(length=0)
+  }else
+  {
+    lambdaT<-as.vector(lambdaT)
+  }
 
   ## Set propr type for correct C++ reading
   locations <- as.matrix(locations)
@@ -67,32 +83,35 @@ CPP_smooth.manifold.FEM.time<-function(locations, bary.locations, time_locations
   storage.mode(FEMbasis$order) <- "integer"
   covariates <- as.matrix(covariates)
   storage.mode(covariates) <- "double"
-  incidence_matrix <- as.matrix(incidence_matrix)
-  storage.mode(incidence_matrix) <- "integer"
-  storage.mode(lambdaS) <- "double"
-  storage.mode(lambdaT) <- "double"
-  IC <- as.matrix(IC)
-  storage.mode(IC) <- "double"
   storage.mode(ndim) <- "integer"
   storage.mode(mydim) <- "integer"
   storage.mode(BC$BC_indices) <- "integer"
-  storage.mode(BC$BC_values)  <- "double"
-  GCV <- as.integer(GCV)
-  storage.mode(GCV) <- "integer"
-
+  storage.mode(BC$BC_values) <-"double"
+  incidence_matrix <- as.matrix(incidence_matrix)
+  storage.mode(incidence_matrix) <- "integer"
+  areal.data.avg <- as.integer(areal.data.avg)
+  storage.mode(areal.data.avg) <-"integer"
   FLAG_MASS <- as.integer(FLAG_MASS)
   storage.mode(FLAG_MASS) <-"integer"
-
   FLAG_PARABOLIC <- as.integer(FLAG_PARABOLIC)
   storage.mode(FLAG_PARABOLIC) <-"integer"
-
-  storage.mode(nrealizations) <- "integer"
-  storage.mode(GCVMETHOD) <- "integer"
+  IC <- as.matrix(IC)
+  storage.mode(IC) <- "double"
   storage.mode(search) <- "integer"
-
+  storage.mode(optim) <- "integer"
+  storage.mode(lambdaS) <- "double"
+  storage.mode(lambdaT) <- "double"
+  DOF.matrix <- as.matrix(DOF.matrix)
+  storage.mode(DOF.matrix) <- "double"
+  storage.mode(DOF.stochastic.realizations) <- "integer"
+  storage.mode(DOF.stochastic.seed) <- "integer"
+  storage.mode(GCV.inflation.factor) <- "double"
+  storage.mode(lambda.optimization.tolerance) <- "double"
 
   ## Call C++ function
   ICsol=NA
+  #empty dof matrix
+  DOF.matrix_IC<-matrix(nrow = 0, ncol = 1)
   if(nrow(IC)==0 && FLAG_PARABOLIC)
   {
     NobsIC = length(observations)%/%nrow(time_locations)
@@ -112,50 +131,50 @@ CPP_smooth.manifold.FEM.time<-function(locations, bary.locations, time_locations
     storage.mode(lambdaSIC) <- "double"
     ## call the smoothing function with initial observations to estimates the IC
     ICsol <- .Call("regression_Laplace", locations, bary.locations, observations[1:NobsIC],
-                  FEMbasis$mesh, FEMbasis$order, mydim, ndim, lambdaSIC, covariatesIC,
-                  incidence_matrix, BC$BC_indices, BC$BC_values,
-                  T, as.integer(1), nrealizations, T, DOF_matrix, search, PACKAGE = "fdaPDE")
+      FEMbasis$mesh, FEMbasis$order, mydim, ndim, covariatesIC,
+      BC$BC_indices, BC$BC_values, incidence_matrix, areal.data.avg,
+      search, as.integer(c(0,1,1)), lambdaSIC, DOF.stochastic.realizations, DOF.stochastic.seed, DOF.matrix_IC, GCV.inflation.factor, lambda.optimization.tolerance, PACKAGE = "fdaPDE")
 
     ## shifting the lambdas interval if the best lambda is the smaller one and retry smoothing
-    if((ICsol[[4]][1]+1)==1)
+    if(ICsol[[6]]==1)
     {
       lambdaSIC <- 10^seq(-9,-7,0.1)
       lambdaSIC <- as.matrix(lambdaSIC)
       storage.mode(lambdaSIC) <- "double"
       ICsol <- .Call("regression_Laplace", locations, bary.locations, observations[1:NobsIC],
-                    FEMbasis$mesh, FEMbasis$order, mydim, ndim, lambdaSIC, covariatesIC,
-                    incidence_matrix, BC$BC_indices, BC$BC_values,
-                    T, as.integer(1), nrealizations, T, DOF_matrix, search, PACKAGE = "fdaPDE")
+         FEMbasis$mesh, FEMbasis$order, mydim, ndim, covariatesIC,
+         BC$BC_indices, BC$BC_values, incidence_matrix, areal.data.avg,
+         search, as.integer(c(0,1,1)), lambdaSIC, DOF.stochastic.realizations, DOF.stochastic.seed, DOF.matrix_IC, GCV.inflation.factor, lambda.optimization.tolerance, PACKAGE = "fdaPDE")
     }
     else
     {
       ## shifting the lambdas interval if the best lambda is the higher one and retry smoothing
-      if((ICsol[[4]][1]+1)==length(lambdaSIC))
+      if(ICsol[[6]]==length(lambdaSIC))
       {
         lambdaSIC <- 10^seq(3,5,0.1)
         lambdaSIC <- as.matrix(lambdaSIC)
         storage.mode(lambdaSIC) <- "double"
         ICsol <- .Call("regression_Laplace", locations, bary.locations, observations[1:NobsIC],
-                      FEMbasis$mesh, FEMbasis$order, mydim, ndim, lambdaSIC, covariatesIC,
-                      incidence_matrix, BC$BC_indices, BC$BC_values,
-                      T, as.integer(1), nrealizations, T, DOF_matrix, search, PACKAGE = "fdaPDE")
+           FEMbasis$mesh, FEMbasis$order, mydim, ndim, covariatesIC,
+           BC$BC_indices, BC$BC_values, incidence_matrix, areal.data.avg,
+           search, as.integer(c(0,1,1)), lambdaSIC, DOF.stochastic.realizations, DOF.stochastic.seed, DOF.matrix_IC, GCV.inflation.factor,lambda.optimization.tolerance, PACKAGE = "fdaPDE")
       }
     }
 
     if(nrow(covariates)!=0)
     {
-      betaIC = ICsol[[5]]
-      IC = ICsol[[1]][1:nrow(FEMbasis$mesh$nodes),ICsol[[4]][1]+1] ## best IC estimation
+      betaIC = ICsol[[15]]
+      IC = ICsol[[1]][1:FEMbasis$mesh$nnodes,] ## best IC estimation
       covariates=covariates[(NobsIC+1):nrow(covariates),]
       covariates <- as.matrix(covariates)
     }
     else
     {
-      IC = ICsol[[1]][1:nrow(FEMbasis$mesh$nodes),ICsol[[4]][1]+1] ## best IC estimation
+      IC = ICsol[[1]][1:FEMbasis$mesh$nnodes,] ## best IC estimation
       betaIC = NULL
     }
     ## return a FEM object containing IC estimates with best lambda and best lambda index
-    ICsol = list(IC.FEM=FEM(ICsol[[1]][1:nrow(FEMbasis$mesh$nodes),],FEMbasis),bestlambdaindex=ICsol[[4]][1]+1,bestlambda=lambdaSIC[ICsol[[4]][1]+1],beta=betaIC)
+    ICsol = list(IC.FEM=FEM(ICsol[[1]][1:FEMbasis$mesh$nnodes,],FEMbasis),bestlambdaindex=ICsol[[6]],bestlambda=ICsol[[5]],beta=betaIC)
     time_locations=time_locations[2:nrow(time_locations)]
     observations = observations[(NobsIC+1):length(observations)]
   }
@@ -163,14 +182,14 @@ CPP_smooth.manifold.FEM.time<-function(locations, bary.locations, time_locations
   storage.mode(IC) <- "double"
 
   M = ifelse(FLAG_PARABOLIC,length(time_mesh)-1,length(time_mesh) + 2);
-  BC$BC_indices = rep((0:(M-1))*nrow(FEMbasis$mesh$nodes),each=length(BC$BC_indices)) + rep(BC$BC_indices,M)
+  BC$BC_indices = rep((0:(M-1))*FEMbasis$mesh$nnodes,each=length(BC$BC_indices)) + rep(BC$BC_indices,M)
   BC$BC_values = rep(BC$BC_values,M)
   storage.mode(BC$BC_indices) <- "integer"
   storage.mode(BC$BC_values) <-"double"
 
   bigsol <- .Call("regression_Laplace_time", locations, bary.locations, time_locations, observations, FEMbasis$mesh, time_mesh, FEMbasis$order,
-                  mydim, ndim, lambdaS, lambdaT, covariates, incidence_matrix, BC$BC_indices, BC$BC_values, FLAG_MASS, FLAG_PARABOLIC,
-                  IC, GCV, GCVMETHOD, nrealizations, DOF, DOF_matrix, search, PACKAGE = "fdaPDE")
+                  mydim, ndim, covariates, BC$BC_indices, BC$BC_values, incidence_matrix, areal.data.avg, FLAG_MASS, FLAG_PARABOLIC,
+                  IC, search, optim, lambdaS, lambdaT, DOF.stochastic.realizations, DOF.stochastic.seed, DOF.matrix, GCV.inflation.factor, lambda.optimization.tolerance, PACKAGE = "fdaPDE")
 
   return(c(bigsol,ICsol))
 }
@@ -178,7 +197,7 @@ CPP_smooth.manifold.FEM.time<-function(locations, bary.locations, time_locations
 CPP_eval.manifold.FEM.time = function(FEM.time, locations, time_locations, incidence_matrix, FLAG_PARABOLIC, redundancy, ndim, mydim, search, bary.locations)
 {
   FEMbasis = FEM.time$FEMbasis
-  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+  # C++ function for manifold works with vectors not with matrices
 
   FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
   FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
