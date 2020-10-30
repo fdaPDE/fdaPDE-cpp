@@ -1,4 +1,5 @@
-#include "../Include/DE_Data.h"
+#ifndef __DE_DATA_IMP_H__
+#define __DE_DATA_IMP_H__
 
 template<UInt ndim>
 DEData<ndim>::DEData(SEXP Rdata, SEXP Rorder, SEXP Rfvec, SEXP RheatStep, SEXP RheatIter, SEXP Rlambda, SEXP Rnfolds, SEXP Rnsim, SEXP RstepProposals,
@@ -116,3 +117,5 @@ void DEData<ndim>::printData(std::ostream & out) const
 		out<<data_[i]<<std::endl;
 	}
 }
+
+#endif

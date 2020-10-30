@@ -53,6 +53,8 @@ protected:
 	//!A Real : Stores the variance of the edf computation using the stochastic method.
 	std::vector<Real> var_;
 
+	UInt nnodes_;
+	
 	//!A Eigen::VectorXr : Stores the final scores computed for each PC.
 	std::vector<VectorXr> scores_mat_;
 	//!A Eigen::VectorXr : Stores the final loadings computed for each PC.
