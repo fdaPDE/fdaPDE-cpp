@@ -10,7 +10,7 @@ template<UInt ORDER, UInt mydim, UInt ndim>
 SEXP FPCA_skeleton(FPCAData &fPCAData, SEXP Rmesh, std::string validation)
 {
 
-	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh);
+	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh, fPCAData.getSearch());
 
 	std::unique_ptr<MixedFEFPCABase> fpca = MixedFEFPCAfactory::createFPCAsolver(validation, fPCAData);
 

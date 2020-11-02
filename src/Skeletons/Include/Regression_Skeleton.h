@@ -20,7 +20,7 @@ std::pair<MatrixXr, output_Data> optimizer_strategy_selection(EvaluationType & o
 template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
 SEXP regression_skeleton(InputHandler & regressionData, OptimizationData & optimizationData, SEXP Rmesh)
 {
-	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh);	// Create the mesh
+	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh, regressionData.getSearch());	// Create the mesh
 	MixedFERegression<InputHandler> regression(regressionData, optimizationData, mesh.num_nodes()); // Define the mixed object
 
 	regression.template preapply<ORDER,mydim,ndim, IntegratorGaussP3, 0, 0>(mesh); // preliminary apply (preapply) to store all problem matrices

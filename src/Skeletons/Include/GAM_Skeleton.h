@@ -10,7 +10,7 @@
 template<typename InputHandler,UInt ORDER, UInt mydim, UInt ndim>
 SEXP GAM_skeleton(InputHandler & GAMData, OptimizationData & optimizationData, SEXP Rmesh, SEXP Rmu0, std::string family, SEXP RscaleParam)
 {
-  MeshHandler<ORDER, mydim, ndim> mesh(Rmesh);
+  MeshHandler<ORDER, mydim, ndim> mesh(Rmesh, GAMData.getSearch());
 
 	// read Rmu0
 	VectorXr mu0;

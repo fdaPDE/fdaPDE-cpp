@@ -592,7 +592,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis,
        search = search, bary.locations = bary.locations,
        optim = optim, lambda = lambda, DOF.stochastic.realizations = DOF.stochastic.realizations, DOF.stochastic.seed = DOF.stochastic.seed,
        DOF.matrix = DOF.matrix, GCV.inflation.factor = GCV.inflation.factor, lambda.optimization.tolerance = lambda.optimization.tolerance)
-      numnodes = FEMbasis$mesh$nnodes
+      numnodes = nrow(FEMbasis$mesh$nodes)
     }else if(class(FEMbasis$mesh) == 'mesh.3D')
     {
       bigsol = NULL
@@ -603,7 +603,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis,
         search = search, bary.locations = bary.locations,
         optim = optim, lambda = lambda, DOF.stochastic.realizations = DOF.stochastic.realizations, DOF.stochastic.seed = DOF.stochastic.seed,
         DOF.matrix = DOF.matrix, GCV.inflation.factor = GCV.inflation.factor, lambda.optimization.tolerance = lambda.optimization.tolerance)
-      numnodes = FEMbasis$mesh$nnodes
+      numnodes = nrow(FEMbasis$mesh$nodes)
     }
   }else
   {
@@ -661,7 +661,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis,
         search = search, bary.locations = bary.locations,
         optim = optim, lambda = lambda, DOF.stochastic.realizations = DOF.stochastic.realizations, DOF.stochastic.seed = DOF.stochastic.seed,
         DOF.matrix = DOF.matrix, GCV.inflation.factor = GCV.inflation.factor, lambda.optimization.tolerance = lambda.optimization.tolerance)
-      numnodes = FEMbasis$mesh$nnodes
+      numnodes = nrow(FEMbasis$mesh$nodes)
     }else if(class(FEMbasis$mesh) == 'mesh.3D')
     {
       bigsol = NULL
@@ -673,7 +673,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis,
         search = search, bary.locations = bary.locations,
         optim = optim, lambda = lambda, DOF.stochastic.realizations = DOF.stochastic.realizations, DOF.stochastic.seed = DOF.stochastic.seed,
         DOF.matrix = DOF.matrix, GCV.inflation.factor = GCV.inflation.factor, lambda.optimization.tolerance = lambda.optimization.tolerance)
-      numnodes = FEMbasis$mesh$nnodes
+      numnodes = nrow(FEMbasis$mesh$nodes)
     }
   }
 

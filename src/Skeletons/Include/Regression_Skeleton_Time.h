@@ -9,7 +9,7 @@
 template<typename InputHandler, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
 SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & optimizationData, SEXP Rmesh, SEXP Rmesh_time)
 {
-	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh);//! load the mesh
+	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh, regressionData.getSearch());//! load the mesh
 	UInt n_time = Rf_length(Rmesh_time);
 	std::vector<Real> mesh_time(n_time);
 	for(UInt i=0; i<n_time; ++i)
