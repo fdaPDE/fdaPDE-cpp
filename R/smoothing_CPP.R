@@ -151,38 +151,6 @@ CPP_smooth.FEM.PDE.basis<-function(locations, observations, FEMbasis, covariates
   storage.mode(FEMbasis$order) <- "integer"
   covariates <- as.matrix(covariates)
   storage.mode(covariates) <- "double"
-  DOF.matrix <- as.matrix(DOF.matrix)
-  storage.mode(DOF.matrix) <- "double"
-  incidence_matrix <- as.matrix(incidence_matrix)
-  storage.mode(incidence_matrix) <- "integer"
-  storage.mode(ndim) <- "integer"
-  storage.mode(mydim) <- "integer"
-  storage.mode(lambda) <- "double"
-  storage.mode(BC$BC_indices) <- "integer"
-  storage.mode(BC$BC_values) <- "double"
-  storage.mode(GCV) <- "integer"
-  DOF <- as.integer(DOF)
-  storage.mode(DOF) <-"integer"
-
-  storage.mode(PDE_parameters$K) <- "double"
-  storage.mode(PDE_parameters$b) <- "double"
-  storage.mode(PDE_parameters$c) <- "double"
-
-  storage.mode(nrealizations) <- "integer"
-  storage.mode(GCVMETHOD) <- "integer"
-  storage.mode(search) <- "integer"
-
-  ## Call C++ function
-  bigsol <- .Call("regression_PDE", locations, bary.locations, observations, FEMbasis$mesh, FEMbasis$order, mydim, ndim,
-                  lambda, PDE_parameters$K, PDE_parameters$b, PDE_parameters$c, covariates, incidence_matrix,
-                  BC$BC_indices, BC$BC_values, GCV,GCVMETHOD, nrealizations, DOF, DOF.matrix, search, PACKAGE = "fdaPDE")
-  return(bigsol)
-}
-
-CPP_smooth.FEM.PDE.sv.basis<-function(locations, bary.locations, observations, FEMbasis, lambda, PDE_parameters, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, GCV,GCVMETHOD = 2, nrealizations = 100, DOF=TRUE, DOF.matrix=NULL, search)
-{
-
-  # Indexes in C++ starts from 0, in R from 1, opportune transformation
   storage.mode(PDE_parameters$K) <- "double"
   storage.mode(PDE_parameters$b) <- "double"
   storage.mode(PDE_parameters$c) <- "double"
@@ -203,7 +171,7 @@ CPP_smooth.FEM.PDE.sv.basis<-function(locations, bary.locations, observations, F
   storage.mode(DOF.stochastic.seed) <- "integer"
   storage.mode(GCV.inflation.factor) <- "double"
   storage.mode(lambda.optimization.tolerance) <- "double"
-  
+
   ## Call C++ function
   bigsol <- .Call("regression_PDE", locations, bary.locations, observations, FEMbasis$mesh, FEMbasis$order, 
                   mydim, ndim, PDE_parameters$K, PDE_parameters$b, PDE_parameters$c, covariates,
@@ -216,7 +184,7 @@ CPP_smooth.FEM.PDE.sv.basis<-function(locations, bary.locations, observations, F
 CPP_smooth.FEM.PDE.sv.basis<-function(locations, observations, FEMbasis, covariates = NULL, PDE_parameters, ndim, mydim, BC = NULL, incidence_matrix = NULL, areal.data.avg = TRUE, search, bary.locations, optim, lambda = NULL, DOF.stochastic.realizations = 100, DOF.stochastic.seed = 0, DOF.matrix = NULL, GCV.inflation.factor = 1, lambda.optimization.tolerance = 0.05)
 {
 
-  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
+  # Indexes in C++ starts from 0, in R from 1, opportune transformation
   FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
   FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
   FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
@@ -267,7 +235,6 @@ CPP_smooth.FEM.PDE.sv.basis<-function(locations, observations, FEMbasis, covaria
 
   PDE_param_eval = NULL
   points_eval = matrix(CPP_get_evaluations_points(mesh = FEMbasis$mesh, order = FEMbasis$order),ncol = 2)
-
   PDE_param_eval$K = (PDE_parameters$K)(points_eval)
   PDE_param_eval$b = (PDE_parameters$b)(points_eval)
   PDE_param_eval$c = (PDE_parameters$c)(points_eval)
@@ -283,12 +250,10 @@ CPP_smooth.FEM.PDE.sv.basis<-function(locations, observations, FEMbasis, covaria
   storage.mode(FEMbasis$order) <- "integer"
   covariates <- as.matrix(covariates)
   storage.mode(covariates) <- "double"
-
   storage.mode(PDE_param_eval$K) <- "double"
   storage.mode(PDE_param_eval$b) <- "double"
   storage.mode(PDE_param_eval$c) <- "double"
   storage.mode(PDE_param_eval$u) <- "double"
-
   storage.mode(ndim) <- "integer"
   storage.mode(mydim) <- "integer"
   storage.mode(BC$BC_indices) <- "integer"
@@ -315,6 +280,7 @@ CPP_smooth.FEM.PDE.sv.basis<-function(locations, observations, FEMbasis, covaria
                   GCV.inflation.factor, lambda.optimization.tolerance, PACKAGE = "fdaPDE")
   return(bigsol)
 }
+
 
 CPP_eval.FEM = function(FEM, locations, incidence_matrix, redundancy, ndim, mydim, search, bary.locations)
 {

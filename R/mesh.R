@@ -721,7 +721,7 @@ create.mesh.3D<- function(nodes, tetrahedrons, order = 1, nodesattributes = NULL
 #' @return An object of class mesh.2D with splitted triangles
 #' @export
 
-split.mesh.2D <- function (mesh=NULL){
+refine.by.splitting.mesh.2D <- function (mesh=NULL){
   if(is.null(mesh))
     stop("No mesh passed as input!")
   if(class(mesh)!='mesh.2D')
@@ -752,7 +752,7 @@ split.mesh.2D <- function (mesh=NULL){
 #' @param mesh a \code{mesh.2.5D} object to split
 #' @return An object of class mesh.2.5D with splitted triangles
 #' @export
-split.mesh.2.5D <- function (mesh=NULL){
+refine.by.splitting.mesh.2.5D <- function (mesh=NULL){
   if(is.null(mesh))
     stop("No mesh passed as input!")
   if(class(mesh)!='mesh.2.5D')
@@ -784,7 +784,7 @@ split.mesh.2.5D <- function (mesh=NULL){
 #' @param mesh a \code{mesh.3D} object to split
 #' @return An object of class mesh.3D with splitted tetrahedrons
 #' @export
-split.mesh.3D <- function (mesh=NULL){
+refine.by.splitting.mesh.3D <- function (mesh=NULL){
   if(is.null(mesh))
     stop("No mesh passed as input!")
   if(class(mesh)!='mesh.3D')
