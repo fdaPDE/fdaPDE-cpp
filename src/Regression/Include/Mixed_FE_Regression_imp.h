@@ -579,12 +579,15 @@ void MixedFERegressionBase<InputHandler>::system_factorize()
 	// First phase: Factorization of matrixNoCov
 	matrixNoCovdec_.compute(matrixNoCov_);
 
+
+
 	if(regressionData_.getCovariates()->rows() != 0)
 	{ // Needed only if there are covariates, else we can stop before
 		// Second phase: factorization of matrix  G =  C + [V * matrixNoCov^-1 * U]= C + D
 		// Definition of matrix U = [ psi^T * A * W | 0 ]^T and V= [ W^T*psi| 0]
 
 		MatrixXr W(*(this->regressionData_.getCovariates()));
+
 
 		U_ = MatrixXr::Zero(2*nnodes,W.cols());
 		V_ = MatrixXr::Zero(W.cols(),2*nnodes);
@@ -598,21 +601,22 @@ void MixedFERegressionBase<InputHandler>::system_factorize()
 			V_.leftCols(nnodes) = W.transpose()*P->asDiagonal()*psi_;
 		}
 
-		// Build "right side" of U_
-		if(P->size() == 0)
-			U_.topRows(nnodes) = W;
-		else
-			U_.topRows(nnodes) = P->asDiagonal()*W;
 
-		// Build "left side" of U_
 		if(regressionData_.getNumberOfRegions()==0)
 		{ // pointwise data
-			U_.topRows(nnodes) = psi_.transpose()*U_.topRows(nnodes);
+			if(P->size() == 0)
+				U_.topRows(nnodes) = psi_.transpose()*W;
+			else
+				U_.topRows(nnodes) = psi_.transpose()*P->asDiagonal()*W;
 		}
 		else
 		{ //areal data
-		 	U_.topRows(nnodes) = psi_.transpose()*A_.asDiagonal()*U_.topRows(nnodes);
-    		}
+			if(P->size() == 0)
+				U_.topRows(nnodes) = psi_.transpose()*A_.asDiagonal()*W;
+			else
+				U_.topRows(nnodes) = psi_.transpose()*A_.asDiagonal()*P->asDiagonal()*W;
+    	}
+
 
 		MatrixXr D = V_*matrixNoCovdec_.solve(U_);
 

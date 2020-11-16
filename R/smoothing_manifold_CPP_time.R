@@ -67,12 +67,25 @@ CPP_smooth.manifold.FEM.time<-function(locations, time_locations, observations, 
     lambdaT<-as.vector(lambdaT)
   }
 
+  if(is.null(time_locations)){
+    time_locations<-matrix(ncol=0, nrow=0)
+  }else
+  {
+    time_locations <- as.matrix(time_locations)
+  }
+
+  if(is.null(time_mesh)){
+    time_mesh<-matrix(ncol=0, nrow=0)
+  }else
+  {
+    time_mesh <- as.matrix(time_mesh)
+  }
+
+
   ## Set propr type for correct C++ reading
   locations <- as.matrix(locations)
   storage.mode(locations) <- "double"
-  time_locations <- as.matrix(time_locations)
   storage.mode(time_locations) <- "double"
-  time_mesh <- as.matrix(time_mesh)
   storage.mode(time_mesh) <- "double"
   observations <- as.vector(observations)
   storage.mode(observations) <- "double"
@@ -164,17 +177,17 @@ CPP_smooth.manifold.FEM.time<-function(locations, time_locations, observations, 
     if(nrow(covariates)!=0)
     {
       betaIC = ICsol[[15]]
-      IC = ICsol[[1]][1:FEMbasis$mesh$nnodes,] ## best IC estimation
+      IC = ICsol[[1]][1:nrow(FEMbasis$mesh$nodes),] ## best IC estimation
       covariates=covariates[(NobsIC+1):nrow(covariates),]
       covariates <- as.matrix(covariates)
     }
     else
     {
-      IC = ICsol[[1]][1:FEMbasis$mesh$nnodes,] ## best IC estimation
+      IC = ICsol[[1]][1:nrow(FEMbasis$mesh$nodes),] ## best IC estimation
       betaIC = NULL
     }
     ## return a FEM object containing IC estimates with best lambda and best lambda index
-    ICsol = list(IC.FEM=FEM(ICsol[[1]][1:FEMbasis$mesh$nnodes,],FEMbasis),bestlambdaindex=ICsol[[6]],bestlambda=ICsol[[5]],beta=betaIC)
+    ICsol = list(IC.FEM=FEM(ICsol[[1]][1:nrow(FEMbasis$mesh$nodes),],FEMbasis),bestlambdaindex=ICsol[[6]],bestlambda=ICsol[[5]],beta=betaIC)
     time_locations=time_locations[2:nrow(time_locations)]
     observations = observations[(NobsIC+1):length(observations)]
   }
@@ -182,7 +195,7 @@ CPP_smooth.manifold.FEM.time<-function(locations, time_locations, observations, 
   storage.mode(IC) <- "double"
 
   M = ifelse(FLAG_PARABOLIC,length(time_mesh)-1,length(time_mesh) + 2);
-  BC$BC_indices = rep((0:(M-1))*FEMbasis$mesh$nnodes,each=length(BC$BC_indices)) + rep(BC$BC_indices,M)
+  BC$BC_indices = rep((0:(M-1))*nrow(FEMbasis$mesh$nodes),each=length(BC$BC_indices)) + rep(BC$BC_indices,M)
   BC$BC_values = rep(BC$BC_values,M)
   storage.mode(BC$BC_indices) <- "integer"
   storage.mode(BC$BC_values) <-"double"
@@ -203,11 +216,18 @@ CPP_eval.manifold.FEM.time = function(FEM.time, locations, time_locations, incid
   FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
   FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
 
+
+  if(is.null(time_locations)){
+    time_locations<-matrix(ncol=0, nrow=0)
+  }else
+  {
+    time_locations <- as.matrix(time_locations)
+  }
+
   # Imposing types, this is necessary for correct reading from C++
   ## Set proper type for correct C++ reading
   locations <- as.matrix(locations)
   storage.mode(locations) <- "double"
-  time_locations <- as.matrix(time_locations)
   storage.mode(time_locations) <- "double"
   incidence_matrix <- as.matrix(incidence_matrix)
   storage.mode(incidence_matrix) <- "integer"

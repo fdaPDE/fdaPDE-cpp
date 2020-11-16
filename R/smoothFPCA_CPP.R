@@ -91,7 +91,7 @@ CPP_smooth.manifold.FEM.FPCA<-function(locations, bary.locations, datamatrix, FE
   storage.mode(FEMbasis$mesh$triangles) <- "integer"
   storage.mode(FEMbasis$mesh$edges) <- "integer"
   storage.mode(FEMbasis$mesh$neighbors) <- "integer"
-  storage.mode(FEMbasis$order) <- "integer"
+  storage.mode(FEMbasis$mesh$order) <- "integer"
   incidence_matrix <- as.matrix(incidence_matrix)
   storage.mode(incidence_matrix) <- "integer"
   storage.mode(lambda) <- "double"

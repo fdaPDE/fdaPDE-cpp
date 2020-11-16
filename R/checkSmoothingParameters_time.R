@@ -127,8 +127,6 @@ checkSmoothingParameters_time<-function(locations = NULL, time_locations=NULL, o
     stop("Both not NULL 'lambdaS'  and 'lambdaT' required for 'lambda.selection.criterion' = 'grid' in separable context.")
   if(optim[1]==0 & FLAG_PARABOLIC == TRUE & is.null(lambdaS))
     stop("Not NULL 'lambdaS' required for 'lambda.selection.criterion' = 'grid' in parabolic context.")
-  if(FLAG_PARABOLIC == 'TRUE' & !is.null(lambdaT))
-    warning("'lambdaT' discarded in parabolic context")
   if(optim[1]!=0 & !is.null(lambdaS))
   {
     if(length(lambdaS)>1) 

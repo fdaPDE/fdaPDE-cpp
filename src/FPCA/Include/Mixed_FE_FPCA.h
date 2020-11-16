@@ -161,8 +161,7 @@ protected:
 	void computeIterationsGCV(MatrixXr &datamatrixResiduals_, UInt nnodes, UInt np);
 	//! A method for the computation of the GCV
 	void computeGCV(FPCAObject& FPCAinput,UInt output_index);
-	//! A method for the computation of the degres of freedom
-	void computeDegreesOfFreedom(UInt output_index);
+
 public:
 	//!A Constructor.
 	MixedFEFPCAGCV(const FPCAData& fpcaData):MixedFEFPCABase(fpcaData){};

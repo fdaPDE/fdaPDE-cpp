@@ -371,7 +371,7 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
   {
     bigsol = NULL
     print('C++ Code Execution')
-    bigsol = CPP_smooth.manifold.FEM.time(locations = locations, observations = observations, FEMbasis = FEMbasis, 
+    bigsol = CPP_smooth.manifold.FEM.time(locations = locations, time_locations = time_locations, observations = observations, FEMbasis = FEMbasis, time_mesh=time_mesh,
       covariates = covariates, ndim = ndim, mydim = mydim, BC = BC,
       incidence_matrix = incidence_matrix, areal.data.avg = areal.data.avg,
       FLAG_MASS = FLAG_MASS, FLAG_PARABOLIC = FLAG_PARABOLIC, IC = IC,
@@ -381,7 +381,7 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
   {
     bigsol = NULL
     print('C++ Code Execution')
-    bigsol = CPP_smooth.volume.FEM.time(locations = locations, observations = observations, FEMbasis = FEMbasis, 
+    bigsol = CPP_smooth.volume.FEM.time(locations = locations, time_locations = time_locations, observations = observations, FEMbasis = FEMbasis, time_mesh=time_mesh,
       covariates = covariates, ndim = ndim, mydim = mydim, BC = BC,
       incidence_matrix = incidence_matrix, areal.data.avg = areal.data.avg,
       FLAG_MASS = FLAG_MASS, FLAG_PARABOLIC = FLAG_PARABOLIC, IC = IC,

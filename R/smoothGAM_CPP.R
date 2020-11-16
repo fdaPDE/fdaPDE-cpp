@@ -387,10 +387,11 @@ CPP_smooth.manifold.GAM.FEM.basis<-function(locations, observations, FEMbasis, c
   locations <- as.matrix(locations)
   storage.mode(locations) <- "double"
   storage.mode(FEMbasis$mesh$order) <- "integer"
-  storage.mode(FEMbasis$mesh$nnodes) <- "integer"
-  storage.mode(FEMbasis$mesh$ntriangles) <- "integer"
   storage.mode(FEMbasis$mesh$nodes) <- "double"
   storage.mode(FEMbasis$mesh$triangles) <- "integer"
+  storage.mode(FEMbasis$mesh$neighbors) <- "integer"
+  storage.mode(FEMbasis$mesh$edges) <- "integer"
+
   covariates <- as.matrix(covariates)
   storage.mode(covariates) <- "double"
   storage.mode(ndim) <- "integer"
@@ -494,8 +495,8 @@ CPP_smooth.volume.GAM.FEM.basis<-function(locations, observations, FEMbasis, cov
   locations <- as.matrix(locations)
   storage.mode(locations) <- "double"
   storage.mode(FEMbasis$mesh$order) <- "integer"
-  storage.mode(FEMbasis$mesh$nnodes) <- "integer"
-  storage.mode(FEMbasis$mesh$ntetrahedrons) <- "integer"
+  storage.mode(FEMbasis$mesh$neighbors) <- "integer"
+  storage.mode(FEMbasis$mesh$faces) <- "integer"
   storage.mode(FEMbasis$mesh$nodes) <- "double"
   storage.mode(FEMbasis$mesh$tetrahedrons) <- "integer"
   covariates <- as.matrix(covariates)

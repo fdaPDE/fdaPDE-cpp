@@ -26,8 +26,6 @@ FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>::computeIntegrals(const
 		VectorXr expg = (dataProblem_.getPsiQuad()*sub_g).array().exp();
 
     VectorXr sub_int2;
-    // mind we are using quadrature rules whom weights sum to the reference element measure (=1/(ndim!))
-		// hence we need to multiply by factorial(ndim)
 
     int1+=expg.dot(EigenMap2WEIGHTS(&Integrator_noPoly::WEIGHTS[0]))*tri_activated.getMeasure();
   	sub_int2 =((expg.cwiseProduct(EigenMap2WEIGHTS(&Integrator_noPoly::WEIGHTS[0]))).transpose()*dataProblem_.getPsiQuad())*tri_activated.getMeasure();
