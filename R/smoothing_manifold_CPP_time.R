@@ -67,25 +67,13 @@ CPP_smooth.manifold.FEM.time<-function(locations, time_locations, observations, 
     lambdaT<-as.vector(lambdaT)
   }
 
-  if(is.null(time_locations)){
-    time_locations<-matrix(ncol=0, nrow=0)
-  }else
-  {
-    time_locations <- as.matrix(time_locations)
-  }
-
-  if(is.null(time_mesh)){
-    time_mesh<-matrix(ncol=0, nrow=0)
-  }else
-  {
-    time_mesh <- as.matrix(time_mesh)
-  }
-
 
   ## Set propr type for correct C++ reading
   locations <- as.matrix(locations)
   storage.mode(locations) <- "double"
+  time_locations <- as.matrix(time_locations)
   storage.mode(time_locations) <- "double"
+  time_mesh <- as.matrix(time_mesh)
   storage.mode(time_mesh) <- "double"
   observations <- as.vector(observations)
   storage.mode(observations) <- "double"

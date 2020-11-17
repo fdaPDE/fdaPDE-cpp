@@ -39,23 +39,15 @@ class Spline
                 knots_.push_back(t_instants[n_time_instants-1]);
         }
 
-        //! Method that prints the knots of the spline
-        void printKnots()
-        {
-            std::cout << "Knots of the spline: ";
-            for (UInt i = 0; i < knots_.size(); ++i)
-                std::cout << knots_[i] << " ";
-            std::cout << std::endl;
-        }
 
         //! Method that return the number of knots of the spline
-        UInt num_knots()
+        UInt num_knots() const
         {
             return knots_.size();
         }
 
         //! Method that returns the i-th node of the spline
-        Real getKnot(UInt i)
+        const Real& getKnot(UInt i) const
         {
             return knots_[i];
         }
@@ -74,7 +66,7 @@ class Spline
 
 
         //! Method that computes the value of the i-th basis function in point u
-        Real BasisFunction(UInt degree, UInt i, Real u)
+        Real BasisFunction(UInt degree, UInt i, Real u) const 
         {
             if(degree == 0)
             {
@@ -96,7 +88,7 @@ class Spline
         }
 
         //! Method that computes the value of the orderDerivative-th derivative of the i-th basis function in point u
-        Real BasisFunctionDerivative(UInt degree, UInt orderDerivative, UInt i, Real u)
+        Real BasisFunctionDerivative(UInt degree, UInt orderDerivative, UInt i, Real u) const
         {
             if(degree == 0)
 	            return 0;
@@ -117,7 +109,7 @@ class Spline
                             degree/(knots_[i+degree+1]-knots_[i+1])*BasisFunctionDerivative(degree-1, orderDerivative-1, i+1, u);
          }
 
-         Real time_mass_impl(UInt i, UInt j, Real u){
+         Real time_mass_impl(UInt i, UInt j, Real u) const {
            return BasisFunctionDerivative(DEGREE, ORDER_DERIVATIVE, i, u) * BasisFunctionDerivative(DEGREE, ORDER_DERIVATIVE, j, u);
          }
 

@@ -47,7 +47,7 @@ void Assembler::operKernel(EOExpr<A> oper, const MeshHandler<ORDER,mydim,ndim>& 
 
 
 template<UInt DEGREE, UInt ORDER_DERIVATIVE, typename Integrator, typename A>
-void Assembler::operKernel(EOExpr<A> oper, Spline<Integrator, DEGREE, ORDER_DERIVATIVE>& spline, SpMat& OpMat)
+void Assembler::operKernel(EOExpr<A> oper, const Spline<Integrator, DEGREE, ORDER_DERIVATIVE>& spline, SpMat& OpMat)
 {
     const UInt M = spline.num_knots()-DEGREE-1;
   	OpMat.resize(M, M);

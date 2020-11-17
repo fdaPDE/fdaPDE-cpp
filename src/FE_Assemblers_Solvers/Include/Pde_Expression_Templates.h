@@ -37,7 +37,7 @@ struct Mass {
 
 struct TimeMass{
     template <typename Integrator, UInt DEGREE, UInt ORDER_DERIVATIVE>
-    Real operator() (Spline<Integrator, DEGREE, ORDER_DERIVATIVE>& spline_, UInt i, UInt j, Real u) const {
+    Real operator() (const Spline<Integrator, DEGREE, ORDER_DERIVATIVE>& spline_, UInt i, UInt j, Real u) const {
         return spline_.time_mass_impl(i,j,u);
     }
 };
@@ -95,7 +95,7 @@ public:
 	 EOExpr(const TimeMass& a) : a_(a) {}
 
    template<typename Integrator, UInt DEGREE, UInt ORDER_DERIVATIVE>
-   Real operator() (Spline<Integrator, DEGREE, ORDER_DERIVATIVE>& spline_, UInt i, UInt j, Real u) const {
+   Real operator() (const Spline<Integrator, DEGREE, ORDER_DERIVATIVE>& spline_, UInt i, UInt j, Real u) const {
          return a_(spline_, i, j, u);
    }
 };

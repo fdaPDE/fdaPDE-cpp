@@ -166,9 +166,9 @@ struct IntegratorGaussP5{
 	//Number of nodes
 	static constexpr UInt NNODES = 3;
 	//Point locations
-	static constexpr std::array<Real, NNODES> NODES{{5./9, 8./9, 5./9}};
+	static constexpr std::array<Real, NNODES> WEIGHTS{{5./9, 8./9, 5./9}};
 	
-	static constexpr std::array<Real, NNODES> WEIGHTS{{-0.774596669241483, 0, 0.774596669241483}};
+	static constexpr std::array<Real, NNODES> NODES{{-0.774596669241483, 0, 0.774596669241483}};
 	};
 
 // Gauss Legendre quadrature rules for triangles (n=3)
