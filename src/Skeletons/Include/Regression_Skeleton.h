@@ -23,9 +23,9 @@ SEXP regression_skeleton(InputHandler & regressionData, OptimizationData & optim
 	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh, regressionData.getSearch());	// Create the mesh
 	MixedFERegression<InputHandler> regression(regressionData, optimizationData, mesh.num_nodes()); // Define the mixed object
 
-	regression.template preapply<ORDER,mydim,ndim, IntegratorGaussP3, 0, 0>(mesh); // preliminary apply (preapply) to store all problem matrices
+	regression.preapply(mesh); // preliminary apply (preapply) to store all problem matrices
 
-        std::pair<MatrixXr, output_Data> solution_bricks;	// Prepare solution to be filled
+    std::pair<MatrixXr, output_Data> solution_bricks;	// Prepare solution to be filled
 
 	// Build the Carrier according to problem type
 	if(regression.isSV())

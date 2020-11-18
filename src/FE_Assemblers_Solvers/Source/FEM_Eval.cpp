@@ -505,13 +505,13 @@ SEXP eval_FEM_time(SEXP Rmesh, SEXP Rmesh_time, SEXP Rlocations, SEXP Rtime_loca
   UInt N = nRegions==0 ? n : nRegions;
 	if(flag_par)
 	{
-		Spline<IntegratorGaussP5,1,0>spline(mesh_time,nt);
+		Spline<1,0>spline(mesh_time,nt);
 		Real value;
 		for (UInt i = 0; i < N; ++i)
 		{
 			for (UInt j = 0; j < M; ++j)
 			{
-				value = spline.BasisFunction(DEGREE, j, t[i]);
+				value = spline.BasisFunction(j, t[i]);
 				if (value!=0)
 				{
 					phi.coeffRef(i,j) = value;
@@ -521,13 +521,13 @@ SEXP eval_FEM_time(SEXP Rmesh, SEXP Rmesh_time, SEXP Rlocations, SEXP Rtime_loca
 	}
 	else
 	{
-		Spline<IntegratorGaussP5,3,2>spline(mesh_time,nt);
+		Spline<3,2>spline(mesh_time,nt);
 		Real value;
 		for (UInt i = 0; i < N; ++i)
 		{
 			for (UInt j = 0; j < M; ++j)
 			{
-				value = spline.BasisFunction(DEGREE, j, t[i]);
+				value = spline.BasisFunction(j, t[i]);
 				if (value!=0)
 				{
 					phi.coeffRef(i,j) = value;
@@ -666,23 +666,23 @@ SEXP eval_FEM_time(SEXP Rmesh, SEXP Rmesh_time, SEXP Rlocations, SEXP Rtime_loca
 
   	if(flag_par)
   	{
-  		Spline<IntegratorGaussP5,1,0>spline(mesh_time,nt);
+  		Spline<1,0>spline(mesh_time,nt);
   		for (UInt i=0; i < n; ++i)
   		{
   			for (UInt j = 0; j < M; ++j)
   			{
-  				phi(j,i) = spline.BasisFunction(DEGREE, j, t[i]);
+  				phi(j,i) = spline.BasisFunction(j, t[i]);
   			}
   		}
   	}
   	else
   	{
-  		Spline<IntegratorGaussP5,3,2>spline(mesh_time,nt);
+  		Spline<3,2>spline(mesh_time,nt);
   		for (UInt i=0; i < n; ++i)
   		{
   			for (UInt j = 0; j < M; ++j)
   			{
-  				phi(j,i) = spline.BasisFunction(DEGREE, j, t[i]);
+  				phi(j,i) = spline.BasisFunction(j, t[i]);
   			}
   		}
   	}

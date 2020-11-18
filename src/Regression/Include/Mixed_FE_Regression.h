@@ -87,7 +87,7 @@ class MixedFERegressionBase
 
 	        // -- SETTERS --
 		template<UInt ORDER, UInt mydim, UInt ndim>
-	        void setPsi(const MeshHandler<ORDER, mydim, ndim> & mesh_);
+	    void setPsi(const MeshHandler<ORDER, mydim, ndim> & mesh_);
 		//! A method computing the no-covariates version of the system matrix
 		void buildMatrixNoCov(const SpMat & NWblock, const SpMat & SWblock,  const SpMat & SEblock);
 
@@ -98,7 +98,7 @@ class MixedFERegressionBase
 		//! A method which takes care of missing values setting to 0 the corresponding rows of B_
 		void addNA();
 	 	//! A member function which builds the A vector containing the areas of the regions in case of areal data
-	        template<UInt ORDER, UInt mydim, UInt ndim>
+	    template<UInt ORDER, UInt mydim, UInt ndim>
 		void setA(const MeshHandler<ORDER, mydim, ndim> & mesh_);
 		//! A member function which sets psi_t_
 		void setpsi_t_(void);
@@ -111,7 +111,6 @@ class MixedFERegressionBase
 		//! A member function returning the system right hand data
 		void getRightHandData(VectorXr& rightHandData);
 		//! A method which builds all the matrices needed for assembling matrixNoCov_
-	        template<typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE>
 		void buildSpaceTimeMatrices();
 		//! A method computing dofs in case of exact GCV, it is called by computeDegreesOfFreedom
 		void computeDegreesOfFreedomExact(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT);
@@ -137,10 +136,10 @@ class MixedFERegressionBase
 
 	public:
 		//!A Constructor.
-		MixedFERegressionBase( const InputHandler & regressionData, OptimizationData & optimizationData,  UInt nnodes_):
+		MixedFERegressionBase( const InputHandler & regressionData, OptimizationData & optimizationData,  UInt nnodes_) :
 			N_(nnodes_), M_(1), regressionData_(regressionData), optimizationData_(optimizationData), _dof(optimizationData.get_DOF_matrix()){isGAMData = regressionData.getisGAM();};
 
-		MixedFERegressionBase(const std::vector<Real> & mesh_time, const InputHandler & regressionData, OptimizationData & optimizationData, UInt nnodes_, UInt spline_degree):
+		MixedFERegressionBase(const std::vector<Real> & mesh_time, const InputHandler & regressionData, OptimizationData & optimizationData, UInt nnodes_, UInt spline_degree) :
 			mesh_time_(mesh_time), N_(nnodes_), M_(regressionData.getFlagParabolic() ? mesh_time.size()-1 : mesh_time.size()+spline_degree-1),
 			regressionData_(regressionData), optimizationData_(optimizationData), _dof(optimizationData.get_DOF_matrix()){isGAMData = regressionData.getisGAM();};
 
@@ -203,8 +202,8 @@ class MixedFERegressionBase
 		    \param u the forcing term, will be used only in case of anysotropic nonstationary regression
 		*/
 		//! A method which builds all the space matrices
-		template<UInt ORDER, UInt mydim, UInt ndim, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, typename A>
-		void preapply(EOExpr<A> oper,const ForcingTerm & u, const MeshHandler<ORDER, mydim, ndim> & mesh_ );
+		template<UInt ORDER, UInt mydim, UInt ndim, typename A>
+		void preapply(EOExpr<A> oper, const ForcingTerm & u, const MeshHandler<ORDER, mydim, ndim> & mesh_ );
 
 		MatrixXv apply(void);
 		MatrixXr apply_to_b(const MatrixXr & b);
@@ -228,7 +227,7 @@ class MixedFERegression : public MixedFERegressionBase<InputHandler>
 };
 
 //! A class for the construction of the temporal matrices needed for the parabolic case
-template<typename InputHandler, typename Integrator, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE>
+template<typename InputHandler>
 class MixedSplineRegression
 {
 	private:
@@ -240,6 +239,9 @@ class MixedSplineRegression
 		SpMat timeMass_; //!< Mass matrix in time
 
 	public:
+		static constexpr UInt SPLINE_DEGREE=3;
+		static constexpr UInt ORDER_DERIVATIVE=2;
+
 		MixedSplineRegression(const std::vector<Real> & mesh_time, const InputHandler & regressionData):
 			mesh_time_(mesh_time), regressionData_(regressionData) {};
 
@@ -267,7 +269,7 @@ class MixedFDRegression
 		MixedFDRegression(const std::vector<Real> & mesh_time, const InputHandler & regressionData):
 			mesh_time_(mesh_time), regressionData_(regressionData) {};
 
-    		void setDerOperator(void); //!< sets derOpL_
+    	void setDerOperator(void); //!< sets derOpL_
 		inline const SpMat & getDerOpL(void) const {return derOpL_;}
 
 };

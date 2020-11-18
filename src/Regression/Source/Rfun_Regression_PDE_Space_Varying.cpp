@@ -121,17 +121,17 @@ extern "C"
                 UInt ndim = INTEGER(Rndim)[0];
 
                 if(regressionData.getOrder() == 1 && ndim==2)
-                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 1, IntegratorGaussP5, 3, 2, 2, 2>(regressionData, optimizationData, Rmesh, Rmesh_time));
+                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 1, 2, 2>(regressionData, optimizationData, Rmesh, Rmesh_time));
                 else if(regressionData.getOrder() == 2 && ndim==2)
-                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 2, IntegratorGaussP5, 3, 2, 2, 2>(regressionData, optimizationData, Rmesh, Rmesh_time));
+                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 2, 2, 2>(regressionData, optimizationData, Rmesh, Rmesh_time));
                 else if(regressionData.getOrder() == 1 && mydim==2 && ndim==3)
-                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 1, IntegratorGaussP5, 3, 2, 2, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
+                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 1, 2, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
                 else if(regressionData.getOrder() == 2 && mydim==2 && ndim==3)
-                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 2, IntegratorGaussP5, 3, 2, 2, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
+                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 2, 2, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
                 else if(regressionData.getOrder() == 1 && mydim==3 && ndim==3)
-                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 1, IntegratorGaussP5, 3, 2, 3, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
+                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 1, 3, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
                 else if(regressionData.getOrder() == 2 && mydim==3 && ndim==3)
-                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 2, IntegratorGaussP5, 3, 2, 3, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
+                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 2, 3, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
 
                 return(NILSXP);
         }

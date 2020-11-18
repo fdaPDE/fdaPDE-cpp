@@ -5,9 +5,6 @@
 template <UInt ORDER, UInt mydim, UInt ndim>
 class FiniteElement;
 
-template<typename Integrator, UInt DEGREE, UInt ORDER_DERIVATIVE>
-class Spline;
-
 enum class PDEParameterOptions;
 
 template<PDEParameterOptions OPTION>
@@ -33,13 +30,6 @@ struct Mass {
   Real operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
     return fe_.mass_impl(iq, i, j);
   }
-};
-
-struct TimeMass{
-    template <typename Integrator, UInt DEGREE, UInt ORDER_DERIVATIVE>
-    Real operator() (const Spline<Integrator, DEGREE, ORDER_DERIVATIVE>& spline_, UInt i, UInt j, Real u) const {
-        return spline_.time_mass_impl(i,j,u);
-    }
 };
 
 
@@ -83,22 +73,6 @@ public:
 	 }
 };
 
-template<>
-class EOExpr<TimeMass>{
-	  //! "A" is a generic type
-	  TimeMass a_;
-public:
-	//! A constructor.
-	/*!
-	 * \param object is a constant reference to a generic operator.
-	 */
-	 EOExpr(const TimeMass& a) : a_(a) {}
-
-   template<typename Integrator, UInt DEGREE, UInt ORDER_DERIVATIVE>
-   Real operator() (const Spline<Integrator, DEGREE, ORDER_DERIVATIVE>& spline_, UInt i, UInt j, Real u) const {
-         return a_(spline_, i, j, u);
-   }
-};
 
 //composition of two wrappers (operator)
 //composition of two wrappers (operator)

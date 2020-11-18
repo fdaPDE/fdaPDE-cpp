@@ -5,6 +5,7 @@
 #include "../../FdaPDE.h"
 #include "../../Mesh/Include/Mesh_Objects.h"
 #include "Param_Functors.h"
+#include "Spline.h"
 
 //Forward declarations to avoid unnecessary includes
 template <UInt ORDER, UInt mydim, UInt ndim>
@@ -36,8 +37,8 @@ struct Assembler{
   template<UInt ORDER, UInt mydim, UInt ndim>
   static void forcingTerm(const MeshHandler<ORDER,mydim,ndim>& mesh, FiniteElement<ORDER,mydim,ndim>& fe, const ForcingTerm& u, VectorXr& forcingTerm);
 
-  template<UInt DEGREE, UInt ORDER_DERIVATIVE, typename Integrator, typename A>
-  static void operKernel(EOExpr<A> oper, const Spline<Integrator, DEGREE, ORDER_DERIVATIVE>& spline, SpMat& OpMat);
+  template<UInt DEGREE, UInt ORDER_DERIVATIVE>
+  static void operKernel(const Spline<DEGREE, ORDER_DERIVATIVE>& spline, SpMat& OpMat);
 
 };
 

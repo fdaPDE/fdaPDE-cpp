@@ -6,9 +6,11 @@
 #include "../../Regression/Include/Mixed_FE_Regression.h"
 #include "../../Lambda_Optimization/Include/Optimization_Data.h"
 
-template<typename InputHandler, UInt ORDER, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, UInt mydim, UInt ndim>
+template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
 SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & optimizationData, SEXP Rmesh, SEXP Rmesh_time)
 {
+	constexpr UInt SPLINE_DEGREE=MixedSplineRegression<InputHandler>::SPLINE_DEGREE;
+
 	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh, regressionData.getSearch());//! load the mesh
 	UInt n_time = Rf_length(Rmesh_time);
 	std::vector<Real> mesh_time(n_time);
@@ -18,8 +20,8 @@ SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & 
 	}
 	MixedFERegression<InputHandler> regression(mesh_time, regressionData, optimizationData, mesh.num_nodes(), SPLINE_DEGREE);//! load data in a C++ object
 
-	regression.template preapply<ORDER,mydim,ndim, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE>(mesh); //! solve the problem (compute the _solution, _dof, _GCV, _beta)
-        regression.apply();
+	regression.preapply(mesh); //! solve the problem (compute the _solution, _dof, _GCV, _beta)
+    regression.apply();
 
 	//! copy result in R memory
 	MatrixXv const & solution = regression.getSolution();
