@@ -1053,9 +1053,9 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply(void)
 			}
 
 			// Applying boundary conditions if necessary
-			if(regressionData_.getDirichletIndices()->size() != 0)  // if areal data NO BOUNDARY CONDITIONS
+			if(regressionData_.getDirichletIndices()->size() != 0)  // if areal data NO BOUNDARY CONDITIONS				
 				addDirichletBC();
-
+			
 
 			//f Factorization of the system for woodbury decomposition
 			if(isGAMData || regressionData_.isSpaceTime() || optimizationData_.get_current_lambdaS()!=optimizationData_.get_last_lS_used())

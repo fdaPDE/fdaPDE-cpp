@@ -24,6 +24,7 @@ Authors@R: c(person("Eleonora", "Arnone", role = c("aut", "cre"),
 		    person("Giulio", "Perin", role = "ctb"),
 		    person("Clara", "Pigolotti", role = "ctb"),
 		    person("Andrea", "Poiatti", role = "ctb"),
+		    person("Gian Matteo", "Rinaldi", role = "ctb"),
 		    person("Andrea", "Vicini", role = "ctb")
 		    )
 Maintainer: Eleonora Arnone <eleonora.arnone@polimi.it>

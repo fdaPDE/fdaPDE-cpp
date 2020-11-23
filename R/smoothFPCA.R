@@ -163,17 +163,17 @@ FPCA.FEM<-function(locations = NULL, datamatrix, FEMbasis, lambda, nPC = 1, vali
 
   bigsol = NULL
   if(class(FEMbasis$mesh) == 'mesh.2D'){
-	  print('C++ Code Execution')
+	  
 	  bigsol = CPP_smooth.FEM.FPCA(locations=locations, bary.locations=bary.locations, datamatrix=datamatrix, FEMbasis=FEMbasis, incidence_matrix=incidence_matrix,
                                  lambda=lambda, ndim=ndim, mydim=mydim, nPC=nPC, validation=validation, NFolds=NFolds, GCVmethod=GCVmethod, nrealizations=nrealizations, search=search)
 	  numnodes = nrow(FEMbasis$mesh$nodes)
   } else if(class(FEMbasis$mesh) == 'mesh.2.5D'){
-	  print('C++ Code Execution')
+	  
 	  bigsol = CPP_smooth.manifold.FEM.FPCA(locations=locations, bary.locations=bary.locations, datamatrix=datamatrix, FEMbasis=FEMbasis, incidence_matrix=incidence_matrix,
                                           lambda=lambda, ndim=ndim, mydim=mydim, nPC=nPC, validation=validation, NFolds=NFolds, GCVmethod=GCVmethod, nrealizations=nrealizations, search=search)
 	  numnodes = nrow(FEMbasis$mesh$nodes)
   } else if(class(FEMbasis$mesh) == 'mesh.3D'){
-	  print('C++ Code Execution')
+	  
 	  bigsol = CPP_smooth.volume.FEM.FPCA(locations=locations, bary.locations=bary.locations, datamatrix=datamatrix, FEMbasis=FEMbasis, incidence_matrix=incidence_matrix,
                                       lambda=lambda, ndim=ndim, mydim=mydim, nPC=nPC, validation=validation, NFolds=NFolds, GCVmethod=GCVmethod, nrealizations=nrealizations, search=search)
 	  numnodes = nrow(FEMbasis$mesh$nodes)

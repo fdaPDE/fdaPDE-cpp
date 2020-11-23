@@ -156,7 +156,7 @@ plot.FEM.time = function(x, time_locations = NULL, locations = NULL,
       t = seq(min(x$mesh_time),max(x$mesh_time),length.out=Nt)
       eval_points = cbind(t, t(kronecker(matrix(1,ncol=Nt), locations)))
       # evaluate the function
-      eval_sol = eval.FEM.time(FEM.time = x, space.time.locations = eval_points)
+      eval_sol = eval.FEM.time(FEM.time = x, space.time.locations = eval_points, lambdaT=lambdaT, lambdaS=lambdaS)
 
       # define variables for the plot
       type = "l"
@@ -251,7 +251,7 @@ plot.FEM.time = function(x, time_locations = NULL, locations = NULL,
       }
 
       # evaluate the function
-      eval_sol = eval.FEM.time(FEM.time = x, space.time.locations = eval_points)
+      eval_sol = eval.FEM.time(FEM.time = x, space.time.locations = eval_points, lambdaT=lambdaT, lambdaS=lambdaS)
 
       # define variables for the plot
       if (length(col) < nrow(locations)){

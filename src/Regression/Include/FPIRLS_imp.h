@@ -56,7 +56,7 @@ void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::apply( const ForcingTerm& u){
 
     this->optimizationData_.setCurrentLambda(i); // set right lambda for the current iteration.
 
-    Rprintf("Start FPIRLS for the lambda number %d \n", i+1);
+    //Rprintf("Start FPIRLS for the lambda number %d \n", i+1);
 
 
     // start the iterative method for the lambda index i
@@ -84,7 +84,7 @@ void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::apply( const ForcingTerm& u){
 
     } //end while
 
-    Rprintf("\t n. iterations: %d\n \n", n_iterations[i]);
+    //Rprintf("\t n. iterations: %d\n \n", n_iterations[i]);
 
     _J_minima.push_back(current_J_values[i][0]+current_J_values[i][1]); // compute the minimum value of the J fuctional
 
@@ -236,7 +236,7 @@ std::array<Real,2> FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_J(UInt&
   }
 
   non_parametric_value = Lf.transpose() * (*(regression_.getR0_())) * Lf;
-  non_parametric_value = (optimizationData_.get_lambda_S())[lambda_index]*non_parametric_value;
+  non_parametric_value = (*optimizationData_.get_LambdaS_vector())[lambda_index]*non_parametric_value;
 
   std::array<Real,2> returnObject{parametric_value, non_parametric_value};
 
