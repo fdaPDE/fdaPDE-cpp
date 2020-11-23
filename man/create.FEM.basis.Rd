@@ -33,7 +33,8 @@ library(fdaPDE)
 data(quasicircle2D)
 
 ## Create the 2D mesh
-mesh = create.mesh.2D(nodes = rbind(quasicircle2D$boundary_nodes, quasicircle2D$locations), segments = quasicircle2D$boundary_segments)
+mesh = create.mesh.2D(nodes = rbind(quasicircle2D$boundary_nodes, 
+quasicircle2D$locations), segments = quasicircle2D$boundary_segments)
 ## Plot it
 plot(mesh)
 ## Create the basis

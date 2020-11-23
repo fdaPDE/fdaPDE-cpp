@@ -284,11 +284,11 @@ int ADTree<Shape>::handledomerr(Id shapeid, std::vector<Real> const & coords) {
   }
   catch(TreeDomainError<Shape> de) {
     // Handle a TreeDomainError exception.
-    std::cout << "error!  " << de.getnelep1() << "-th object which is to be inserted into the tree is out of domain"
-        << std::endl;
-    std::cout << "Coordinates" << std::endl;
-    std::cout << "-----------" << std::endl;
-    std::cout << de;
+    // std::cout << "error!  " << de.getnelep1() << "-th object which is to be inserted into the tree is out of domain"
+    //     << std::endl;
+    // std::cout << "Coordinates" << std::endl;
+    // std::cout << "-----------" << std::endl;
+    // std::cout << de;
     std::exit(EXIT_FAILURE);
   }
 }
@@ -301,14 +301,14 @@ int ADTree<Shape>::handletreealloc(Id shapeid, std::vector<Real> const & coords)
   }
   catch(TreeAlloc<Shape>) {
     // Handle a TreeAlloc exception.
-    std::cout << "warning! not enough space" << std::endl;
-    std::cout << "increasing tree memory locations up to 1.5 * number of current locations..." << std::endl;
+    // std::cout << "warning! not enough space" << std::endl;
+    // std::cout << "increasing tree memory locations up to 1.5 * number of current locations..." << std::endl;
     int locv = header_.gettreeloc();
     int delta = int(locv/2);
     header_.settreeloc(locv+delta);
     if(locv == header_.gettreeloc()) {
-      std::cout << "error! no more space to add a new node" << std::endl;
-      std::exit(EXIT_FAILURE);
+      //std::cout << "error! no more space to add a new node" << std::endl;
+      //std::exit(EXIT_FAILURE);
     }
     data_.resize(header_.gettreeloc()+1);
     int iloc = handledomerr(shapeid, coords);
@@ -324,9 +324,9 @@ int ADTree<Shape>::handleleverr(Id shapeid, std::vector<Real> const & coords) {
   }
   catch(LevRuntimeError<Shape>) {
     // Handle a LevRuntimeError exception.
-    std::cout << "warning! maximum number of tree levels exceeded" << std::endl;
-    std::cout << "the limit is " << LevRuntimeError<Shape>::getmaxtreelev() << std::endl;
-    std::cout << "setting the new limit to" << int(LevRuntimeError<Shape>::getmaxtreelev() * 1.1) << std::endl;
+    // std::cout << "warning! maximum number of tree levels exceeded" << std::endl;
+    // std::cout << "the limit is " << LevRuntimeError<Shape>::getmaxtreelev() << std::endl;
+    // std::cout << "setting the new limit to" << int(LevRuntimeError<Shape>::getmaxtreelev() * 1.1) << std::endl;
     LevRuntimeError<Shape>::setmaxtreelev(int(LevRuntimeError<Shape>::getmaxtreelev() * 1.1));
 
     int iloc = handletreealloc(shapeid, coords);
@@ -414,7 +414,7 @@ bool ADTree<Shape>::search(std::vector<Real> const & region, std::set<int> & fou
       }
 
       if(dimp == dimt) {
-        std::cout << "when dimp == dimt but in our case, there shouldn't be this case" << std::endl;
+        //std::cout << "when dimp == dimt but in our case, there shouldn't be this case" << std::endl;
       /*
        * This function works when we have either points or boxes.
        * In the first case we have to repeat the object's coordinates.

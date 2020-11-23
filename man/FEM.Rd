@@ -25,7 +25,7 @@ library(fdaPDE)
 data(horseshoe2D)
 
 ## Create the 2D mesh
-mesh = create.mesh.2D(nodes = rbind(boundary_nodes, locations), segments = boundary_segments)
+mesh = create.mesh.2D(nodes = rbind(horseshoe2D$boundary_nodes, horseshoe2D$locations), segments = horseshoe2D$boundary_segments)
 ## Create the FEM basis
 FEMbasis = create.FEM.basis(mesh)
 ## Compute the coeff vector evaluating the desired function at the mesh nodes

@@ -277,9 +277,6 @@ eval.FEM.time <- function(FEM.time, locations = NULL, time.instants = NULL, spac
   if(class(FEM.time$FEMbasis$mesh)=='mesh.2.5D' & search ==3)
   	stop("2.5D search must be either tree or naive.")
 
-  if(class(FEM.time$FEMbasis$mesh)=='mesh.3D' & search ==3)
-  	stop("3D search must be either tree or naive.")
-
 
   if(dim(FEM.time$coeff)[2]>1||dim(FEM.time$coeff)[3]>1)
   {

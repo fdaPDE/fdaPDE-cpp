@@ -54,7 +54,7 @@ CPP_smooth.volume.FEM.basis<-function(locations, observations, FEMbasis, covaria
   locations <- as.matrix(locations)
   storage.mode(locations) <- "double"
   data <- as.vector(observations)
-  storage.mode(observations) <- "double"
+  storage.mode(data) <- "double"
   storage.mode(FEMbasis$mesh$order) <- "integer"
   storage.mode(FEMbasis$mesh$nodes) <- "double"
   storage.mode(FEMbasis$mesh$faces) <- "integer"
@@ -88,59 +88,7 @@ CPP_smooth.volume.FEM.basis<-function(locations, observations, FEMbasis, covaria
   return(bigsol)
 }
 
-CPP_eval.volume.FEM = function(FEM, locations, incidence_matrix, redundancy, ndim, mydim, search, bary.locations)
-{
-  FEMbasis = FEM$FEMbasis
-
-  FEMbasis$mesh$tetrahedrons = FEMbasis$mesh$tetrahedrons - 1
-  FEMbasis$mesh$faces = FEMbasis$mesh$faces - 1
-  FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
-
-  # Imposing types, this is necessary for correct reading from C++
-  ## Set proper type for correct C++ reading
-  locations <- as.matrix(locations)
-  storage.mode(locations) <- "double"
-  incidence_matrix <- as.matrix(incidence_matrix)
-  storage.mode(incidence_matrix) <- "integer"
-  storage.mode(FEMbasis$mesh$nodes) <- "double"
-  storage.mode(FEMbasis$mesh$triangles) <- "integer"
-  storage.mode(FEMbasis$mesh$edges) <- "integer"
-  storage.mode(FEMbasis$mesh$neighbors) <- "integer"
-  storage.mode(FEMbasis$order) <- "integer"
-  coeff <- as.matrix(FEM$coeff)
-  storage.mode(coeff) <- "double"
-  storage.mode(ndim) <- "integer"
-  storage.mode(mydim) <- "integer"
-  storage.mode(locations) <- "double"
-  storage.mode(redundancy) <- "integer"
-  storage.mode(search) <- "integer"
-
-  if(!is.null(bary.locations))
-  {
-    storage.mode(bary.locations$element_ids) <- "integer"
-    element_ids <- as.matrix(bary.locations$element_ids)
-    storage.mode(bary.locations$barycenters) <- "double"
-    barycenters <- as.matrix(bary.locations$barycenters)
-  }
-
-  # if (search == 1) { #use Naive search
-  #   print('This is Naive Search')
-  # } else if (search == 2)  { #use Tree search (default)
-  #   print('This is Tree Search')
-  # }
-
-  #Calling the C++ function "eval_FEM_fd" in RPDE_interface.cpp
-  evalmat = matrix(0,max(nrow(locations),nrow(incidence_matrix)),ncol(coeff))
-  for (i in 1:ncol(coeff)){
-    evalmat[,i] <- .Call("eval_FEM_fd", FEMbasis$mesh, locations, incidence_matrix, coeff[,i],
-                         FEMbasis$order, redundancy, mydim, ndim, search, bary.locations, PACKAGE = "fdaPDE")
-  }
-
-  #Returning the evaluation matrix
-  evalmat
-}
-
-CPP_smooth.volume.FEM.PDE.basis<-function(locations, bary.locations, observations, FEMbasis, lambda, PDE_parameters, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, GCV,GCVMETHOD = 2, nrealizations = 100, DOF=TRUE,DOF.matrix=NULL, search)
+CPP_smooth.volume.FEM.PDE.basis<-function(locations, observations, FEMbasis, covariates = NULL, PDE_parameters, ndim, mydim, BC = NULL, incidence_matrix = NULL, areal.data.avg = TRUE, search, bary.locations, optim, lambda = NULL, DOF.stochastic.realizations = 100, DOF.stochastic.seed = 0, DOF.matrix = NULL, GCV.inflation.factor = 1, lambda.optimization.tolerance = 0.05)
 {
 
   # Indexes in C++ starts from 0, in R from 1, opportune transformation
@@ -189,6 +137,8 @@ CPP_smooth.volume.FEM.PDE.basis<-function(locations, bary.locations, observation
 
   locations <- as.matrix(locations)
   storage.mode(locations) <- "double"
+  data <- as.vector(observations)
+  storage.mode(data) <- "double"
   storage.mode(FEMbasis$mesh$nodes) <- "double"
   storage.mode(FEMbasis$mesh$tetrahedrons) <- "integer"
   storage.mode(FEMbasis$mesh$faces) <- "integer"
@@ -205,26 +155,32 @@ CPP_smooth.volume.FEM.PDE.basis<-function(locations, bary.locations, observation
   storage.mode(lambda) <- "double"
   storage.mode(BC$BC_indices) <- "integer"
   storage.mode(BC$BC_values) <- "double"
-  storage.mode(GCV) <- "integer"
-  DOF <- as.integer(DOF)
-  storage.mode(DOF) <-"integer"
 
   storage.mode(PDE_parameters$K) <- "double"
   storage.mode(PDE_parameters$b) <- "double"
   storage.mode(PDE_parameters$c) <- "double"
 
-  storage.mode(nrealizations) <- "integer"
-  storage.mode(GCVMETHOD) <- "integer"
+  areal.data.avg <- as.integer(areal.data.avg)
+  storage.mode(areal.data.avg) <-"integer"
   storage.mode(search) <- "integer"
+  storage.mode(optim) <- "integer"  
+  storage.mode(lambda) <- "double"
+  DOF.matrix <- as.matrix(DOF.matrix)
+  storage.mode(DOF.matrix) <- "double"
+  storage.mode(DOF.stochastic.realizations) <- "integer"
+  storage.mode(DOF.stochastic.seed) <- "integer"
+  storage.mode(GCV.inflation.factor) <- "double"
+  storage.mode(lambda.optimization.tolerance) <- "double"
 
   ## Call C++ function
-  bigsol <- .Call("regression_PDE", locations, bary.locations, observations, FEMbasis$mesh, FEMbasis$order, mydim, ndim,
-                  lambda, PDE_parameters$K, PDE_parameters$b, PDE_parameters$c, covariates, incidence_matrix,
-                  BC$BC_indices, BC$BC_values, GCV,GCVMETHOD, nrealizations, DOF, DOF.matrix, search, PACKAGE = "fdaPDE")
+  bigsol <- .Call("regression_PDE", locations, bary.locations, data, FEMbasis$mesh, FEMbasis$order, mydim, ndim, PDE_parameters$K, PDE_parameters$b, PDE_parameters$c, covariates,
+                  BC$BC_indices, BC$BC_values, incidence_matrix, areal.data.avg, search,
+                  optim, lambda, DOF.stochastic.realizations, DOF.stochastic.seed, DOF.matrix, GCV.inflation.factor, lambda.optimization.tolerance, PACKAGE = "fdaPDE")
+
   return(bigsol)
 }
 
-CPP_smooth.volume.FEM.PDE.sv.basis<-function(locations, bary.locations, observations, FEMbasis, lambda, PDE_parameters, covariates = NULL, incidence_matrix = NULL, ndim, mydim, BC = NULL, GCV,GCVMETHOD = 2, nrealizations = 100, DOF=TRUE, DOF.matrix=NULL, search)
+CPP_smooth.volume.FEM.PDE.sv.basis<-function(locations, observations, FEMbasis, covariates = NULL, PDE_parameters, ndim, mydim, BC = NULL, incidence_matrix = NULL, areal.data.avg = TRUE, search, bary.locations, optim, lambda = NULL, DOF.stochastic.realizations = 100, DOF.stochastic.seed = 0, DOF.matrix = NULL, GCV.inflation.factor = 1, lambda.optimization.tolerance = 0.05)
 {
 
   # Indexes in C++ starts from 0, in R from 1, opportune transformation
@@ -280,39 +236,97 @@ CPP_smooth.volume.FEM.PDE.sv.basis<-function(locations, bary.locations, observat
   ## Set propr type for correct C++ reading
   locations <- as.matrix(locations)
   storage.mode(locations) <- "double"
+  data <- as.vector(observations)
+  storage.mode(data) <- "double"
   storage.mode(FEMbasis$mesh$nodes) <- "double"
-  storage.mode(FEMbasis$mesh$triangles) <- "integer"
-  storage.mode(FEMbasis$mesh$edges) <- "integer"
+  storage.mode(FEMbasis$mesh$tetrahedrons) <- "integer"
+  storage.mode(FEMbasis$mesh$faces) <- "integer"
   storage.mode(FEMbasis$mesh$neighbors) <- "integer"
   storage.mode(FEMbasis$order) <- "integer"
   covariates <- as.matrix(covariates)
   storage.mode(covariates) <- "double"
   incidence_matrix <- as.matrix(incidence_matrix)
-  DOF.matrix <- as.matrix(DOF.matrix)
-  storage.mode(DOF.matrix) <- "double"
   storage.mode(incidence_matrix) <- "integer"
   storage.mode(ndim) <- "integer"
   storage.mode(mydim) <- "integer"
   storage.mode(lambda) <- "double"
   storage.mode(BC$BC_indices) <- "integer"
   storage.mode(BC$BC_values) <- "double"
-  storage.mode(GCV) <- "integer"
-  DOF <- as.integer(DOF)
-  storage.mode(DOF) <-"integer"
 
   storage.mode(PDE_param_eval$K) <- "double"
   storage.mode(PDE_param_eval$b) <- "double"
   storage.mode(PDE_param_eval$c) <- "double"
   storage.mode(PDE_param_eval$u) <- "double"
 
-  storage.mode(nrealizations) <- "integer"
-  storage.mode(GCVMETHOD) <- "integer"
+  areal.data.avg <- as.integer(areal.data.avg)
+  storage.mode(areal.data.avg) <-"integer"
   storage.mode(search) <- "integer"
+  storage.mode(optim) <- "integer"  
+  storage.mode(lambda) <- "double"
+  DOF.matrix <- as.matrix(DOF.matrix)
+  storage.mode(DOF.matrix) <- "double"
+  storage.mode(DOF.stochastic.realizations) <- "integer"
+  storage.mode(DOF.stochastic.seed) <- "integer"
+  storage.mode(GCV.inflation.factor) <- "double"
+  storage.mode(lambda.optimization.tolerance) <- "double"
 
   ## Call C++ function
-  bigsol <- .Call("regression_PDE_space_varying", locations, bary.locations, observations, FEMbasis$mesh, FEMbasis$order,
-                  mydim, ndim, lambda, PDE_param_eval$K, PDE_param_eval$b, PDE_param_eval$c, PDE_param_eval$u,
-                  covariates, incidence_matrix, BC$BC_indices, BC$BC_values, GCV,GCVMETHOD, nrealizations, DOF, DOF.matrix, search, 
-                  PACKAGE = "fdaPDE")
+  bigsol <- .Call("regression_PDE_space_varying", locations, bary.locations, data, FEMbasis$mesh, FEMbasis$order, mydim, ndim, PDE_param_eval$K, PDE_param_eval$b, PDE_param_eval$c, PDE_param_eval$u, covariates,
+                  BC$BC_indices, BC$BC_values, incidence_matrix, areal.data.avg, search,
+                  optim, lambda, DOF.stochastic.realizations, DOF.stochastic.seed, DOF.matrix, GCV.inflation.factor, lambda.optimization.tolerance, PACKAGE = "fdaPDE")
+
   return(bigsol)
 }
+
+CPP_eval.volume.FEM = function(FEM, locations, incidence_matrix, redundancy, ndim, mydim, search, bary.locations)
+{
+  FEMbasis = FEM$FEMbasis
+
+  FEMbasis$mesh$tetrahedrons = FEMbasis$mesh$tetrahedrons - 1
+  FEMbasis$mesh$faces = FEMbasis$mesh$faces - 1
+  FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
+
+  # Imposing types, this is necessary for correct reading from C++
+  ## Set proper type for correct C++ reading
+  locations <- as.matrix(locations)
+  storage.mode(locations) <- "double"
+  incidence_matrix <- as.matrix(incidence_matrix)
+  storage.mode(incidence_matrix) <- "integer"
+  storage.mode(FEMbasis$mesh$nodes) <- "double"
+  storage.mode(FEMbasis$mesh$tetrahedrons) <- "integer"
+  storage.mode(FEMbasis$mesh$faces) <- "integer"
+  storage.mode(FEMbasis$mesh$neighbors) <- "integer"
+  storage.mode(FEMbasis$order) <- "integer"
+  coeff <- as.matrix(FEM$coeff)
+  storage.mode(coeff) <- "double"
+  storage.mode(ndim) <- "integer"
+  storage.mode(mydim) <- "integer"
+  storage.mode(locations) <- "double"
+  storage.mode(redundancy) <- "integer"
+  storage.mode(search) <- "integer"
+
+  if(!is.null(bary.locations))
+  {
+    storage.mode(bary.locations$element_ids) <- "integer"
+    element_ids <- as.matrix(bary.locations$element_ids)
+    storage.mode(bary.locations$barycenters) <- "double"
+    barycenters <- as.matrix(bary.locations$barycenters)
+  }
+
+  # if (search == 1) { #use Naive search
+  #   print('This is Naive Search')
+  # } else if (search == 2)  { #use Tree search (default)
+  #   print('This is Tree Search')
+  # }
+
+  #Calling the C++ function "eval_FEM_fd" in RPDE_interface.cpp
+  evalmat = matrix(0,max(nrow(locations),nrow(incidence_matrix)),ncol(coeff))
+  for (i in 1:ncol(coeff)){
+    evalmat[,i] <- .Call("eval_FEM_fd", FEMbasis$mesh, locations, incidence_matrix, coeff[,i],
+                         FEMbasis$order, redundancy, mydim, ndim, search, bary.locations, PACKAGE = "fdaPDE")
+  }
+
+  #Returning the evaluation matrix
+  evalmat
+}
+

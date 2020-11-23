@@ -59,8 +59,8 @@ extern "C"
         		return(regression_skeleton<RegressionDataElliptic, 1, 2, 3>(regressionData, optimizationData, Rmesh));
         	else if(regressionData.getOrder()==2 && mydim==2 && ndim==3)
         		return(regression_skeleton<RegressionDataElliptic, 2, 2, 3>(regressionData, optimizationData, Rmesh));
-            else if(regressionData.getOrder()==2 && mydim==3 && ndim==3)
-                return(regression_skeleton<RegressionDataElliptic, 2, 3, 3>(regressionData, optimizationData, Rmesh));
+            else if(regressionData.getOrder()==1 && mydim==3 && ndim==3)
+                return(regression_skeleton<RegressionDataElliptic, 1, 3, 3>(regressionData, optimizationData, Rmesh));
             else if(regressionData.getOrder()==2 && mydim==3 && ndim==3)
                 return(regression_skeleton<RegressionDataElliptic, 2, 3, 3>(regressionData, optimizationData, Rmesh));
 

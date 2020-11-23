@@ -47,10 +47,10 @@ TreeHeader<T> createtreeheader(int const & nt, Domain<T> const & d) {
 		return hd;
 	}
 	catch(LocLengthError<T> lo) {
-		std::cout << std::endl << std::endl;
-		std::cout << "warning!	createtreeheader : max dimension exceeded" << std::endl;
-		std::cout << "the limit is " << lo.getmaxtreeloc()-1
-				<< " while needed at least " << lo.gettreeloc() << std::endl;
+		// std::cout << std::endl << std::endl;
+		// std::cout << "warning!	createtreeheader : max dimension exceeded" << std::endl;
+		// std::cout << "the limit is " << lo.getmaxtreeloc()-1
+		// 		<< " while needed at least " << lo.gettreeloc() << std::endl;
 		std::exit(EXIT_FAILURE);
 	}
 }
@@ -61,11 +61,11 @@ void TreeHeader<T>::settreeloc(int const & nt) {
 		stml(nt);
 	}
 	catch(LocLengthError<T> lo) {
-		std::cout << std::endl << std::endl;
-		std::cout << "warning!	settreeloc : max dimension exceeded" << std::endl;
-		std::cout << "the limit is " << lo.getmaxtreeloc()-1
-				<< " while requested " << lo.gettreeloc() << std::endl;
-		std::cout << "increasing tree memory locations up to the limit" << std::endl;
+		// std::cout << std::endl << std::endl;
+		// std::cout << "warning!	settreeloc : max dimension exceeded" << std::endl;
+		// std::cout << "the limit is " << lo.getmaxtreeloc()-1
+		// 		<< " while requested " << lo.gettreeloc() << std::endl;
+		// std::cout << "increasing tree memory locations up to the limit" << std::endl;
 		stml(lo.getmaxtreeloc()-1);
 	}
 }

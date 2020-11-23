@@ -589,7 +589,7 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis,
        optim = optim, lambda = lambda, DOF.stochastic.realizations = DOF.stochastic.realizations, DOF.stochastic.seed = DOF.stochastic.seed,
        DOF.matrix = DOF.matrix, GCV.inflation.factor = GCV.inflation.factor, lambda.optimization.tolerance = lambda.optimization.tolerance)
       numnodes = nrow(FEMbasis$mesh$nodes)
-    }else if(class(FEMbasis$mesh) == 'mesh.3D')
+  	}else if(class(FEMbasis$mesh) == 'mesh.3D' & is.null(PDE_parameters))
     {
       bigsol = NULL
       bigsol = CPP_smooth.volume.FEM.basis(locations = locations, observations = observations, FEMbasis = FEMbasis,
@@ -599,8 +599,28 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis,
         optim = optim, lambda = lambda, DOF.stochastic.realizations = DOF.stochastic.realizations, DOF.stochastic.seed = DOF.stochastic.seed,
         DOF.matrix = DOF.matrix, GCV.inflation.factor = GCV.inflation.factor, lambda.optimization.tolerance = lambda.optimization.tolerance)
       numnodes = nrow(FEMbasis$mesh$nodes)
-    }
-  }else
+    } else if(class(FEMbasis$mesh) == 'mesh.3D' & !is.null(PDE_parameters) & space_varying==FALSE)
+    {
+  	  bigsol = NULL
+      bigsol = CPP_smooth.volume.FEM.PDE.basis(locations = locations, observations = observations, FEMbasis = FEMbasis,
+        covariates = covariates, PDE_parameters=PDE_parameters, ndim = ndim, mydim = mydim, BC = BC,
+        incidence_matrix = incidence_matrix, areal.data.avg = areal.data.avg,
+        search = search, bary.locations = bary.locations,
+        optim = optim, lambda = lambda, DOF.stochastic.realizations = DOF.stochastic.realizations, DOF.stochastic.seed = DOF.stochastic.seed,
+        DOF.matrix = DOF.matrix, GCV.inflation.factor = GCV.inflation.factor, lambda.optimization.tolerance = lambda.optimization.tolerance)
+      numnodes = nrow(FEMbasis$mesh$nodes)
+  	} else if(class(FEMbasis$mesh) == 'mesh.3D' & !is.null(PDE_parameters) & space_varying==TRUE)
+  	{
+      bigsol = NULL
+      bigsol = CPP_smooth.volume.FEM.PDE.sv.basis(locations = locations, observations = observations, FEMbasis = FEMbasis,
+        covariates = covariates, PDE_parameters=PDE_parameters, ndim = ndim, mydim = mydim, BC = BC,
+        incidence_matrix = incidence_matrix, areal.data.avg = areal.data.avg,
+        search = search, bary.locations = bary.locations,
+        optim = optim, lambda = lambda, DOF.stochastic.realizations = DOF.stochastic.realizations, DOF.stochastic.seed = DOF.stochastic.seed,
+        DOF.matrix = DOF.matrix, GCV.inflation.factor = GCV.inflation.factor, lambda.optimization.tolerance = lambda.optimization.tolerance)
+      numnodes = nrow(FEMbasis$mesh$nodes)
+  	}
+  } else
   {
     #----------------------------------------------------#
     ############# GAMs: FPIRLS algorithm #################
