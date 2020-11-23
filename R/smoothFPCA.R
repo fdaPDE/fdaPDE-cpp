@@ -68,13 +68,13 @@
 #'   a2 = rnorm(1, mean = 1, sd = 1)
 #'   a3 = rnorm(1, mean = 1, sd = 1)
 #'
-#'   func_evaluation = numeric(mesh$nnodes)
-#'   for (i in 0:(mesh$nnodes-1)){
+#'   func_evaluation = numeric(nrow(mesh$nodes))
+#'   for (i in 0:(nrow(mesh$nodes)-1)){
 #'     func_evaluation[i+1] = a1* sin(2*pi*mesh$nodes[i+1,1]) +
 #'                            a2* sin(2*pi*mesh$nodes[i+1,2]) +
 #'                            a3*sin(2*pi*mesh$nodes[i+1,3]) + 1
 #'   }
-#'   data = func_evaluation + rnorm(mesh$nnodes, mean = 0, sd = 0.5)
+#'   data = func_evaluation + rnorm(nrow(mesh$nodes), mean = 0, sd = 0.5)
 #'   datamatrix = rbind(datamatrix, data)
 #' }
 #' ## Compute the mean of the datamatrix and subtract it to the data
