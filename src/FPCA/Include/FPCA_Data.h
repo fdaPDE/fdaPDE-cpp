@@ -14,7 +14,7 @@
 class  FPCAData{
 	private:
 
-		std::vector<Point> locations_;
+		const RNumericMatrix locations_;
 
 		//barycenter information
 		MatrixXr barycenters_; //barycenter information
@@ -53,7 +53,6 @@ class  FPCAData{
 
 
 		void setDatamatrix(SEXP Rdatamatrix);
-		void setLocations(SEXP Rlocations);
 		void setBaryLocations(SEXP RbaryLocations);
 		void setNrealizations(SEXP Rnrealizations);
 		void setIncidenceMatrix(SEXP RincidenceMatrix);
@@ -85,13 +84,13 @@ class  FPCAData{
 
 		*/
 
-		FPCAData(){};
+		// FPCAData(){};
 
 		explicit FPCAData(SEXP Rlocations, SEXP RbaryLocations, SEXP Rdatamatrix, SEXP Rorder, SEXP RincidenceMatrix,
 		SEXP Rlambda, SEXP RnPC, SEXP RnFolds, SEXP RGCVmethod, SEXP Rnrealizations, SEXP Rsearch);
 
 
-		explicit FPCAData(std::vector<Point>& locations, MatrixXr& datamatrix,
+		explicit FPCAData(Real* locations, UInt n_locations, UInt ndim, MatrixXr& datamatrix,
 		UInt order, MatrixXi& incidenceMatrix, std::vector<Real> lambda, UInt nPC, UInt nFolds, UInt search);
 
 
@@ -100,7 +99,8 @@ class  FPCAData{
 		void printIncidenceMatrix(std::ostream & out) const;
 
 		//! A method returning the locations of the observations
-		inline std::vector<Point> const & getLocations() const {return locations_;}
+		template<UInt ndim>
+		inline Point<ndim> getLocations(UInt i) const {return Point<ndim>(i, locations_);}
 		//! A method returning TRUE if the observations are located in the nodes of the mesh or FALSE otherwise
 		inline bool isLocationsByNodes() const {return locations_by_nodes_;}
 

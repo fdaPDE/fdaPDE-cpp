@@ -130,7 +130,7 @@ CPP_smooth.FEM.PDE.basis<-function(locations, observations, FEMbasis, covariates
   {
     BC$BC_values<-as.vector(BC$BC_values)
   }
-  
+
   if(is.null(lambda))
   {
     lambda<-vector(length=0)
@@ -171,7 +171,7 @@ CPP_smooth.FEM.PDE.basis<-function(locations, observations, FEMbasis, covariates
   storage.mode(DOF.stochastic.seed) <- "integer"
   storage.mode(GCV.inflation.factor) <- "double"
   storage.mode(lambda.optimization.tolerance) <- "double"
-  
+
   ## Call C++ function
   bigsol <- .Call("regression_PDE", locations, bary.locations, observations, FEMbasis$mesh, FEMbasis$order, 
                   mydim, ndim, PDE_parameters$K, PDE_parameters$b, PDE_parameters$c, covariates,
@@ -184,8 +184,7 @@ CPP_smooth.FEM.PDE.basis<-function(locations, observations, FEMbasis, covariates
 CPP_smooth.FEM.PDE.sv.basis<-function(locations, observations, FEMbasis, covariates = NULL, PDE_parameters, ndim, mydim, BC = NULL, incidence_matrix = NULL, areal.data.avg = TRUE, search, bary.locations, optim, lambda = NULL, DOF.stochastic.realizations = 100, DOF.stochastic.seed = 0, DOF.matrix = NULL, GCV.inflation.factor = 1, lambda.optimization.tolerance = 0.05)
 {
 
-  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
-
+  # Indexes in C++ starts from 0, in R from 1, opportune transformation
   FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
   FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
   FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
@@ -282,6 +281,7 @@ CPP_smooth.FEM.PDE.sv.basis<-function(locations, observations, FEMbasis, covaria
   return(bigsol)
 }
 
+
 CPP_eval.FEM = function(FEM, locations, incidence_matrix, redundancy, ndim, mydim, search, bary.locations)
 {
 
@@ -355,11 +355,15 @@ CPP_get_evaluations_points = function(mesh, order)
   #here we do not shift indices since this function is called inside CPP_smooth.FEM.PDE.sv.basis
 
   # Imposing types, this is necessary for correct reading from C++
-  if(class(mesh)=="mesh.2D"){
-    ndim=2
-    mydim=2
-  }else if(class(mesh) == "mesh.2.5D" || class(mesh) == "mesh.3D"){
-    stop('Function not yet implemented for this mesh class')
+  if(class(mesh) == "mesh.2D"){
+    ndim = 2
+    mydim = 2
+  }else if(class(mesh) == "mesh.2.5D"){
+    ndim = 3
+    mydim = 2
+  }else if(class(mesh) == "mesh.3D"){
+    ndim = 3
+    mydim = 3
   }else{
     stop('Unknown mesh class')
   }
@@ -367,8 +371,15 @@ CPP_get_evaluations_points = function(mesh, order)
   storage.mode(ndim)<-"integer"
   storage.mode(mydim)<-"integer"
   storage.mode(mesh$nodes) <- "double"
-  storage.mode(mesh$triangles) <- "integer"
-  storage.mode(mesh$edges) <- "integer"
+  if(mydim==2){
+    storage.mode(mesh$triangles) <- "integer"
+    storage.mode(mesh$edges) <- "integer"
+  }
+  else if(mydim==3){
+    storage.mode(mesh$tetrahedrons) <- "integer"
+    storage.mode(mesh$faces) <- "integer"
+  }
+
   storage.mode(mesh$neighbors) <- "integer"
   storage.mode(order) <- "integer"
 
@@ -475,7 +486,6 @@ CPP_get.FEM.PDE.Matrix<-function(observations, FEMbasis, PDE_parameters)
   areal.data.avg = 1
   BC$BC_indices <- vector(length = 0)
   BC$BC_values <- vector(length = 0)
-
   ## Set proper type for correct C++ reading
 
   locations <- as.matrix(locations)
@@ -551,10 +561,12 @@ CPP_get.FEM.PDE.sv.Matrix<-function(observations, FEMbasis, PDE_parameters)
   storage.mode(FEMbasis$order) <- "integer"
   covariates <- as.matrix(covariates)
   storage.mode(covariates) <- "double"
+
   storage.mode(PDE_param_eval$K) <- "double"
   storage.mode(PDE_param_eval$b) <- "double"
   storage.mode(PDE_param_eval$c) <- "double"
   storage.mode(PDE_param_eval$u) <- "double"
+
   storage.mode(BC$BC_indices) <- "integer"
   storage.mode(BC$BC_values) <- "double"
   storage.mode(ndim) <- "integer"

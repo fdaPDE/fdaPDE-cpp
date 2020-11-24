@@ -5,7 +5,7 @@ CPP_smooth.FEM.FPCA<-function(locations, bary.locations, datamatrix, FEMbasis, i
   FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
   FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
   FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
-  
+
   if(is.null(locations))
   {
     locations<-matrix(nrow = 0, ncol = ndim)
@@ -15,8 +15,8 @@ CPP_smooth.FEM.FPCA<-function(locations, bary.locations, datamatrix, FEMbasis, i
   {
     incidence_matrix<-matrix(nrow = 0, ncol = 1)
   }
-  
-  if(is.null(validation)) 
+
+  if(is.null(validation))
   {
     validation="NoValidation"
   }
@@ -45,11 +45,11 @@ CPP_smooth.FEM.FPCA<-function(locations, bary.locations, datamatrix, FEMbasis, i
   storage.mode(search) <- "integer"
 
   ## Call C++ function
-  bigsol <- .Call("Smooth_FPCA", locations, bary.locations, datamatrix, FEMbasis$mesh, 
-                  FEMbasis$order, incidence_matrix, mydim, ndim, 
+  bigsol <- .Call("Smooth_FPCA", locations, bary.locations, datamatrix, FEMbasis$mesh,
+                  FEMbasis$order, incidence_matrix, mydim, ndim,
                   lambda, nPC, validation, NFolds, GCVmethod, nrealizations, search,
                   PACKAGE = "fdaPDE")
-  
+
   ## Reset them correctly
   #fdobj$basis$params$mesh$triangles = fdobj$basis$params$mesh$triangles + 1
   #fdobj$basis$params$mesh$edges = fdobj$basis$params$mesh$edges + 1
@@ -61,19 +61,17 @@ CPP_smooth.FEM.FPCA<-function(locations, bary.locations, datamatrix, FEMbasis, i
 
 CPP_smooth.manifold.FEM.FPCA<-function(locations, bary.locations, datamatrix, FEMbasis, incidence_matrix, lambda, ndim, mydim, nPC, validation, NFolds, GCVmethod = 2, nrealizations = 100, search)
 {
-  # C++ function for manifold works with vectors not with matrices
-  
-  FEMbasis$mesh$triangles=c(t(FEMbasis$mesh$triangles))
-  FEMbasis$mesh$nodes=c(t(FEMbasis$mesh$nodes))
-  
-  #riporto in R lo shift degli indici
-  FEMbasis$mesh$triangles=FEMbasis$mesh$triangles-1
+  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+
+  FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
+  FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
+  FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
 
   if(is.null(locations))
   {
     locations<-matrix(nrow = 0, ncol = ndim)
   }
-  
+
   if(is.null(incidence_matrix))
   {
     incidence_matrix<-matrix(nrow = 0, ncol = 1)
@@ -83,17 +81,17 @@ CPP_smooth.manifold.FEM.FPCA<-function(locations, bary.locations, datamatrix, FE
   {
     validation="NoValidation"
   }
-  
+
   ## Set propr type for correct C++ reading
   locations <- as.matrix(locations)
   storage.mode(locations) <- "double"
   datamatrix <- as.matrix(datamatrix)
   storage.mode(datamatrix) <- "double"
-  storage.mode(FEMbasis$mesh$order) <- "integer"
-  storage.mode(FEMbasis$mesh$nnodes) <- "integer"
-  storage.mode(FEMbasis$mesh$ntriangles) <- "integer"
   storage.mode(FEMbasis$mesh$nodes) <- "double"
   storage.mode(FEMbasis$mesh$triangles) <- "integer"
+  storage.mode(FEMbasis$mesh$edges) <- "integer"
+  storage.mode(FEMbasis$mesh$neighbors) <- "integer"
+  storage.mode(FEMbasis$mesh$order) <- "integer"
   incidence_matrix <- as.matrix(incidence_matrix)
   storage.mode(incidence_matrix) <- "integer"
   storage.mode(lambda) <- "double"
@@ -120,13 +118,11 @@ CPP_smooth.manifold.FEM.FPCA<-function(locations, bary.locations, datamatrix, FE
 
 CPP_smooth.volume.FEM.FPCA<-function(locations, bary.locations, datamatrix, FEMbasis, incidence_matrix, lambda, ndim, mydim, nPC, validation, NFolds, GCVmethod = 2, nrealizations = 100, search)
 {
-  # C++ function for manifold works with vectors not with matrices
-  
-  FEMbasis$mesh$tetrahedrons=c(t(FEMbasis$mesh$tetrahedrons))
-  FEMbasis$mesh$nodes=c(t(FEMbasis$mesh$nodes))
-  
-  #riporto in R lo shift degli indici
-  FEMbasis$mesh$tetrahedrons=FEMbasis$mesh$tetrahedrons-1
+  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+
+  FEMbasis$mesh$tetrahedrons = FEMbasis$mesh$tetrahedrons - 1
+  FEMbasis$mesh$faces = FEMbasis$mesh$faces - 1
+  FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
 
   if(is.null(locations))
   {
@@ -137,21 +133,21 @@ CPP_smooth.volume.FEM.FPCA<-function(locations, bary.locations, datamatrix, FEMb
   {
     incidence_matrix<-matrix(nrow = 0, ncol = 1)
   }
-  
+
   if(is.null(validation))
   {
     validation="NoValidation"
   }
-  
+
   ## Set propr type for correct C++ reading
   locations <- as.matrix(locations)
   storage.mode(locations) <- "double"
   datamatrix <- as.matrix(datamatrix)
   storage.mode(datamatrix) <- "double"
   storage.mode(FEMbasis$mesh$order) <- "integer"
-  storage.mode(FEMbasis$mesh$nnodes) <- "integer"
-  storage.mode(FEMbasis$mesh$ntetrahedrons) <- "integer"
   storage.mode(FEMbasis$mesh$nodes) <- "double"
+  storage.mode(FEMbasis$mesh$faces) <- "integer"
+  storage.mode(FEMbasis$mesh$neighbors) <- "integer"
   storage.mode(FEMbasis$mesh$tetrahedrons) <- "integer"
   incidence_matrix <- as.matrix(incidence_matrix)
   storage.mode(incidence_matrix) <- "integer"
@@ -167,13 +163,12 @@ CPP_smooth.volume.FEM.FPCA<-function(locations, bary.locations, datamatrix, FEMb
   storage.mode(nrealizations) <- "integer"
   storage.mode(GCVmethod) <- "integer"
   storage.mode(search) <- "integer"
-  
+
   ## Call C++ function
-  bigsol <- .Call("Smooth_FPCA", locations, bary.locations, datamatrix, FEMbasis$mesh, 
+  bigsol <- .Call("Smooth_FPCA", locations, bary.locations, datamatrix, FEMbasis$mesh,
                   FEMbasis$mesh$order, incidence_matrix, mydim, ndim, lambda,
                   nPC, validation, NFolds, GCVmethod, nrealizations, search,
                   PACKAGE = "fdaPDE")
 
   return(bigsol)
 }
-

@@ -322,14 +322,11 @@ CPP_smooth.GAM.FEM.PDE.sv.basis<-function(locations, observations, FEMbasis, cov
 
 CPP_smooth.manifold.GAM.FEM.basis<-function(locations, observations, FEMbasis, covariates = NULL, ndim, mydim, BC = NULL, incidence_matrix = NULL, areal.data.avg = FALSE, FAMILY, mu0 = NULL, max.steps.FPIRLS = 15, scale.param = NULL, threshold.FPIRLS = 0.0004, search, bary.locations, optim, lambda = NULL, DOF.stochastic.realizations = 100, DOF.stochastic.seed = 0, DOF.matrix = NULL, GCV.inflation.factor = 1.8, lambda.optimization.tolerance = 0.05)
 {
-  # C++ function for manifold works with vectors not with matrices
   
-  FEMbasis$mesh$triangles = c(t(FEMbasis$mesh$triangles))
-  FEMbasis$mesh$nodes = c(t(FEMbasis$mesh$nodes))
+  FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
+  FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
+  FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
   
-  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
- 
-  FEMbasis$mesh$triangles=FEMbasis$mesh$triangles-1
 
   max.steps.FPIRLS = max.steps.FPIRLS - 1
   if(is.null(covariates))
@@ -387,10 +384,11 @@ CPP_smooth.manifold.GAM.FEM.basis<-function(locations, observations, FEMbasis, c
   locations <- as.matrix(locations)
   storage.mode(locations) <- "double"
   storage.mode(FEMbasis$mesh$order) <- "integer"
-  storage.mode(FEMbasis$mesh$nnodes) <- "integer"
-  storage.mode(FEMbasis$mesh$ntriangles) <- "integer"
   storage.mode(FEMbasis$mesh$nodes) <- "double"
   storage.mode(FEMbasis$mesh$triangles) <- "integer"
+  storage.mode(FEMbasis$mesh$neighbors) <- "integer"
+  storage.mode(FEMbasis$mesh$edges) <- "integer"
+
   covariates <- as.matrix(covariates)
   storage.mode(covariates) <- "double"
   storage.mode(ndim) <- "integer"
@@ -429,14 +427,12 @@ CPP_smooth.manifold.GAM.FEM.basis<-function(locations, observations, FEMbasis, c
 CPP_smooth.volume.GAM.FEM.basis<-function(locations, observations, FEMbasis, covariates = NULL, ndim, mydim, BC = NULL, incidence_matrix = NULL, areal.data.avg = FALSE, FAMILY, mu0 = NULL, max.steps.FPIRLS = 15, scale.param = NULL, threshold.FPIRLS = 0.0004, search, bary.locations, optim, lambda = NULL, DOF.stochastic.realizations = 100, DOF.stochastic.seed = 0, DOF.matrix = NULL, GCV.inflation.factor = 1.8, lambda.optimization.tolerance = 0.05)
 {
   
-  # C++ function for volumetric works with vectors not with matrices
-  
-  FEMbasis$mesh$tetrahedrons = c(t(FEMbasis$mesh$tetrahedrons))
-  FEMbasis$mesh$nodes = c(t(FEMbasis$mesh$nodes))
-  
-  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
+  # Indexes in C++ starts from 0, in R from 1
 
-  FEMbasis$mesh$tetrahedrons=FEMbasis$mesh$tetrahedrons-1
+  FEMbasis$mesh$tetrahedrons = FEMbasis$mesh$tetrahedrons - 1
+  FEMbasis$mesh$faces = FEMbasis$mesh$faces - 1
+  FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
+  
 
   max.steps.FPIRLS = max.steps.FPIRLS - 1
   if(is.null(covariates))
@@ -494,8 +490,8 @@ CPP_smooth.volume.GAM.FEM.basis<-function(locations, observations, FEMbasis, cov
   locations <- as.matrix(locations)
   storage.mode(locations) <- "double"
   storage.mode(FEMbasis$mesh$order) <- "integer"
-  storage.mode(FEMbasis$mesh$nnodes) <- "integer"
-  storage.mode(FEMbasis$mesh$ntetrahedrons) <- "integer"
+  storage.mode(FEMbasis$mesh$neighbors) <- "integer"
+  storage.mode(FEMbasis$mesh$faces) <- "integer"
   storage.mode(FEMbasis$mesh$nodes) <- "double"
   storage.mode(FEMbasis$mesh$tetrahedrons) <- "integer"
   covariates <- as.matrix(covariates)

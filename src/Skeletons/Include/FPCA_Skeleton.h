@@ -6,15 +6,15 @@
 #include "../../FPCA/Include/Mixed_FE_FPCA.h"
 #include "../../FPCA/Include/Mixed_FE_FPCA_Factory.h"
 
-template<typename Integrator,UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 SEXP FPCA_skeleton(FPCAData &fPCAData, SEXP Rmesh, std::string validation)
 {
 
-	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh);
+	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh, fPCAData.getSearch());
 
 	std::unique_ptr<MixedFEFPCABase> fpca = MixedFEFPCAfactory::createFPCAsolver(validation, fPCAData);
 
-	fpca->template SetAndFixParameters<Integrator,ORDER,mydim,ndim>(mesh);
+	fpca->template SetAndFixParameters<ORDER,mydim,ndim>(mesh);
 	fpca->apply();
 
 	const std::vector<VectorXr>& loadings = fpca->getLoadingsMat();
@@ -74,46 +74,48 @@ SEXP FPCA_skeleton(FPCAData &fPCAData, SEXP Rmesh, std::string validation)
 		rans5[i] = var[i];
 	}
 
-	//TREE INFORMATION
-	SET_VECTOR_ELT(result, 6, Rf_allocVector(INTSXP, 7)); //tree_header information
-	int *rans6 = INTEGER(VECTOR_ELT(result, 6));
-	rans6[0] = mesh.getTree().gettreeheader().gettreeloc();
-	rans6[1] = mesh.getTree().gettreeheader().gettreelev();
-	rans6[2] = mesh.getTree().gettreeheader().getndimp();
-	rans6[3] = mesh.getTree().gettreeheader().getndimt();
-	rans6[4] = mesh.getTree().gettreeheader().getnele();
-	rans6[5] = mesh.getTree().gettreeheader().getiava();
-	rans6[6] = mesh.getTree().gettreeheader().getiend();
+	if(fPCAData.getSearch()==2){
+		//TREE INFORMATION
+		SET_VECTOR_ELT(result, 6, Rf_allocVector(INTSXP, 7)); //tree_header information
+		int *rans6 = INTEGER(VECTOR_ELT(result, 6));
+		rans6[0] = mesh.getTree().gettreeheader().gettreeloc();
+		rans6[1] = mesh.getTree().gettreeheader().gettreelev();
+		rans6[2] = mesh.getTree().gettreeheader().getndimp();
+		rans6[3] = mesh.getTree().gettreeheader().getndimt();
+		rans6[4] = mesh.getTree().gettreeheader().getnele();
+		rans6[5] = mesh.getTree().gettreeheader().getiava();
+		rans6[6] = mesh.getTree().gettreeheader().getiend();
 
-	SET_VECTOR_ELT(result, 7, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain origin
-	Real *rans7 = REAL(VECTOR_ELT(result, 7));
-	for(UInt i = 0; i < ndim*2; i++)
-		rans7[i] = mesh.getTree().gettreeheader().domainorig(i);
+		SET_VECTOR_ELT(result, 7, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain origin
+		Real *rans7 = REAL(VECTOR_ELT(result, 7));
+		for(UInt i = 0; i < ndim*2; i++)
+			rans7[i] = mesh.getTree().gettreeheader().domainorig(i);
 
-	SET_VECTOR_ELT(result, 8, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain scale
-	Real *rans8 = REAL(VECTOR_ELT(result, 8));
-	for(UInt i = 0; i < ndim*2; i++)
-		rans8[i] = mesh.getTree().gettreeheader().domainscal(i);
+		SET_VECTOR_ELT(result, 8, Rf_allocVector(REALSXP, ndim*2)); //tree_header domain scale
+		Real *rans8 = REAL(VECTOR_ELT(result, 8));
+		for(UInt i = 0; i < ndim*2; i++)
+			rans8[i] = mesh.getTree().gettreeheader().domainscal(i);
 
 
-	UInt num_tree_nodes = mesh.num_elements()+1; //Be careful! This is not equal to number of elements
-	SET_VECTOR_ELT(result, 9, Rf_allocMatrix(INTSXP, num_tree_nodes, 3)); //treenode information
-	int *rans9 = INTEGER(VECTOR_ELT(result, 9));
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		UInt num_tree_nodes = mesh.num_elements()+1; //Be careful! This is not equal to number of elements
+		SET_VECTOR_ELT(result, 9, Rf_allocMatrix(INTSXP, num_tree_nodes, 3)); //treenode information
+		int *rans9 = INTEGER(VECTOR_ELT(result, 9));
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans9[i] = mesh.getTree().gettreenode(i).getid();
 
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans9[i + num_tree_nodes*1] = mesh.getTree().gettreenode(i).getchild(0);
 
-	for(UInt i = 0; i < num_tree_nodes; i++)
+		for(UInt i = 0; i < num_tree_nodes; i++)
 			rans9[i + num_tree_nodes*2] = mesh.getTree().gettreenode(i).getchild(1);
 
-	SET_VECTOR_ELT(result, 10, Rf_allocMatrix(REALSXP, num_tree_nodes, ndim*2)); //treenode box coordinate
-	Real *rans10 = REAL(VECTOR_ELT(result, 10));
-	for(UInt j = 0; j < ndim*2; j++)
-	{
-		for(UInt i = 0; i < num_tree_nodes; i++)
-			rans10[i + num_tree_nodes*j] = mesh.getTree().gettreenode(i).getbox().get()[j];
+		SET_VECTOR_ELT(result, 10, Rf_allocMatrix(REALSXP, num_tree_nodes, ndim*2)); //treenode box coordinate
+		Real *rans10 = REAL(VECTOR_ELT(result, 10));
+		for(UInt j = 0; j < ndim*2; j++)
+		{
+			for(UInt i = 0; i < num_tree_nodes; i++)
+				rans10[i + num_tree_nodes*j] = mesh.getTree().gettreenode(i).getbox().get()[j];
+		}
 	}
 
 	//BARYCENTER INFORMATION

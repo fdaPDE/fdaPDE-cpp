@@ -188,11 +188,11 @@ void MixedFERegressionBase<InputHandler>::setPsi(const MeshHandler<ORDER, mydim,
 			// [[GM missing a defaulted else, raising a WARNING!]]
 			if(regressionData_.getSearch() == 1)
 			{ // Use Naive search
-				tri_activated = mesh_.findLocationNaive(regressionData_.getLocations()[i]);
+				tri_activated = mesh_.findLocationNaive(regressionData_.template getLocations<ndim>(i));
 			}
 			else if(regressionData_.getSearch() == 2)
 			{ // Use Tree search (default)
-				tri_activated = mesh_.findLocationTree(regressionData_.getLocations()[i]);
+				tri_activated = mesh_.findLocationTree(regressionData_.template getLocations<ndim>(i));
 			}
 
 			// Search the element containing the point
@@ -210,9 +210,9 @@ void MixedFERegressionBase<InputHandler>::setPsi(const MeshHandler<ORDER, mydim,
 					coefficients = Eigen::Matrix<Real,Nodes,1>::Zero();
 					coefficients(node) = 1; //Activates only current base-node
 					// Evaluate psi in the node
-					evaluator = evaluate_point<Nodes,mydim,ndim>(tri_activated, regressionData_.getLocations()[i], coefficients);
+					evaluator = tri_activated.evaluate_point(regressionData_.template getLocations<ndim>(i), coefficients);
 					// Save barycenter information
-					barycenters_(i,node) = tri_activated.getBaryCoordinates(regressionData_.getLocations()[i])[node];
+					barycenters_(i,node)=tri_activated.getBaryCoordinates(regressionData_.template getLocations<ndim>(i))[node];
 					// Insert the value in the column given by the GLOBAL indexing of the evaluated NODE
 					psi_.insert(i, tri_activated[node].getId()) = evaluator;
 				}
@@ -236,7 +236,7 @@ void MixedFERegressionBase<InputHandler>::setPsi(const MeshHandler<ORDER, mydim,
 					Element<Nodes, mydim, ndim> tri = mesh_.getElement(j); // Identify the element
 					for(UInt k=0; k<Nodes; k++)
 					{ // Add contribution of the area to right location
-						tab[tri[k].getId()] += integratePsi(tri,k); // Integral over tri of psi_k
+						tab[tri[k].getId()] += tri.integrate(Eigen::Matrix<Real,Nodes,1>::Unit(k)); // integral over tri of psi_k
 					}
 				}
 			}
@@ -408,7 +408,6 @@ MatrixXr MixedFERegressionBase<InputHandler>::LeftMultiplybyQ(const MatrixXr& u)
 //----------------------------------------------------------------------------//
 // Builders
 template<typename InputHandler>
-template<typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE>
 void MixedFERegressionBase<InputHandler>::buildSpaceTimeMatrices()
 {
 	SpMat IM(M_,M_); // Matrix temporl_nodes x temporal_nodes
@@ -428,7 +427,7 @@ void MixedFERegressionBase<InputHandler>::buildSpaceTimeMatrices()
 	}
 	else
 	{ // Separable case
-		MixedSplineRegression <InputHandler, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE> Spline(mesh_time_,regressionData_);
+		MixedSplineRegression <InputHandler> Spline(mesh_time_,regressionData_);
 		SpMat IN(N_,N_);
 		Spline.setPhi();
 		Spline.setTimeMass();
@@ -579,12 +578,15 @@ void MixedFERegressionBase<InputHandler>::system_factorize()
 	// First phase: Factorization of matrixNoCov
 	matrixNoCovdec_.compute(matrixNoCov_);
 
+
+
 	if(regressionData_.getCovariates()->rows() != 0)
 	{ // Needed only if there are covariates, else we can stop before
 		// Second phase: factorization of matrix  G =  C + [V * matrixNoCov^-1 * U]= C + D
 		// Definition of matrix U = [ psi^T * A * W | 0 ]^T and V= [ W^T*psi| 0]
 
 		MatrixXr W(*(this->regressionData_.getCovariates()));
+
 
 		U_ = MatrixXr::Zero(2*nnodes,W.cols());
 		V_ = MatrixXr::Zero(W.cols(),2*nnodes);
@@ -598,21 +600,22 @@ void MixedFERegressionBase<InputHandler>::system_factorize()
 			V_.leftCols(nnodes) = W.transpose()*P->asDiagonal()*psi_;
 		}
 
-		// Build "right side" of U_
-		if(P->size() == 0)
-			U_.topRows(nnodes) = W;
-		else
-			U_.topRows(nnodes) = P->asDiagonal()*W;
 
-		// Build "left side" of U_
 		if(regressionData_.getNumberOfRegions()==0)
 		{ // pointwise data
-			U_.topRows(nnodes) = psi_.transpose()*U_.topRows(nnodes);
+			if(P->size() == 0)
+				U_.topRows(nnodes) = psi_.transpose()*W;
+			else
+				U_.topRows(nnodes) = psi_.transpose()*P->asDiagonal()*W;
 		}
 		else
 		{ //areal data
-		 	U_.topRows(nnodes) = psi_.transpose()*A_.asDiagonal()*U_.topRows(nnodes);
-    		}
+			if(P->size() == 0)
+				U_.topRows(nnodes) = psi_.transpose()*A_.asDiagonal()*W;
+			else
+				U_.topRows(nnodes) = psi_.transpose()*A_.asDiagonal()*P->asDiagonal()*W;
+    	}
+
 
 		MatrixXr D = V_*matrixNoCovdec_.solve(U_);
 
@@ -858,13 +861,13 @@ void MixedFERegressionBase<InputHandler>::computeDegreesOfFreedomStochastic(UInt
 }
 
 template<typename InputHandler>
-template<UInt ORDER, UInt mydim, UInt ndim, typename IntegratorSpace, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE, typename A>
+template<UInt ORDER, UInt mydim, UInt ndim, typename A>
 void MixedFERegressionBase<InputHandler>::preapply(EOExpr<A> oper, const ForcingTerm & u, const MeshHandler<ORDER, mydim, ndim> & mesh_)
 {
 	const MatrixXr * Wp = regressionData_.getCovariates();
 
 	UInt nnodes = N_*M_;	// total number of spatio-temporal nodes
-	FiniteElement<IntegratorSpace, ORDER, mydim, ndim> fe;
+	FiniteElement<ORDER, mydim, ndim> fe;
 
 	// Set Areal data if present and no already done
 	if(regressionData_.getNumberOfRegions()>0 && !isAComputed)
@@ -905,7 +908,7 @@ void MixedFERegressionBase<InputHandler>::preapply(EOExpr<A> oper, const Forcing
 
 	if(regressionData_.isSpaceTime())
 	{
-		this->template buildSpaceTimeMatrices<IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE>();
+		this->buildSpaceTimeMatrices();
 	}
 
 	// Set final transpose of Psi matrix
@@ -1050,9 +1053,9 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply(void)
 			}
 
 			// Applying boundary conditions if necessary
-			if(regressionData_.getDirichletIndices()->size() != 0)  // if areal data NO BOUNDARY CONDITIONS
+			if(regressionData_.getDirichletIndices()->size() != 0)  // if areal data NO BOUNDARY CONDITIONS				
 				addDirichletBC();
-
+			
 
 			//f Factorization of the system for woodbury decomposition
 			if(isGAMData || regressionData_.isSpaceTime() || optimizationData_.get_current_lambdaS()!=optimizationData_.get_last_lS_used())
@@ -1117,12 +1120,11 @@ class MixedFERegression<RegressionData>: public MixedFERegressionBase<Regression
 		MixedFERegression(const std::vector<Real> & mesh_time, const RegressionData & regressionData, OptimizationData & optimizationData, UInt nnodes_, UInt spline_degree):
 			MixedFERegressionBase<RegressionData>(mesh_time, regressionData, optimizationData, nnodes_, spline_degree) {};
 
-		template<UInt ORDER, UInt mydim, UInt ndim, typename IntegratorSpace, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE>
+		template<UInt ORDER, UInt mydim, UInt ndim>
 		void preapply(const MeshHandler<ORDER,mydim,ndim> & mesh)
 		{
 			typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
-		    	MixedFERegressionBase<RegressionData>::preapply<ORDER,mydim,ndim, IntegratorSpace, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE>
-				(stiff, ForcingTerm(std::vector<Real>(1)), mesh);
+		    MixedFERegressionBase<RegressionData>::preapply(stiff, ForcingTerm(), mesh);
 		}
 };
 
@@ -1135,26 +1137,19 @@ class MixedFERegression<RegressionDataElliptic>: public MixedFERegressionBase<Re
 		MixedFERegression(const std::vector<Real> & mesh_time, const RegressionDataElliptic & regressionData,  OptimizationData & optimizationData, UInt nnodes_, UInt spline_degree):
 			MixedFERegressionBase<RegressionDataElliptic>(mesh_time, regressionData, optimizationData, nnodes_, spline_degree) {};
 
-		template<UInt ORDER, UInt mydim, UInt ndim, typename IntegratorSpace, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE>
+		template<UInt ORDER, UInt mydim, UInt ndim>
 		void preapply(const MeshHandler<ORDER,mydim,ndim> & mesh)
 		{
-			if(mydim!=2 || ndim!=2)
-			{
-				Rprintf("ERROR: these dimensions are not yet implemented, for the moment smoothEllipticPDE is available for mydim = ndim = 2");
-			}
-			else
-			{
-				typedef EOExpr<Mass>  ETMass;  Mass EMass;   ETMass mass(EMass);
-				typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
-				typedef EOExpr<Grad>  ETGrad;  Grad EGrad;   ETGrad grad(EGrad);
+			typedef EOExpr<Mass>  ETMass;  Mass EMass;   ETMass mass(EMass);
+			typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
+			typedef EOExpr<Grad>  ETGrad;  Grad EGrad;   ETGrad grad(EGrad);
 
-				const Real & c = this->regressionData_.getC();
-				const Eigen::Matrix<Real,2,2> & K = this->regressionData_.getK();
-				const Eigen::Matrix<Real,2,1> & b = this->regressionData_.getBeta();
+	  		const Real& c = this->regressionData_.getC();
+	  		const Diffusion<PDEParameterOptions::Constant>& K = this->regressionData_.getK();
+	  		const Advection<PDEParameterOptions::Constant>& b = this->regressionData_.getBeta();
 
-				MixedFERegressionBase<RegressionDataElliptic>::preapply<ORDER,mydim,ndim, IntegratorSpace, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE>
-					(c*mass+stiff[K]+dot(b,grad), ForcingTerm(std::vector<Real>(1)), mesh);
-			}
+			MixedFERegressionBase<RegressionDataElliptic>::preapply(c*mass+stiff[K]+b.dot(grad), ForcingTerm(), mesh);
+			
 		}
 };
 
@@ -1168,38 +1163,31 @@ class MixedFERegression<RegressionDataEllipticSpaceVarying> : public MixedFERegr
 			MixedFERegressionBase<RegressionDataEllipticSpaceVarying>(mesh_time, regressionData, optimizationData, nnodes_, spline_degree) {};
 
 
-		template< UInt ORDER, UInt mydim, UInt ndim, typename IntegratorSpace, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE>
+		template< UInt ORDER, UInt mydim, UInt ndim>
 		void preapply(const MeshHandler<ORDER,mydim,ndim> & mesh)
 		{
-			if(mydim!=2 || ndim!=2)
-			{
-				Rprintf("ERROR: these dimensions are not yet implemented, for the moment smoothEllipticPDE is available for mydim = ndim = 2");
-			}
-			else
-			{
-				typedef EOExpr<Mass>  ETMass;  Mass EMass;   ETMass mass(EMass);
-				typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
-				typedef EOExpr<Grad>  ETGrad;  Grad EGrad;   ETGrad grad(EGrad);
+			typedef EOExpr<Mass>  ETMass;  Mass EMass;   ETMass mass(EMass);
+			typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
+			typedef EOExpr<Grad>  ETGrad;  Grad EGrad;   ETGrad grad(EGrad);
 
-				const Reaction & c    = this->regressionData_.getC();
-				const Diffusivity & K = this->regressionData_.getK();
-				const Advection & b   = this->regressionData_.getBeta();
-				const ForcingTerm & u = this->regressionData_.getU();
+			const Reaction& c = this->regressionData_.getC();
+			const Diffusion<PDEParameterOptions::SpaceVarying>& K = this->regressionData_.getK();
+			const Advection<PDEParameterOptions::SpaceVarying>& b = this->regressionData_.getBeta();
+			const ForcingTerm& u= this->regressionData_.getU();
 
-				this->isSpaceVarying = TRUE;
+			this->isSpaceVarying = TRUE;
 
-				MixedFERegressionBase<RegressionDataEllipticSpaceVarying>::preapply<ORDER,mydim,ndim, IntegratorSpace, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE>
-					(c*mass+stiff[K]+dot(b,grad), u, mesh);
-			}
+			MixedFERegressionBase<RegressionDataEllipticSpaceVarying>::preapply(c*mass+stiff[K]+b.dot(grad), u, mesh);
+			
 		}
 };
 
 // -- TEMPORAL PART --
-template<typename InputHandler, typename Integrator, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE>
-void MixedSplineRegression<InputHandler, Integrator, SPLINE_DEGREE, ORDER_DERIVATIVE>::setPhi(void)
+template<typename InputHandler>
+void MixedSplineRegression<InputHandler>::setPhi(void)
 {
 
-	Spline<Integrator, SPLINE_DEGREE, ORDER_DERIVATIVE> spline(mesh_time_);
+	Spline<SPLINE_DEGREE, ORDER_DERIVATIVE> spline(mesh_time_);
 	UInt M = spline.num_knots()-SPLINE_DEGREE-1;
 	UInt m = regressionData_.getNumberofTimeObservations();
 
@@ -1210,7 +1198,7 @@ void MixedSplineRegression<InputHandler, Integrator, SPLINE_DEGREE, ORDER_DERIVA
 	{
 		for(UInt j=0; j<M; ++j)
 		{
-			value = spline.BasisFunction(SPLINE_DEGREE, j, this->regressionData_.getTimeLocations()[i]);
+			value = spline.BasisFunction(j, this->regressionData_.getTimeLocations()[i]);
 			if(value!=0)
 			{
 				phi_.coeffRef(i,j) = value;
@@ -1220,30 +1208,18 @@ void MixedSplineRegression<InputHandler, Integrator, SPLINE_DEGREE, ORDER_DERIVA
 	phi_.makeCompressed();
 }
 
-template<typename InputHandler, typename Integrator, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE>
-void MixedSplineRegression<InputHandler, Integrator, SPLINE_DEGREE, ORDER_DERIVATIVE>::setTimeMass(void)
+template<typename InputHandler>
+void MixedSplineRegression<InputHandler>::setTimeMass(void)
 {
-    using ETTimeMass = EOExpr<TimeMass>;
-
-    Spline<Integrator, SPLINE_DEGREE, 0> spline(mesh_time_);
-
-    TimeMass ETimeMass;
-    ETTimeMass timeMass(ETimeMass);
-
-    Assembler::operKernel(timeMass, spline, timeMass_);
+    Spline<SPLINE_DEGREE, 0> spline(mesh_time_);
+    Assembler::operKernel(spline, timeMass_);
 }
 
-template<typename InputHandler, typename Integrator, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE>
-void MixedSplineRegression<InputHandler, Integrator, SPLINE_DEGREE, ORDER_DERIVATIVE>::smoothSecondDerivative(void)
+template<typename InputHandler>
+void MixedSplineRegression<InputHandler>::smoothSecondDerivative(void)
 {
-    using ETTimeMass = EOExpr<TimeMass>;
-
-    Spline<Integrator, SPLINE_DEGREE, ORDER_DERIVATIVE> spline(mesh_time_);
-
-    TimeMass ETimeMass;
-    ETTimeMass timeMass(ETimeMass);
-
-    Assembler::operKernel(timeMass, spline, Pt_);
+    Spline<SPLINE_DEGREE, ORDER_DERIVATIVE> spline(mesh_time_);
+    Assembler::operKernel(spline, Pt_);
 }
 
 // Parabolic
@@ -1280,12 +1256,11 @@ class MixedFERegression<GAMDataLaplace>: public MixedFERegressionBase<Regression
 		MixedFERegression(const RegressionData & regressionData, OptimizationData & optimizationData, UInt nnodes_):
 			MixedFERegressionBase<RegressionData>(regressionData, optimizationData, nnodes_) {};
 
-		template<UInt ORDER, UInt mydim, UInt ndim, typename IntegratorSpace, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE>
+		template<UInt ORDER, UInt mydim, UInt ndim>
 		void preapply(const MeshHandler<ORDER,mydim,ndim> & mesh)
 		{
 			typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
-			MixedFERegressionBase<RegressionData>::preapply<ORDER,mydim,ndim, IntegratorSpace, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE>
-				(stiff, ForcingTerm(std::vector<Real>(1)), mesh);
+			MixedFERegressionBase<RegressionData>::preapply(stiff, ForcingTerm(), mesh);
 		}
 };
 
@@ -1296,26 +1271,19 @@ class MixedFERegression<GAMDataElliptic>: public MixedFERegressionBase<Regressio
 		MixedFERegression(const RegressionDataElliptic & regressionData, OptimizationData & optimizationData, UInt nnodes_):
 			MixedFERegressionBase<RegressionDataElliptic>(regressionData, optimizationData, nnodes_) {};
 
-		template< UInt ORDER, UInt mydim, UInt ndim, typename IntegratorSpace, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE>
+		template< UInt ORDER, UInt mydim, UInt ndim>
 		void preapply(const MeshHandler<ORDER,mydim,ndim> & mesh)
 		{
-			if(mydim!=2 || ndim!=2)
-			{
-				Rprintf("ERROR: these dimensions are not yet implemented, for the moment smoothEllipticPDE is available for mydim = ndim = 2");
-			}
-			else
-			{
-				typedef EOExpr<Mass>  ETMass;  Mass EMass;   ETMass mass(EMass);
-				typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
-				typedef EOExpr<Grad>  ETGrad;  Grad EGrad;   ETGrad grad(EGrad);
+			typedef EOExpr<Mass>  ETMass;  Mass EMass;   ETMass mass(EMass);
+			typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
+			typedef EOExpr<Grad>  ETGrad;  Grad EGrad;   ETGrad grad(EGrad);
 
-				const Real & c = this->regressionData_.getC();
-				const Eigen::Matrix<Real,2,2> & K = this->regressionData_.getK();
-				const Eigen::Matrix<Real,2,1> & b = this->regressionData_.getBeta();
+	  		const Real& c = this->regressionData_.getC();
+	  		const Diffusion<PDEParameterOptions::Constant>& K = this->regressionData_.getK();
+	  		const Advection<PDEParameterOptions::Constant>& b = this->regressionData_.getBeta();
 
-				MixedFERegressionBase<RegressionDataElliptic>::preapply<ORDER,mydim,ndim, IntegratorSpace, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE>
-					(c*mass+stiff[K]+dot(b,grad), ForcingTerm(std::vector<Real>(1)), mesh);
-			}
+			MixedFERegressionBase<RegressionDataElliptic>::preapply(c*mass+stiff[K]+b.dot(grad), ForcingTerm(), mesh);
+			
 		}
 };
 
@@ -1326,29 +1294,22 @@ class MixedFERegression<GAMDataEllipticSpaceVarying>: public MixedFERegressionBa
 		MixedFERegression(const RegressionDataEllipticSpaceVarying & regressionData, OptimizationData & optimizationData, UInt nnodes_):
 			MixedFERegressionBase<RegressionDataEllipticSpaceVarying>( regressionData, optimizationData, nnodes_) {};
 
-		template<UInt ORDER, UInt mydim, UInt ndim, typename IntegratorSpace, typename IntegratorTime, UInt SPLINE_DEGREE, UInt ORDER_DERIVATIVE>
+		template<UInt ORDER, UInt mydim, UInt ndim>
 		void preapply(const MeshHandler<ORDER,mydim,ndim> & mesh)
 		{
-			if(mydim!=2 || ndim!=2)
-			{
-				Rprintf("ERROR: these dimensions are not yet implemented, for the moment smoothEllipticPDE is available for mydim = ndim = 2");
-			}
-			else
-			{
-				typedef EOExpr<Mass>  ETMass;  Mass EMass;   ETMass mass(EMass);
-				typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
-				typedef EOExpr<Grad>  ETGrad;  Grad EGrad;   ETGrad grad(EGrad);
+			typedef EOExpr<Mass>  ETMass;  Mass EMass;   ETMass mass(EMass);
+			typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
+			typedef EOExpr<Grad>  ETGrad;  Grad EGrad;   ETGrad grad(EGrad);
 
-				const Reaction &    c = this->regressionData_.getC();
-				const Diffusivity & K = this->regressionData_.getK();
-				const Advection &   b = this->regressionData_.getBeta();
-				const ForcingTerm & u = this->regressionData_.getU();
+			const Reaction& c = this->regressionData_.getC();
+			const Diffusion<PDEParameterOptions::SpaceVarying>& K = this->regressionData_.getK();
+			const Advection<PDEParameterOptions::SpaceVarying>& b = this->regressionData_.getBeta();
+			const ForcingTerm& u= this->regressionData_.getU();
 
-				this->isSpaceVarying=TRUE;
+			this->isSpaceVarying = TRUE;
 
-				MixedFERegressionBase<RegressionDataEllipticSpaceVarying>::preapply<ORDER,mydim,ndim, IntegratorSpace, IntegratorTime, SPLINE_DEGREE, ORDER_DERIVATIVE>
-					(c*mass+stiff[K]+dot(b,grad), u, mesh);
-			}
+			MixedFERegressionBase<RegressionDataEllipticSpaceVarying>::preapply(c*mass+stiff[K]+b.dot(grad), u, mesh);
+			
 		}
 };
 

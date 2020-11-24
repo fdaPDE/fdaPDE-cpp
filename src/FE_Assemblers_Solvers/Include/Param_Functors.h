@@ -1,119 +1,133 @@
-/*
- * param_functors.hpp
- *
- *  Created on: Jun 2, 2015
- *      Author: eardi
- */
 #ifndef __PARAM_FUNCTORS_H__
 #define __PARAM_FUNCTORS_H__
 
-//#include "matrix_assembler.hpp"
+#include "Pde_Expression_Templates.h"
 
-class Function
-{
+// Forward declaration!
+template <UInt ORDER, UInt mydim, UInt ndim>
+class FiniteElement;
+
+// Convenience enum for options
+enum class PDEParameterOptions{Constant, SpaceVarying};
+
+template<PDEParameterOptions OPTION>
+class Diffusion{
 public:
-	//virtual ~Function();
-	virtual Real operator()(UInt globalNodeIndex, UInt ic = 0) const {return 0;}
+
+  Diffusion(const Real* const K_ptr) :
+    K_ptr_(K_ptr) {}
+
+  Diffusion(SEXP RGlobalVector) :
+    K_ptr_(REAL(RGlobalVector)) {}
+
+  template<UInt ORDER, UInt mydim, UInt ndim>
+  Real operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const;
+
+private:
+  const Real* const K_ptr_;
 };
 
-class Diffusivity
-{
-	std::vector<Eigen::Matrix<Real,2,2>, Eigen::aligned_allocator<Eigen::Matrix<Real,2,2> > > K_;
+template<>
+template<UInt ORDER, UInt mydim, UInt ndim>
+Real Diffusion<PDEParameterOptions::Constant>::operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
+  using EigenMap2Diff_matr = Eigen::Map<const Eigen::Matrix<Real,ndim,ndim> >;
+
+  return fe_.stiff_impl(iq, i, j, EigenMap2Diff_matr(K_ptr_));
+}
+
+template<>
+template<UInt ORDER, UInt mydim, UInt ndim>
+Real Diffusion<PDEParameterOptions::SpaceVarying>::operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
+  using EigenMap2Diff_matr = Eigen::Map<const Eigen::Matrix<Real,ndim,ndim> >;
+
+  const UInt index = fe_.getGlobalIndex(iq) * EigenMap2Diff_matr::SizeAtCompileTime;
+  return fe_.stiff_impl(iq, i, j, EigenMap2Diff_matr(&K_ptr_[index]));
+}
+
+template<PDEParameterOptions OPTION>
+class Advection{
 public:
-	Diffusivity():
-			K_(){};
-	Diffusivity(const std::vector<Eigen::Matrix<Real,2,2>, Eigen::aligned_allocator<Eigen::Matrix<Real,2,2> > >& K):
-		K_(K){};
-	Diffusivity(SEXP RGlobalVector)
-	{
-		UInt num_int_nodes = Rf_length(RGlobalVector)/4;
-		K_.resize(num_int_nodes);
-		for(auto l=0; l<num_int_nodes;l++)
-		{
-			for(auto j = 0; j < 2; ++j)
-			{
-				for(auto i = 0; i < 2; ++i)
-					K_[l](i,j) = REAL(RGlobalVector)[l*4 + 2*j + i];
-			}
-		}
-	}
 
+  Advection(const Real* const b_ptr) :
+    b_ptr_(b_ptr) {}
 
-	Eigen::Matrix<Real,2,2> operator()(UInt globalNodeIndex, UInt ic1 = 0) const
-	{
-		return K_[globalNodeIndex];
-	}
+  Advection(SEXP RGlobalVector) :
+    b_ptr_(REAL(RGlobalVector)) {}
+
+  template<UInt ORDER, UInt mydim, UInt ndim>
+  Real operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const;
+
+  EOExpr<const Advection&> dot(const EOExpr<Grad>& grad) const {
+    typedef EOExpr<const Advection&> ExprT;
+    return ExprT(*this);
+  }
+
+private:
+  const Real* const b_ptr_;
 };
 
-class Advection : public virtual Function
-{
-	std::vector<Eigen::Matrix<Real,2,1>, Eigen::aligned_allocator<Eigen::Matrix<Real,2,1> > > beta_;
-public:
-	Advection(const std::vector<Eigen::Matrix<Real,2,1>, Eigen::aligned_allocator<Eigen::Matrix<Real,2,1> > >& beta):
-		beta_(beta){};
-	Advection(SEXP RGlobalVector)
-	{
-		UInt num_int_nodes = Rf_length(RGlobalVector)/2;
-		beta_.resize(num_int_nodes);
-		for(auto l=0; l<num_int_nodes;l++)
-		{
-			for(auto j = 0; j < 2; ++j)
-			{
-					beta_[l](j) = REAL(RGlobalVector)[l*2 + j];
-			}
-		}
-	}
+template<>
+template<UInt ORDER, UInt mydim, UInt ndim>
+Real Advection<PDEParameterOptions::Constant>::operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
+  using EigenMap2Adv_vec = Eigen::Map<const Eigen::Matrix<Real,ndim,1> >;
 
-	Real operator() (UInt globalNodeIndex, UInt ic = 0) const
-	{
-		return beta_[globalNodeIndex][ic];
-	}
+  return fe_.grad_impl(iq, i, j, EigenMap2Adv_vec(b_ptr_));
+}
+
+template<>
+template<UInt ORDER, UInt mydim, UInt ndim>
+Real Advection<PDEParameterOptions::SpaceVarying>::operator() (const FiniteElement<ORDER,mydim,ndim>& fe_, UInt iq, UInt i, UInt j) const {
+  using EigenMap2Adv_vec = Eigen::Map<const Eigen::Matrix<Real,ndim,1> >;
+
+  const UInt index = fe_.getGlobalIndex(iq) * EigenMap2Adv_vec::SizeAtCompileTime;
+  return fe_.grad_impl(iq, i, j, EigenMap2Adv_vec(&b_ptr_[index]));
+}
+
+
+class Reaction{
+public:
+
+	Reaction(const Real* const  c_ptr) :
+		c_ptr_(c_ptr) {}
+
+	Reaction(SEXP RGlobalVector) :
+    c_ptr_(REAL(RGlobalVector)) {}
+
+  template<UInt ORDER, UInt mydim, UInt ndim>
+  Real operator() (const FiniteElement<ORDER, mydim, ndim>& fe_, UInt iq, UInt i, UInt j) const {
+    const UInt index = fe_.getGlobalIndex(iq);
+    return c_ptr_[index]*fe_.mass_impl(iq, i, j);
+  }
+
+  EOExpr<const Reaction&> operator* (const EOExpr<Mass>&  mass) const {
+      typedef EOExpr<const Reaction&> ExprT;
+      return ExprT(*this);
+  }
+
+private:
+  const Real* const c_ptr_;
 };
 
-class Reaction : public virtual Function
-{
-	std::vector<Real> c_;
+
+class ForcingTerm{
 public:
-	Reaction(const std::vector<Real>& c, UInt ic = 0):
-		c_(c){};
 
-	Reaction(SEXP RGlobalVector)
-	{
-		UInt num_int_nodes = Rf_length(RGlobalVector);
-		c_.resize(num_int_nodes);
-		for(auto l=0; l<num_int_nodes;l++)
-		{
-					c_[l] = REAL(RGlobalVector)[l];
-		}
-	}
+  ForcingTerm() :
+    u_ptr_(nullptr) {}
+	ForcingTerm(const Real* const u_ptr) :
+		u_ptr_(u_ptr) {}
 
-	Real operator()(UInt globalNodeIndex, UInt ic = 0) const
-	{
-		return c_[globalNodeIndex];
-	}
-};
+	ForcingTerm(SEXP RGlobalVector) :
+    u_ptr_(REAL(RGlobalVector)) {}
 
-class ForcingTerm : public virtual Function
-{
-	std::vector<Real> u_;
-public:
-	ForcingTerm(const std::vector<Real>& u, UInt ic = 0):
-		u_(u){};
+  template<UInt ORDER, UInt mydim, UInt ndim>
+  Real integrate (const FiniteElement<ORDER, mydim, ndim>& fe_, UInt i) const {
+    const UInt index = fe_.getGlobalIndex(0);
+    return fe_.forcing_integrate(i, &u_ptr_[index]);
+  }
 
-	ForcingTerm(SEXP RGlobalVector)
-	{
-		UInt num_int_nodes = Rf_length(RGlobalVector);
-		u_.resize(num_int_nodes);
-		for(auto l=0; l<num_int_nodes;l++)
-		{
-					u_[l] = REAL(RGlobalVector)[l];
-		}
-	}
-
-	Real operator()(UInt globalNodeIndex, UInt ic = 0) const
-	{
-		return u_[globalNodeIndex];
-	}
+private:
+  const Real* const u_ptr_;
 };
 
 

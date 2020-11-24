@@ -1,6 +1,8 @@
-#include "../Include/DE_Data.h"
+#ifndef __DE_DATA_IMP_H__
+#define __DE_DATA_IMP_H__
 
-DEData::DEData(SEXP Rdata, SEXP Rorder, SEXP Rfvec, SEXP RheatStep, SEXP RheatIter, SEXP Rlambda, SEXP Rnfolds, SEXP Rnsim, SEXP RstepProposals,
+template<UInt ndim>
+DEData<ndim>::DEData(SEXP Rdata, SEXP Rorder, SEXP Rfvec, SEXP RheatStep, SEXP RheatIter, SEXP Rlambda, SEXP Rnfolds, SEXP Rnsim, SEXP RstepProposals,
   SEXP Rtol1, SEXP Rtol2, SEXP Rprint, SEXP Rsearch)
 {
   setData(Rdata);
@@ -32,7 +34,8 @@ DEData::DEData(SEXP Rdata, SEXP Rorder, SEXP Rfvec, SEXP RheatStep, SEXP RheatIt
 }
 
 
-DEData::DEData(const std::vector<Point>& data, const UInt& order, const VectorXr& fvec, Real heatStep, UInt heatIter, const std::vector<Real>& lambda,
+template<UInt ndim>
+DEData<ndim>::DEData(const std::vector<Point<ndim> >& data, const UInt& order, const VectorXr& fvec, Real heatStep, UInt heatIter, const std::vector<Real>& lambda,
                const UInt& nfolds, const UInt& nsim, const std::vector<Real>& stepProposals, Real tol1, Real tol2,
                bool print, UInt search):
                 data_(data), order_(order), fvec_(fvec), heatStep_(heatStep), heatIter_(heatIter), lambda_(lambda), Nfolds_(nfolds),
@@ -43,29 +46,20 @@ DEData::DEData(const std::vector<Point>& data, const UInt& order, const VectorXr
 
 
 
-void DEData::setData(SEXP Rdata)
+template<UInt ndim>
+void DEData<ndim>::setData(SEXP Rdata)
 {
-  n_ = INTEGER(Rf_getAttrib(Rdata, R_DimSymbol))[0];
-  data_.reserve(n_);
-	if(n_>0){
-		UInt ndim = INTEGER(Rf_getAttrib(Rdata, R_DimSymbol))[1];
-
-	  if (ndim == 2){
-			for(UInt i=0; i<n_; ++i)
-			{
-				data_.emplace_back(REAL(Rdata)[i+ n_*0],REAL(Rdata)[i+ n_*1]);
-      }
-    }
-    else {
-			for(UInt i=0; i<n_; ++i)
-			{
-				data_.emplace_back(REAL(Rdata)[i+ n_*0],REAL(Rdata)[i+ n_*1],REAL(Rdata)[i+ n_*2]);
-			}
-		}
-	}
+  const RNumericMatrix data(Rdata);
+  n_=data.nrows();
+  if(n_>0){
+    data_.reserve(n_);
+    for(int i=0; i<n_; ++i)
+      data_.emplace_back(i, data);
+  }
 }
 
-void DEData::setFvec(SEXP Rfvec)
+template<UInt ndim>
+void DEData<ndim>::setFvec(SEXP Rfvec)
 {
   UInt dimc = Rf_length(Rfvec);
   fvec_.resize(dimc);
@@ -75,7 +69,8 @@ void DEData::setFvec(SEXP Rfvec)
   }
 }
 
-void DEData::setLambda(SEXP Rlambda)
+template<UInt ndim>
+void DEData<ndim>::setLambda(SEXP Rlambda)
 {
   UInt diml = Rf_length(Rlambda);
   lambda_.reserve(diml);
@@ -85,7 +80,8 @@ void DEData::setLambda(SEXP Rlambda)
   }
 }
 
-void DEData::setStepProposals(SEXP RstepProposals)
+template<UInt ndim>
+void DEData<ndim>::setStepProposals(SEXP RstepProposals)
 {
   UInt dimPG = Rf_length(RstepProposals);
   stepProposals_.reserve(dimPG);
@@ -96,28 +92,30 @@ void DEData::setStepProposals(SEXP RstepProposals)
 }
 
 
-
-void DEData::setNewData(const std::vector<Point>& p)
+template<UInt ndim>
+void DEData<ndim>::setNewData(const std::vector<Point<ndim> >& p)
 {
-  data_.resize(p.size());
-  for(UInt i = 0; i < p.size(); i++){
-    data_[i] = p[i];
-  }
+  data_=p;
 }
 
-void DEData::setDatum(const Point& p, UInt i)
+template<UInt ndim>
+void DEData<ndim>::setDatum(const Point<ndim>& p, UInt i)
 {
   data_[i] = p;
 }
 
-void DEData::updateN(UInt n){
+template<UInt ndim>
+void DEData<ndim>::updateN(UInt n){
   n_ = n;
 }
 
-void DEData::printData(std::ostream & out) const
+template<UInt ndim>
+void DEData<ndim>::printData(std::ostream & out) const
 {
-  for(std::vector<Point>::size_type i=0;i<data_.size(); i++)
+  for(int i=0; i<data_.size(); i++)
 	{
-		data_[i].print(out);
+		out<<data_[i]<<std::endl;
 	}
 }
+
+#endif

@@ -33,7 +33,7 @@ library(fdaPDE)
 data(horseshoe2D)
 boundary_nodes = horseshoe2D$boundary_nodes
 boundary_segments = horseshoe2D$boundary_segments
-locations = horseshoe2D$locations											  
+locations = horseshoe2D$locations
 
 ## Create the 2D mesh
 mesh = create.mesh.2D(nodes = rbind(boundary_nodes, locations), segments = boundary_segments)

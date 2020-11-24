@@ -15,14 +15,14 @@
 // This file contains data informations for the Density Estimation problem
 
 //! @brief A class to store common data for the problem.
-template<typename Integrator, typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
 class DataProblem{
   private:
-    DEData deData_;
+    DEData<ndim> deData_;
     MeshHandler<ORDER, mydim, ndim> mesh_;
     SpMat R0_, R1_, GlobalPsi_;
     MatrixXr P_, PsiQuad_;
-    static constexpr UInt Nodes = mydim==2? 3*ORDER : 6*ORDER-2;
+    static constexpr UInt Nodes = (mydim==2) ? 3*ORDER : 6*ORDER-2;
 
     //! A method to compute the finite element matrices.
     void fillFEMatrices();
@@ -45,9 +45,9 @@ class DataProblem{
 
     // Getters
 		//! A method returning the data. It calls the same method of DEData class.
-		inline std::vector<Point> getData() const {return deData_.getData();}
+		inline std::vector<Point<ndim> > getData() const {return deData_.getData();}
     //! A method returning a datum. It calls the same method of DEData class.
-    inline Point getDatum(UInt i) const {return deData_.getDatum(i);}
+    inline Point<ndim> getDatum(UInt i) const {return deData_.getDatum(i);}
     //! A method returning the number of observations. It calls the same method of DEData class.
 		inline UInt getNumberofData() const {return deData_.getNumberofData();}
 		//! A method returning the the input order. It calls the same method of DEData class.
@@ -83,20 +83,20 @@ class DataProblem{
 
     //getter for mesh
     //! A method returning the mesh.
-    inline MeshHandler<ORDER, mydim, ndim> getMesh() const {return mesh_;}
+    inline const MeshHandler<ORDER, mydim, ndim>& getMesh() const {return mesh_;}
     //getter for specific mesh features
     //! A method returning the number of mesh nodes. It calls the same method of MeshHandler class.
     inline UInt getNumNodes() const {return mesh_.num_nodes();}
     //! A method returning the number of mesh elements. It calls the same method of MeshHandler class.
     inline UInt getNumElements() const {return mesh_.num_elements();}
     //! A method returning a node. It calls the same method of MeshHandler class.
-    inline Point getPoint(Id id) const {return mesh_.getPoint(id);}
+    inline Point<ndim> getPoint(Id id) const {return mesh_.getPoint(id);}
     //! A method returning an element. It calls the same method of MeshHandler class.
     inline Element<Nodes,mydim,ndim> getElement(Id id) const {return mesh_.getElement(id);}
     //! A method returning the element in which he point in input is located by using a naive search. It calls the same method of MeshHandler class.
-    inline Element<Nodes,mydim,ndim> findLocationNaive(Point point) const {return mesh_.findLocationNaive(point);}
+    inline Element<Nodes,mydim,ndim> findLocationNaive(Point<ndim> point) const {return mesh_.findLocationNaive(point);}
     //! A method returning the element in which he point in input is located by using a tree search. It calls the same method of MeshHandler class.
-    inline Element<Nodes,mydim,ndim> findLocationTree(Point point) const {return mesh_.findLocationTree(point);}
+    inline Element<Nodes,mydim,ndim> findLocationTree(Point<ndim> point) const {return mesh_.findLocationTree(point);}
 
     //getter for matrices
     //! A method returning the P matrix.

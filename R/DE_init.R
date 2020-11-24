@@ -88,12 +88,12 @@ DE.heat.FEM <- function(data, FEMbasis, lambda=NULL, heatStep=0.1, heatIter=500,
   ###################### C++ Code Execution #########################################################
   bigsol = NULL
   if(class(FEMbasis$mesh) == 'mesh.2D'){	  
-    print('C++ Code Execution')
+    
     bigsol = CPP_FEM.DE_init(data, FEMbasis, lambda, fvec, heatStep, heatIter, ndim, mydim, step_method, direction_method, preprocess_method,
                         stepProposals, tol1, tol2, print, nfolds, nsimulations, search, init, nFolds)
     
   } else if(class(FEMbasis$mesh) == 'mesh.2.5D'){
-    print('C++ Code Execution')
+    
     bigsol = CPP_FEM.manifold.DE_init(data, FEMbasis, lambda, fvec, heatStep, heatIter, ndim, mydim, step_method, direction_method, preprocess_method,
                                  stepProposals, tol1, tol2, print, nfolds, nsimulations, search, init, nFolds)
     

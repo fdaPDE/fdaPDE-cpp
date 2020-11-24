@@ -9,7 +9,6 @@
 #include "../../FE_Assemblers_Solvers/Include/Solver.h"
 #include "FPCA_Data.h"
 #include "FPCA_Object.h"
-#include "../../FE_Assemblers_Solvers/Include/Integrate_Psi.h"
 #include "../../Global_Utilities/Include/Solver_Definitions.h"
 #include <memory>
 
@@ -55,7 +54,7 @@ protected:
 	std::vector<Real> var_;
 
 	UInt nnodes_;
-
+	
 	//!A Eigen::VectorXr : Stores the final scores computed for each PC.
 	std::vector<VectorXr> scores_mat_;
 	//!A Eigen::VectorXr : Stores the final loadings computed for each PC.
@@ -89,13 +88,15 @@ protected:
 	void computeCumulativePercentageExplained();
 	//! A method for the computation of the iterations of the SF-PCA algorithm.
 	void computeIterations(MatrixXr & datamatrixResiduals_,FPCAObject & FPCAinput, UInt lambda_index, UInt nnodes);
+	//! A method for the initialization of all the parameters used in the iteration of the SF-PCA algorithm.
+	void SetAndFixParameters();
 
 public:
 	//!A Constructor.
 	MixedFEFPCABase(const FPCAData& fpcaData): fpcaData_(fpcaData),isRcomputed_(false) {};
 
 	//! A method for the initialization of all the parameters used in the iteration of the SF-PCA algorithm.
-	template<typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
+	template<UInt ORDER, UInt mydim, UInt ndim>
 	void SetAndFixParameters(const MeshHandler<ORDER, mydim, ndim> & mesh);
 
 	//!A destructor.
@@ -160,8 +161,7 @@ protected:
 	void computeIterationsGCV(MatrixXr &datamatrixResiduals_, UInt nnodes, UInt np);
 	//! A method for the computation of the GCV
 	void computeGCV(FPCAObject& FPCAinput,UInt output_index);
-	//! A method for the computation of the degres of freedom
-	void computeDegreesOfFreedom(UInt output_index);
+
 public:
 	//!A Constructor.
 	MixedFEFPCAGCV(const FPCAData& fpcaData):MixedFEFPCABase(fpcaData){};

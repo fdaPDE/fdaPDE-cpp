@@ -275,12 +275,25 @@ CPP_smooth.FEM.PDE.time<-function(locations, time_locations, observations, FEMba
     lambdaT<-as.vector(lambdaT)
   }
 
+  if(is.null(time_locations)){
+    time_locations<-matrix(ncol=0, nrow=0)
+  }else
+  {
+    time_locations <- as.matrix(time_locations)
+  }
+
+  if(is.null(time_mesh)){
+    time_mesh<-matrix(ncol=0, nrow=0)
+  }else
+  {
+    time_mesh <- as.matrix(time_mesh)
+  }
+
+
   ## Set proper type for correct C++ reading
   locations <- as.matrix(locations)
   storage.mode(locations) <- "double"
-  time_locations <- as.matrix(time_locations)
   storage.mode(time_locations) <- "double"
-  time_mesh <- as.matrix(time_mesh)
   storage.mode(time_mesh) <- "double"
   storage.mode(FEMbasis$mesh$nodes) <- "double"
   storage.mode(FEMbasis$mesh$triangles) <- "integer"
@@ -472,6 +485,20 @@ CPP_smooth.FEM.PDE.sv.time<-function(locations, time_locations, observations, FE
     lambdaT<-as.vector(lambdaT)
   }
 
+  if(is.null(time_locations)){
+    time_locations<-matrix(ncol=0, nrow=0)
+  }else
+  {
+    time_locations <- as.matrix(time_locations)
+  }
+
+  if(is.null(time_mesh)){
+    time_mesh<-matrix(ncol=0, nrow=0)
+  }else
+  {
+    time_mesh <- as.matrix(time_mesh)
+  }
+
 
   PDE_param_eval = NULL
   points_eval = matrix(CPP_get_evaluations_points(mesh = FEMbasis$mesh, order = FEMbasis$order),ncol = 2)
@@ -483,9 +510,7 @@ CPP_smooth.FEM.PDE.sv.time<-function(locations, time_locations, observations, FE
   ## Set proper type for correct C++ reading
   locations <- as.matrix(locations)
   storage.mode(locations) <- "double"
-  time_locations <- as.matrix(time_locations)
   storage.mode(time_locations) <- "double"
-  time_mesh <- as.matrix(time_mesh)
   storage.mode(time_mesh) <- "double"
   storage.mode(FEMbasis$mesh$nodes) <- "double"
   storage.mode(FEMbasis$mesh$triangles) <- "integer"
@@ -628,11 +653,18 @@ CPP_eval.FEM.time <- function(FEM.time, locations, time_locations, incidence_mat
   FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
   FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
 
+
+  if(is.null(time_locations)){
+    time_locations<-matrix(ncol=0, nrow=0)
+  }else
+  {
+    time_locations <- as.matrix(time_locations)
+  }
+
   # Imposing types, this is necessary for correct reading from C++
   ## Set proper type for correct C++ reading
   locations <- as.matrix(locations)
   storage.mode(locations) <- "double"
-  time_locations <- as.matrix(time_locations)
   storage.mode(time_locations) <- "double"
   incidence_matrix <- as.matrix(incidence_matrix)
   storage.mode(incidence_matrix) <- "integer"

@@ -5,212 +5,123 @@
 #include "Integration.h"
 #include "../../Mesh/Include/Mesh_Objects.h"
 
-//!  This class implements all properties of a Triangular or Tetrahedral Finite Element
-/*!
- * This class is the most important one of the entire code
- * and implements everything needed by a triangular or tetrahedral finite elemnt
- *
- * It takes as a template parameter a class that implements the method used
- * for determining the mass, stiff and grad matrices
-*/
-
-template <class Integrator ,UInt ORDER, UInt mydim, UInt ndim>
-class FiniteElement{
-};
-
-
-template <class Integrator ,UInt ORDER>
-class FiniteElement<Integrator, ORDER, 2,2>{
-private:
-	Element<3*ORDER,2,2> reference_;
-	Element<3*ORDER,2,2> t_;
-	Eigen::Matrix<Real,3*ORDER, Integrator::NNODES> phiMapMaster_;
-	//Numero basi locali x Num coordinate x numero nodi integrazione
-	Eigen::Matrix<Real,3*ORDER, Integrator::NNODES*2> phiDerMapMaster_;
-	Eigen::Matrix<Real,3*ORDER, Integrator::NNODES*2> invTrJPhiDerMapMaster_;
-
-	void setPhiMaster();
-	void setPhiDerMaster();
-	void setInvTrJPhiDerMaster();
-
+// This is an abstract base class that wraps Element objects
+// It stores the data needed by a triangular or tetrahedral finite element
+template <UInt ORDER, UInt mydim, UInt ndim>
+class FiniteElementData{
+	static_assert((ORDER==1 || ORDER==2) &&
+								(mydim==2 || mydim==3) &&
+								 mydim <= ndim,
+								 "ERROR! TRYING TO INSTANTIATE FINITE ELEMENT WITH WRONG NUMBER OF NODES AND/OR DIMENSIONS! See finite_element.h");
 public:
+	// This type encodes an appropriate quadrature rule depending on order and dimension
+	using Integrator = typename SpaceIntegratorHelper::Integrator<ORDER,mydim>;
 
-	//! This is an empty constructor
-    /*!
-        For efficiency and Expression Templates organization of the
-        code, the use of this class is based on the updateElement class
-    */
-	FiniteElement();
+	// Number of basis function on the element
+	static constexpr UInt NBASES = how_many_nodes(ORDER,mydim);
 
-	//! A member updating the Finite Element properties
-    /*!
-      \param t an element from which to update the finite element properties
-    */
-	void updateElement(const Element<3*ORDER,2,2> &t);
+	// A default constructor
+	FiniteElementData();
 
-	Real getAreaReference()
-	{
-		return reference_.getArea();
-	}
+	// No move/copy constructors/operations
+	// Since the class acts as a wrapper they are not needed!
+	// Moreover this guarantees that the class can't be passed by value
+	// (it is less error prone)
+	FiniteElementData(const FiniteElementData&) = delete;
+	FiniteElementData(FiniteElementData&&) = delete;
+	FiniteElementData& operator=(const FiniteElementData&) = delete;
+	FiniteElementData& operator=(FiniteElementData&&) = delete;
 
-	Real getDet()
-	{
-		return t_.getDetJ();
-	}
+	// Pure virtual destructor making the class an ABC
+	// Note: this has negligible runtime cost for this class
+	virtual ~FiniteElementData()=0;
 
-	Point coorQuadPt(UInt iq)
-	{
-		return Point(t_.getM_J()(0,0)*Integrator::NODES[iq][0] + t_.getM_J()(0,1)*Integrator::NODES[iq][1] + t_[0][0],
-				t_.getM_J()(1,0)*Integrator::NODES[iq][0] + t_.getM_J()(1,1)*Integrator::NODES[iq][1] + t_[0][1]);
-	}
+	// A member that accepts a new element to wrap
+	void updateElement(const Element<NBASES,mydim,ndim>& t);
 
-	UInt getGlobalIndex(UInt iq)
-	{
-		return Integrator::NNODES * t_.getId() + iq;
-	}
+	// Overloaded subscript operator
+	// It returns the i-th point of the underlying element
+	// Note: read-only access because changing a point in an element
+	// currently invalidates its state (see: "mesh_objects.h")
+	const Point<ndim>& operator[] (UInt i) const {return t_[i];}
 
-	//Returns \hat{phi}
-	Real phiMaster(UInt i, UInt iq) const;
+	// Members returning the area/volume of the underlying element
+	Real getMeasure() const {return t_.getMeasure();}
+	Real getArea() const {return t_.getMeasure();}
+	Real getVolume() const {return t_.getMeasure();}
 
-	//Returns \nabla \hat{phi}
-	Real phiDerMaster(UInt i, UInt ic, UInt iq) const;
+	// A member returning the ID of the underlying element
+	Real getId() const {return t_.getId();}
 
-	//Returns J^{-1} \nabla \hat{phi}
-	Real invTrJPhiDerMaster(UInt i, UInt ic, UInt iq) const;
-};
+	// A member returning the global index of a quadrature node
+	UInt getGlobalIndex(UInt iq) const {return Integrator::NNODES * t_.getId() + iq;}
 
+protected:
+	// The underlying element
+	Element<NBASES,mydim,ndim> t_;
+	// A matrix Phi
+	// Phi(i,iq) is ^phi_i(node_iq), i.e. the i-th basis function evaluated at the
+	// iq-th quadrature node on the reference element
+	Eigen::Matrix<Real, Integrator::NNODES, NBASES> referencePhi;
+	// A block matrix PhiDer
+	// Each block iq is made of nabla ^phi(node_iq), i.e. it stores the gradients
+	// of the basis functions evaluated at the quadrature nodes on the reference element
+	Eigen::Matrix<Real, mydim, NBASES*Integrator::NNODES> referencePhiDer;
+	// A block matrix elementPhiDer
+	// Each block iq is made of nabla phi(node_iq), i.e. it stores the gradients
+	// of the basis functions evaluated at the quadrature nodes on the underlying element
+	Eigen::Matrix<Real, ndim, NBASES*Integrator::NNODES> elementPhiDer;
 
-template <class Integrator ,UInt ORDER>
-class FiniteElement<Integrator, ORDER, 2,3>{
-private:
-	Element<3*ORDER,2,2> reference_;
-	Element<3*ORDER,2,3> t_;
-	Eigen::Matrix<Real,3*ORDER, Integrator::NNODES> phiMapMaster_;
-	//Numero basi locali x Num coordinate x numero nodi integrazione
-	Eigen::Matrix<Real,3*ORDER, Integrator::NNODES*2> phiDerMapMaster_;
-	//Eigen::Matrix<Real,3*ORDER, Integrator::NNODES*2> invTrJPhiDerMapMaster_;
-	Eigen::Matrix<Real,2,2> metric_;
-
-	void setPhiMaster();
-	void setPhiDerMaster();
-	//void setInvTrJPhiDerMaster();
-
-public:
-
-	//! This is an empty constructor
-    /*!
-        For efficiency and Expression Templates organization of the
-        code, the use of this class is based on the updateElement class
-    */
-	FiniteElement();
-
-	//! A member updating the Finite Element properties
-    /*!
-      \param t an element from which to update the finite element properties
-    */
-	void updateElement(const Element<3*ORDER,2,3> &t);
-
-	Real getAreaReference()
-	{
-		return reference_.getArea();
-	}
-
-	Real getDet()
-	{
-		return t_.getDetJ();
-	}
-
-	Point coorQuadPt(UInt iq)
-	{
-		return Point(t_.getM_J()(0,0)*Integrator::NODES[iq][0] + t_.getM_J()(0,1)*Integrator::NODES[iq][1] + t_[0][0],
-				t_.getM_J()(1,0)*Integrator::NODES[iq][0] + t_.getM_J()(1,1)*Integrator::NODES[iq][1] + t_[0][1],
-				t_.getM_J()(2,0)*Integrator::NODES[iq][0] + t_.getM_J()(2,1)*Integrator::NODES[iq][1] + t_[0][2]);
-	}
-
-	UInt getGlobalIndex(UInt iq)
-	{
-		return Integrator::NNODES * t_.getId() + iq;
-	}
-
-	//Returns \hat{phi}
-	Real phiMaster(UInt i, UInt iq) const;
-
-	//Returns \nabla \hat{phi}
-	Real phiDerMaster(UInt i, UInt ic, UInt iq) const;
-
-	//Returns J^{-1} \nabla \hat{phi}
-	//Real invTrJPhiDerMaster(UInt i, UInt ic, UInt iq) const;
-
-	Eigen::Matrix<Real,2,2> metric()const {return metric_;};
+	// Members initializing the corresponding matrices at construction
+	void setPhi();
+	void setPhiDer();
+	// A member updating elementPhiDer after each element update
+	void setElementPhiDer();
 
 };
 
 
+// This class implements all the needed methods to assemble the FE matrix
 
-//Implementazione FiniteElement con mydim=3 e ndim=3
-template <class Integrator ,UInt ORDER>
-class FiniteElement<Integrator, ORDER, 3,3>{
-private:
-	Element<6*ORDER-2,3,3> reference_;
-	Element<6*ORDER-2,3,3> t_;
-	Eigen::Matrix<Real,6*ORDER-2, Integrator::NNODES> phiMapMaster_;
-	//Numero basi locali x Num coordinate x numero nodi integrazione
-	Eigen::Matrix<Real,6*ORDER-2, Integrator::NNODES*3> phiDerMapMaster_;
-	Eigen::Matrix<Real,6*ORDER-2, Integrator::NNODES*3> invTrJPhiDerMapMaster_;
-	Eigen::Matrix<Real,3,3> metric_;
-
-	void setPhiMaster();
-	void setPhiDerMaster();
-	void setInvTrJPhiDerMaster();
-
-
+template <UInt ORDER, UInt mydim, UInt ndim>
+class FiniteElement : public FiniteElementData<ORDER, mydim, ndim> {
+	
 public:
+	using Integrator = typename FiniteElementData<ORDER, mydim, ndim>::Integrator;
+	static constexpr UInt NBASES = FiniteElementData<ORDER, mydim, ndim>::NBASES;
 
-	//! This is an empty constructor
-    /*!
-        For efficiency and Expression Templates organization of the
-        code, the use of this class is based on the updateElement class
-    */
-	FiniteElement();
+	FiniteElement()=default;
 
-	//! A member updating the Finite Element properties
-    /*!
-      \param t an element from which to update the finite element properties
-    */
-	void updateElement(const Element<6*ORDER-2,3,3> &t);
-
-	Real getVolumeReference()
-	{
-		return reference_.getVolume();
+	Real stiff_impl(UInt iq, UInt i, UInt j) const {
+		return this->elementPhiDer.col(iq*NBASES+i).dot(this->elementPhiDer.col(iq*NBASES+j));
 	}
 
-	Real getDet()
-	{
-		return t_.getDetJ();
+	template <class ArgType>
+	Real stiff_impl(UInt iq, UInt i, UInt j, const Eigen::MatrixBase<ArgType>& K) const {
+		static_assert(ArgType::RowsAtCompileTime==ndim && ArgType::ColsAtCompileTime==ndim,
+			"ERROR! WRONG DIMENSIONS OF THE INPUT! See finite_element.h");
+		return this->elementPhiDer.col(iq*NBASES+i).dot(K.lazyProduct(this->elementPhiDer.col(iq*NBASES+j)));
 	}
 
-	Point coorQuadPt(UInt iq)
-	{
-		return Point(t_.getM_J()(0,0)*Integrator::NODES[iq][0] + t_.getM_J()(0,1)*Integrator::NODES[iq][1]+t_.getM_J()(0,2)*Integrator::NODES[iq][2] + t_[0][0],
-				t_.getM_J()(1,0)*Integrator::NODES[iq][0] + t_.getM_J()(1,1)*Integrator::NODES[iq][1]+t_.getM_J()(1,2)*Integrator::NODES[iq][2] + t_[0][1],
-				t_.getM_J()(2,0)*Integrator::NODES[iq][0] + t_.getM_J()(2,1)*Integrator::NODES[iq][1]+t_.getM_J()(2,2)*Integrator::NODES[iq][2] + t_[0][2]);
+	Real grad_impl(UInt iq, UInt i, UInt j) const {
+		return this->referencePhi(iq,i) * this->elementPhiDer(0,iq*NBASES+j);
+	}
+	
+	template <class ArgType>
+	Real grad_impl(UInt iq, UInt i, UInt j, const Eigen::MatrixBase<ArgType>& b) const {
+		static_assert(ArgType::RowsAtCompileTime==ndim && ArgType::ColsAtCompileTime==1,
+			"ERROR! WRONG DIMENSIONS OF THE INPUT! See finite_element.h");
+		return this->referencePhi(i,iq) * b.dot(this->elementPhiDer.col(iq*NBASES+j));
 	}
 
-	UInt getGlobalIndex(UInt iq)
-	{
-		return Integrator::NNODES * t_.getId() + iq;
+	Real mass_impl(UInt iq, UInt i, UInt j) const {
+		return this->referencePhi(iq,i) * this->referencePhi(iq,j);
 	}
 
-	//Returns \hat{phi}
-	Real phiMaster(UInt i, UInt iq) const;
-
-	//Returns \nabla \hat{phi}
-	Real phiDerMaster(UInt i, UInt ic, UInt iq) const;
-
-	//Returns J^{-1} \nabla \hat{phi}
-	Real invTrJPhiDerMaster(UInt i, UInt ic, UInt iq) const;
-
-	Eigen::Matrix<Real,3,3> metric()const {return metric_;};
+	Real forcing_integrate(UInt i, const Real* const local_u) const {
+		using EigenMap2Forcing_vec = Eigen::Map<const Eigen::Matrix<Real, Integrator::NNODES, 1> >;
+		return this->referencePhi.col(i).dot(EigenMap2Forcing_vec(local_u).cwiseProduct(EigenMap2Forcing_vec(&Integrator::WEIGHTS[0])));
+	}
 
 };
 

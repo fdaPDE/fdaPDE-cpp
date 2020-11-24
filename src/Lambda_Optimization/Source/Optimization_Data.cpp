@@ -148,15 +148,13 @@ OptimizationData::OptimizationData(SEXP Roptim, SEXP Rlambda_S, SEXP Rlambda_T, 
         if(this->criterion == "grid") // Rlambda is a vector
         {
                 fill_lambda(Rlambda_S, this->lambda_S, this->size_S);
-                if(INTEGER(Rflag_parabolic)[0] == 0) // if separable add temporal lambda
-                        fill_lambda(Rlambda_T, this->lambda_T, this->size_T);
+                fill_lambda(Rlambda_T, this->lambda_T, this->size_T);
                 set_lambdaS_backup(); // save a backup
         }
         else // Rlambda is an initial value (or null)
         {
                 initialize_lambda(Rlambda_S, this->initial_lambda_S);
-                if(INTEGER(Rflag_parabolic)[0] == 0) // if separable add temporal lambda
-                        initialize_lambda(Rlambda_T, this->initial_lambda_T);
+                initialize_lambda(Rlambda_T, this->initial_lambda_T);
         }
 }
 

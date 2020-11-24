@@ -53,15 +53,18 @@ extern "C"
 		UInt ndim = INTEGER(Rndim)[0];
 
 		if(regressionData.getOrder()==1 && mydim==2 && ndim==2)
-			return(regression_skeleton<RegressionData,IntegratorTriangleP2, 1, 2, 2>(regressionData, optimizationData, Rmesh));
+			return(regression_skeleton<RegressionData, 1, 2, 2>(regressionData, optimizationData, Rmesh));
 		else if(regressionData.getOrder()==2 && mydim==2 && ndim==2)
-			return(regression_skeleton<RegressionData,IntegratorTriangleP4, 2, 2, 2>(regressionData, optimizationData, Rmesh));
+			return(regression_skeleton<RegressionData, 2, 2, 2>(regressionData, optimizationData, Rmesh));
 		else if(regressionData.getOrder()==1 && mydim==2 && ndim==3)
-			return(regression_skeleton<RegressionData,IntegratorTriangleP2, 1, 2, 3>(regressionData, optimizationData, Rmesh));
+			return(regression_skeleton<RegressionData, 1, 2, 3>(regressionData, optimizationData, Rmesh));
 		else if(regressionData.getOrder()==2 && mydim==2 && ndim==3)
-			return(regression_skeleton<RegressionData,IntegratorTriangleP4, 2, 2, 3>(regressionData, optimizationData, Rmesh));
+			return(regression_skeleton<RegressionData, 2, 2, 3>(regressionData, optimizationData, Rmesh));
 		else if(regressionData.getOrder()==1 && mydim==3 && ndim==3)
-			return(regression_skeleton<RegressionData,IntegratorTetrahedronP2, 1, 3, 3>(regressionData, optimizationData, Rmesh));
+			return(regression_skeleton<RegressionData, 1, 3, 3>(regressionData, optimizationData, Rmesh));
+		else if(regressionData.getOrder()==2 && mydim==3 && ndim==3)
+			return(regression_skeleton<RegressionData, 2, 3, 3>(regressionData, optimizationData, Rmesh));
+
 		return(NILSXP);
 	}
 
@@ -113,15 +116,19 @@ extern "C"
 		UInt ndim = INTEGER(Rndim)[0];
 
 		if(regressionData.getOrder()==1 && mydim==2 && ndim==2)
-			return(regression_skeleton_time<RegressionData,IntegratorTriangleP2, 1, IntegratorGaussP5, 3, 2, 2, 2>(regressionData, optimizationData, Rmesh, Rmesh_time));
+			return(regression_skeleton_time<RegressionData, 1, 2, 2>(regressionData, optimizationData, Rmesh, Rmesh_time));
 		else if(regressionData.getOrder()==2 && mydim==2 && ndim==2)
-			return(regression_skeleton_time<RegressionData,IntegratorTriangleP4, 2, IntegratorGaussP5, 3, 2, 2, 2>(regressionData, optimizationData, Rmesh, Rmesh_time));
+			return(regression_skeleton_time<RegressionData, 2, 2, 2>(regressionData, optimizationData, Rmesh, Rmesh_time));
 		else if(regressionData.getOrder()==1 && mydim==2 && ndim==3)
-			return(regression_skeleton_time<RegressionData,IntegratorTriangleP2, 1, IntegratorGaussP5, 3, 2, 2, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
+			return(regression_skeleton_time<RegressionData, 1, 2, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
 		else if(regressionData.getOrder()==2 && mydim==2 && ndim==3)
-			return(regression_skeleton_time<RegressionData,IntegratorTriangleP4, 2, IntegratorGaussP5, 3, 2, 2, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
+			return(regression_skeleton_time<RegressionData, 2, 2, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
 		else if(regressionData.getOrder()==1 && mydim==3 && ndim==3)
-			return(regression_skeleton_time<RegressionData,IntegratorTetrahedronP2, 1, IntegratorGaussP5, 3, 2, 3, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
+			return(regression_skeleton_time<RegressionData, 1, 3, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
+		else if(regressionData.getOrder()==2 && mydim==3 && ndim==3)
+			return(regression_skeleton_time<RegressionData, 2, 3, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
+
+
 	    	return(NILSXP);
 	}
 
@@ -175,15 +182,18 @@ extern "C"
 	  	std::string family = CHAR(STRING_ELT(Rfamily,0));
 
 		if(regressionData.getOrder()==1 && mydim==2 && ndim==2)
-			return(GAM_skeleton<GAMDataLaplace,IntegratorTriangleP2, 1, 2, 2>(regressionData, optimizationData, Rmesh, Rmu0 , family, RscaleParam));
+			return(GAM_skeleton<GAMDataLaplace, 1, 2, 2>(regressionData, optimizationData, Rmesh, Rmu0 , family, RscaleParam));
 		else if(regressionData.getOrder()==2 && mydim==2 && ndim==2)
-			return(GAM_skeleton<GAMDataLaplace,IntegratorTriangleP4, 2, 2, 2>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
+			return(GAM_skeleton<GAMDataLaplace, 2, 2, 2>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
 		else if(regressionData.getOrder()==1 && mydim==2 && ndim==3)
-			return(GAM_skeleton<GAMDataLaplace,IntegratorTriangleP2, 1, 2, 3>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
+			return(GAM_skeleton<GAMDataLaplace, 1, 2, 3>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
 		else if(regressionData.getOrder()==2 && mydim==2 && ndim==3)
-			return(GAM_skeleton<GAMDataLaplace,IntegratorTriangleP4, 2, 2, 3>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
+			return(GAM_skeleton<GAMDataLaplace, 2, 2, 3>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
 		else if(regressionData.getOrder()==1 && mydim==3 && ndim==3)
-			return(GAM_skeleton<GAMDataLaplace,IntegratorTetrahedronP2, 1, 3, 3>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
+			return(GAM_skeleton<GAMDataLaplace, 1, 3, 3>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
+		else if(regressionData.getOrder()==2 && mydim==3 && ndim==3)
+			return(GAM_skeleton<GAMDataLaplace, 2, 3, 3>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
+
 		return(R_NilValue);
 	}
 }

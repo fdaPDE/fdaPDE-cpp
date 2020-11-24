@@ -12,11 +12,39 @@ Box<NDIMP>::Box() {
 
 template<int NDIMP>
 Box<NDIMP>::Box(std::vector<Real> const & coord) {
+	if(coord.size()==2*NDIMP){
 	x_.resize(2*NDIMP); //multiply 2 for min, max
-	for(int i = 0; i < 2*NDIMP; ++i) {
+	for(int i = 0; i < 2*NDIMP; ++i)
 		x_[i] = coord[i];
 	}
+	else if(NDIMP==2 && coord.size()==6) {
+			x_.resize(2*NDIMP); //4
+			x_[0] = std::min(std::min(coord[0], coord[2]), coord[4]); //min x
+			x_[1] = std::min(std::min(coord[1], coord[3]), coord[5]); //min y
+			x_[2] = std::max(std::max(coord[0], coord[2]), coord[4]); //max x
+			x_[3] = std::max(std::max(coord[1], coord[3]), coord[5]); //max y
+			}
+	else if(NDIMP==3 && coord.size()==9) {
+			x_.resize(3*NDIMP); //6
+			x_[0] = std::min(std::min(coord[0], coord[3]), coord[6]); //min x
+			x_[1] = std::min(std::min(coord[1], coord[4]), coord[7]); //min y
+			x_[2] = std::min(std::min(coord[2], coord[5]), coord[8]); //min z
+			x_[3] = std::max(std::max(coord[0], coord[3]), coord[6]); //max x
+			x_[4] = std::max(std::max(coord[1], coord[4]), coord[7]); //max y
+			x_[5] = std::max(std::max(coord[2], coord[5]), coord[8]); //max z
+			}
+	else if(NDIMP==3 && coord.size()==12) { //Tetrahedron has 4 nodes
+			x_.resize(3*NDIMP); //6
+			x_[0] = std::min(std::min(std::min(coord[0], coord[3]), coord[6]), coord[9]); //min x
+			x_[1] = std::min(std::min(std::min(coord[1], coord[4]), coord[7]), coord[10]); //min y
+			x_[2] = std::min(std::min(std::min(coord[2], coord[5]), coord[8]), coord[11]); //min z
+			x_[3] = std::max(std::max(std::max(coord[0], coord[3]), coord[6]), coord[9]); //max x
+			x_[4] = std::max(std::max(std::max(coord[1], coord[4]), coord[7]), coord[10]); //max y
+			x_[5] = std::max(std::max(std::max(coord[2], coord[5]), coord[8]), coord[11]); //max z
+	}
 }
+
+
 
 template<int NDIMP>
 template <UInt NNODES,int NDIME,int NDIMPP>
@@ -55,6 +83,7 @@ Box<NDIMP>::Box(Element<NNODES,NDIME,NDIMPP> const & element) {
 }
 
 
+
 template<int NDIMP>
 void Box<NDIMP>::set(std::vector<Real> const & data) {
 	for(int i = 0; i < 2*NDIMP; ++i) { //multiply 2 for min, max
@@ -77,5 +106,3 @@ void Box<NDIMP>::print(std::ostream & out) const {
 }
 
 #endif //__BOUNDING_BOX_IMP_H__
-
-

@@ -11,8 +11,8 @@ checkSmoothingParameters<-function(locations = NULL, observations, FEMbasis, cov
   if(class(FEMbasis$mesh)!='mesh.2D' & class(FEMbasis$mesh) != "mesh.2.5D" & class(FEMbasis$mesh) != "mesh.3D")
     stop('Unknown mesh class')
 
-  if((class(FEMbasis$mesh) == "mesh.2.5D" || class(FEMbasis$mesh) == "mesh.3D") & !is.null(PDE_parameters) )
-    stop('For mesh classes different from mesh.2D, anysotropic regularization is not yet implemented.
+  if((class(FEMbasis$mesh) == "mesh.2.5D") & !is.null(PDE_parameters) )
+    stop('For mesh class mesh.2.5D, anysotropic regularization is not yet implemented.
          Use Laplacian regularization instead')
 
   # Locations & observations & areal
@@ -172,9 +172,6 @@ checkSmoothingParametersSize<-function(locations = NULL, observations, FEMbasis,
     if(class(FEMbasis$mesh) == "mesh.2D"){
       if(nrow(observations) > nrow(FEMbasis$mesh$nodes))
         stop("Size of 'observations' is larger then the size of 'nodes' in the mesh")
-    }else if(class(FEMbasis$mesh) == "mesh.2.5D" || class(FEMbasis$mesh) == "mesh.3D"){
-      if(nrow(observations) > FEMbasis$mesh$nnodes)
-        stop("Size of 'observations' is larger then the size of 'nodes' in the mesh")
     }
   }
   
@@ -199,9 +196,9 @@ checkSmoothingParametersSize<-function(locations = NULL, observations, FEMbasis,
       stop("'incidence_matrix' and 'observations' have incompatible size;")
     if (class(FEMbasis$mesh) == 'mesh.2D' && ncol(incidence_matrix) != nrow(FEMbasis$mesh$triangles))
       stop("'incidence_matrix' must be a ntriangles-columns matrix;")
-    else if (class(FEMbasis$mesh) == 'mesh.2.5D' && ncol(incidence_matrix) != FEMbasis$mesh$ntriangles)
+    else if (class(FEMbasis$mesh) == 'mesh.2.5D' && ncol(incidence_matrix) != nrow(FEMbasis$mesh$triangles))
       stop("'incidence_matrix' must be a ntriangles-columns matrix;")
-    else if (class(FEMbasis$mesh) == 'mesh.3D' && ncol(incidence_matrix) != FEMbasis$mesh$ntetrahedrons)
+    else if (class(FEMbasis$mesh) == 'mesh.3D' && ncol(incidence_matrix) != nrow(FEMbasis$mesh$tetrahedrons))
       stop("'incidence_matrix' must be a ntetrahedrons-columns matrix;")
   }
   
@@ -216,18 +213,15 @@ checkSmoothingParametersSize<-function(locations = NULL, observations, FEMbasis,
     if(class(FEMbasis$mesh) == "mesh.2D"){
       if(sum(BC$BC_indices>nrow(nrow(FEMbasis$mesh$nodes))) > 0)
         stop("At least one index in 'BC_indices' larger then the number of 'nodes' in the mesh;")
-    }else if((class(FEMbasis$mesh) == "mesh.2.5D" || class(FEMbasis$mesh) == "mesh.3D")){
-      if(sum(BC$BC_indices>FEMbasis$mesh$nnodes) > 0)
-        stop("At least one index in 'BC_indices' larger then the number of 'nodes' in the mesh;")
     }
   }
   
   # PDE_parameters
   if(!is.null(PDE_parameters) & space_varying==FALSE){
-    if(!all.equal(dim(PDE_parameters$K), c(2,2)))
-      stop("'K' in 'PDE_parameters must be a 2x2 matrix")
-    if(!all.equal(dim(PDE_parameters$b), c(2,1)))
-      stop("'b' in 'PDE_parameters must be a column vector of size 2")
+    if(!all.equal(dim(PDE_parameters$K), c(ndim,ndim)))
+      stop("'K' in 'PDE_parameters must be a 2x2 or 3x3 matrix")
+    if(!all.equal(dim(PDE_parameters$b), c(ndim,1)))
+      stop("'b' in 'PDE_parameters must be a column vector of size 2 or 3")
     if(!all.equal(dim(PDE_parameters$c), c(1,1)))
       stop("'c' in 'PDE_parameters must be a double")
   }
@@ -244,12 +238,12 @@ checkSmoothingParametersSize<-function(locations = NULL, observations, FEMbasis,
 
     if(!is.numeric(try_K_func))
       stop("Test on function 'K' in 'PDE_parameters' not passed; output is not numeric")
-    if(!all.equal(dim(try_K_func), c(2,2,n_test_points)) )
+    if(!all.equal(dim(try_K_func), c(ndim,ndim,n_test_points)) )
       stop("Test on function 'K' in 'PDE_parameters' not passed; wrong size of the output")
 
     if(!is.numeric(try_b_func))
       stop("Test on function 'b' in 'PDE_parameters' not passed; output is not numeric")
-    if(!all.equal(dim(try_b_func), c(2,n_test_points)))
+    if(!all.equal(dim(try_b_func), c(ndim,n_test_points)))
       stop("Test on function 'b' in 'PDE_parameters' not passed; wrong size of the output")
 
     if(!is.numeric(try_c_func))

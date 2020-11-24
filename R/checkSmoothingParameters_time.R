@@ -127,8 +127,6 @@ checkSmoothingParameters_time<-function(locations = NULL, time_locations=NULL, o
     stop("Both not NULL 'lambdaS'  and 'lambdaT' required for 'lambda.selection.criterion' = 'grid' in separable context.")
   if(optim[1]==0 & FLAG_PARABOLIC == TRUE & is.null(lambdaS))
     stop("Not NULL 'lambdaS' required for 'lambda.selection.criterion' = 'grid' in parabolic context.")
-  if(FLAG_PARABOLIC == 'TRUE' & !is.null(lambdaT))
-    warning("'lambdaT' discarded in parabolic context")
   if(optim[1]!=0 & !is.null(lambdaS))
   {
     if(length(lambdaS)>1) 
@@ -231,12 +229,12 @@ checkSmoothingParametersSize_time<-function(locations = NULL, time_locations = N
     {
     if(!FLAG_PARABOLIC || is.null(IC))
       {
-      if(ifelse(class(FEMbasis$mesh) == "mesh.2D", nrow(FEMbasis$mesh$nodes),FEMbasis$mesh$nnodes) != nrow(observations) || ncol(observations) != nrow(time_locations))
+      if(nrow(FEMbasis$mesh$nodes) != nrow(observations) || ncol(observations) != nrow(time_locations))
         stop("'locations' and 'observations' have incompatible size;")
       }
       else
       {
-        if(ifelse(class(FEMbasis$mesh) == "mesh.2D", nrow(FEMbasis$mesh$nodes),FEMbasis$mesh$nnodes) != nrow(observations) || ncol(observations) != (nrow(time_locations)-1))
+        if(nrow(FEMbasis$mesh$nodes) != nrow(observations) || ncol(observations) != (nrow(time_locations)-1))
           stop("'locations' and 'observations' have incompatible size;")
       }
     }
@@ -244,12 +242,12 @@ checkSmoothingParametersSize_time<-function(locations = NULL, time_locations = N
     {
       if(FLAG_PARABOLIC && !is.null(IC))
       {
-        if(ifelse(class(FEMbasis$mesh) == "mesh.2D", nrow(FEMbasis$mesh$nodes),FEMbasis$mesh$nnodes) != nrow(observations) || (nrow(time_mesh)-1) != ncol(observations))
+        if(nrow(FEMbasis$mesh$nodes) != nrow(observations) || (nrow(time_mesh)-1) != ncol(observations))
           stop("'locations' and 'observations' have incompatible size;")
       }
       else
       {
-        if(ifelse(class(FEMbasis$mesh) == "mesh.2D", nrow(FEMbasis$mesh$nodes),FEMbasis$mesh$nnodes) != nrow(observations) || nrow(time_mesh) != ncol(observations))
+        if(nrow(FEMbasis$mesh$nodes) != nrow(observations) || nrow(time_mesh) != ncol(observations))
           stop("'locations' and 'observations' have incompatible size;")
       }
     }
@@ -306,9 +304,9 @@ checkSmoothingParametersSize_time<-function(locations = NULL, time_locations = N
       stop("'incidence_matrix' and 'observations' have incompatible size;")
     if (class(FEMbasis$mesh) == 'mesh.2D' && ncol(incidence_matrix) != nrow(FEMbasis$mesh$triangles))
       stop("'incidence_matrix' must be a ntriangles-columns matrix;")
-    else if (class(FEMbasis$mesh) == 'mesh.2.5D' && ncol(incidence_matrix) != FEMbasis$mesh$ntriangles)
+    else if (class(FEMbasis$mesh) == 'mesh.2.5D' && ncol(incidence_matrix) != nrow(FEMbasis$mesh$triangles))
       stop("'incidence_matrix' must be a ntriangles-columns matrix;")
-    else if (class(FEMbasis$mesh) == 'mesh.3D' && ncol(incidence_matrix) != FEMbasis$mesh$ntetrahedrons)
+    else if (class(FEMbasis$mesh) == 'mesh.3D' && ncol(incidence_matrix) != nrow(FEMbasis$mesh$tetrahedrons))
       stop("'incidence_matrix' must be a ntetrahedrons-columns matrix;")
   }
 
@@ -319,16 +317,16 @@ checkSmoothingParametersSize_time<-function(locations = NULL, time_locations = N
       stop("'BC_indices' must be a column vector")
     if(ncol(BC$BC_values) != 1)
       stop("'BC_values' must be a column vector")
-    if(nrow(BC$BC_indices)>ifelse(class(FEMbasis$mesh)=='mesh.2D',nrow(FEMbasis$mesh$nodes),FEMbasis$mesh$nnodes))
+    if(nrow(BC$BC_indices)>nrow(FEMbasis$mesh$nodes))
       stop("'BC_indices' longer than the mesh")
     if(nrow(BC$BC_indices) != nrow(BC$BC_values))
       stop("'BC_indices' and 'BC_values' have incompatible size;")
 
-    N=ifelse(class(FEMbasis$mesh) == "mesh.2D",nrow(FEMbasis$mesh$nodes),FEMbasis$mesh$nnodes)
+    N=nrow(FEMbasis$mesh$nodes)
     #M=ifelse(FLAG_PARABOLIC==TRUE,length(time_mesh)-1,length(time_mesh)+2)
     if(any(BC$BC_indices)<0)
       stop("'BC_indices' elements must be non negative")
-    if(any(BC$BC_indices)>ifelse(class(FEMbasis$mesh)=='mesh.2D',nrow(FEMbasis$mesh$nodes),FEMbasis$mesh$nnodes))
+    if(any(BC$BC_indices)>nrow(FEMbasis$mesh$nodes))
       stop("At least one index in 'BC_indices' larger then the number of 'nodes' in the mesh")
   }
 

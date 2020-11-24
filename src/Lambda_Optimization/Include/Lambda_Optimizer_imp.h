@@ -623,6 +623,12 @@ void GCV_Stochastic<InputCarrier, 1>::set_US_(void)
                         }
                 }
 
+        this->USTpsi = this->US_.transpose()*(*this->the_carrier.get_psip());
+
+        // Define the first right hand side : | I  0 |^T * psi^T * Q * u
+        UInt nnodes = this->the_carrier.get_n_nodes();
+        this->b = MatrixXr::Zero(2*nnodes, this->US_.cols());
+        UInt ret = AuxiliaryOptimizer::universal_b_setter(this->b, this->the_carrier, this->US_, nnodes);
         // Validate the completion of the task
         this->us = true;
         //Debugging purpose
@@ -659,14 +665,10 @@ void GCV_Stochastic<InputCarrier, 1>::update_dof(Real lambda)
                         this->set_US_();
                 }
 
-        	// Define the first right hand side : | I  0 |^T * psi^T * Q * u
-        	MatrixXr b = MatrixXr::Zero(2*nnodes, this->US_.cols());
-                UInt ret = AuxiliaryOptimizer::universal_b_setter(b, this->the_carrier, this->US_, nnodes);
 
         	// Solve the system
             	MatrixXr x = this->the_carrier.apply_to_b(b, lambda);
 
-        	MatrixXr USTpsi = this->US_.transpose()*(*this->the_carrier.get_psip());
         	VectorXr edf_vect(nr);
         	Real q = 0;
 
@@ -679,7 +681,7 @@ void GCV_Stochastic<InputCarrier, 1>::update_dof(Real lambda)
         	// For any realization we calculate the degrees of freedom
         	for (UInt i = 0; i < nr; ++i)
                 {
-        		edf_vect(i) = USTpsi.row(i).dot(x.col(i).head(nnodes)) + q;
+        		edf_vect(i) = this->USTpsi.row(i).dot(x.col(i).head(nnodes)) + q;
         	}
 
         	// Estimates: sample mean, sample variance

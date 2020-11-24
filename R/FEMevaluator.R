@@ -87,10 +87,6 @@ eval.FEM <- function(FEM, locations = NULL, incidence_matrix = NULL, search = "t
   if(class(FEM$FEMbasis$mesh)=='mesh.2.5D' && search ==3)
     stop("2.5D search must be either 'tree' or 'naive'")
   
-
-  if(class(FEM$FEMbasis$mesh)=='mesh.3D' && search ==3)
-    stop("3D search must be either 'tree' or 'naive'")
-  
   if (search != 1 && search != 2 && search != 3)
     stop("search must be either 'tree' or 'naive' or 'walking'")
 
@@ -181,8 +177,7 @@ eval.FEM <- function(FEM, locations = NULL, incidence_matrix = NULL, search = "t
 #' ## Compute the coeff vector evaluating the desired function at the mesh nodes
 #' ## In this case we consider the fs.test() function introduced by Wood et al. 2008
 #' time = 1:5
-#' coeff = rep(fs.test(mesh$nodes[,1], mesh$nodes[,2], exclude = FALSE),5)*
-#'              rep(time, each = nrow(mesh$nodes)) 
+#' coeff = rep(fs.test(mesh$nodes[,1], mesh$nodes[,2]),5)*time
 #' ## Create the FEM.time object
 #' FEM_time_function = FEM.time(coeff=coeff, time_mesh=1:5, FEMbasis=FEMbasis, FLAG_PARABOLIC=TRUE)
 #'
@@ -196,10 +191,6 @@ eval.FEM.time <- function(FEM.time, locations = NULL, time.instants = NULL, spac
     stop("FEM.time required;  is NULL.")
   if(class(FEM.time) != "FEM.time")
     stop("'FEM.time' is not of class 'FEM.time'")
-  
-  if(is.vector(locations)){
-    locations = matrix(locations, ncol = 2)
-  }
   
   # save flag for areal evaluation
   FLAG_AREAL_EVALUATION = FALSE
@@ -284,10 +275,7 @@ eval.FEM.time <- function(FEM.time, locations = NULL, time.instants = NULL, spac
     stop("search must be either tree or naive or walking.")
   
   if(class(FEM.time$FEMbasis$mesh)=='mesh.2.5D' & search ==3)
-    stop("2.5D search must be either tree or naive.")
-
-  if(class(FEM.time$FEMbasis$mesh)=='mesh.3D' & search ==3)
-    stop("3D search must be either tree or naive.")
+  	stop("2.5D search must be either tree or naive.")
 
 
   if(dim(FEM.time$coeff)[2]>1||dim(FEM.time$coeff)[3]>1)

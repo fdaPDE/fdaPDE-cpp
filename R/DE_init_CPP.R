@@ -104,10 +104,11 @@ CPP_FEM.volume.DE_init <- function(data, FEMbasis, lambda, fvec, heatStep, heatI
   ## Set proper type for correct C++ reading
   storage.mode(data) <- "double"                        
   storage.mode(FEMbasis$mesh$order) <- "integer"
-  storage.mode(FEMbasis$mesh$nnodes) <- "integer"
-  storage.mode(FEMbasis$mesh$ntetrahedrons) <- "integer"
   storage.mode(FEMbasis$mesh$nodes) <- "double"
   storage.mode(FEMbasis$mesh$tetrahedrons) <- "integer"
+  storage.mode(FEMbasis$mesh$faces) <- "integer"
+  storage.mode(FEMbasis$mesh$neighbors) <- "integer"
+
   storage.mode(lambda) <- "double"
   storage.mode(fvec) <- "double"
   storage.mode(heatStep) <- "double"

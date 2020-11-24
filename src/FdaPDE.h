@@ -14,6 +14,7 @@
 //#include <iomanip>
 #include <limits>
 #include <vector>
+#include <array>
 #include <stack>
 #include <set>
 #include "Global_Utilities/Include/Make_Unique.h"
@@ -43,6 +44,8 @@ typedef Eigen::Matrix<VectorXr,Eigen::Dynamic,Eigen::Dynamic> MatrixXv;
 typedef Eigen::SparseMatrix<Real> SpMat;
 typedef Eigen::SparseVector<Real> SpVec;
 typedef Eigen::Triplet<Real> coeff;
+
+#include "Global_Utilities/Include/RObjects.h"
 
 template <bool ... b>
 struct multi_bool_type

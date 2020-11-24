@@ -37,13 +37,10 @@ public:
 	// constructor in case there is already tree information
 	Box(std::vector<Real> const & coord);
 
-	/**	Another constructor.
-		 *
-		 *	\param[in] Element<NNODES,NDIME,NDIMPP>, NDIME: dimension of Element, NDIMPP: physical dimension
-		 *											 NDIMPP has same dimension as NDIMP
-	 */
+
 	template <UInt NNODES,int NDIME,int NDIMPP>
 	Box(Element<NNODES,NDIME,NDIMPP> const & element);
+
 
 	/// Returns the i-th coordinate value.
 	inline Real operator[](int const & i) { return x_[i]; }

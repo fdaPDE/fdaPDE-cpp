@@ -21,31 +21,22 @@ ADTree<Shape>::ADTree(TreeHeader<Shape> const & header): header_(header) {
 
 //Shape is given as Element<NNODES,myDim,nDim> from mesh.h
 template<class Shape>
-ADTree<Shape>::ADTree(Real const * const points, UInt const * const triangle, const UInt num_nodes, const UInt num_triangle) {
+ADTree<Shape>::ADTree(const RNumericMatrix& points, const RIntegerMatrix& triangle) {
     int ndimp = Shape::dp(); //physical dimension
     int nvertex = Shape::numVertices; //number of nodes at each Element (not total number of nodes!)
 
+    const UInt num_nodes = points.nrows();
+    const UInt num_triangle = triangle.nrows();
     // Build the tree.
 
     // step1: Construct TreeHeader
     std::vector<std::vector<Real> > vcoord;
     vcoord.resize(ndimp);
 
-    if (ndimp == 2)  { //when ndimp==2, existing logic
-      for (int i = 0; i < ndimp; i++) {
-        vcoord[i].resize(num_nodes);
-        for(int j = 0; j < num_nodes; j++) {
-        vcoord[i][j] = points[i*num_nodes + j];
-         }
-      }
-    } else { //when ndimp ==3
-      //else clause to be deleted after integrating mesh structure of 2D vs 2.5,3D
-      for (int i = 0; i < ndimp; i++) {
-        vcoord[i].resize(num_nodes);
-        for(int j = 0; j < num_nodes; j++) {
-        vcoord[i][j] = points[i + ndimp*j];
-         }
-      }
+    for (int i = 0; i < ndimp; i++) {
+      vcoord[i].resize(num_nodes);
+      for(int j = 0; j < num_nodes; j++)
+        vcoord[i][j] = points(j,i);
     }
 
     Domain<Shape> mydom(vcoord);
@@ -71,31 +62,64 @@ ADTree<Shape>::ADTree(Real const * const points, UInt const * const triangle, co
 
 
     // Step 3: Fill the tree: Add each element to the Treenode
-    UInt idpt;
 
     std::vector<Real> elem(nvertex*ndimp); //'elem' is a single Element, composed of vector of points
     for ( int i = 0; i < num_triangle; i++ ) {
-      if (ndimp == 2) { //when ndimp==2, existing logic
-        for (int j = 0; j < nvertex ; j++) {
-          for (int l = 0; l < ndimp ; l++) {
-            idpt = triangle[j*num_triangle + i];
-            elem[j*ndimp + l] =  points[idpt + l*num_nodes];
-          }
-        }
-      }else { //when ndimp==3
-        //else clause to be deleted after integrating mesh structure of 2D vs 2.5,3D
-        for (int j=0; j< nvertex; j++) {
-          for (int l=0; l < ndimp; l++) {
-            idpt = triangle[j + i*nvertex];
-            elem[j*ndimp + l] =  points[idpt*ndimp + l];
-          }
+      for (int j = 0; j < nvertex ; j++) {
+        for (int l = 0; l < ndimp ; l++) {
+          UInt idpt = triangle(i,j);
+          elem[j*ndimp + l] =  points(idpt, l);
         }
       }
-
       //insert Element into tree
       this -> addtreenode(i, elem);
-     } //end of for loop
+    } //end of loop
+}
+
+
+template<class Shape>
+ADTree<Shape>::ADTree(SEXP Rmesh){
+  int tree_loc_ = INTEGER(Rf_getAttrib(VECTOR_ELT(Rmesh, 3), R_DimSymbol))[0];
+  int tree_lev_ = INTEGER(VECTOR_ELT(Rmesh, 11))[0];
+  int ndimp_ = Shape::dp();
+  int ndimt_ = 2*ndimp_;
+  int nele_ = tree_loc_;
+  int iava_ = tree_loc_+1;
+  int iend_ = tree_loc_+1;
+
+  std::vector<Real>  origin_;
+  origin_.assign(REAL(VECTOR_ELT(Rmesh, 12)), REAL(VECTOR_ELT(Rmesh, 12))+ndimt_);
+  std::vector<Real> scalingfactors_;
+  scalingfactors_.assign(REAL(VECTOR_ELT(Rmesh, 13)), REAL(VECTOR_ELT(Rmesh, 13))+ndimt_);
+
+  Domain<Shape> tree_domain(origin_, scalingfactors_);
+  header_ = TreeHeader<Shape>(tree_loc_, tree_lev_, ndimp_, ndimt_, nele_, iava_, iend_, tree_domain);
+
+
+  //treenode information (number of nodes = number of elements+1)
+  std::vector<Id> id_;
+  id_.assign(INTEGER(VECTOR_ELT(Rmesh, 14)), INTEGER(VECTOR_ELT(Rmesh, 14))+tree_loc_+1);
+  std::vector<int> node_left_child_;
+  node_left_child_.assign(INTEGER(VECTOR_ELT(Rmesh, 15)), INTEGER(VECTOR_ELT(Rmesh, 15))+tree_loc_+1);
+  std::vector<int> node_right_child_;
+  node_right_child_.assign(INTEGER(VECTOR_ELT(Rmesh, 16)), INTEGER(VECTOR_ELT(Rmesh, 16))+tree_loc_+1);
+  Real* box_ = REAL(VECTOR_ELT(Rmesh, 17));
+
+  UInt num_tree_nodes = id_.size();
+  data_.reserve(num_tree_nodes);
+
+  std::vector<Real> coord;
+  coord.reserve(ndimt_);
+  for (UInt i=0; i<num_tree_nodes; i++) {
+    for (UInt j=0; j<ndimt_; j++) {
+      coord.push_back(box_[i + num_tree_nodes*j]);
+    }
+    Box<Shape::dp()> box(coord);
+    TreeNode<Shape> tree_node(box, id_[i], node_left_child_[i], node_right_child_[i]);
+    data_.push_back(tree_node);
+    coord.clear();
   }
+}
 
 
 template<class Shape>
@@ -131,8 +155,8 @@ int ADTree<Shape>::adtrb(Id shapeid, std::vector<Real> const & coords) {
   /* We scale the dimension of the "bounding box" of the Shape object
    * with coordinate values given by coords.
    */
-  Shape shapeobj(coords);
-  Box<Shape::dp()> shapebox(shapeobj);
+
+  Box<Shape::dp()> shapebox(coords);
   for(int i = 0; i < header_.getndimt(); ++i) {
     Real orig = header_.domainorig(i);
     Real scal = header_.domainscal(i);
@@ -187,7 +211,7 @@ int ADTree<Shape>::adtrb(Id shapeid, std::vector<Real> const & coords) {
      * The list of available node is empty, so we have to put the new node
      * in the yet unassigned portion of the vector storing the tree.
      */
-    data_.push_back(TreeNode<Shape>(shapeid, shapeobj)); // push dummy object to be changed
+    data_.push_back(TreeNode<Shape>(shapeid, shapebox)); // push dummy object to be changed
   }
   // else {
   //   std::vector<Real> bcoords = {shapebox[0], shapebox[1], shapebox[2], shapebox[3]};
@@ -260,11 +284,11 @@ int ADTree<Shape>::handledomerr(Id shapeid, std::vector<Real> const & coords) {
   }
   catch(TreeDomainError<Shape> de) {
     // Handle a TreeDomainError exception.
-    std::cout << "error!  " << de.getnelep1() << "-th object which is to be inserted into the tree is out of domain"
-        << std::endl;
-    std::cout << "Coordinates" << std::endl;
-    std::cout << "-----------" << std::endl;
-    std::cout << de;
+    // std::cout << "error!  " << de.getnelep1() << "-th object which is to be inserted into the tree is out of domain"
+    //     << std::endl;
+    // std::cout << "Coordinates" << std::endl;
+    // std::cout << "-----------" << std::endl;
+    // std::cout << de;
     std::exit(EXIT_FAILURE);
   }
 }
@@ -277,14 +301,14 @@ int ADTree<Shape>::handletreealloc(Id shapeid, std::vector<Real> const & coords)
   }
   catch(TreeAlloc<Shape>) {
     // Handle a TreeAlloc exception.
-    std::cout << "warning! not enough space" << std::endl;
-    std::cout << "increasing tree memory locations up to 1.5 * number of current locations..." << std::endl;
+    // std::cout << "warning! not enough space" << std::endl;
+    // std::cout << "increasing tree memory locations up to 1.5 * number of current locations..." << std::endl;
     int locv = header_.gettreeloc();
     int delta = int(locv/2);
     header_.settreeloc(locv+delta);
     if(locv == header_.gettreeloc()) {
-      std::cout << "error! no more space to add a new node" << std::endl;
-      std::exit(EXIT_FAILURE);
+      //std::cout << "error! no more space to add a new node" << std::endl;
+      //std::exit(EXIT_FAILURE);
     }
     data_.resize(header_.gettreeloc()+1);
     int iloc = handledomerr(shapeid, coords);
@@ -300,9 +324,9 @@ int ADTree<Shape>::handleleverr(Id shapeid, std::vector<Real> const & coords) {
   }
   catch(LevRuntimeError<Shape>) {
     // Handle a LevRuntimeError exception.
-    std::cout << "warning! maximum number of tree levels exceeded" << std::endl;
-    std::cout << "the limit is " << LevRuntimeError<Shape>::getmaxtreelev() << std::endl;
-    std::cout << "setting the new limit to" << int(LevRuntimeError<Shape>::getmaxtreelev() * 1.1) << std::endl;
+    // std::cout << "warning! maximum number of tree levels exceeded" << std::endl;
+    // std::cout << "the limit is " << LevRuntimeError<Shape>::getmaxtreelev() << std::endl;
+    // std::cout << "setting the new limit to" << int(LevRuntimeError<Shape>::getmaxtreelev() * 1.1) << std::endl;
     LevRuntimeError<Shape>::setmaxtreelev(int(LevRuntimeError<Shape>::getmaxtreelev() * 1.1));
 
     int iloc = handletreealloc(shapeid, coords);
@@ -327,6 +351,10 @@ void ADTree<Shape>::gettri(int const & loc, std::vector<Real> & coord, Id & id) 
 
 template<class Shape>
 bool ADTree<Shape>::search(std::vector<Real> const & region, std::set<int> & found) const {
+
+  
+    static constexpr Real eps = std::numeric_limits<Real>::epsilon(),
+     tolerance = 10 * eps;
 
   // This function returns true if it has completed successfully, false otherwise.
 
@@ -386,7 +414,7 @@ bool ADTree<Shape>::search(std::vector<Real> const & region, std::set<int> & fou
       }
 
       if(dimp == dimt) {
-        std::cout << "when dimp == dimt but in our case, there shouldn't be this case" << std::endl;
+        //std::cout << "when dimp == dimt but in our case, there shouldn't be this case" << std::endl;
       /*
        * This function works when we have either points or boxes.
        * In the first case we have to repeat the object's coordinates.
@@ -397,8 +425,8 @@ bool ADTree<Shape>::search(std::vector<Real> const & region, std::set<int> & fou
       // Does the element intersect box?
       int flag = 0;
       for(int i = 0; i < dimp; ++i) {
-        if(box[i] > xel[i+dimp]) { flag = 1; }
-        if(box[i+dimp] < xel[i]) { flag = 1; }
+        if(box[i] > xel[i+dimp]+tolerance) { flag = 1; }
+        if(box[i+dimp] < xel[i]-tolerance) { flag = 1; }
       }
 
       if(flag == 0) {

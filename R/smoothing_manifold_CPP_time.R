@@ -5,14 +5,9 @@ CPP_smooth.manifold.FEM.time<-function(locations, time_locations, observations, 
                                        search, bary.locations, optim , lambdaS = NULL, lambdaT = NULL, DOF.stochastic.realizations = 100, DOF.stochastic.seed = 0, DOF.matrix = NULL, GCV.inflation.factor = 1, lambda.optimization.tolerance = 0.05)
 {
 
-  # C++ function for manifold works with vectors not with matrices
-
-  FEMbasis$mesh$triangles=c(t(FEMbasis$mesh$triangles))
-  FEMbasis$mesh$nodes=c(t(FEMbasis$mesh$nodes))
-
-  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
-
-  FEMbasis$mesh$triangles=FEMbasis$mesh$triangles-1
+  FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
+  FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
+  FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
 
 
   if(is.null(covariates))
@@ -72,6 +67,7 @@ CPP_smooth.manifold.FEM.time<-function(locations, time_locations, observations, 
     lambdaT<-as.vector(lambdaT)
   }
 
+
   ## Set propr type for correct C++ reading
   locations <- as.matrix(locations)
   storage.mode(locations) <- "double"
@@ -81,11 +77,11 @@ CPP_smooth.manifold.FEM.time<-function(locations, time_locations, observations, 
   storage.mode(time_mesh) <- "double"
   observations <- as.vector(observations)
   storage.mode(observations) <- "double"
-  storage.mode(FEMbasis$mesh$order) <- "integer"
-  storage.mode(FEMbasis$mesh$nnodes) <- "integer"
-  storage.mode(FEMbasis$mesh$ntriangles) <- "integer"
   storage.mode(FEMbasis$mesh$nodes) <- "double"
   storage.mode(FEMbasis$mesh$triangles) <- "integer"
+  storage.mode(FEMbasis$mesh$edges) <- "integer"
+  storage.mode(FEMbasis$mesh$neighbors) <- "integer"
+  storage.mode(FEMbasis$order) <- "integer"
   covariates <- as.matrix(covariates)
   storage.mode(covariates) <- "double"
   storage.mode(ndim) <- "integer"
@@ -169,17 +165,17 @@ CPP_smooth.manifold.FEM.time<-function(locations, time_locations, observations, 
     if(nrow(covariates)!=0)
     {
       betaIC = ICsol[[15]]
-      IC = ICsol[[1]][1:FEMbasis$mesh$nnodes,] ## best IC estimation
+      IC = ICsol[[1]][1:nrow(FEMbasis$mesh$nodes),] ## best IC estimation
       covariates=covariates[(NobsIC+1):nrow(covariates),]
       covariates <- as.matrix(covariates)
     }
     else
     {
-      IC = ICsol[[1]][1:FEMbasis$mesh$nnodes,] ## best IC estimation
+      IC = ICsol[[1]][1:nrow(FEMbasis$mesh$nodes),] ## best IC estimation
       betaIC = NULL
     }
     ## return a FEM object containing IC estimates with best lambda and best lambda index
-    ICsol = list(IC.FEM=FEM(ICsol[[1]][1:FEMbasis$mesh$nnodes,],FEMbasis),bestlambdaindex=ICsol[[6]],bestlambda=ICsol[[5]],beta=betaIC)
+    ICsol = list(IC.FEM=FEM(ICsol[[1]][1:nrow(FEMbasis$mesh$nodes),],FEMbasis),bestlambdaindex=ICsol[[6]],bestlambda=ICsol[[5]],beta=betaIC)
     time_locations=time_locations[2:nrow(time_locations)]
     observations = observations[(NobsIC+1):length(observations)]
   }
@@ -187,7 +183,7 @@ CPP_smooth.manifold.FEM.time<-function(locations, time_locations, observations, 
   storage.mode(IC) <- "double"
 
   M = ifelse(FLAG_PARABOLIC,length(time_mesh)-1,length(time_mesh) + 2);
-  BC$BC_indices = rep((0:(M-1))*FEMbasis$mesh$nnodes,each=length(BC$BC_indices)) + rep(BC$BC_indices,M)
+  BC$BC_indices = rep((0:(M-1))*nrow(FEMbasis$mesh$nodes),each=length(BC$BC_indices)) + rep(BC$BC_indices,M)
   BC$BC_values = rep(BC$BC_values,M)
   storage.mode(BC$BC_indices) <- "integer"
   storage.mode(BC$BC_values) <-"double"
@@ -204,24 +200,30 @@ CPP_eval.manifold.FEM.time = function(FEM.time, locations, time_locations, incid
   FEMbasis = FEM.time$FEMbasis
   # C++ function for manifold works with vectors not with matrices
 
-  FEMbasis$mesh$triangles=c(t(FEMbasis$mesh$triangles))
-  FEMbasis$mesh$nodes=c(t(FEMbasis$mesh$nodes))
+  FEMbasis$mesh$triangles = FEMbasis$mesh$triangles - 1
+  FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
+  FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] = FEMbasis$mesh$neighbors[FEMbasis$mesh$neighbors != -1] - 1
 
-  #NEW: riporto shift indici in R
-  FEMbasis$mesh$triangles=FEMbasis$mesh$triangles-1
+
+  if(is.null(time_locations)){
+    time_locations<-matrix(ncol=0, nrow=0)
+  }else
+  {
+    time_locations <- as.matrix(time_locations)
+  }
 
   # Imposing types, this is necessary for correct reading from C++
   ## Set proper type for correct C++ reading
   locations <- as.matrix(locations)
   storage.mode(locations) <- "double"
-  time_locations <- as.matrix(time_locations)
   storage.mode(time_locations) <- "double"
   incidence_matrix <- as.matrix(incidence_matrix)
   storage.mode(incidence_matrix) <- "integer"
   storage.mode(FEMbasis$mesh$nodes) <- "double"
   storage.mode(FEMbasis$mesh$triangles) <- "integer"
+  storage.mode(FEMbasis$mesh$edges) <- "integer"
+  storage.mode(FEMbasis$mesh$neighbors) <- "integer"
   storage.mode(FEMbasis$order) <- "integer"
-  storage.mode(FEM.time$mesh_time) <- "double"
   coeff <- as.matrix(FEM.time$coeff)
   storage.mode(coeff) <- "double"
   storage.mode(ndim) <- "integer"

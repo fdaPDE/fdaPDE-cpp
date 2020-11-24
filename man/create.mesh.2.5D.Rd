@@ -2,36 +2,63 @@
 % Please edit documentation in R/mesh.R
 \name{create.mesh.2.5D}
 \alias{create.mesh.2.5D}
-\title{Create a \code{mesh.2.5D} object from the nodes locations and the connectivty matrix}
+\title{Create a \code{mesh.2.5D} object from the nodes locations and the connectivity matrix}
 \usage{
-create.mesh.2.5D(nodes, triangles, order = 1)
+create.mesh.2.5D(
+  nodes,
+  triangles = NULL,
+  order = 1,
+  nodesattributes = NULL,
+  segments = NULL,
+  holes = NULL
+)
 }
 \arguments{
-\item{nodes}{A #nodes-by-3 matrix specifying the locations of each node.}
+\item{nodes}{A #nodes-by-3 matrix containing the x, y, z coordinates of the mesh nodes.}
 
-\item{triangles}{A #triangles-by-3 (when \code{order} = 1) or #triangles-by-6 (when \code{order} = 2) matrix, 
-specifying the indices of the nodes in each triangle.}
+\item{triangles}{A #triangles-by-3 (when \code{order} = 1) or #triangles-by-6 (when \code{order} = 2) matrix.
+It specifies the triangles giving the row's indices in \code{nodes} of the triangles' vertices and (when \code{nodes} = 2) also if the triangles' edges midpoints. The triangles' vertices and midpoints are ordered as described
+at \cr https://www.cs.cmu.edu/~quake/triangle.highorder.html.}
 
-\item{order}{Either '1' or '2'. It specifies wether each mesh triangle should be represented by 3 nodes 
-(the triangle' vertices) or by 6 nodes (the triangle's vertices and midpoints). 
-These are respectively used for linear (order = 1) and quadratic (order = 2) Finite Elements. 
-Default is \code{order} = 1.}
+\item{order}{Either '1' or '2'. It specifies wether each mesh triangle should be represented by 3 nodes (the triangle' vertices) or by 6 nodes (the triangle's vertices and midpoints).
+These are
+respectively used for linear (order = 1) and quadratic (order = 2) Finite Elements. Default is \code{order} = 1.}
+
+\item{nodesattributes}{A matrix with #nodes rows containing nodes' attributes.
+These are passed unchanged to the output. This has been added for consistency with the function \code{create.mesh.2D}.}
+
+\item{segments}{A #segments-by-2 matrix. Each row contains the row's indices in \code{nodes} of the vertices where the segment starts from and ends to.
+Segments are edges that are not splitted during the triangulation process. These are for instance used to define the boundaries
+of the domain. This has been added for consistency with the function \code{create.mesh.2D}.}
+
+\item{holes}{A #holes-by-3 matrix containing the x, y, z coordinates of a point internal to each hole of the mesh. These points are used to carve holes
+in the triangulation, when the domain has holes. This has been added for consistency with the function \code{create.mesh.2D}.}
 }
 \value{
-An object of the class \code{mesh.2.5D} with the following output:
+An object of the class mesh.2.5D with the following output:
 \itemize{
-\item{\code{nnodes}}{The #nodes in the mesh.}
-\item{\code{ntriangles}}{The #triangles in the mesh.}
-\item{\code{nodes}}{A #nodes-by-3 matrix containing the x,y and z coordinate for each point of the mesh.}
-\item{\code{triangles}}{A #triangles-by-3 (when \code{order} = 1) or #triangles-by-6 (when \code{order} = 2) matrix, 
-specifying the indices of the nodes in each triangle.}
-\item{\code{order}}{Either '1' or '2'. It specifies wether each mesh triangle should be represented by 3 nodes 
-(the triangle' vertices) or by 6 nodes (the triangle's vertices and midpoints). 
-It is passed unchanged from the input.}
+\item{\code{nodes}}{A #nodes-by-3 matrix containing the x, y, z coordinates of the mesh nodes.}
+\item{\code{nodesmarkers}}{A vector of length #nodes, with entries either '1' or '0'. An entry '1' indicates that the corresponding node is a boundary node; an entry '0' indicates that the corresponding node is not a boundary node.}
+\item{\code{nodesattributes}}{A matrix with #nodes rows containing nodes' attributes.
+These are passed unchanged from the input.}
+\item{\code{triangles}}{A #triangles-by-3 (when \code{order} = 1) or #triangles-by-6 (when \code{order} = 2) matrix.
+It specifies the triangles giving the indices in \code{nodes} of the triangles' vertices and (when \code{nodes} = 2) also if the triangles' edges midpoints. The triangles' vertices and midpoints are ordered as described
+at  \cr https://www.cs.cmu.edu/~quake/triangle.highorder.html.}
+\item{\code{segmentsmarker}}{A vector of length #segments with entries either '1' or '0'. An entry '1' indicates that the corresponding element in \code{segments} is a boundary segment;
+an entry '0' indicates that the corresponding segment is not a boundary segment.}
+\item{\code{edges}}{A #edges-by-2 matrix containing all the edges of the triangles in the output triangulation. Each row contains the row's indices in \code{nodes}, indicating the nodes where the edge starts from and ends to.}
+\item{\code{edgesmarkers}}{A vector of lenght #edges with entries either '1' or '0'. An entry '1' indicates that the corresponding element in \code{edge} is a boundary edge;
+an entry '0' indicates that the corresponding edge is not a boundary edge.}
+\item{\code{neighbors}}{A #triangles-by-3 matrix. Each row contains the indices of the three neighbouring triangles. An entry '-1' indicates that
+one edge of the triangle is a boundary edge.}
+\item{\code{holes}}{A #holes-by-3 matrix containing the x, y, z coordinates of a point internal to each hole of the mesh. These points are used to carve holes
+in the triangulation, when the domain has holes. These are passed unchanged from the input.}
+\item{\code{order}}{Either '1' or '2'. It specifies wether each mesh triangle should be represented by 3 nodes (the triangle' vertices) or by 6 nodes (the triangle's vertices and midpoints).
+These are respectively used for linear (order = 1) and quadratic (order = 2) Finite Elements.}
 }
 }
 \description{
-Create a \code{mesh.2.5D} object from the nodes locations and the connectivty matrix
+Create a \code{mesh.2.5D} object from the nodes locations and the connectivity matrix
 }
 \examples{
 library(fdaPDE)

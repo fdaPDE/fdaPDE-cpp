@@ -143,6 +143,7 @@ std::pair<Real, UInt> Newton_fd<Real, Real, Extensions...>::compute (const Real 
         for(UInt i=1; i<Nm; i++)
         {
                 valcur = this->F.evaluate_f(vals[i]);
+
                 if(valcur<valmin)
                 {
                         valmin = valcur;
@@ -150,7 +151,8 @@ std::pair<Real, UInt> Newton_fd<Real, Real, Extensions...>::compute (const Real 
                 }
         }
 
-        if (x>lambda_min/4|| x<=0)
+
+        if (x>lambda_min/4 || x<=0)
         {
                 x = lambda_min/8;
         }

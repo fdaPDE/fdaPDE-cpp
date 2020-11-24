@@ -17,29 +17,29 @@ std::pair<MatrixXr, output_Data> optimizer_method_selection(CarrierType & carrie
 template<typename EvaluationType, typename CarrierType>
 std::pair<MatrixXr, output_Data> optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier);
 
-template<typename InputHandler, typename Integrator, UInt ORDER, UInt mydim, UInt ndim>
+template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
 SEXP regression_skeleton(InputHandler & regressionData, OptimizationData & optimizationData, SEXP Rmesh)
 {
-	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh);	// Create the mesh
+	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh, regressionData.getSearch());	// Create the mesh
 	MixedFERegression<InputHandler> regression(regressionData, optimizationData, mesh.num_nodes()); // Define the mixed object
 
-	regression.template preapply<ORDER,mydim,ndim, Integrator, IntegratorGaussP3, 0, 0>(mesh); // preliminary apply (preapply) to store all problem matrices
+	regression.preapply(mesh); // preliminary apply (preapply) to store all problem matrices
 
-        std::pair<MatrixXr, output_Data> solution_bricks;	// Prepare solution to be filled
+    std::pair<MatrixXr, output_Data> solution_bricks;	// Prepare solution to be filled
 
 	// Build the Carrier according to problem type
 	if(regression.isSV())
 	{
 		if(regressionData.getNumberOfRegions()>0)
 		{
-			Rprintf("Areal-forced\n");
+			//Rprintf("Areal-forced\n");
 			Carrier<InputHandler,Forced,Areal>
 				carrier = CarrierBuilder<InputHandler>::build_forced_areal_carrier(regressionData, regression, optimizationData);
 			solution_bricks = optimizer_method_selection<Carrier<InputHandler, Forced,Areal>>(carrier);
 		}
 		else
 		{
-			Rprintf("Pointwise-forced\n");
+			//Rprintf("Pointwise-forced\n");
 			Carrier<InputHandler,Forced>
 				carrier = CarrierBuilder<InputHandler>::build_forced_carrier(regressionData, regression, optimizationData);
 			solution_bricks = optimizer_method_selection<Carrier<InputHandler,Forced>>(carrier);
@@ -49,14 +49,14 @@ SEXP regression_skeleton(InputHandler & regressionData, OptimizationData & optim
 	{
 		if(regressionData.getNumberOfRegions()>0)
 		{
-			Rprintf("Areal\n");
+			//Rprintf("Areal\n");
 			Carrier<InputHandler,Areal>
 				carrier = CarrierBuilder<InputHandler>::build_areal_carrier(regressionData, regression, optimizationData);
 			solution_bricks = optimizer_method_selection<Carrier<InputHandler,Areal>>(carrier);
 		}
 		else
 		{
-			Rprintf("Pointwise\n");
+			//Rprintf("Pointwise\n");
 			Carrier<InputHandler>
 				carrier = CarrierBuilder<InputHandler>::build_plain_carrier(regressionData, regression, optimizationData);
 			solution_bricks = optimizer_method_selection<Carrier<InputHandler>>(carrier);
@@ -79,20 +79,20 @@ std::pair<MatrixXr, output_Data> optimizer_method_selection(CarrierType & carrie
 	const OptimizationData * optr = carrier.get_opt_data();
 	if(optr->get_loss_function() == "GCV" && optr->get_DOF_evaluation() == "exact")
 	{
-		Rprintf("GCV exact\n");
+		//Rprintf("GCV exact\n");
 		GCV_Exact<CarrierType, 1> optim(carrier);
 		return optimizer_strategy_selection<GCV_Exact<CarrierType, 1>, CarrierType>(optim, carrier);
 	}
 	else if(optr->get_loss_function() == "GCV" && (optr->get_DOF_evaluation() == "stochastic" || optr->get_DOF_evaluation() == "not_required"))
 	{
-		Rprintf("GCV stochastic\n");
-		GCV_Stochastic<CarrierType, 1> optim(carrier);
+		//Rprintf("GCV stochastic\n");
+		GCV_Stochastic<CarrierType, 1> optim(carrier, true);
 		return optimizer_strategy_selection<GCV_Stochastic<CarrierType, 1>, CarrierType>(optim, carrier);
 	}
 	else // if(optr->get_loss_function() == "unused" && optr->get_DOF_evaluation() == "not_required")
 	{
-		Rprintf("Pure evaluation\n");
-		GCV_Stochastic<CarrierType, 1> optim(carrier);
+		//Rprintf("Pure evaluation\n");
+		GCV_Stochastic<CarrierType, 1> optim(carrier, false);
 
 		timer Time_partial; // Of the sole optimization
 		Time_partial.start();
@@ -103,6 +103,8 @@ std::pair<MatrixXr, output_Data> optimizer_method_selection(CarrierType & carrie
 		output.z_hat.resize(carrier.get_psip()->rows(),carrier.get_opt_data()->get_size_S());
 		output.lambda_vec = carrier.get_opt_data()->get_lambda_S();
 		MatrixXr solution;
+ 		MatrixXv betas;
+		betas.resize(carrier.get_opt_data()->get_size_S(),1);
 
 		for(UInt j=0; j<carrier.get_opt_data()->get_size_S(); j++)
 		{
@@ -117,6 +119,8 @@ std::pair<MatrixXr, output_Data> optimizer_method_selection(CarrierType & carrie
 				solution.col(j) = carrier.apply(carrier.get_opt_data()->get_lambda_S()[j]);
 			}
 			optim.combine_output_prediction(solution.topRows(solution.rows()/2).col(j),output,j);
+			if(carrier.get_model()->getBeta().cols()>0 & carrier.get_model()->getBeta().rows()>0)
+				betas.coeffRef(j,0)=carrier.get_model()->getBeta().coeffRef(0,0);
 		}
 
 		// Rprintf("WARNING: partial time after the optimization method\n");
@@ -125,9 +129,9 @@ std::pair<MatrixXr, output_Data> optimizer_method_selection(CarrierType & carrie
 		output.time_partial = T.tv_sec + 1e-9*T.tv_nsec;
 
                 // postponed after apply in order to have betas computed
-                output.betas = carrier.get_model()->getBeta();
+        output.betas = betas;
 
-                return {solution, output};
+        return {solution, output};
 	}
 }
 

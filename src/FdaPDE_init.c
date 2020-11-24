@@ -28,6 +28,14 @@ extern SEXP regression_PDE_space_varying_time( SEXP, SEXP, SEXP, SEXP, SEXP, SEX
 extern SEXP regression_PDE_time(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP Smooth_FPCA(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP tree_mesh_construction(SEXP, SEXP, SEXP, SEXP);
+extern SEXP CPP_SurfaceMeshHelper(SEXP, SEXP);
+extern SEXP CPP_SurfaceMeshOrder2(SEXP, SEXP);
+extern SEXP CPP_VolumeMeshHelper(SEXP, SEXP);
+extern SEXP CPP_VolumeMeshOrder2(SEXP, SEXP);
+extern SEXP CPP_TriangleMeshSplit(SEXP, SEXP);
+extern SEXP CPP_TriangleMeshSplitOrder2(SEXP, SEXP);
+extern SEXP CPP_TetraMeshSplit(SEXP, SEXP);
+extern SEXP CPP_TetraMeshSplitOrder2(SEXP, SEXP);
 extern SEXP gam_Laplace(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP gam_PDE(SEXP, SEXP, SEXP, SEXP, SEXP,SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP gam_PDE_space_varying( SEXP, SEXP, SEXP, SEXP, SEXP,SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -54,6 +62,14 @@ static const R_CallMethodDef CallEntries[] = {
     {"regression_PDE_time",               (DL_FUNC) &regression_PDE_time,               29},
     {"Smooth_FPCA",                       (DL_FUNC) &Smooth_FPCA,                       15},
     {"tree_mesh_construction",            (DL_FUNC) &tree_mesh_construction,             4},
+    {"CPP_SurfaceMeshHelper",             (DL_FUNC) &CPP_SurfaceMeshHelper,              2},
+    {"CPP_SurfaceMeshOrder2",             (DL_FUNC) &CPP_SurfaceMeshOrder2,              2},
+    {"CPP_VolumeMeshHelper",              (DL_FUNC) &CPP_VolumeMeshHelper,               2},
+    {"CPP_VolumeMeshOrder2",              (DL_FUNC) &CPP_VolumeMeshOrder2,               2},
+    {"CPP_TriangleMeshSplit",             (DL_FUNC) &CPP_TriangleMeshSplit,              2},
+    {"CPP_TriangleMeshSplitOrder2",       (DL_FUNC) &CPP_TriangleMeshSplitOrder2,        2},
+    {"CPP_TetraMeshSplit",                (DL_FUNC) &CPP_TetraMeshSplit,                 2},
+    {"CPP_TetraMeshSplitOrder2",          (DL_FUNC) &CPP_TetraMeshSplitOrder2,           2},
     {"gam_Laplace",                       (DL_FUNC) &gam_Laplace,                       25},
     {"gam_PDE",                           (DL_FUNC) &gam_PDE,                           28},
     {"gam_PDE_space_varying",             (DL_FUNC) &gam_PDE_space_varying,             29},

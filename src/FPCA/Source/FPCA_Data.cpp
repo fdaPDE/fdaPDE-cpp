@@ -1,13 +1,13 @@
 #include "../Include/FPCA_Data.h"
 
-FPCAData::FPCAData(std::vector<Point>& locations, MatrixXr& datamatrix, UInt order, MatrixXi& incidenceMatrix,
+FPCAData::FPCAData(Real* locations, UInt n_locations, UInt ndim, MatrixXr& datamatrix, UInt order, MatrixXi& incidenceMatrix,
 					std::vector<Real> lambda, UInt nPC, UInt nFolds, UInt search):
-					locations_(locations), datamatrix_(datamatrix), order_(order),
+					locations_(locations, n_locations, ndim), datamatrix_(datamatrix), order_(order),
 					incidenceMatrix_(incidenceMatrix), lambda_(lambda),  nPC_(nPC),
 					nFolds_(nFolds), search_(search)
 {
 	nRegions_ = incidenceMatrix.rows();
-	if(locations.size()==0 && nRegions_==0)
+	if(locations_.nrows()==0 && nRegions_==0)
 	{
 		locations_by_nodes_ = true;
 		for(int i = 0; i<datamatrix_.cols();++i) observations_indices_.push_back(i);
@@ -16,9 +16,11 @@ FPCAData::FPCAData(std::vector<Point>& locations, MatrixXr& datamatrix, UInt ord
 }
 
 FPCAData::FPCAData(SEXP Rlocations, SEXP RbaryLocations, SEXP Rdatamatrix, SEXP Rorder, SEXP RincidenceMatrix, SEXP Rlambda,
-					SEXP RnPC, SEXP RnFolds,SEXP RGCVmethod, SEXP Rnrealizations, SEXP Rsearch)
+					SEXP RnPC, SEXP RnFolds,SEXP RGCVmethod, SEXP Rnrealizations, SEXP Rsearch) :
+	locations_(Rlocations)
 {
-	setLocations(Rlocations);
+
+
 	setBaryLocations(RbaryLocations);
 	setIncidenceMatrix(RincidenceMatrix);
 	setDatamatrix(Rdatamatrix);
@@ -37,25 +39,6 @@ FPCAData::FPCAData(SEXP Rlocations, SEXP RbaryLocations, SEXP Rdatamatrix, SEXP 
 	nFolds_=INTEGER(RnFolds)[0];
 }
 
-void FPCAData::setLocations(SEXP Rlocations)
-{
-	n_ = INTEGER(Rf_getAttrib(Rlocations, R_DimSymbol))[0];
-	if(n_>0){
-		int ndim = INTEGER(Rf_getAttrib(Rlocations, R_DimSymbol))[1];
-
-	  if (ndim == 2){
-			for(auto i=0; i<n_; ++i)
-			{
-				locations_.emplace_back(REAL(Rlocations)[i+ n_*0],REAL(Rlocations)[i+ n_*1]);
-			}
-		}else{ //ndim == 3
-			for(auto i=0; i<n_; ++i)
-			{
-				locations_.emplace_back(REAL(Rlocations)[i+ n_*0],REAL(Rlocations)[i+ n_*1],REAL(Rlocations)[i+ n_*2]);
-			}
-		}
-	}
-}
 
 void FPCAData::setBaryLocations(SEXP RbaryLocations)
 {
@@ -96,7 +79,7 @@ void FPCAData::setDatamatrix(SEXP Rdatamatrix)
 
 	nRegions_ = incidenceMatrix_.rows();
 
-	if(locations_.size() == 0 && nRegions_==0)
+	if(locations_.nrows() == 0 && nRegions_==0)
 	{
 		locations_by_nodes_ = true;
 		for(auto i=0; i<n_; ++i)
@@ -162,19 +145,18 @@ void FPCAData::printDatamatrix(std::ostream & out) const
 	}
 }
 
-/*void newDatamatrix(const VectorXr& scores_,const VectorXr& loadings_)
-{    	datamatrix_=scores_*loadings_.transpose();
-}
-*/
+
 void FPCAData::printLocations(std::ostream & out) const
 {
+	if(locations_.ncols()==2)
+		for(UInt i=0; i<locations_.nrows(); i++)
+			out<<getLocations<2>(i)<<std::endl;
+	else
+		for(UInt i=0; i<locations_.nrows(); i++)
+			out<<getLocations<3>(i)<<std::endl;
 
-	for(std::vector<Point>::size_type i=0;i<locations_.size(); i++)
-	{
-		locations_[i].print(out);
-		//std::cout<<std::endl;
-	}
 }
+
 
 void FPCAData::printIncidenceMatrix(std::ostream & out) const
 {
@@ -187,3 +169,4 @@ void FPCAData::printIncidenceMatrix(std::ostream & out) const
 		out << std::endl;
 	}
 }
+

@@ -54,13 +54,18 @@ extern "C"
         	UInt ndim = INTEGER(Rndim)[0];
 
         	if(regressionData.getOrder() == 1 && ndim==2)
-        		return(regression_skeleton<RegressionDataEllipticSpaceVarying,IntegratorTriangleP2, 1, 2, 2>(regressionData, optimizationData, Rmesh));
+        		return(regression_skeleton<RegressionDataEllipticSpaceVarying, 1, 2, 2>(regressionData, optimizationData, Rmesh));
         	else if(regressionData.getOrder() == 2 && ndim==2)
-        		return(regression_skeleton<RegressionDataEllipticSpaceVarying,IntegratorTriangleP4, 2, 2, 2>(regressionData, optimizationData, Rmesh));
-        	else if(regressionData.getOrder() == 1 && ndim==3)
-        		return(regression_skeleton<RegressionDataEllipticSpaceVarying,IntegratorTriangleP2, 1, 2, 3>(regressionData, optimizationData, Rmesh));
-        	else if(regressionData.getOrder() == 2 && ndim==3)
-        		return(regression_skeleton<RegressionDataEllipticSpaceVarying,IntegratorTriangleP4, 2, 2, 3>(regressionData, optimizationData, Rmesh));
+        		return(regression_skeleton<RegressionDataEllipticSpaceVarying, 2, 2, 2>(regressionData, optimizationData, Rmesh));
+        	else if(regressionData.getOrder() == 1 && mydim==2 && ndim==3)
+        		return(regression_skeleton<RegressionDataEllipticSpaceVarying, 1, 2, 3>(regressionData, optimizationData, Rmesh));
+        	else if(regressionData.getOrder() == 2 && mydim==2 && ndim==3)
+        		return(regression_skeleton<RegressionDataEllipticSpaceVarying, 2, 2, 3>(regressionData, optimizationData, Rmesh));
+            else if(regressionData.getOrder() == 1 && mydim==3 && ndim==3)
+                return(regression_skeleton<RegressionDataEllipticSpaceVarying, 1, 3, 3>(regressionData, optimizationData, Rmesh));
+            else if(regressionData.getOrder() == 2 && mydim==3 && ndim==3)
+                return(regression_skeleton<RegressionDataEllipticSpaceVarying, 2, 3, 3>(regressionData, optimizationData, Rmesh));
+
         	return(NILSXP);
         }
 
@@ -116,13 +121,18 @@ extern "C"
                 UInt ndim = INTEGER(Rndim)[0];
 
                 if(regressionData.getOrder() == 1 && ndim==2)
-                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying,IntegratorTriangleP2, 1, IntegratorGaussP5, 3, 2, 2, 2>(regressionData, optimizationData, Rmesh, Rmesh_time));
+                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 1, 2, 2>(regressionData, optimizationData, Rmesh, Rmesh_time));
                 else if(regressionData.getOrder() == 2 && ndim==2)
-                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying,IntegratorTriangleP4, 2, IntegratorGaussP5, 3, 2, 2, 2>(regressionData, optimizationData, Rmesh, Rmesh_time));
-                else if(regressionData.getOrder() == 1 && ndim==3)
-                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying,IntegratorTriangleP2, 1, IntegratorGaussP5, 3, 2, 2, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
-                else if(regressionData.getOrder() == 2 && ndim==3)
-                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying,IntegratorTriangleP4, 2, IntegratorGaussP5, 3, 2, 2, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
+                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 2, 2, 2>(regressionData, optimizationData, Rmesh, Rmesh_time));
+                else if(regressionData.getOrder() == 1 && mydim==2 && ndim==3)
+                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 1, 2, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
+                else if(regressionData.getOrder() == 2 && mydim==2 && ndim==3)
+                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 2, 2, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
+                else if(regressionData.getOrder() == 1 && mydim==3 && ndim==3)
+                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 1, 3, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
+                else if(regressionData.getOrder() == 2 && mydim==3 && ndim==3)
+                        return(regression_skeleton_time<RegressionDataEllipticSpaceVarying, 2, 3, 3>(regressionData, optimizationData, Rmesh, Rmesh_time));
+
                 return(NILSXP);
         }
 
@@ -179,9 +189,18 @@ extern "C"
           	std::string family = CHAR(STRING_ELT(Rfamily,0));
 
                 if(regressionData.getOrder()==1 && mydim==2 && ndim==2)
-                	return(GAM_skeleton<GAMDataEllipticSpaceVarying,IntegratorTriangleP2, 1, 2, 2>(regressionData, optimizationData, Rmesh, Rmu0 , family, RscaleParam));
+                	return(GAM_skeleton<GAMDataEllipticSpaceVarying, 1, 2, 2>(regressionData, optimizationData, Rmesh, Rmu0 , family, RscaleParam));
                 else if(regressionData.getOrder()==2 && mydim==2 && ndim==2)
-                	return(GAM_skeleton<GAMDataEllipticSpaceVarying,IntegratorTriangleP4, 2, 2, 2>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
+                	return(GAM_skeleton<GAMDataEllipticSpaceVarying, 2, 2, 2>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
+                else if(regressionData.getOrder()==1 && mydim==2 && ndim==3)
+                    return(GAM_skeleton<GAMDataEllipticSpaceVarying, 2, 2, 3>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
+                else if(regressionData.getOrder()==2 && mydim==2 && ndim==3)
+                    return(GAM_skeleton<GAMDataEllipticSpaceVarying, 2, 2, 3>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
+                else if(regressionData.getOrder()==1 && mydim==3 && ndim==3)
+                    return(GAM_skeleton<GAMDataEllipticSpaceVarying, 2, 3, 3>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
+                else if(regressionData.getOrder()==2 && mydim==3 && ndim==3)
+                    return(GAM_skeleton<GAMDataEllipticSpaceVarying, 2, 3, 3>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
+
                 return(R_NilValue);
         }
 
@@ -222,14 +241,14 @@ extern "C"
                 typedef EOExpr<Stiff> ETStiff; Stiff EStiff; ETStiff stiff(EStiff);
                 typedef EOExpr<Grad>  ETGrad;  Grad  EGrad;  ETGrad  grad(EGrad);
 
-                const Reaction & c = regressionData.getC();
-                const Diffusivity & K = regressionData.getK();
-                const Advection & beta = regressionData.getBeta();
+                const Reaction& c = regressionData.getC();
+                const Diffusion<PDEParameterOptions::SpaceVarying>& K = regressionData.getK();
+                const Advection<PDEParameterOptions::SpaceVarying>& beta = regressionData.getBeta();
 
                 if(regressionData.getOrder()==1 && ndim==2)
-                        return(get_FEM_Matrix_skeleton<IntegratorTriangleP2, 1,2,2>(Rmesh, c*mass+stiff[K]+dot(beta,grad)));
+                        return(get_FEM_Matrix_skeleton<1,2,2>(Rmesh, c*mass+stiff[K]+beta.dot(grad)));
                 if(regressionData.getOrder()==2 && ndim==2)
-                        return(get_FEM_Matrix_skeleton<IntegratorTriangleP4, 2,2,2>(Rmesh, c*mass+stiff[K]+dot(beta,grad)));
+                        return(get_FEM_Matrix_skeleton<2,2,2>(Rmesh, c*mass+stiff[K]+beta.dot(grad)));
                 return(NILSXP);
         }
 }

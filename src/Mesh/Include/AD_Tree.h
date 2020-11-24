@@ -97,7 +97,9 @@ public:
   /** It fills all the locations of the tree. Object's coordinates are stored to perform searching operations.
    * 	See mesh_handler to verify what points and triangle must contain.
    */
-  ADTree(Real const * const points, UInt const * const triangle, UInt num_nodes, UInt num_triangle);
+  ADTree(const RNumericMatrix& points, const RIntegerMatrix& triangle);
+
+	ADTree(SEXP Rmesh);
 
   /// Returns a reference to the tree header.
   inline TreeHeader<Shape> gettreeheader() const { return header_; }

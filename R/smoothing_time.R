@@ -186,7 +186,7 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
     optim = c(optim,2)
   }else
   {
-    stop("'DOF.evaluation' must be 'not_required', 'stochastic' or 'exact'.")
+    stop("'DOF.evaluation' must be NULL, 'stochastic' or 'exact'.")
   }
   
   if(is.null(lambda.selection.lossfunction))
@@ -339,7 +339,6 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
   if(class(FEMbasis$mesh) == 'mesh.2D' & is.null(PDE_parameters))
   {
     bigsol = NULL
-    print('C++ Code Execution')
     bigsol = CPP_smooth.FEM.time(locations = locations, time_locations = time_locations, observations = observations, FEMbasis = FEMbasis, time_mesh=time_mesh,
       covariates = covariates, ndim = ndim, mydim = mydim, BC = BC,
       incidence_matrix = incidence_matrix, areal.data.avg = areal.data.avg,
@@ -349,7 +348,6 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
   }else if(class(FEMbasis$mesh) == 'mesh.2D' & !is.null(PDE_parameters) & space_varying==FALSE)
   {
     bigsol = NULL
-    print('C++ Code Execution')
     bigsol = CPP_smooth.FEM.PDE.time(locations = locations, time_locations = time_locations, observations = observations, FEMbasis = FEMbasis, time_mesh=time_mesh,
        covariates = covariates, PDE_parameters=PDE_parameters, ndim = ndim, mydim = mydim, BC = BC,
        incidence_matrix = incidence_matrix, areal.data.avg = areal.data.avg,
@@ -360,7 +358,6 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
   }else if(class(FEMbasis$mesh) == 'mesh.2D' & !is.null(PDE_parameters) & space_varying==TRUE)
   {
     bigsol = NULL
-    print('C++ Code Execution')
     bigsol = CPP_smooth.FEM.PDE.sv.time(locations = locations, time_locations = time_locations, observations = observations, FEMbasis = FEMbasis, time_mesh=time_mesh,
       covariates = covariates, PDE_parameters=PDE_parameters, ndim = ndim, mydim = mydim, BC = BC,
       incidence_matrix = incidence_matrix, areal.data.avg = areal.data.avg,
@@ -370,8 +367,7 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
   }else if(class(FEMbasis$mesh) == 'mesh.2.5D')
   {
     bigsol = NULL
-    print('C++ Code Execution')
-    bigsol = CPP_smooth.manifold.FEM.time(locations = locations, observations = observations, FEMbasis = FEMbasis, 
+    bigsol = CPP_smooth.manifold.FEM.time(locations = locations, time_locations = time_locations, observations = observations, FEMbasis = FEMbasis, time_mesh=time_mesh,
       covariates = covariates, ndim = ndim, mydim = mydim, BC = BC,
       incidence_matrix = incidence_matrix, areal.data.avg = areal.data.avg,
       FLAG_MASS = FLAG_MASS, FLAG_PARABOLIC = FLAG_PARABOLIC, IC = IC,
@@ -380,8 +376,7 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
   }else if(class(FEMbasis$mesh) == 'mesh.3D')
   {
     bigsol = NULL
-    print('C++ Code Execution')
-    bigsol = CPP_smooth.volume.FEM.time(locations = locations, observations = observations, FEMbasis = FEMbasis, 
+    bigsol = CPP_smooth.volume.FEM.time(locations = locations, time_locations = time_locations, observations = observations, FEMbasis = FEMbasis, time_mesh=time_mesh,
       covariates = covariates, ndim = ndim, mydim = mydim, BC = BC,
       incidence_matrix = incidence_matrix, areal.data.avg = areal.data.avg,
       FLAG_MASS = FLAG_MASS, FLAG_PARABOLIC = FLAG_PARABOLIC, IC = IC,
