@@ -441,7 +441,7 @@ void GCV_Exact<InputCarrier, 1>::update_dor(Real lambda)
         {
                 Rprintf("WARNING: Some values of the trace of the matrix S('lambda') are inconstistent.\n");
                 Rprintf("This might be due to ill-conditioning of the linear system.\n");
-                Rprintf("Try increasing value of 'lambda'. Value of 'lambda' that produces an error is: %d \n", lambda);
+                Rprintf("Try increasing value of 'lambda'. Value of 'lambda' that produces an error is: %e \n", lambda);
         }
 
         // Debugging purpose
@@ -719,7 +719,7 @@ void GCV_Stochastic<InputCarrier, 1>::update_dor(Real lambda)
         {
                 Rprintf("WARNING: Some values of the trace of the matrix S('lambda') are inconstistent.\n");
                 Rprintf("This might be due to ill-conditioning of the linear system.\n");
-                Rprintf("Try increasing value of 'lambda'. Value of 'lambda' that produces an error is: %d \n", lambda);
+                Rprintf("Try increasing value of 'lambda'. Value of 'lambda' that produces an error is: %e \n", lambda);
         }
 
         // Debugging purpose
