@@ -98,8 +98,8 @@
 #' \itemize{
 #'    \item{\code{fit.FEM}}{A \code{FEM} object that represents the fitted spatial field.}
 #'    \item{\code{PDEmisfit.FEM}}{A \code{FEM} object that represents the Laplacian of the estimated spatial field.}
-#'    \item{\code{solution}}{A list, note that all terms are matrices or row vectors: the \code{j}th column represents the vector of related to \code{lambda[j]} if \code{lambda.selection.criterion="grid"} and \code{lambda.selection.lossfunction=NULL}.
-#'          In all the other cases is returned just the column related to the best smoothing parameter.
+#'    \item{\code{solution}}{A list, note that all terms are matrices or row vectors: the \code{j}th column represents the vector related to \code{lambda[j]} if \code{lambda.selection.criterion="grid"} and \code{lambda.selection.lossfunction=NULL}.
+#'          In all the other cases, only the column related to the best smoothing parameter is returned.
 #'          \item{\code{f}}{Matrix, estimate of function f, first half of solution vector.}
 #'          \item{\code{g}}{Matrix, second half of solution vector.}
 #'          \item{\code{z_hat}}{Matrix, prediction of the output in the locations.}
@@ -117,7 +117,7 @@
 #'          \item{\code{GCV_vector}}{vector of positive numbers, GCV values for all the lambdas in \code{lambda_vector}}
 #'          }
 #'    \item{\code{time}}{Duration of the entire optimization computation.}
-#'    \item{\code{bary.locations}}{A barycenter information of the given locations, if the locations are not mesh nodes.}
+#'    \item{\code{bary.locations}}{Barycenter information of the given locations, if the locations are not mesh nodes.}
 #'    \item{\code{GAM_output}}{A list of GAM related data:
 #'          \item{\code{fn_hat}}{A matrix with number of rows equal to number of locations and number of columns equal to length of lambda. Each column contains the evaluaton of the spatial field in the location points.}
 #'          \item{\code{J_minima}}{A vector of the same length of lambda, containing the reached minima for each value of the smoothing parameter.}
