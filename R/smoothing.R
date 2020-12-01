@@ -80,7 +80,7 @@
 #' The following possibilities are allowed: NULL and 'GCV' (generalized cross validation)
 #' If NULL is selected, \code{lambda.selection.criterion='grid'} is required. 'GCV' is employed for both \code{lambda.selection.criterion='grid'} and optimization methods.
 #' Default value \code{lambda.selection.lossfunction=NULL}
-#' @param lambda a vector of spatial smoothing parameters provided if \code{lambda.selection.criterion='grid}'. An optional initialization otherwise.
+#' @param lambda a vector of spatial smoothing parameters provided if \code{lambda.selection.criterion='grid'}. An optional initialization otherwise.
 #' @param DOF.stochastic.realizations This positive integer is considered only when \code{DOF.evaluation = 'stochastic'}.
 #' It is the number of uniform random variables used in stochastic DOF evaluation.
 #' Default value \code{DOF.stochastic.realizations=100}.
