@@ -65,73 +65,64 @@
 #' Default value \code{threshold.FPIRLS = 0.0002020}.
 #' @param max.steps.FPIRLS This parameter is used to limit the maximum number of iteration.
 #' Default value \code{max.steps.FPIRLS=15}.
-#' @param lambda.selection.criterion This parameter is used to select the optimization method related to the smoothing parameter \code{lambda}.
+#' @param lambda.selection.criterion This parameter is used to select the optimization method for the smoothing parameter \code{lambda}.
 #' The following methods are implemented: 'grid', 'newton', 'newton_fd'.
-#' The former is a pure evaluation method, therefore a vector of \code{lambda} testing penalizations must be provided.
+#' The former is a pure evaluation method. A test vector of \code{lambda} must be provided.
 #' The remaining two are optimization methods that automatically select the best penalization according to \code{lambda.selection.lossfunction} criterion.
 #' They implement respectively a pure Newton method and a finite differences Newton method.
 #' Default value \code{lambda.selection.criterion='grid'}
-#' @param DOF.evaluation This parameter is used to identify if and how degrees of freedom computation has to be performed.
+#' @param DOF.evaluation This parameter is used to identify if and how to perform degrees of freedom computation.
 #' The following possibilities are allowed: NULL, 'exact' and 'stochastic'
 #' In the former case no degree of freedom is computed, while the other two methods enable computation.
-#' Stochastic computation of DOFs may be slightly less accurate than its deterministic counterpart, but is highly suggested for meshes of more than 5000 nodes, being fairly less time consuming.
+#' Stochastic computation of DOFs may be slightly less accurate than its deterministic counterpart, but it is fairly less time consuming. Stochastic evaluation is highly suggested for meshes with more than 5000 nodes.
 #' Default value \code{DOF.evaluation=NULL}
-#' @param lambda.selection.lossfunction This parameter is used to understand if some loss function has to be evaluated.
+#' @param lambda.selection.lossfunction This parameter is used to determine if some loss function has to be evaluated.
 #' The following possibilities are allowed: NULL and 'GCV' (generalized cross validation)
-#' The former case is that of \code{lambda.selection.criterion='grid'} pure evaluation, while the second can be employed for optimization methods.
+#' If NULL is selected, \code{lambda.selection.criterion='grid'} is required. 'GCV' is employed for both \code{lambda.selection.criterion='grid'} and optimization methods.
 #' Default value \code{lambda.selection.lossfunction=NULL}
-#' @param lambda a vector of spatial smoothing parameters to be provided for evaluation if \code{lambda.selection.criterion='grid'}, an optional initialization otherwise
-#' @param DOF.stochastic.realizations This parameter is considered only when \code{DOF.evaluation = 'stochastic'}.
-#' It is a positive integer that represents the number of uniform random variables used in stochastic GCV computation.
+#' @param lambda a vector of spatial smoothing parameters provided if \code{lambda.selection.criterion='grid'}. An optional initialization otherwise.
+#' @param DOF.stochastic.realizations This positive integer is considered only when \code{DOF.evaluation = 'stochastic'}.
+#' It is the number of uniform random variables used in stochastic DOF evaluation.
 #' Default value \code{DOF.stochastic.realizations=100}.
-#' @param DOF.stochastic.seed This parameter is considered only when \code{DOF.evaluation = 'stochastic'}.
-#' It is a positive integer that represents user defined seed employed in stochastic GCV computation.
+#' @param DOF.stochastic.seed This positive integer is considered only when \code{DOF.evaluation = 'stochastic'}.
+#' It is a user defined seed employed in stochastic DOF evaluation.
 #' Default value \code{DOF.stochastic.seed = 0} means random.
-#' @param DOF.matrix Matrix of degrees of freedom. This parameter can be used if the DOF.matrix corresponding to \code{lambda} is available from precedent computation. This allows to save time
-#' since the computation of the DOFs is the most expensive part of GCV.
+#' @param DOF.matrix Matrix of degrees of freedom. This parameter can be used if the DOF.matrix corresponding to \code{lambda} is available from precedent computation. This allows to save time,
+#' since the computation of the DOFs is the most time consuming part of GCV evaluation.
 #' @param GCV.inflation.factor Tuning parameter used for the estimation of GCV. Default value \code{GCV.inflation.factor = 1.0} or \code{1.8} in GAM.
-#' It is advised to set it grather than 1 to avoid overfitting.
+#' It is advised to set \code{GCV.inflation.factor} larger than 1 to avoid overfitting.
 #' @param lambda.optimization.tolerance Tolerance parameter, a double between 0 and 1 that fixes how much precision is required by the optimization method: the smaller the parameter, the higher the accuracy.
 #' Used only if \code{lambda.selection.criterion='newton'} or \code{lambda.selection.criterion='newton_fd'}.
 #' Default value \code{lambda.optimization.tolerance=0.05}.
-#' @return A list with the following variables in \code{family="gaussian"} case:
+#' @return A list with the following variables:
 #' \itemize{
 #'    \item{\code{fit.FEM}}{A \code{FEM} object that represents the fitted spatial field.}
 #'    \item{\code{PDEmisfit.FEM}}{A \code{FEM} object that represents the Laplacian of the estimated spatial field.}
-#'    \item{\code{solution}}{A list, note that all terms are matrices or row vectors: the \code{j}th column represents the vector of related to \code{lambda[j]} if \code{lambda.selection.criterion="grid"} and \code{lambda.selection.lossfunction=NULL}.
-#'          In all the other cases is returned just the column related to the best smoothing parameter
-#'          \item{\code{f}}{Matrix, estimate of function f, first half of solution vector}
-#'          \item{\code{g}}{Matrix, second half of solution vector}
-#'          \item{\code{z_hat}}{Matrix, prediction of the output in the locations}
-#'          \item{\code{beta}}{If \code{covariates} is not \code{NULL}, a matrix with number of rows equal to the number of covariates and number of columns equal to length of lambda. It is the regression coefficients estimate}
-#'          \item{\code{rmse}}{Estimate of the root mean square error in the locations}
-#'          \item{\code{estimated_sd}}{Estiimate of the standard deviation of the error}
+#'    \item{\code{solution}}{A list, note that all terms are matrices or row vectors: the \code{j}th column represents the vector related to \code{lambda[j]} if \code{lambda.selection.criterion="grid"} and \code{lambda.selection.lossfunction=NULL}.
+#'          In all the other cases, only the column related to the best smoothing parameter is returned.
+#'          \item{\code{f}}{Matrix, estimate of function f, first half of solution vector.}
+#'          \item{\code{g}}{Matrix, second half of solution vector.}
+#'          \item{\code{z_hat}}{Matrix, prediction of the output in the locations.}
+#'          \item{\code{beta}}{If \code{covariates} is not \code{NULL}, a matrix with number of rows equal to the number of covariates and number of columns equal to length of lambda. It is the regression coefficients estimate.}
+#'          \item{\code{rmse}}{Estimate of the root mean square error in the locations.}
+#'          \item{\code{estimated_sd}}{Estimate of the standard deviation of the error.}
 #'          }
 #'    \item{\code{optimization}}{A detailed list of optimization related data:
-#'          \item{\code{lambda_solution}}{numerical value of best lambda acording to \code{lambda.selection.lossfunction}, -1 if \code{lambda.selection.lossfunction=NULL}}
-#'          \item{\code{lambda_position}}{integer, postion in \code{lambda_vector} of best lambda acording to \code{lambda.selection.lossfunction}, -1 if \code{lambda.selection.lossfunction=NULL}}
-#'          \item{\code{GCV}}{numeric value of GCV in correspondence of the optimum}
-#'          \item{\code{optimization_details}}{list containing further information about the optimization method used and the nature of its termination, eventual number of iterations}
-#'          \item{\code{dof}}{numeric vector, value of DOFs for all the penalizations it has been computed, empty if not computed}
-#'          \item{\code{lambda_vector}}{numeric value of the penalization factors passed by the user or found in the iterations of the optimization method}
-#'          \item{\code{GCV_vector}}{numeric vector, value of GCV for all the penalizations it has been computed}
+#'          \item{\code{lambda_solution}}{numerical value of best lambda according to \code{lambda.selection.lossfunction}, -1 if \code{lambda.selection.lossfunction=NULL}.}
+#'          \item{\code{lambda_position}}{integer, position in \code{lambda_vector} of best lambda according to \code{lambda.selection.lossfunction}, -1 if \code{lambda.selection.lossfunction=NULL}.}
+#'          \item{\code{GCV}}{numeric value of GCV in correspondence of the optimum.}
+#'          \item{\code{optimization_details}}{list containing further information about the optimization method used and the nature of its termination, eventual number of iterations.}
+#'          \item{\code{dof}}{vector of positive numbers, DOFs for all the lambdas in \code{lambda_vector}, empty or invalid if not computed.}
+#'          \item{\code{lambda_vector}}{vector of positive numbers: penalizations either passed by the user or found in the iterations of the optimization method.}
+#'          \item{\code{GCV_vector}}{vector of positive numbers, GCV values for all the lambdas in \code{lambda_vector}}
 #'          }
-#'    \item{\code{time}}{Duration of the entire optimization computation}
-#'    \item{\code{bary.locations}}{A barycenter information of the given locations if the locations are not mesh nodes.}
-#' }
-#' A list with the following variables in others GAM case:
-#' \itemize{
-#'    \item{\code{fit.FEM}}{A \code{FEM} object that represents the fitted spatial field.}
-#'    \item{\code{PDEmisfit.FEM}}{A \code{FEM} object that represents the Laplacian of the estimated spatial field.}
-#'    \item{\code{beta}}{If covariates is not \code{NULL}, a matrix with number of rows equal to the number of covariates and numer of columns equal to length of lambda.  The \code{j}th column represents the vector of regression coefficients when
-#' the smoothing parameter is equal to \code{lambda[j]}.}
-#'    \item{\code{edf}}{If GCV is \code{TRUE}, a scalar or vector with the trace of the smoothing matrix for each value of the smoothing parameter specified in \code{lambda}.}
-#'    \item{\code{stderr}}{If GCV is \code{TRUE}, a scalar or vector with the estimate of the standard deviation of the error for each value of the smoothing parameter specified in \code{lambda}.}
-#'    \item{\code{GCV}}{If GCV is \code{TRUE}, a  scalar or vector with the value of the GCV criterion for each value of the smoothing parameter specified in \code{lambda}.}
-#'    \item{\code{bary.locations}}{A barycenter information of the given locations if the locations are not mesh nodes.}
-#'    \item{\code{fn_hat}}{ A matrix with number of rows equal to number of locations and number of columns equal to length of lambda. Each column contain the evaluaton of the spatial field in the location points.}
-#'    \item{\code{J_minima}}{A vector of the same length of lambda, containing the reached minima for each value of the smoothing parameter.}
-#'    \item {\code{variance.est}}{ A vector which return the variance estimates for the Generative Additive Models}
+#'    \item{\code{time}}{Duration of the entire optimization computation.}
+#'    \item{\code{bary.locations}}{Barycenter information of the given locations, if the locations are not mesh nodes.}
+#'    \item{\code{GAM_output}}{A list of GAM related data:
+#'          \item{\code{fn_hat}}{A matrix with number of rows equal to number of locations and number of columns equal to length of lambda. Each column contains the evaluaton of the spatial field in the location points.}
+#'          \item{\code{J_minima}}{A vector of the same length of lambda, containing the reached minima for each value of the smoothing parameter.}
+#'          \item{\code{variance.est}}{A vector which returns the variance estimates for the Generative Additive Models.}
+#'         }
 #' }
 #' @description This function implements a spatial regression model with differential regularization.
 #'  The regularizing term involves a Partial Differential Equation (PDE). In the simplest case the PDE involves only the
@@ -737,30 +728,56 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis,
 
     # Prepare return list
     reslist = NULL
-
+    
     if(optim[3]==1)
     {
-    	if(bestlambda == 1 || bestlambda == length(lambda))
-    		warning("Your optimal 'GCV' is on the border of lambda sequence")
+      if(bestlambda == 1 || bestlambda == length(lambda))
+        warning("Your optimal 'GCV' is on the border of lambda sequence")
       stderr=sqrt(GCV_*(sum(!is.na(observations))-dof)/sum(!is.na(observations)))
-      reslist=list(fit.FEM = fit.FEM, PDEmisfit.FEM = PDEmisfit.FEM,
-              beta = beta, edf = dof, GCV = GCV_, stderr=stderr, bestlambda = bestlambda, bary.locations = bary.locations)
+      optimization_type = "full DOF grid"
     }
     else
     {
-      reslist=list(fit.FEM = fit.FEM, PDEmisfit.FEM = PDEmisfit.FEM, beta = beta, bary.locations = bary.locations)
+      stderr = -1
+      optimization_type = "uninformative"
     }
-
+    
+    solution = list(
+      f = f,
+      g = g,
+      z_hat = -1,
+      beta = beta,
+      rmse = -1,
+      estimated_sd=stderr
+    )
+    
+    optimization = list(
+      lambda_solution = lambda[bestlambda],
+      lambda_position = bestlambda,
+      GCV = GCV_[bestlambda],
+      optimization_details = list(
+        iterations = -1,
+        termination = "uninformative",
+        optimization_type = optimization_type),
+      dof = dof,
+      lambda_vector = lambda,
+      GCV_vector = GCV_
+    )
+    
     # GAM outputs
     if(sum(family==c("binomial", "exponential", "gamma", "poisson")) == 1)
     {
       fn.eval = bigsol[[13]]
       J_minima = bigsol[[14]]
       variance.est=bigsol[[15]]
-      if( variance.est[1]<0 ) variance.est = NULL
-      reslist = c(reslist, list(fn.eval = fn.eval, J_minima = J_minima, variance.est = variance.est))
+      if(variance.est[1]<0)
+        variance.est = NULL
+      GAM_output = list(fn.eval = fn.eval, J_minima = J_minima, variance.est = variance.est)
     }
-
+    
+    reslist = list(fit.FEM = fit.FEM, PDEmisfit.FEM = PDEmisfit.FEM, solution = solution,
+                   optimization  = optimization, bary.locations = bary.locations,
+                   GAM_output = GAM_output)
     return(reslist)
   }
   else
