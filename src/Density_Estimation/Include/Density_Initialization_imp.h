@@ -33,7 +33,7 @@ HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>::HeatProcess(const DataProble
     llik_.resize(niter_);
     penTerm_.resize(niter_);
 
-    data_index_.resize(this->dataProblem_.getNumberofData());
+    data_index_.resize(this->dataProblem_.dataSize());
     std::iota(data_index_.begin(),data_index_.end(),0);
 
     computePatchAreas();
@@ -48,18 +48,10 @@ HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>::computePatchAreas(){
 
   constexpr UInt Nodes = mydim==2? 3*ORDER : 6*ORDER-2;
 
-  for(UInt t=0; t<this->dataProblem_.getNumElements(); t++){
+  for(UInt t=0; t<this->dataProblem_.getNumElements(); ++t){
     Element<Nodes, mydim, ndim> current_element = this->dataProblem_.getElement(t);
-
-    // for(UInt i=0; i<Nodes; i++){
-    //   if constexpr(mydim == 2) patch_areas_[current_element[i].id()] += std::abs(current_element.getArea());
-    //   if constexpr(mydim == 3) patch_areas_[current_element[i].id()] += std::abs(current_element.getVolume());
-    //
-    // }
-    for(UInt i=0; i<Nodes; i++){
-      patch_areas_[current_element[i].id()] += std::abs(this->dataProblem_.getMesh().elementMeasure(t));
-    }
-
+    for(const auto& node : current_element)
+      patch_areas_[node.id()] += current_element.getMeasure();
   }
 }
 
@@ -72,19 +64,10 @@ HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>::computeDensityOnlyData(){
 
 	VectorXr x = VectorXr::Zero(this->dataProblem_.getNumNodes());
 
-	// for(UInt i=0; i<this->dataProblem_.getNumberofData(); i++){
   for(UInt i : data_index_){
-
-    Element<Nodes, mydim, ndim> current_element;
-    if(this->dataProblem_.getSearch() == 1) { //use Naive search
-      current_element = this->dataProblem_.findLocationNaive(this->dataProblem_.getDatum(i));
-    } else if (this->dataProblem_.getSearch() == 2) { //use Tree search (default)
-      current_element = this->dataProblem_.findLocationTree(this->dataProblem_.getDatum(i));
-    }
-
-		for(UInt j=0; j<Nodes; j++){
-				x[current_element[j].id()] += 1;
-		}
+    Element<Nodes, mydim, ndim> current_element = this->dataProblem_.findLocation(this->dataProblem_.data(i));
+    for(const auto& node : current_element)
+				x[node.id()] += 1;
 	}
 
 	x.array() /= patch_areas_.array();
@@ -100,13 +83,12 @@ HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>::computeStartingDensities(){
 
 	constexpr UInt Nodes = mydim==2? 3*ORDER : 6*ORDER-2;
 
-	VectorXr x(this->dataProblem_.getNumNodes());
-	x = computeDensityOnlyData();
+	VectorXr x = computeDensityOnlyData();
 
 	std::vector<std::unordered_set<UInt>> neighbours_nodes(this->dataProblem_.getNumNodes());
 	// it saves in i-th position the set of the neighboor nodes id that have node i
 
-	for(UInt t = 0; t < this->dataProblem_.getNumElements(); t++){
+	for(UInt t = 0; t < this->dataProblem_.getNumElements(); ++t){
 		Element<Nodes, mydim, ndim> current_element = this->dataProblem_.getElement(t);
 		for(UInt i=0; i<Nodes;i++){
 			for(UInt j=i+1; j<Nodes; j++){
@@ -158,7 +140,7 @@ Heat_CV<Integrator_noPoly, ORDER, mydim, ndim>::Heat_CV(const DataProblem<Integr
 
     cv_errors_.resize(this->niter_, 0);
 
-    K_folds_.resize(dp.getNumberofData());
+    K_folds_.resize(dp.dataSize());
 
     perform_init_cv();
 
@@ -168,7 +150,7 @@ template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
 void
 Heat_CV<Integrator_noPoly, ORDER, mydim, ndim>::perform_init_cv(){
 
-    UInt N = this->dataProblem_.getNumberofData();
+    UInt N = this->dataProblem_.dataSize();
     UInt K = nFolds_;
 
     for (UInt i = 0; i< N; i++){
@@ -208,7 +190,7 @@ Heat_CV<Integrator_noPoly, ORDER, mydim, ndim>::perform_init_cv(){
     Rprintf("The initialization selected is the number %d\n", init_best_);
 
     // totale
-    this->data_index_.resize(this->dataProblem_.getNumberofData());
+    this->data_index_.resize(this->dataProblem_.dataSize());
     std::iota(this->data_index_.begin(),this->data_index_.end(),0);
 
     this-> computeStartingDensities();

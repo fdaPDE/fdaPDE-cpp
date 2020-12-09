@@ -42,7 +42,7 @@ CrossValidation<Integrator_noPoly, ORDER, mydim, ndim>::CrossValidation(const Da
   std::shared_ptr<MinimizationAlgorithm<Integrator_noPoly, ORDER, mydim, ndim>> ma):
   Preprocess<Integrator_noPoly, ORDER, mydim, ndim>(dp, fp), minAlgo_(ma), error_(dp){
 
-    K_folds_.resize(dp.getNumberofData());
+    K_folds_.resize(dp.dataSize());
     CV_errors_.resize(dp.getNlambda(), 0);
     g_sols_.resize(dp.getNlambda());
 
@@ -53,7 +53,7 @@ template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
 std::pair<VectorXr, Real>
 CrossValidation<Integrator_noPoly, ORDER, mydim, ndim>::performCV(){
 
-  UInt N = this->dataProblem_.getNumberofData();
+  UInt N = this->dataProblem_.dataSize();
   UInt K = this->dataProblem_.getNfolds();
 
   for (UInt i = 0; i< N; i++){

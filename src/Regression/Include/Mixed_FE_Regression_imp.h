@@ -186,14 +186,7 @@ void MixedFERegressionBase<InputHandler>::setPsi(const MeshHandler<ORDER, mydim,
 		for(UInt i=0; i<nlocations;i++)
 		{ // Update Psi looping on all locations
 			// [[GM missing a defaulted else, raising a WARNING!]]
-			if(regressionData_.getSearch() == 1)
-			{ // Use Naive search
-				tri_activated = mesh_.findLocationNaive(regressionData_.template getLocations<ndim>(i));
-			}
-			else if(regressionData_.getSearch() == 2)
-			{ // Use Tree search (default)
-				tri_activated = mesh_.findLocationTree(regressionData_.template getLocations<ndim>(i));
-			}
+			tri_activated = mesh_.findLocation(regressionData_.template getLocations<ndim>(i));
 
 			// Search the element containing the point
 			if(tri_activated.getId() == Identifier::NVAL)
@@ -1117,8 +1110,8 @@ class MixedFERegression<RegressionData>: public MixedFERegressionBase<Regression
 	public:
 		MixedFERegression(const RegressionData & regressionData,  OptimizationData & optimizationData, UInt nnodes_):
 			MixedFERegressionBase<RegressionData>(regressionData, optimizationData, nnodes_) {};
-		MixedFERegression(const std::vector<Real> & mesh_time, const RegressionData & regressionData, OptimizationData & optimizationData, UInt nnodes_, UInt spline_degree):
-			MixedFERegressionBase<RegressionData>(mesh_time, regressionData, optimizationData, nnodes_, spline_degree) {};
+		MixedFERegression(const std::vector<Real> & mesh_time, const RegressionData & regressionData, OptimizationData & optimizationData, UInt nnodes_):
+			MixedFERegressionBase<RegressionData>(mesh_time, regressionData, optimizationData, nnodes_) {};
 
 		template<UInt ORDER, UInt mydim, UInt ndim>
 		void preapply(const MeshHandler<ORDER,mydim,ndim> & mesh)
@@ -1134,8 +1127,8 @@ class MixedFERegression<RegressionDataElliptic>: public MixedFERegressionBase<Re
 	public:
 		MixedFERegression(const RegressionDataElliptic & regressionData,  OptimizationData & optimizationData, UInt nnodes_):
 			MixedFERegressionBase<RegressionDataElliptic>(regressionData, optimizationData, nnodes_) {};
-		MixedFERegression(const std::vector<Real> & mesh_time, const RegressionDataElliptic & regressionData,  OptimizationData & optimizationData, UInt nnodes_, UInt spline_degree):
-			MixedFERegressionBase<RegressionDataElliptic>(mesh_time, regressionData, optimizationData, nnodes_, spline_degree) {};
+		MixedFERegression(const std::vector<Real> & mesh_time, const RegressionDataElliptic & regressionData,  OptimizationData & optimizationData, UInt nnodes_):
+			MixedFERegressionBase<RegressionDataElliptic>(mesh_time, regressionData, optimizationData, nnodes_) {};
 
 		template<UInt ORDER, UInt mydim, UInt ndim>
 		void preapply(const MeshHandler<ORDER,mydim,ndim> & mesh)
@@ -1159,8 +1152,8 @@ class MixedFERegression<RegressionDataEllipticSpaceVarying> : public MixedFERegr
 	public:
 		MixedFERegression(const RegressionDataEllipticSpaceVarying & regressionData,  OptimizationData & optimizationData, UInt nnodes_):
 			MixedFERegressionBase<RegressionDataEllipticSpaceVarying>(regressionData, optimizationData, nnodes_) {};
-		MixedFERegression(const std::vector<Real> & mesh_time, const RegressionDataEllipticSpaceVarying & regressionData,  OptimizationData & optimizationData, UInt nnodes_, UInt spline_degree):
-			MixedFERegressionBase<RegressionDataEllipticSpaceVarying>(mesh_time, regressionData, optimizationData, nnodes_, spline_degree) {};
+		MixedFERegression(const std::vector<Real> & mesh_time, const RegressionDataEllipticSpaceVarying & regressionData,  OptimizationData & optimizationData, UInt nnodes_):
+			MixedFERegressionBase<RegressionDataEllipticSpaceVarying>(mesh_time, regressionData, optimizationData, nnodes_) {};
 
 
 		template< UInt ORDER, UInt mydim, UInt ndim>

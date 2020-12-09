@@ -2,7 +2,7 @@
 #define __EVALUATOR_IMP_H__
 
 template <UInt ORDER>
-void Evaluator<ORDER,2,2>::eval(Real* X, Real *Y, UInt length, const Real *coef, bool redundancy, Real* result, std::vector<bool>& isinside)
+void Evaluator<ORDER,2,2>::eval(const Real* X, const Real *Y, UInt length, const Real *coef, bool redundancy, Real* result, std::vector<bool>& isinside)
 {
 
 	constexpr UInt Nodes = 3*ORDER;
@@ -14,19 +14,12 @@ void Evaluator<ORDER,2,2>::eval(Real* X, Real *Y, UInt length, const Real *coef,
 	for (int i = 0; i<length; ++i) {
 		current_point = Point<2>({X[i],Y[i]});
 
-		if (search == 1) { //use Naive search
-			current_element = mesh_.findLocationNaive(current_point);
-		} else if (search == 2)  { //use Tree search (default)
-			current_element = mesh_.findLocationTree(current_point);
-		} else if (search == 3) { //use Walking search
-			Element<Nodes,2,2> starting_element;
-			starting_element = mesh_.getElement(0);
-			current_element = mesh_.findLocationWalking(current_point, starting_element);
-			if(current_element.getId() == Identifier::NVAL && redundancy == true) {
+		current_element = mesh_.findLocation(current_point);
+		if(search==3 && current_element.getId() == Identifier::NVAL && redundancy == true) {
 				//To avoid problems with non convex mesh
-				current_element = mesh_.findLocationNaive(current_point);
-			}
+			current_element = mesh_.findLocationNaive(current_point);
 		}
+		
 
 		if(current_element.getId() == Identifier::NVAL) {
 			isinside[i]=false;
@@ -42,7 +35,7 @@ void Evaluator<ORDER,2,2>::eval(Real* X, Real *Y, UInt length, const Real *coef,
 }
 
 template <UInt ORDER>
-void Evaluator<ORDER,2,2>::evalWithInfo(Real* X, Real *Y, UInt length, const Real *coef, bool redundancy, Real* result, std::vector<bool>& isinside, const std::vector<UInt> & element_id, Real **barycenters)
+void Evaluator<ORDER,2,2>::evalWithInfo(const Real* X, const Real *Y, UInt length, const Real *coef, bool redundancy, Real* result, std::vector<bool>& isinside, const std::vector<UInt> & element_id, Real **barycenters)
 {
 
 	constexpr UInt Nodes = 3*ORDER;
@@ -72,7 +65,7 @@ void Evaluator<ORDER,2,2>::evalWithInfo(Real* X, Real *Y, UInt length, const Rea
 
 
 template <UInt ORDER>
-void Evaluator<ORDER,2,3>::eval(Real* X, Real *Y,  Real *Z, UInt length, const Real *coef, bool redundancy, Real* result, std::vector<bool>& isinside)
+void Evaluator<ORDER,2,3>::eval(const Real* X, const Real *Y,  const Real *Z, UInt length, const Real *coef, bool redundancy, Real* result, std::vector<bool>& isinside)
 {
 
 	constexpr UInt Nodes = 3*ORDER;
@@ -84,11 +77,7 @@ void Evaluator<ORDER,2,3>::eval(Real* X, Real *Y,  Real *Z, UInt length, const R
 	for (int i = 0; i<length; ++i) {
 		current_point = Point<3>({X[i],Y[i],Z[i]});
 
-		if (search == 1) { //use Naive search
-			current_element = mesh_.findLocationNaive(current_point);
-		} else if (search == 2)  { //use Tree search (default)
-			current_element = mesh_.findLocationTree(current_point);
-		}
+		current_element = mesh_.findLocation(current_point);
 
 		if(current_element.getId() == Identifier::NVAL) {
 			isinside[i]=false;
@@ -105,7 +94,7 @@ void Evaluator<ORDER,2,3>::eval(Real* X, Real *Y,  Real *Z, UInt length, const R
 }
 
 template <UInt ORDER>
-void Evaluator<ORDER,2,3>::evalWithInfo(Real* X, Real *Y, Real *Z, UInt length, const Real *coef, bool redundancy, Real* result, std::vector<bool>& isinside, const std::vector<UInt> & element_id, Real **barycenters)
+void Evaluator<ORDER,2,3>::evalWithInfo(const Real* X, const Real *Y, const Real *Z, UInt length, const Real *coef, bool redundancy, Real* result, std::vector<bool>& isinside, const std::vector<UInt> & element_id, Real **barycenters)
 {
 
 	constexpr UInt Nodes = 3*ORDER;
@@ -132,7 +121,7 @@ void Evaluator<ORDER,2,3>::evalWithInfo(Real* X, Real *Y, Real *Z, UInt length, 
 }
 
 template <UInt ORDER>
-void Evaluator<ORDER,3,3>::eval(Real* X, Real *Y,  Real *Z, UInt length, const Real *coef, bool redundancy, Real* result, std::vector<bool>& isinside)
+void Evaluator<ORDER,3,3>::eval(const Real* X, const Real *Y,  const Real *Z, UInt length, const Real *coef, bool redundancy, Real* result, std::vector<bool>& isinside)
 {
 
 	constexpr UInt Nodes = 6*ORDER-2;
@@ -145,19 +134,12 @@ void Evaluator<ORDER,3,3>::eval(Real* X, Real *Y,  Real *Z, UInt length, const R
 	for (int i = 0; i<length; ++i) {
 		current_point = Point<3>({X[i],Y[i],Z[i]});
 
-		if (search == 1) { //use Naive search
+		current_element = mesh_.findLocation(current_point);
+		if(search==3 && current_element.getId() == Identifier::NVAL && redundancy == true) {
+			//To avoid problems with non convex mesh
 			current_element = mesh_.findLocationNaive(current_point);
-		} else if (search == 2)  { //use Tree search (default)
-			current_element = mesh_.findLocationTree(current_point);
-		} else if (search == 3) { //use Walking search
-			Element<Nodes,3,3> starting_element;
-			starting_element = mesh_.getElement(0);
-			current_element = mesh_.findLocationWalking(current_point, starting_element);
-			if(current_element.getId() == Identifier::NVAL && redundancy == true) {
-				//To avoid problems with non convex mesh
-				current_element = mesh_.findLocationNaive(current_point);
-			}
 		}
+		
 
 
 		if(current_element.getId() == Identifier::NVAL) {
@@ -175,7 +157,7 @@ void Evaluator<ORDER,3,3>::eval(Real* X, Real *Y,  Real *Z, UInt length, const R
 }
 
 template <UInt ORDER>
-void Evaluator<ORDER,3,3>::evalWithInfo(Real* X, Real *Y, Real *Z, UInt length, const Real *coef, bool redundancy, Real* result, std::vector<bool>& isinside, const std::vector<UInt> & element_id, Real **barycenters)
+void Evaluator<ORDER,3,3>::evalWithInfo(const Real* X, const Real *Y, const Real *Z, UInt length, const Real *coef, bool redundancy, Real* result, std::vector<bool>& isinside, const std::vector<UInt> & element_id, Real **barycenters)
 {
 
 	constexpr UInt Nodes = 6*ORDER-2;

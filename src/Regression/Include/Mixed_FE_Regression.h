@@ -14,12 +14,18 @@
 #include "../../Lambda_Optimization/Include/Optimization_Data.h"
 #include "Regression_Data.h"
 
+//Forward declaration
+template<typename InputHandler>
+class MixedSplineRegression;
+
+
 /*! A base class for the smooth regression.
 */
 template<typename InputHandler>
 class MixedFERegressionBase
 {
 	protected:
+
 		const std::vector<Real> mesh_time_;
 		const UInt N_; 			//!< Number of spatial basis functions.
 		const UInt M_;
@@ -135,12 +141,13 @@ class MixedFERegressionBase
 		MatrixXr system_solve(const Eigen::MatrixBase<Derived>&);
 
 	public:
+
 		//!A Constructor.
 		MixedFERegressionBase( const InputHandler & regressionData, OptimizationData & optimizationData,  UInt nnodes_) :
 			N_(nnodes_), M_(1), regressionData_(regressionData), optimizationData_(optimizationData), _dof(optimizationData.get_DOF_matrix()){isGAMData = regressionData.getisGAM();};
 
-		MixedFERegressionBase(const std::vector<Real> & mesh_time, const InputHandler & regressionData, OptimizationData & optimizationData, UInt nnodes_, UInt spline_degree) :
-			mesh_time_(mesh_time), N_(nnodes_), M_(regressionData.getFlagParabolic() ? mesh_time.size()-1 : mesh_time.size()+spline_degree-1),
+		MixedFERegressionBase(const std::vector<Real> & mesh_time, const InputHandler & regressionData, OptimizationData & optimizationData, UInt nnodes_) :
+			mesh_time_(mesh_time), N_(nnodes_), M_(regressionData.getFlagParabolic() ? mesh_time.size()-1 : mesh_time.size()-1+MixedSplineRegression<InputHandler>::SPLINE_DEGREE),
 			regressionData_(regressionData), optimizationData_(optimizationData), _dof(optimizationData.get_DOF_matrix()){isGAMData = regressionData.getisGAM();};
 
 		//! A member function computing the dofs for external calls
@@ -151,46 +158,46 @@ class MixedFERegressionBase
 		//! A method computing the dofs
 		void computeDegreesOfFreedom(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT);
 		//! A method that set WTW flag to false, in order to recompute the matrix WTW.
-		inline void recomputeWTW(void){ this->isWTWfactorized_ = false;}
+		void recomputeWTW(void){ this->isWTWfactorized_ = false;}
 
 		// -- GETTERS --
 		//! A function returning the computed barycenters of the locationss
-		inline MatrixXr const & getBarycenters(void) const {return barycenters_;}; //returns a const reference as in rergressionData
+		MatrixXr const & getBarycenters(void) const {return barycenters_;}; //returns a const reference as in rergressionData
 		//! A function returning the element ids of the locations
-		inline VectorXi const & getElementIds(void) const {return element_ids_;};
-		//! A inline member that returns a VectorXr, returns the whole solution_.
-		inline MatrixXv const & getSolution(void) const {return _solution;}
+		VectorXi const & getElementIds(void) const {return element_ids_;};
+		//! A member that returns a VectorXr, returns the whole solution_.
+		MatrixXv const & getSolution(void) const {return _solution;}
 		//! A function returning the computed dofs of the model
-		inline MatrixXr const & getDOF(void) const { if (optimizationData_.get_DOF_matrix().rows()!=0 && optimizationData_.get_DOF_matrix().cols()!=0)
+		MatrixXr const & getDOF(void) const { if (optimizationData_.get_DOF_matrix().rows()!=0 && optimizationData_.get_DOF_matrix().cols()!=0)
                                                              	return  optimizationData_.get_DOF_matrix();
 							     else return this->_dof;}
 		//! A method returning the computed GCV of the model
-		inline MatrixXr const & getGCV(void) const {return _GCV;}
+		MatrixXr const & getGCV(void) const {return _GCV;}
 		//! A method returning the computed beta coefficients of the model
-		inline MatrixXv const & getBeta(void) const {return _beta;}
+		MatrixXv const & getBeta(void) const {return _beta;}
 		//! A method returning the psi matrix
-		inline const SpMat * getpsi_(void) const {return &this->psi_;}
+		const SpMat * getpsi_(void) const {return &this->psi_;}
 		//! A method returning the psi matrix transposed
-		inline const SpMat * getpsi_t_(void) const {return &this->psi_t_;}
+		const SpMat * getpsi_t_(void) const {return &this->psi_t_;}
 		//! A method returning the R0 matrix
-		inline const SpMat * getR0_(void) const {return &this->R0_;}
+		const SpMat * getR0_(void) const {return &this->R0_;}
 		//! A method returning the R1 matrix
-		inline const SpMat * getR1_(void) const {return &this->R1_;}
+		const SpMat * getR1_(void) const {return &this->R1_;}
 		//! A method returning the DMat matrix, da implementare la DMat
-		inline const SpMat * getDMat_(void) const {return &this->DMat_;}
+		const SpMat * getDMat_(void) const {return &this->DMat_;}
 		//! A method returning the Q_ matrix -> da impementare la Q
-		inline const MatrixXr *	getQ_(void) const {return &this->Q_;}
+		const MatrixXr *	getQ_(void) const {return &this->Q_;}
 		//! A method returning the H_ matrix da implementare la H
-		inline const MatrixXr *	getH_(void) const {return &this->H_;}
+		const MatrixXr *	getH_(void) const {return &this->H_;}
 		//! A method returning the A_ matrix
-		inline const VectorXr *	getA_(void) const {return &this->A_;}
+		const VectorXr *	getA_(void) const {return &this->A_;}
 		//! A method returning the rhs
-		inline const VectorXr *	getrhs_(void) const {return &this->_rightHandSide;}
+		const VectorXr *	getrhs_(void) const {return &this->_rightHandSide;}
 		//! A method returning the forcing term
-		inline const VectorXr *	getu_(void) const {return &this->rhs_ft_correction_;}
+		const VectorXr *	getu_(void) const {return &this->rhs_ft_correction_;}
 		//! A method returning the number of nodes of the mesh
-		inline UInt getnnodes_(void) const {return this->N_;}
-		inline bool isSV(void) const {return this->isSpaceVarying;}
+		UInt getnnodes_(void) const {return this->N_;}
+		bool isSV(void) const {return this->isSpaceVarying;}
 
 		//! A function that given a vector u, performs Q*u efficiently
 		MatrixXr LeftMultiplybyQ(const MatrixXr & u);
@@ -217,8 +224,8 @@ class MixedFERegression : public MixedFERegressionBase<InputHandler>
 	public:
 		MixedFERegression(const InputHandler & regressionData,  OptimizationData & optimizationData, UInt nnodes_):
 			MixedFERegressionBase<InputHandler>(regressionData, optimizationData, nnodes_) {};
-		MixedFERegression(const std::vector<Real> & mesh_time, const InputHandler & regressionData,  OptimizationData & optimizationData, UInt nnodes_, UInt spline_degree):
-			MixedFERegressionBase<InputHandler>(mesh_time, regressionData, optimizationData, nnodes_, spline_degree) {};
+		MixedFERegression(const std::vector<Real> & mesh_time, const InputHandler & regressionData,  OptimizationData & optimizationData, UInt nnodes_):
+			MixedFERegressionBase<InputHandler>(mesh_time, regressionData, optimizationData, nnodes_) {};
 
 		void apply(void)
 		{
@@ -249,9 +256,9 @@ class MixedSplineRegression
 		void setTimeMass(void);
 		void smoothSecondDerivative(void);
 
-		inline const SpMat & getPt(void) const {return Pt_;}
-		inline const SpMat & getPhi(void) const {return phi_;}
-		inline const SpMat & getTimeMass(void) const {return timeMass_;}
+		const SpMat & getPt(void) const {return Pt_;}
+		const SpMat & getPhi(void) const {return phi_;}
+		const SpMat & getTimeMass(void) const {return timeMass_;}
 
 };
 
@@ -270,7 +277,7 @@ class MixedFDRegression
 			mesh_time_(mesh_time), regressionData_(regressionData) {};
 
     	void setDerOperator(void); //!< sets derOpL_
-		inline const SpMat & getDerOpL(void) const {return derOpL_;}
+		const SpMat & getDerOpL(void) const {return derOpL_;}
 
 };
 

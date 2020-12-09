@@ -461,9 +461,13 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis,
   }else if(search=="tree")
   {
     search=2
-  }else
+  }else if(search=="walking")
   {
-    stop("'search' must be either 'tree' or 'naive'.")
+  	if(class(FEMbasis$mesh) == "mesh.2.5D")
+	{    
+		stop("walking search is not available for mesh class mesh.2.5D.")
+  	}  
+  	search=3
   }
 
   # If locations is null but bary.locations is not null, use the locations in bary.locations

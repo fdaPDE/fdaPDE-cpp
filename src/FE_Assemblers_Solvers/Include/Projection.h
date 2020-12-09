@@ -43,7 +43,7 @@ class projection<ORDER,3,3>{
 private:
   const MeshHandler<ORDER,3,3>& mesh_;
   const std::vector<Point<3> > & deData_; // the points to be projected
-  UInt num_points;
+  const UInt num_points;
 
 public:
   projection(const MeshHandler<ORDER,3,3>& m, const std::vector<Point<3> > & d): mesh_(m), deData_(d), num_points(d.size()) {};

@@ -39,14 +39,14 @@ class FEDE{
 
     // Getters
     //! A method returning the estimated density coefficients.
-    inline VectorXr getDensity_g() const {return gcoeff_;}
+    VectorXr getDensity_g() const {return gcoeff_;}
     //! A method returning initial densities.
-    inline std::vector<const VectorXr*> getInitialDensity() const {return fInit_;}
+    std::vector<const VectorXr*> getInitialDensity() const {return fInit_;}
     //! A method returning the smmothing parameter selected.
-    inline Real getBestLambda() const {return bestLambda_;}
+    Real getBestLambda() const {return bestLambda_;}
 
     // to delete
-    inline std::vector<Real> getCvError() const {return CV_errors_;}
+    std::vector<Real> getCvError() const {return CV_errors_;}
 
 
 };

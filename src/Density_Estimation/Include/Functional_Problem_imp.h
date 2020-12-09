@@ -18,17 +18,17 @@ FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>::computeIntegrals(const
 		Element<Nodes, mydim, ndim> tri_activated = dataProblem_.getElement(triangle);
 // (1) -------------------------------------------------
 
-		VectorXr sub_g(Nodes);
-		for (UInt i=0; i<Nodes; i++){
-			sub_g[i]=g[tri_activated[i].getId()];
-		}
+    Eigen::Matrix<Real,Nodes,1> sub_g;
+    for (UInt i=0; i<Nodes; i++){
+      sub_g[i]=g[tri_activated[i].getId()];
+    }
 // (2) -------------------------------------------------
-		VectorXr expg = (dataProblem_.getPsiQuad()*sub_g).array().exp();
+		Eigen::Matrix<Real,Integrator_noPoly::NNODES,1> expg = (dataProblem_.getPsiQuad()*sub_g).array().exp();
 
-    VectorXr sub_int2;
+    Eigen::Matrix<Real,Nodes,1> sub_int2;
 
     int1+=expg.dot(EigenMap2WEIGHTS(&Integrator_noPoly::WEIGHTS[0]))*tri_activated.getMeasure();
-  	sub_int2 =((expg.cwiseProduct(EigenMap2WEIGHTS(&Integrator_noPoly::WEIGHTS[0]))).transpose()*dataProblem_.getPsiQuad())*tri_activated.getMeasure();
+  	sub_int2 = dataProblem_.getPsiQuad().transpose() * expg.cwiseProduct(EigenMap2WEIGHTS(&Integrator_noPoly::WEIGHTS[0]))*tri_activated.getMeasure();
 
   	for (UInt i=0; i<Nodes; i++){
   		int2[tri_activated[i].getId()]+= sub_int2[i];
@@ -67,7 +67,7 @@ std::pair<Real,Real>
 FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>::computeLlikPen_f(const VectorXr& f) const{
 
   Real llik = - (dataProblem_.getGlobalPsi()*f).array().log().sum() +
-                  dataProblem_.getNumberofData()*dataProblem_.FEintegrate(f);
+                  dataProblem_.dataSize()*dataProblem_.FEintegrate(f);
   VectorXr tmp = f.array().log();
   Real pen = tmp.dot(dataProblem_.getP()*tmp);
 
