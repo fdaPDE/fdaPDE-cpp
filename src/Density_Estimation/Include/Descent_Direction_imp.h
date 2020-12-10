@@ -2,26 +2,26 @@
 #define __DESCENT_DIRECTION_IMP_H__
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-std::unique_ptr<DirectionBase<Integrator_noPoly, ORDER, mydim, ndim>>
-DirectionGradient<Integrator_noPoly, ORDER, mydim, ndim>::clone() const {
+template<UInt ORDER, UInt mydim, UInt ndim>
+std::unique_ptr<DirectionBase<ORDER, mydim, ndim>>
+DirectionGradient<ORDER, mydim, ndim>::clone() const {
 
-  return make_unique<DirectionGradient<Integrator_noPoly, ORDER, mydim, ndim>>(*this);
+  return make_unique<DirectionGradient<ORDER, mydim, ndim>>(*this);
 
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 VectorXr
-DirectionGradient<Integrator_noPoly, ORDER, mydim, ndim>::computeDirection(const VectorXr& g, const VectorXr& grad){
+DirectionGradient<ORDER, mydim, ndim>::computeDirection(const VectorXr& g, const VectorXr& grad){
 
   return (- grad);
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-DirectionBFGS<Integrator_noPoly, ORDER, mydim, ndim>::DirectionBFGS(const DirectionBFGS<Integrator_noPoly, ORDER, mydim, ndim>& rhs):
-DirectionBase<Integrator_noPoly, ORDER, mydim, ndim>(rhs) {
+template<UInt ORDER, UInt mydim, UInt ndim>
+DirectionBFGS<ORDER, mydim, ndim>::DirectionBFGS(const DirectionBFGS<ORDER, mydim, ndim>& rhs):
+DirectionBase<ORDER, mydim, ndim>(rhs) {
 
   updateH_ = false;
   HInit_ = rhs.HInit_;
@@ -30,18 +30,18 @@ DirectionBase<Integrator_noPoly, ORDER, mydim, ndim>(rhs) {
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-std::unique_ptr<DirectionBase<Integrator_noPoly, ORDER, mydim, ndim>>
-DirectionBFGS<Integrator_noPoly, ORDER, mydim, ndim>::clone() const {
+template<UInt ORDER, UInt mydim, UInt ndim>
+std::unique_ptr<DirectionBase<ORDER, mydim, ndim>>
+DirectionBFGS<ORDER, mydim, ndim>::clone() const {
 
-  return make_unique<DirectionBFGS<Integrator_noPoly, ORDER, mydim, ndim>>(*this);
+  return make_unique<DirectionBFGS<ORDER, mydim, ndim>>(*this);
 
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 VectorXr
-DirectionBFGS<Integrator_noPoly, ORDER, mydim, ndim>::computeDirection(const VectorXr& g, const VectorXr& grad){
+DirectionBFGS<ORDER, mydim, ndim>::computeDirection(const VectorXr& g, const VectorXr& grad){
 
   if(updateH_){
     const VectorXr delta = g - gOld_;
@@ -63,9 +63,9 @@ DirectionBFGS<Integrator_noPoly, ORDER, mydim, ndim>::computeDirection(const Vec
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 void
-DirectionBFGS<Integrator_noPoly, ORDER, mydim, ndim>::resetParameters(){
+DirectionBFGS<ORDER, mydim, ndim>::resetParameters(){
   updateH_ = false;
   HOld_ = HInit_;
 }

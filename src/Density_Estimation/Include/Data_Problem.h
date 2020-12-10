@@ -11,23 +11,25 @@
 #include "../../FdaPDE.h"
 #include "DE_Data.h"
 #include "../../FE_Assemblers_Solvers/Include/Projection.h"
+#include "../../FE_Assemblers_Solvers/Include/Integration.h"
 
 // This file contains data informations for the Density Estimation problem
 
 //! @brief A class to store common data for the problem.
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 class DataProblem{
 private:
-    static constexpr UInt Nodes = (mydim==2) ? 3*ORDER : 6*ORDER-2;
+    using Integrator = typename DensityIntegratorHelper::Integrator<mydim>;
+    static constexpr UInt EL_NNODES = how_many_nodes(ORDER,mydim);
     DEData<ndim> deData_;
     MeshHandler<ORDER, mydim, ndim> mesh_;
     SpMat R0_, R1_, GlobalPsi_;
     MatrixXr P_;
-    Eigen::Matrix<Real, Integrator_noPoly::NNODES, Nodes> PsiQuad_;
+    Eigen::Matrix<Real, Integrator::NNODES, EL_NNODES> PsiQuad_;
 
     //! A method to compute the finite element matrices.
     void fillFEMatrices();
-    //! A method to compute the matrix which evaluates the basis function at the quadrature nodes.
+    //! A method to compute the matrix which evaluates the basis function at the quadrature EL_NNODES.
     void fillPsiQuad();
 
 public:
@@ -87,22 +89,22 @@ public:
     //! A method returning the mesh.
     const MeshHandler<ORDER, mydim, ndim>& getMesh() const {return mesh_;}
     //getter for specific mesh features
-    //! A method returning the number of mesh nodes. It calls the same method of MeshHandler class.
+    //! A method returning the number of mesh EL_NNODES. It calls the same method of MeshHandler class.
     UInt getNumNodes() const {return mesh_.num_nodes();}
     //! A method returning the number of mesh elements. It calls the same method of MeshHandler class.
     UInt getNumElements() const {return mesh_.num_elements();}
     //! A method returning a node. It calls the same method of MeshHandler class.
     Point<ndim> getPoint(Id id) const {return mesh_.getPoint(id);}
     //! A method returning an element. It calls the same method of MeshHandler class.
-    Element<Nodes,mydim,ndim> getElement(Id id) const {return mesh_.getElement(id);}
+    Element<EL_NNODES,mydim,ndim> getElement(Id id) const {return mesh_.getElement(id);}
     //! A method returning the element in which the point in input is located. It calls the same method of MeshHandler class.
-    Element<Nodes,mydim,ndim> findLocation(const Point<ndim>& point) const {return mesh_.findLocation(point);}
+    Element<EL_NNODES,mydim,ndim> findLocation(const Point<ndim>& point) const {return mesh_.findLocation(point);}
 
     //getter for matrices
     //! A method returning the P matrix.
     MatrixXr getP() const {return P_;}
     //! A method returning the PsiQuad_ matrix.
-    const Eigen::Matrix<Real, Integrator_noPoly::NNODES, Nodes>& getPsiQuad() const {return PsiQuad_;}
+    const Eigen::Matrix<Real, Integrator::NNODES, EL_NNODES>& getPsiQuad() const {return PsiQuad_;}
     //! A method returning the GlobalPsi_ matrix.
     SpMat getGlobalPsi() const {return GlobalPsi_;}
 };

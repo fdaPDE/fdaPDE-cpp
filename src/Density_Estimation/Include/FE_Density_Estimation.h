@@ -8,17 +8,17 @@
 
 /*! @brief A class to perform the whole density estimation problem.
 */
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 class FEDE{
   private:
     // A member to acess data problem methods
-    const DataProblem<Integrator_noPoly, ORDER, mydim, ndim>& dataProblem_;
+    const DataProblem<ORDER, mydim, ndim>& dataProblem_;
     // A member to acess functional methods
-    const FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>& funcProblem_;
+    const FunctionalProblem<ORDER, mydim, ndim>& funcProblem_;
     // A member to do the minimization phase
-    std::shared_ptr<MinimizationAlgorithm<Integrator_noPoly, ORDER, mydim, ndim>> minAlgo_;
+    std::shared_ptr<MinimizationAlgorithm<ORDER, mydim, ndim>> minAlgo_;
     // A member to do the preprocess phase
-    std::unique_ptr<Preprocess<Integrator_noPoly, ORDER, mydim, ndim>> preprocess_;
+    std::unique_ptr<Preprocess<ORDER, mydim, ndim>> preprocess_;
     // A member to store the final density estimated
     VectorXr gcoeff_;
     // A member to store the initial densities selected
@@ -30,9 +30,9 @@ class FEDE{
 
   public:
     //! A costructor
-    FEDE(const DataProblem<Integrator_noPoly, ORDER, mydim, ndim>& dp,
-      const FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>& fp,
-      std::shared_ptr<MinimizationAlgorithm<Integrator_noPoly, ORDER, mydim, ndim>> ma, const std::string& p);
+    FEDE(const DataProblem<ORDER, mydim, ndim>& dp,
+      const FunctionalProblem<ORDER, mydim, ndim>& fp,
+      std::shared_ptr<MinimizationAlgorithm<ORDER, mydim, ndim>> ma, const std::string& p);
 
     //! A method to perform the whole density estimation task.
     void apply();

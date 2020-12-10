@@ -3,28 +3,28 @@
 
 #include <unordered_set>
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-UserInitialization<Integrator_noPoly, ORDER, mydim, ndim>::UserInitialization(const DataProblem<Integrator_noPoly, ORDER, mydim, ndim>& dp):
-  DensityInitialization<Integrator_noPoly, ORDER, mydim, ndim>(dp){
+template<UInt ORDER, UInt mydim, UInt ndim>
+UserInitialization<ORDER, mydim, ndim>::UserInitialization(const DataProblem<ORDER, mydim, ndim>& dp):
+  DensityInitialization<ORDER, mydim, ndim>(dp){
 
     initialization = dp.getFvec();
 
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 const VectorXr*
-UserInitialization<Integrator_noPoly, ORDER, mydim, ndim>::chooseInitialization(Real lambda) const{
+UserInitialization<ORDER, mydim, ndim>::chooseInitialization(Real lambda) const{
 
   return &(this->initialization);
 
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>::HeatProcess(const DataProblem<Integrator_noPoly, ORDER, mydim, ndim>& dp,
-  const FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>& fp):
-  DensityInitialization<Integrator_noPoly, ORDER, mydim, ndim>(dp), funcProblem_(fp){
+template<UInt ORDER, UInt mydim, UInt ndim>
+HeatProcess<ORDER, mydim, ndim>::HeatProcess(const DataProblem<ORDER, mydim, ndim>& dp,
+  const FunctionalProblem<ORDER, mydim, ndim>& fp):
+  DensityInitialization<ORDER, mydim, ndim>(dp), funcProblem_(fp){
 
     patch_areas_= VectorXr::Zero(this->dataProblem_.getNumNodes());
     alpha_=dp.getHeatStep();
@@ -42,30 +42,26 @@ HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>::HeatProcess(const DataProble
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 void
-HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>::computePatchAreas(){
-
-  constexpr UInt Nodes = mydim==2? 3*ORDER : 6*ORDER-2;
+HeatProcess<ORDER, mydim, ndim>::computePatchAreas(){
 
   for(UInt t=0; t<this->dataProblem_.getNumElements(); ++t){
-    Element<Nodes, mydim, ndim> current_element = this->dataProblem_.getElement(t);
+    Element<EL_NNODES, mydim, ndim> current_element = this->dataProblem_.getElement(t);
     for(const auto& node : current_element)
       patch_areas_[node.id()] += current_element.getMeasure();
   }
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 VectorXr
-HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>::computeDensityOnlyData(){
-
-	constexpr UInt Nodes = mydim==2? 3*ORDER : 6*ORDER-2;
+HeatProcess<ORDER, mydim, ndim>::computeDensityOnlyData(){
 
 	VectorXr x = VectorXr::Zero(this->dataProblem_.getNumNodes());
 
   for(UInt i : data_index_){
-    Element<Nodes, mydim, ndim> current_element = this->dataProblem_.findLocation(this->dataProblem_.data(i));
+    Element<EL_NNODES, mydim, ndim> current_element = this->dataProblem_.findLocation(this->dataProblem_.data(i));
     for(const auto& node : current_element)
 				x[node.id()] += 1;
 	}
@@ -77,11 +73,9 @@ HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>::computeDensityOnlyData(){
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 void
-HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>::computeStartingDensities(){
-
-	constexpr UInt Nodes = mydim==2? 3*ORDER : 6*ORDER-2;
+HeatProcess<ORDER, mydim, ndim>::computeStartingDensities(){
 
 	VectorXr x = computeDensityOnlyData();
 
@@ -89,9 +83,9 @@ HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>::computeStartingDensities(){
 	// it saves in i-th position the set of the neighboor nodes id that have node i
 
 	for(UInt t = 0; t < this->dataProblem_.getNumElements(); ++t){
-		Element<Nodes, mydim, ndim> current_element = this->dataProblem_.getElement(t);
-		for(UInt i=0; i<Nodes;i++){
-			for(UInt j=i+1; j<Nodes; j++){
+		Element<EL_NNODES, mydim, ndim> current_element = this->dataProblem_.getElement(t);
+		for(UInt i=0; i<EL_NNODES;i++){
+			for(UInt j=i+1; j<EL_NNODES; j++){
 					neighbours_nodes[current_element[i].id()].insert(current_element[j].id());
 					neighbours_nodes[current_element[j].id()].insert(current_element[i].id());
 			}
@@ -119,9 +113,9 @@ HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>::computeStartingDensities(){
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 const VectorXr*
-HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>::chooseInitialization(Real lambda) const{
+HeatProcess<ORDER, mydim, ndim>::chooseInitialization(Real lambda) const{
 
   VectorXr sum = llik_ + lambda*penTerm_;
 
@@ -133,10 +127,10 @@ HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>::chooseInitialization(Real la
   return &(init_proposals_[index_min]);
 }
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-Heat_CV<Integrator_noPoly, ORDER, mydim, ndim>::Heat_CV(const DataProblem<Integrator_noPoly, ORDER, mydim, ndim>& dp,
-  const FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>& fp, UInt K):
-  HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>(dp, fp), error_(dp), nFolds_(K){
+template<UInt ORDER, UInt mydim, UInt ndim>
+Heat_CV<ORDER, mydim, ndim>::Heat_CV(const DataProblem<ORDER, mydim, ndim>& dp,
+  const FunctionalProblem<ORDER, mydim, ndim>& fp, UInt K):
+  HeatProcess<ORDER, mydim, ndim>(dp, fp), error_(dp), nFolds_(K){
 
     cv_errors_.resize(this->niter_, 0);
 
@@ -146,9 +140,9 @@ Heat_CV<Integrator_noPoly, ORDER, mydim, ndim>::Heat_CV(const DataProblem<Integr
 
 }
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 void
-Heat_CV<Integrator_noPoly, ORDER, mydim, ndim>::perform_init_cv(){
+Heat_CV<ORDER, mydim, ndim>::perform_init_cv(){
 
     UInt N = this->dataProblem_.dataSize();
     UInt K = nFolds_;
@@ -198,9 +192,9 @@ Heat_CV<Integrator_noPoly, ORDER, mydim, ndim>::perform_init_cv(){
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 const VectorXr*
-Heat_CV<Integrator_noPoly, ORDER, mydim, ndim>::chooseInitialization(Real lambda) const{
+Heat_CV<ORDER, mydim, ndim>::chooseInitialization(Real lambda) const{
 
   return &(this->init_proposals_[init_best_]);
 

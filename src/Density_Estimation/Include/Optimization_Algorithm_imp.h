@@ -2,38 +2,38 @@
 #define __OPTIMIZATION_ALGORITHM_IMP_H__
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-MinimizationAlgorithm<Integrator_noPoly, ORDER, mydim, ndim>::
-  MinimizationAlgorithm(const DataProblem<Integrator_noPoly, ORDER, mydim, ndim>& dp,
-  const FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>& fp, const std::string& d):
+template<UInt ORDER, UInt mydim, UInt ndim>
+MinimizationAlgorithm<ORDER, mydim, ndim>::
+  MinimizationAlgorithm(const DataProblem<ORDER, mydim, ndim>& dp,
+  const FunctionalProblem<ORDER, mydim, ndim>& fp, const std::string& d):
   dataProblem_(dp), funcProblem_(fp){
 
-    direction_ = DescentDirection_factory<Integrator_noPoly, ORDER,  mydim,  ndim>::createDirectionSolver(dp, fp, d);
+    direction_ = DescentDirection_factory<ORDER,  mydim,  ndim>::createDirectionSolver(dp, fp, d);
 
 };
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-MinimizationAlgorithm<Integrator_noPoly, ORDER, mydim, ndim>::
-  MinimizationAlgorithm(const MinimizationAlgorithm<Integrator_noPoly, ORDER, mydim, ndim>& rhs):
+template<UInt ORDER, UInt mydim, UInt ndim>
+MinimizationAlgorithm<ORDER, mydim, ndim>::
+  MinimizationAlgorithm(const MinimizationAlgorithm<ORDER, mydim, ndim>& rhs):
   dataProblem_(rhs.dataProblem_), funcProblem_(rhs.funcProblem_){
 
     direction_ = rhs.direction_->clone();
 };
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-std::unique_ptr<MinimizationAlgorithm<Integrator_noPoly, ORDER, mydim, ndim>>
-FixedStep<Integrator_noPoly, ORDER, mydim, ndim>::clone() const {
+template<UInt ORDER, UInt mydim, UInt ndim>
+std::unique_ptr<MinimizationAlgorithm<ORDER, mydim, ndim>>
+FixedStep<ORDER, mydim, ndim>::clone() const {
 
-  return make_unique<FixedStep<Integrator_noPoly, ORDER, mydim, ndim>>(*this);
+  return make_unique<FixedStep<ORDER, mydim, ndim>>(*this);
 
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 VectorXr
-FixedStep<Integrator_noPoly,ORDER,mydim,ndim>::apply_core(const SpMat& Psi, Real lambda, const VectorXr& g) const{
+FixedStep<ORDER,mydim,ndim>::apply_core(const SpMat& Psi, Real lambda, const VectorXr& g) const{
 
   // termination criteria variables
   const Real toll1 = this->dataProblem_.getTol1(), toll2 = this->dataProblem_.getTol2();
@@ -122,9 +122,9 @@ FixedStep<Integrator_noPoly,ORDER,mydim,ndim>::apply_core(const SpMat& Psi, Real
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 VectorXr
-AdaptiveStep<Integrator_noPoly,ORDER,mydim,ndim>::apply_core(const SpMat& Psi, Real lambda, const VectorXr& g) const{
+AdaptiveStep<ORDER,mydim,ndim>::apply_core(const SpMat& Psi, Real lambda, const VectorXr& g) const{
 
   // termination criteria variables
   const Real toll1 = this->dataProblem_.getTol1(), toll2 = this->dataProblem_.getTol2();
@@ -197,9 +197,9 @@ AdaptiveStep<Integrator_noPoly,ORDER,mydim,ndim>::apply_core(const SpMat& Psi, R
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 Real
-BacktrackingMethod<Integrator_noPoly,ORDER,mydim,ndim>::computeStep(const VectorXr& g, Real loss, const VectorXr& grad, const VectorXr& dir, Real lambda, const SpMat& Psi) const{
+BacktrackingMethod<ORDER,mydim,ndim>::computeStep(const VectorXr& g, Real loss, const VectorXr& grad, const VectorXr& dir, Real lambda, const SpMat& Psi) const{
 
   Real ro = 0.5, alpha = 1/ro, c = 0.5;
 
@@ -226,18 +226,18 @@ BacktrackingMethod<Integrator_noPoly,ORDER,mydim,ndim>::computeStep(const Vector
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-std::unique_ptr<MinimizationAlgorithm<Integrator_noPoly, ORDER, mydim, ndim>>
-BacktrackingMethod<Integrator_noPoly, ORDER, mydim, ndim>::clone() const {
+template<UInt ORDER, UInt mydim, UInt ndim>
+std::unique_ptr<MinimizationAlgorithm<ORDER, mydim, ndim>>
+BacktrackingMethod<ORDER, mydim, ndim>::clone() const {
 
-  return make_unique<BacktrackingMethod<Integrator_noPoly, ORDER, mydim, ndim>>(*this);
+  return make_unique<BacktrackingMethod<ORDER, mydim, ndim>>(*this);
 
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 Real
-WolfeMethod<Integrator_noPoly,ORDER,mydim,ndim>::computeStep(const VectorXr& g, Real loss, const VectorXr& grad, const VectorXr& dir, Real lambda, const SpMat& Psi) const{
+WolfeMethod<ORDER,mydim,ndim>::computeStep(const VectorXr& g, Real loss, const VectorXr& grad, const VectorXr& dir, Real lambda, const SpMat& Psi) const{
 
   Real alpha = 1, alphamax = 0, alphamin = 0, c1 = 1e-4, c2 = 0.9;
 
@@ -290,11 +290,11 @@ WolfeMethod<Integrator_noPoly,ORDER,mydim,ndim>::computeStep(const VectorXr& g, 
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-std::unique_ptr<MinimizationAlgorithm<Integrator_noPoly, ORDER, mydim, ndim>>
-WolfeMethod<Integrator_noPoly, ORDER, mydim, ndim>::clone() const {
+template<UInt ORDER, UInt mydim, UInt ndim>
+std::unique_ptr<MinimizationAlgorithm<ORDER, mydim, ndim>>
+WolfeMethod<ORDER, mydim, ndim>::clone() const {
 
-  return make_unique<WolfeMethod<Integrator_noPoly, ORDER, mydim, ndim>>(*this);
+  return make_unique<WolfeMethod<ORDER, mydim, ndim>>(*this);
 
 }
 

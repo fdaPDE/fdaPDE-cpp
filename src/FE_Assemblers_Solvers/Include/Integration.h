@@ -151,6 +151,12 @@ struct SpaceIntegratorHelper{
 												typename std::conditional<ORDER==1, IntegratorTetrahedronP2, IntegratorTetrahedronP4>::type>::type;
 };
 
+struct DensityIntegratorHelper{
+	template<UInt mydim>
+	using Integrator = typename std::conditional<mydim==2, IntegratorTriangleP4, IntegratorTetrahedronP4>::type;
+};
+
+
 struct IntegratorGaussP3{
 	static constexpr UInt ORDER = 1;
 	//Number of nodes
