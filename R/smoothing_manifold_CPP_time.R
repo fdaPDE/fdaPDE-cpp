@@ -134,7 +134,7 @@ CPP_smooth.manifold.FEM.time<-function(locations, time_locations, observations, 
     ICsol <- .Call("regression_Laplace", locations, bary.locations, observations[1:NobsIC],
       FEMbasis$mesh, FEMbasis$order, mydim, ndim, covariatesIC,
       BC$BC_indices, BC$BC_values, incidence_matrix, areal.data.avg,
-      search, as.integer(c(0,1,1)), lambdaSIC, DOF.stochastic.realizations, DOF.stochastic.seed, DOF.matrix_IC, GCV.inflation.factor, lambda.optimization.tolerance, PACKAGE = "fdaPDE")
+      search, as.integer(c(0,2,1)), lambdaSIC, DOF.stochastic.realizations, DOF.stochastic.seed, DOF.matrix_IC, GCV.inflation.factor, lambda.optimization.tolerance, PACKAGE = "fdaPDE")
 
     ## shifting the lambdas interval if the best lambda is the smaller one and retry smoothing
     if(ICsol[[6]]==1)
@@ -145,7 +145,7 @@ CPP_smooth.manifold.FEM.time<-function(locations, time_locations, observations, 
       ICsol <- .Call("regression_Laplace", locations, bary.locations, observations[1:NobsIC],
          FEMbasis$mesh, FEMbasis$order, mydim, ndim, covariatesIC,
          BC$BC_indices, BC$BC_values, incidence_matrix, areal.data.avg,
-         search, as.integer(c(0,1,1)), lambdaSIC, DOF.stochastic.realizations, DOF.stochastic.seed, DOF.matrix_IC, GCV.inflation.factor, lambda.optimization.tolerance, PACKAGE = "fdaPDE")
+         search, as.integer(c(0,2,1)), lambdaSIC, DOF.stochastic.realizations, DOF.stochastic.seed, DOF.matrix_IC, GCV.inflation.factor, lambda.optimization.tolerance, PACKAGE = "fdaPDE")
     }
     else
     {
@@ -158,7 +158,7 @@ CPP_smooth.manifold.FEM.time<-function(locations, time_locations, observations, 
         ICsol <- .Call("regression_Laplace", locations, bary.locations, observations[1:NobsIC],
            FEMbasis$mesh, FEMbasis$order, mydim, ndim, covariatesIC,
            BC$BC_indices, BC$BC_values, incidence_matrix, areal.data.avg,
-           search, as.integer(c(0,1,1)), lambdaSIC, DOF.stochastic.realizations, DOF.stochastic.seed, DOF.matrix_IC, GCV.inflation.factor,lambda.optimization.tolerance, PACKAGE = "fdaPDE")
+           search, as.integer(c(0,2,1)), lambdaSIC, DOF.stochastic.realizations, DOF.stochastic.seed, DOF.matrix_IC, GCV.inflation.factor,lambda.optimization.tolerance, PACKAGE = "fdaPDE")
       }
     }
 
