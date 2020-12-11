@@ -31,7 +31,7 @@ class MixedFERegressionBase
 		const UInt M_;
 
 		const InputHandler & regressionData_;
-                OptimizationData & optimizationData_; //!<COnst reference to OptimizationData class
+        OptimizationData & optimizationData_; //!<COnst reference to OptimizationData class
 		// For only space problems
 		//  system matrix= 	|psi^T * A *psi | lambda R1^T  |   +  |psi^T * A * (-H) * psi |  O |   =  matrixNoCov + matrixOnlyCov
 		//	                |     R1        | R0	      |      |         O             |  O |

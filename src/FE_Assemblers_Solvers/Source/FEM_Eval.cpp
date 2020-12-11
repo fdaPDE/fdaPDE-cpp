@@ -746,12 +746,11 @@ SEXP eval_FEM_time(SEXP Rmesh, SEXP Rmesh_time, SEXP Rlocations, SEXP Rtime_loca
 			projection<1,2,3> projector(mesh, deData_);
 			prjData_ = projector.computeProjection();
 		}
-
-		// if (order == 2) {
-		// MeshHandler<2,2,3> mesh(Rmesh);
-		// projection<2,2,3> projector(mesh, deData_);
-		// prjData_ = projector.computeProjection();
-		// }
+		else if (order == 2) {
+			MeshHandler<2,2,3> mesh(Rmesh);
+			projection<2,2,3> projector(mesh, deData_);
+			prjData_ = projector.computeProjection();
+		}
 	}
 
 	for (int i=0; i<n_X; ++i)

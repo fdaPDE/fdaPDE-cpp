@@ -63,8 +63,6 @@ checkParametersDE <- function(data, FEMbasis, lambda, step_method, direction_met
   if(!is.numeric(search))
     stop("'search' needs to be an integer.")
   
-  if(search != 1 && search != 2)
-    stop("'search' needs to be an integer either equal to 1 or equal to 2.")
   
 }
 
