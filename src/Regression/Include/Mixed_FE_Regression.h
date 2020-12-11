@@ -39,7 +39,7 @@ class MixedFERegressionBase
 		//  system matrix= 	|          B^T * Ak *B           | -lambdaS*(R1k^T+lambdaT*LR0k)  |   +  |B^T * Ak * (-H) * B |  O |   =  matrixNoCov + matrixOnlyCov
 		//	                | -lambdaS*(R1k^T+lambdaT*LR0k)  |        -lambdaS*R0k	          |      |         O          |  O |
 
-		SpMat 		matrixNoCov_;	//!< System matrix without
+		SpMat 		matrixNoCov_;//!< System matrix without
 		SpMat 		DMat_;
 		SpMat 		R1_;		//!< R1 matrix of the model
 		SpMat 		R0_;	 	//!< Mass matrix in space
@@ -84,6 +84,7 @@ class MixedFERegressionBase
 
 		bool isSpaceVarying = false; //!< used to distinguish whether to use the forcing term u in apply() or not
 		bool isGAMData;
+		bool isIterative;
 
 	        // -- SETTERS --
 		template<UInt ORDER, UInt mydim, UInt ndim>
@@ -137,11 +138,19 @@ class MixedFERegressionBase
 	public:
 		//!A Constructor.
 		MixedFERegressionBase( const InputHandler & regressionData, OptimizationData & optimizationData,  UInt nnodes_) :
-			N_(nnodes_), M_(1), regressionData_(regressionData), optimizationData_(optimizationData), _dof(optimizationData.get_DOF_matrix()){isGAMData = regressionData.getisGAM();};
+			N_(nnodes_), M_(1), regressionData_(regressionData), optimizationData_(optimizationData), _dof(optimizationData.get_DOF_matrix())
+			{
+		        isGAMData = regressionData.getisGAM();
+		        isIterative = false;
+			};
 
 		MixedFERegressionBase(const std::vector<Real> & mesh_time, const InputHandler & regressionData, OptimizationData & optimizationData, UInt nnodes_, UInt spline_degree) :
 			mesh_time_(mesh_time), N_(nnodes_), M_(regressionData.getFlagParabolic() ? mesh_time.size()-1 : mesh_time.size()+spline_degree-1),
-			regressionData_(regressionData), optimizationData_(optimizationData), _dof(optimizationData.get_DOF_matrix()){isGAMData = regressionData.getisGAM();};
+			regressionData_(regressionData), optimizationData_(optimizationData), _dof(optimizationData.get_DOF_matrix())
+			{
+		        isGAMData = regressionData.getisGAM();
+		        isIterative = regressionData.getFlagIterative();
+			};
 
 		//! A member function computing the dofs for external calls
 		//template<typename A>
@@ -191,6 +200,7 @@ class MixedFERegressionBase
 		//! A method returning the number of nodes of the mesh
 		inline UInt getnnodes_(void) const {return this->N_;}
 		inline bool isSV(void) const {return this->isSpaceVarying;}
+		inline bool isIter(void) const {return this->isIterative;}
 
 		//! A function that given a vector u, performs Q*u efficiently
 		MatrixXr LeftMultiplybyQ(const MatrixXr & u);
@@ -206,6 +216,7 @@ class MixedFERegressionBase
 		void preapply(EOExpr<A> oper, const ForcingTerm & u, const MeshHandler<ORDER, mydim, ndim> & mesh_ );
 
 		MatrixXv apply(void);
+        MatrixXv apply_iterative(void);
 		MatrixXr apply_to_b(const MatrixXr & b);
 };
 
@@ -224,6 +235,11 @@ class MixedFERegression : public MixedFERegressionBase<InputHandler>
 		{
 			Rprintf("Option not implemented!\n");
 		}
+
+         void apply_iterative(void)
+        {
+            Rprintf("Option not implemented!\n");
+         }
 };
 
 //! A class for the construction of the temporal matrices needed for the parabolic case

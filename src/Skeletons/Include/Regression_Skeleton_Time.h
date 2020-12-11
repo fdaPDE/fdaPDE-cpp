@@ -21,7 +21,11 @@ SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & 
 	MixedFERegression<InputHandler> regression(mesh_time, regressionData, optimizationData, mesh.num_nodes(), SPLINE_DEGREE);//! load data in a C++ object
 
 	regression.preapply(mesh); //! solve the problem (compute the _solution, _dof, _GCV, _beta)
-    regression.apply();
+
+	if (regression.isIter())
+	    regression.apply_iterative();
+	else
+	    regression.apply();
 
 	//! copy result in R memory
 	MatrixXv const & solution = regression.getSolution();

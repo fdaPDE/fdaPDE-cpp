@@ -1,7 +1,7 @@
 CPP_smooth.manifold.FEM.time<-function(locations, time_locations, observations, FEMbasis, time_mesh,
                                        covariates = NULL, ndim, mydim, BC = NULL,
                                        incidence_matrix = NULL, areal.data.avg = TRUE,
-                                       FLAG_MASS, FLAG_PARABOLIC, IC,
+                                       FLAG_MASS, FLAG_PARABOLIC, FLAG_ITERATIVE,  IC,
                                        search, bary.locations, optim , lambdaS = NULL, lambdaT = NULL, DOF.stochastic.realizations = 100, DOF.stochastic.seed = 0, DOF.matrix = NULL, GCV.inflation.factor = 1, lambda.optimization.tolerance = 0.05)
 {
 
@@ -96,6 +96,8 @@ CPP_smooth.manifold.FEM.time<-function(locations, time_locations, observations, 
   storage.mode(FLAG_MASS) <-"integer"
   FLAG_PARABOLIC <- as.integer(FLAG_PARABOLIC)
   storage.mode(FLAG_PARABOLIC) <-"integer"
+  FLAG_PARABOLIC <- as.integer(FLAG_ITERATIVE)
+  storage.mode(FLAG_ITERATIVE) <-"integer"
   IC <- as.matrix(IC)
   storage.mode(IC) <- "double"
   storage.mode(search) <- "integer"
@@ -189,7 +191,7 @@ CPP_smooth.manifold.FEM.time<-function(locations, time_locations, observations, 
   storage.mode(BC$BC_values) <-"double"
 
   bigsol <- .Call("regression_Laplace_time", locations, bary.locations, time_locations, observations, FEMbasis$mesh, time_mesh, FEMbasis$order,
-                  mydim, ndim, covariates, BC$BC_indices, BC$BC_values, incidence_matrix, areal.data.avg, FLAG_MASS, FLAG_PARABOLIC,
+                  mydim, ndim, covariates, BC$BC_indices, BC$BC_values, incidence_matrix, areal.data.avg, FLAG_MASS, FLAG_PARABOLIC, FLAG_ITERATIVE,
                   IC, search, optim, lambdaS, lambdaT, DOF.stochastic.realizations, DOF.stochastic.seed, DOF.matrix, GCV.inflation.factor, lambda.optimization.tolerance, PACKAGE = "fdaPDE")
 
   return(c(bigsol,ICsol))

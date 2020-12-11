@@ -7,7 +7,7 @@
 smooth.FEM.time(locations = NULL, time_locations = NULL, observations, FEMbasis, 
 time_mesh=NULL, covariates = NULL, PDE_parameters = NULL,  BC = NULL,
 incidence_matrix = NULL, areal.data.avg = TRUE,
-FLAG_MASS = FALSE, FLAG_PARABOLIC = FALSE, IC = NULL,
+FLAG_MASS = FALSE, FLAG_PARABOLIC = FALSE,FLAG_ITERATIVE=FALSE, IC = NULL,
 search = "tree", bary.locations = NULL,
 lambda.selection.criterion = "grid", DOF.evaluation = NULL, 
 lambda.selection.lossfunction = NULL, lambdaS = NULL, lambdaT = NULL, 
@@ -58,6 +58,8 @@ This is only for areal data. In case of pointwise data, this parameter is set to
 \item{FLAG_MASS}{Boolean. This parameter is considerd only for separable problems i.e. when \code{FLAG_PARABOLIC==FALSE}. If \code{TRUE} the mass matrix in space and in time are used, if \code{FALSE} they are substituted with proper identity matrices.}
 
 \item{FLAG_PARABOLIC}{Boolean. If \code{TRUE} the parabolic problem problem is selected, if \code{FALSE} the separable one.}
+
+\item{FLAG_ITERATIVE}{Boolean. If \code{TRUE} the iterative method problem is selected, if \code{FALSE} the monolithic one.}
 
 \item{IC}{Initial condition needed in case of parabolic problem i.e. when \code{FLAG_PARABOLIC==TRUE}. 
 If \code{FLAG_PARABOLIC==FALSE} this parameter is ignored. If \code{FLAG_PARABOLIC=TRUE} and \code{IC=NULL} it is necessary to provide
