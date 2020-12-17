@@ -37,7 +37,7 @@ void MixedFEFPCABase::computeBasisEvaluations(const MeshHandler<ORDER, mydim, nd
 	//std::cout<<"Data Matrix Computation by Basis Evaluation.."<<std::endl;
 	UInt nnodes = mesh.num_nodes();
 	UInt nlocations = fpcaData_.getNumberofObservations();
-	Real eps = 2.2204e-016,
+	static constexpr Real eps = std::numeric_limits<Real>::epsilon(),
 		 tolerance = 100 * eps;
 
 	Psi_.resize(nlocations, nnodes);
@@ -56,15 +56,12 @@ void MixedFEFPCABase::computeBasisEvaluations(const MeshHandler<ORDER, mydim, nd
 	}
 	else if (fpcaData_.isLocationsByBarycenter() && (fpcaData_.getNumberOfRegions()==0))
 	{
-		//Constexpr is used for selecting the right number of nodes to pass as a template parameter to the Element object.In case of planar domain(i.e. mydim==2), we have that the number of nodes is 3*ORDER. In case of volumetric domain (i.e. mydim==3), we have that the number of nodes is 4 nodes if ORDER==1 and 10 nodes if ORDER==2, so the expression is 6*ORDER-2. ORDER==2 if mydim==3 is not yet implemented.
-		constexpr UInt Nodes = mydim==2? 3*ORDER : 6*ORDER-2;
-		Element<Nodes, mydim, ndim> tri_activated;
-		Real evaluator;
+    	static constexpr UInt EL_NNODES = how_many_nodes(ORDER,mydim);
 
 		for(UInt i=0; i<nlocations;i++)
 		{
 
-			tri_activated = mesh.getElement(fpcaData_.getElementId(i));
+			Element<EL_NNODES, mydim, ndim> tri_activated = mesh.getElement(fpcaData_.getElementId(i));
 
 			if(tri_activated.getId() == Identifier::NVAL)
 			{
@@ -72,9 +69,9 @@ void MixedFEFPCABase::computeBasisEvaluations(const MeshHandler<ORDER, mydim, nd
 			}
 			else
 			{
-				for(UInt node = 0; node < Nodes ; ++node)
+				for(UInt node = 0; node < EL_NNODES ; ++node)
 				{
-					evaluator = fpcaData_.getBarycenter(i,node);
+					Real evaluator = fpcaData_.getBarycenter(i,node);
 					Psi_.insert(i, tri_activated[node].getId()) = evaluator;
 				}
 			}
@@ -85,22 +82,14 @@ void MixedFEFPCABase::computeBasisEvaluations(const MeshHandler<ORDER, mydim, nd
 	}
 	else if ((!fpcaData_.isLocationsByBarycenter()) && fpcaData_.getNumberOfRegions()==0)
 	{
-		//Constexpr is used for selecting the right number of nodes to pass as a template parameter to the Element object.In case of planar domain(i.e. mydim==2), we have that the number of nodes is 3*ORDER. In case of volumetric domain (i.e. mydim==3), we have that the number of nodes is 4 nodes if ORDER==1 and 10 nodes if ORDER==2, so the expression is 6*ORDER-2. ORDER==2 if mydim==3 is not yet implemented.
-		constexpr UInt Nodes = mydim==2? 3*ORDER : 6*ORDER-2;
-		Element<Nodes, mydim, ndim> tri_activated;
-		Eigen::Matrix<Real,Nodes,1> coefficients;
+    	static constexpr UInt EL_NNODES = how_many_nodes(ORDER,mydim);
 
-		Real evaluator;
-		this->barycenters_.resize(nlocations, Nodes);
+		this->barycenters_.resize(nlocations, EL_NNODES);
 		this->element_ids_.resize(nlocations);
 		for(UInt i=0; i<nlocations;i++)
 		{
 
-			if (fpcaData_.getSearch() == 1) { //use Naive search
-				tri_activated = mesh.findLocationNaive(fpcaData_.template getLocations<ndim>(i));
-			} else if (fpcaData_.getSearch() == 2) { //use Tree search (default)
-				tri_activated = mesh.findLocationTree(fpcaData_.template getLocations<ndim>(i));
-			}
+			Element<EL_NNODES, mydim, ndim> tri_activated = mesh.findLocation(fpcaData_.template getLocations<ndim>(i));
 
 			if(tri_activated.getId() == Identifier::NVAL)
 			{
@@ -109,11 +98,9 @@ void MixedFEFPCABase::computeBasisEvaluations(const MeshHandler<ORDER, mydim, nd
 			else
 			{
 				element_ids_(i)=tri_activated.getId();
-				for(UInt node = 0; node < Nodes ; ++node)
+				for(UInt node = 0; node < EL_NNODES ; ++node)
 				{
-					coefficients = Eigen::Matrix<Real,Nodes,1>::Zero();
-					coefficients(node) = 1; //Activates only current base
-					evaluator = tri_activated.evaluate_point(fpcaData_.template getLocations<ndim>(i), coefficients);
+					Real evaluator = tri_activated.evaluate_point(fpcaData_.template getLocations<ndim>(i), Eigen::Matrix<Real,EL_NNODES,1>::Unit(node));
 					barycenters_(i,node)=evaluator;
 					Psi_.insert(i, tri_activated[node].getId()) = evaluator;
 				}
@@ -125,7 +112,7 @@ void MixedFEFPCABase::computeBasisEvaluations(const MeshHandler<ORDER, mydim, nd
 	}
 	else //areal data
 	{
-		constexpr UInt Nodes = mydim==2 ? 3*ORDER : 6*ORDER-2;
+    	static constexpr UInt EL_NNODES = how_many_nodes(ORDER,mydim);
 
 		Real *tab; //Psi_i
 		tab = (Real*) malloc(sizeof(Real)*nnodes);
@@ -136,10 +123,10 @@ void MixedFEFPCABase::computeBasisEvaluations(const MeshHandler<ORDER, mydim, nd
 			{
 				if (fpcaData_.getIncidenceMatrix()(i,j) == 1) //element j is in region i
 				{
-					Element<Nodes, mydim, ndim> tri = mesh.getElement(j); //can also be a tetrahedron
-					for (UInt k=0; k<Nodes; k++)
+					Element<EL_NNODES, mydim, ndim> tri = mesh.getElement(j); //can also be a tetrahedron
+					for (UInt k=0; k<EL_NNODES; k++)
 					{
-						tab[tri[k].getId()] += tri.integrate(Eigen::Matrix<Real,Nodes,1>::Unit(k)); // integral over tri of psi_k	
+						tab[tri[k].getId()] += tri.integrate(Eigen::Matrix<Real,EL_NNODES,1>::Unit(k)); // integral over tri of psi_k	
 					}				
 				}
 			}

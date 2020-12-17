@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "../../FdaPDE.h"
+#include "../../Global_Utilities/Include/Make_Unique.h"
 // Note: how_many_nodes constexpr function is defined in mesh_objects.h
 // Also Point and Element
 #include "Mesh_Objects.h"
@@ -18,7 +19,6 @@ class MeshHandler{
                  "ERROR! TRYING TO INSTANTIATE MESH_HANDLER WITH WRONG NUMBER OF NODES AND/OR DIMENSIONS! See mesh.h");
 public:
   using meshElement = Element<how_many_nodes(ORDER,mydim),mydim,ndim>;
-
 
   //! A constructor.
     /*!
@@ -78,15 +78,21 @@ public:
   void printPoints(std::ostream &) const;
   void printElements(std::ostream &) const;
   void printNeighbors(std::ostream &) const;
-  void printTree(std::ostream & out) const;
+  void printTree(std::ostream &) const;
+    
+  template <bool isManifold=(ndim!=mydim)>
+  typename std::enable_if<!isManifold, meshElement>::type  
+  findLocation(const Point<ndim>&) const;
 
+  template <bool isManifold=(ndim!=mydim)>
+  typename std::enable_if<isManifold, meshElement>::type  
+  findLocation(const Point<ndim>&) const;
 
   //! A normal member returning the element on which a point is located
     /*!
      * This method implements a simply research between all the elements of the mesh
     */
   meshElement findLocationNaive(const Point<ndim>&) const;
-
   //! A normal member returning the element on which a point is located
     /*!
     * This method implements a Visibility Walk Algorithm (further details in: Walking in a triangulation, Devillers et al)
@@ -94,10 +100,8 @@ public:
   // Note: this method is guaranteed to work only on convex domains
   // It does not work for manifold data!
   // We make sure that it is not available for manifold data at compile time using static_assert
-
-  meshElement findLocationWalking(const Point<ndim>&, const meshElement&) const;
-
-  meshElement findLocationTree(const Point<ndim>& point) const;
+  meshElement findLocationWalking(const Point<ndim>&, const meshElement&) const;  
+  meshElement findLocationTree(const Point<ndim>&) const;
 
 private:
 

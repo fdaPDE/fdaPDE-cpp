@@ -1,16 +1,13 @@
 #ifndef MESH_IMP_H_
 #define MESH_IMP_H_
 
-
 template <UInt ORDER, UInt mydim, UInt ndim>
 MeshHandler<ORDER,mydim,ndim>::MeshHandler(SEXP Rmesh, UInt search) :
 	points_(VECTOR_ELT(Rmesh, 0)), sides_(VECTOR_ELT(Rmesh, 6)),
 		elements_(VECTOR_ELT(Rmesh, 3)), neighbors_(VECTOR_ELT(Rmesh, 8)),
 		 	search_(search) {
-				if((XLENGTH(Rmesh)==11 || TYPEOF(VECTOR_ELT(Rmesh, 11))==0) && search==2)
-					tree_ptr_.reset(new ADTree<meshElement>(points_, elements_));
-				else if (search==2)
-					tree_ptr_.reset(new ADTree<meshElement>(Rmesh));
+		 		if(search==2)
+		 			tree_ptr_=make_unique<const ADTree<meshElement> > (Rmesh);
 				}
 
 template <UInt ORDER, UInt mydim, UInt ndim>
@@ -34,6 +31,28 @@ typename MeshHandler<ORDER,mydim,ndim>::meshElement MeshHandler<ORDER,mydim,ndim
 	int id_neighbor{neighbors_(id_element, number)};
 	//return empty element if "neighbor" not present (out of boundary!)
 	return (id_neighbor==-1) ? meshElement() : getElement(id_neighbor);
+}
+
+template <UInt ORDER, UInt mydim, UInt ndim>
+template <bool isManifold>
+typename std::enable_if<!isManifold, typename MeshHandler<ORDER,mydim,ndim>::meshElement>::type  
+MeshHandler<ORDER,mydim,ndim>::findLocation(const Point<ndim>& point) const {
+	if(search_==2)
+		return findLocationTree(point);
+	else if(search_==3)
+		return findLocationWalking(point, getElement(0));
+	else
+		return findLocationNaive(point);
+}
+
+template <UInt ORDER, UInt mydim, UInt ndim>
+template <bool isManifold>
+typename std::enable_if<isManifold, typename MeshHandler<ORDER,mydim,ndim>::meshElement>::type  
+MeshHandler<ORDER,mydim,ndim>::findLocation(const Point<ndim>& point) const {
+	if(search_==2)
+		return findLocationTree(point);
+	else
+		return findLocationNaive(point);
 }
 
 template <UInt ORDER, UInt mydim, UInt ndim>

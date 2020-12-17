@@ -15,23 +15,23 @@
 #include "../../Density_Estimation/Include/Optimization_Algorithm_Factory.h"
 #include "../../Density_Estimation/Include/FE_Density_Estimation.h"
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 SEXP DE_skeleton(SEXP Rdata, SEXP Rorder, SEXP Rfvec, SEXP RheatStep, SEXP RheatIter, SEXP Rlambda, SEXP Rnfolds, SEXP Rnsim, SEXP RstepProposals,
 	SEXP Rtol1, SEXP Rtol2, SEXP Rprint, SEXP Rmesh, SEXP Rsearch,
 	const std::string & step_method, const std::string & direction_method, const std::string & preprocess_method)
 {
 	// Construct data problem object
-	DataProblem<Integrator_noPoly, ORDER, mydim, ndim> dataProblem(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rsearch, Rmesh);
+	DataProblem<ORDER, mydim, ndim> dataProblem(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rsearch, Rmesh);
 
 	// Construct functional problem object
-	FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim> functionalProblem(dataProblem);
+	FunctionalProblem<ORDER, mydim, ndim> functionalProblem(dataProblem);
 
 	// Construct minimization algorithm object
-	std::shared_ptr<MinimizationAlgorithm<Integrator_noPoly, ORDER, mydim, ndim>> minimizationAlgo =
-		MinimizationAlgorithm_factory<Integrator_noPoly, ORDER, mydim, ndim>::createStepSolver(dataProblem, functionalProblem, direction_method, step_method);
+	std::shared_ptr<MinimizationAlgorithm<ORDER, mydim, ndim>> minimizationAlgo =
+		MinimizationAlgorithm_factory<ORDER, mydim, ndim>::createStepSolver(dataProblem, functionalProblem, direction_method, step_method);
 
 	// Construct FEDE object
-	FEDE<Integrator_noPoly, ORDER, mydim, ndim> fede(dataProblem, functionalProblem, minimizationAlgo, preprocess_method);
+	FEDE<ORDER, mydim, ndim> fede(dataProblem, functionalProblem, minimizationAlgo, preprocess_method);
 
   	// Perform the whole task
 	fede.apply();
@@ -42,7 +42,7 @@ SEXP DE_skeleton(SEXP Rdata, SEXP Rorder, SEXP Rfvec, SEXP RheatStep, SEXP Rheat
 	Real lambda_sol = fede.getBestLambda();
 	std::vector<Real> CV_errors = fede.getCvError();
 
-	std::vector<Point<ndim> > data = dataProblem.getData();
+	const std::vector<Point<ndim> >& data = dataProblem.data();
 
 	// Copy result in R memory
 	SEXP result = NILSXP;

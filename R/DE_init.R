@@ -10,13 +10,12 @@
 #' @param init String. This parameter specifies the initialization procedure. It can be either 'Heat' or 'CV'.
 #' @param nFolds An integer specifying the number of folds used in cross validation techinque. It is useful only 
 #' for the case \code{init = 'CV'}.
-#' @param search An integer specifying the search algorithm to use. It is either 1 (Naive search algorithm) or 2 (Tree search algorithm).
-#' The default is 2.
+#' @param search a flag to decide the search algorithm type (tree or naive or walking search algorithm).
 #' @return If \code{init = 'Heat'} it returns a matrix in which each column contains the initial vector 
 #' for each \code{lambda}. If \code{init = 'CV'} it returns the initial vector associated to the \code{lambda} given.
 #' @description This function implements two methods for the density initialization procedure.
-#' @usage DE.heat.FEM(data, FEMbasis, lambda, heatStep=0.1, heatIter=500, 
-#'                    init="Heat", nFolds=5, search = 2) 
+#' @usage DE.heat.FEM(data, FEMbasis, lambda=NULL, heatStep=0.1, heatIter=500, 
+#'                    init="Heat", nFolds=5, search = "tree") 
 #' @export
 #' @examples
 #' library(fdaPDE)
@@ -47,7 +46,7 @@
 #' ## Visualization 
 #' plot(FEM(coeff=sol$f_init, FEMbasis=FEMbasis))
 
-DE.heat.FEM <- function(data, FEMbasis, lambda=NULL, heatStep=0.1, heatIter=500, init="Heat", nFolds=5, search=2) 
+DE.heat.FEM <- function(data, FEMbasis, lambda=NULL, heatStep=0.1, heatIter=500, init="Heat", nFolds=5, search="tree") 
 { 
   if(class(FEMbasis$mesh) == "mesh.2D"){
     ndim = 2
@@ -73,6 +72,20 @@ DE.heat.FEM <- function(data, FEMbasis, lambda=NULL, heatStep=0.1, heatIter=500,
   step_method=NULL
   direction_method=NULL
   preprocess_method=NULL
+
+    # Search algorithm
+  if(search=="naive"){
+    search=1
+  }else if(search=="tree"){
+    search=2
+  }else if(search=="walking" & class(FEMbasis$mesh) == "mesh.2.5D"){
+  stop("walking search is not available for mesh class mesh.2.5D.")
+  }else if(search=="walking" & class(FEMbasis$mesh) != "mesh.2.5D"){
+    search=3
+  }else{
+    stop("'search' must must belong to the following list: 'naive', 'tree' or 'walking'.")
+  }
+
 
   ###################### Checking parameters, sizes and conversion #################################
   checkParametersDE_init(data, FEMbasis, lambda, heatStep, heatIter, init, search) 

@@ -41,7 +41,6 @@ DEData<ndim>::DEData(const std::vector<Point<ndim> >& data, const UInt& order, c
                 data_(data), order_(order), fvec_(fvec), heatStep_(heatStep), heatIter_(heatIter), lambda_(lambda), Nfolds_(nfolds),
                 nsim_(nsim), stepProposals_(stepProposals), tol1_(tol1), tol2_(tol2), print_(print), search_(search)
 {
-    n_ = data.size();
 }
 
 
@@ -50,7 +49,7 @@ template<UInt ndim>
 void DEData<ndim>::setData(SEXP Rdata)
 {
   const RNumericMatrix data(Rdata);
-  n_=data.nrows();
+  UInt n_=data.nrows();
   if(n_>0){
     data_.reserve(n_);
     for(int i=0; i<n_; ++i)
@@ -91,23 +90,6 @@ void DEData<ndim>::setStepProposals(SEXP RstepProposals)
   }
 }
 
-
-template<UInt ndim>
-void DEData<ndim>::setNewData(const std::vector<Point<ndim> >& p)
-{
-  data_=p;
-}
-
-template<UInt ndim>
-void DEData<ndim>::setDatum(const Point<ndim>& p, UInt i)
-{
-  data_[i] = p;
-}
-
-template<UInt ndim>
-void DEData<ndim>::updateN(UInt n){
-  n_ = n;
-}
 
 template<UInt ndim>
 void DEData<ndim>::printData(std::ostream & out) const

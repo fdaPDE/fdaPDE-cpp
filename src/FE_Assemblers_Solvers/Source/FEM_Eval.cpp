@@ -256,7 +256,7 @@ SEXP eval_FEM_fd(SEXP Rmesh, SEXP Rlocations, SEXP RincidenceMatrix, SEXP Rcoef,
 	}
 
 	//Declare pointer to access data from C++
-	double *X, *Y, *Z;
+	const double *X, *Y, *Z;
 	UInt **incidenceMatrix;
 	double *coef;
 	int order, mydim, ndim, search;
@@ -283,6 +283,7 @@ SEXP eval_FEM_fd(SEXP Rmesh, SEXP Rlocations, SEXP RincidenceMatrix, SEXP Rcoef,
 		X = REAL(Rlocations);
 		Y = REAL(Rlocations)+n_X;
 	}
+
 	for (int i=0; i<nRegions; i++)
 	{
 		incidenceMatrix[i] = (UInt*) malloc(sizeof(UInt)*nElements);
@@ -719,8 +720,6 @@ SEXP eval_FEM_time(SEXP Rmesh, SEXP Rmesh_time, SEXP Rlocations, SEXP Rtime_loca
   SEXP points_projection(SEXP Rmesh, SEXP Rlocations)
   {
   	int n_X = INTEGER(Rf_getAttrib(Rlocations, R_DimSymbol))[0];
-	//Declare pointer to access data from C++
-  	double X, Y, Z;
 
     // Cast all computation parameters
     std::vector<Point<3> > deData_(n_X); // the points to be projected
@@ -729,9 +728,9 @@ SEXP eval_FEM_time(SEXP Rmesh, SEXP Rmesh_time, SEXP Rlocations, SEXP Rtime_loca
     //RECIEVE PROJECTION INFORMATION FROM R
     for (int i=0; i<n_X; i++)
     {
-    	X = REAL(Rlocations)[i + n_X*0];
-    	Y = REAL(Rlocations)[i + n_X*1];
-    	Z = REAL(Rlocations)[i + n_X*2];
+    	double X = REAL(Rlocations)[i + n_X*0];
+    	double Y = REAL(Rlocations)[i + n_X*1];
+    	double Z = REAL(Rlocations)[i + n_X*2];
     	deData_[i]=Point<3>({X,Y,Z});
     }
 
@@ -747,12 +746,11 @@ SEXP eval_FEM_time(SEXP Rmesh, SEXP Rmesh_time, SEXP Rlocations, SEXP Rtime_loca
 			projection<1,2,3> projector(mesh, deData_);
 			prjData_ = projector.computeProjection();
 		}
-
-		// if (order == 2) {
-		// MeshHandler<2,2,3> mesh(Rmesh);
-		// projection<2,2,3> projector(mesh, deData_);
-		// prjData_ = projector.computeProjection();
-		// }
+		else if (order == 2) {
+			MeshHandler<2,2,3> mesh(Rmesh);
+			projection<2,2,3> projector(mesh, deData_);
+			prjData_ = projector.computeProjection();
+		}
 	}
 
 	for (int i=0; i<n_X; ++i)

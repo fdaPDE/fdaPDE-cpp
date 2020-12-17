@@ -44,7 +44,7 @@ namespace Solution_Builders
          \return SEXP containg all the data that will be managed by R code
         */
         template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
-        static SEXP build_solution_plain_regression(const MatrixXr & solution, const output_Data & output, const MeshHandler<ORDER, mydim, ndim> & mesh, const InputHandler & regressionData);
+        static SEXP build_solution_plain_regression(const MatrixXr & solution, const output_Data & output, const MeshHandler<ORDER, mydim, ndim> & mesh, const InputHandler & regressionData, const MixedFERegression<InputHandler>& regression);
 };
 
 #include "Solution_Builders_imp.h"

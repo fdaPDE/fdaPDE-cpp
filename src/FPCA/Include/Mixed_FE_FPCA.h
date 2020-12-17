@@ -105,24 +105,24 @@ public:
 	//!A virtual method that will be called for performing the algorithm. This method is specified in the children classes.
 	virtual  void apply()=0;
 
-	//! A inline member that returns a VectorXr, returns the whole solution_.
-	inline std::vector<VectorXr> const & getSolution() const{return solution_;};
+	//! A member that returns a VectorXr, returns the whole solution_.
+	std::vector<VectorXr> const & getSolution() const{return solution_;};
 	//! A method returning a reference to the scores matrix.
-	inline std::vector<VectorXr> const & getScoresMat() const {return scores_mat_;}
+	std::vector<VectorXr> const & getScoresMat() const {return scores_mat_;}
 	//! A method returning a reference to the loadings matrix.
-	inline std::vector<VectorXr> const & getLoadingsMat() const {return loadings_mat_;}
+	std::vector<VectorXr> const & getLoadingsMat() const {return loadings_mat_;}
 	//! A method returning a reference to the vector of lambda taken for each PC.
-	inline std::vector<Real> const & getLambdaPC() const {return lambda_PC_;}
+	std::vector<Real> const & getLambdaPC() const {return lambda_PC_;}
 	//! A method returning a reference to the vector of variance explained for each PC.
-	inline std::vector<Real> const & getVarianceExplained() const {return variance_explained_;}
+	std::vector<Real> const & getVarianceExplained() const {return variance_explained_;}
 	//! A method returning a reference to the vector of the percentage explained cumulatively by the first N PC.
-	inline std::vector<Real> const & getCumulativePercentage() const {return cumsum_percentage_;}
+	std::vector<Real> const & getCumulativePercentage() const {return cumsum_percentage_;}
 	//! A method returning the vector of the variance of the stochastic computation of the edf.
-	inline std::vector<Real> const & getVar() const{return var_;};
+	std::vector<Real> const & getVar() const{return var_;};
 	//! A function returning the computed barycenters of the locationss
-	inline MatrixXr const & getBarycenters() const{return barycenters_;};
+	MatrixXr const & getBarycenters() const{return barycenters_;};
 	//! A function returning the element ids of the locations
-	inline VectorXi const & getElementIds() const{return element_ids_;};
+	VectorXi const & getElementIds() const{return element_ids_;};
 };
 
 
@@ -172,7 +172,7 @@ public:
 	//!A specification of the virtual method for performing the SF-PCA algorithm with GCV cross-validation method for the choice of the parameter lambda.
 	void apply();
 	//!A method returning the degrees of freedom of the problem.
-	inline std::vector<Real> const & getDOF() const{return dof_;};
+	std::vector<Real> const & getDOF() const{return dof_;};
 
 };
 

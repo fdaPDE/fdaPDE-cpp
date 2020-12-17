@@ -2,12 +2,12 @@
 #define __PREPROCESS_PHASE_IMP_H__
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-Preprocess<Integrator_noPoly, ORDER, mydim, ndim>::Preprocess(const DataProblem<Integrator_noPoly, ORDER, mydim, ndim>& dp,
-  const FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>& fp):
+template<UInt ORDER, UInt mydim, UInt ndim>
+Preprocess<ORDER, mydim, ndim>::Preprocess(const DataProblem<ORDER, mydim, ndim>& dp,
+  const FunctionalProblem<ORDER, mydim, ndim>& fp):
   dataProblem_(dp), funcProblem_(fp){
 
-    densityInit_ = DensityInitialization_factory<Integrator_noPoly, ORDER, mydim, ndim>::createInitializationSolver(dp, fp);
+    densityInit_ = DensityInitialization_factory<ORDER, mydim, ndim>::createInitializationSolver(dp, fp);
 
     fInit_.resize(dp.getNlambda());
     fillFInit();
@@ -15,9 +15,9 @@ Preprocess<Integrator_noPoly, ORDER, mydim, ndim>::Preprocess(const DataProblem<
   };
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 void
-Preprocess<Integrator_noPoly, ORDER, mydim, ndim>::fillFInit(){
+Preprocess<ORDER, mydim, ndim>::fillFInit(){
 
   for(UInt l = 0; l < dataProblem_.getNlambda(); l++){
     fInit_[l] = densityInit_-> chooseInitialization(dataProblem_.getLambda(l));
@@ -26,9 +26,9 @@ Preprocess<Integrator_noPoly, ORDER, mydim, ndim>::fillFInit(){
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 void
-NoCrossValidation<Integrator_noPoly, ORDER, mydim, ndim>::performPreprocessTask(){
+NoCrossValidation<ORDER, mydim, ndim>::performPreprocessTask(){
 
   this->bestLambda_ = this->dataProblem_.getLambda(0);
   this->gInit_ = (*(this->fInit_[0])).array().log();
@@ -36,24 +36,24 @@ NoCrossValidation<Integrator_noPoly, ORDER, mydim, ndim>::performPreprocessTask(
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-CrossValidation<Integrator_noPoly, ORDER, mydim, ndim>::CrossValidation(const DataProblem<Integrator_noPoly, ORDER, mydim, ndim>& dp,
-  const FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>& fp,
-  std::shared_ptr<MinimizationAlgorithm<Integrator_noPoly, ORDER, mydim, ndim>> ma):
-  Preprocess<Integrator_noPoly, ORDER, mydim, ndim>(dp, fp), minAlgo_(ma), error_(dp){
+template<UInt ORDER, UInt mydim, UInt ndim>
+CrossValidation<ORDER, mydim, ndim>::CrossValidation(const DataProblem<ORDER, mydim, ndim>& dp,
+  const FunctionalProblem<ORDER, mydim, ndim>& fp,
+  std::shared_ptr<MinimizationAlgorithm<ORDER, mydim, ndim>> ma):
+  Preprocess<ORDER, mydim, ndim>(dp, fp), minAlgo_(ma), error_(dp){
 
-    K_folds_.resize(dp.getNumberofData());
+    K_folds_.resize(dp.dataSize());
     CV_errors_.resize(dp.getNlambda(), 0);
     g_sols_.resize(dp.getNlambda());
 
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 std::pair<VectorXr, Real>
-CrossValidation<Integrator_noPoly, ORDER, mydim, ndim>::performCV(){
+CrossValidation<ORDER, mydim, ndim>::performCV(){
 
-  UInt N = this->dataProblem_.getNumberofData();
+  UInt N = this->dataProblem_.dataSize();
   UInt K = this->dataProblem_.getNfolds();
 
   for (UInt i = 0; i< N; i++){
@@ -93,18 +93,18 @@ CrossValidation<Integrator_noPoly, ORDER, mydim, ndim>::performCV(){
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 void
-CrossValidation<Integrator_noPoly, ORDER, mydim, ndim>::performPreprocessTask(){
+CrossValidation<ORDER, mydim, ndim>::performPreprocessTask(){
 
   std::tie(this->gInit_, this->bestLambda_) = performCV();
 
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 void
-SimplifiedCrossValidation<Integrator_noPoly, ORDER, mydim, ndim>::performCV_core(UInt fold, const SpMat& Psi_train, const SpMat& Psi_valid){
+SimplifiedCrossValidation<ORDER, mydim, ndim>::performCV_core(UInt fold, const SpMat& Psi_train, const SpMat& Psi_valid){
 
   if(this->dataProblem_.Print()){
     Rprintf("lambda: %f\n", this->dataProblem_.getLambda(fold));
@@ -117,25 +117,25 @@ SimplifiedCrossValidation<Integrator_noPoly, ORDER, mydim, ndim>::performCV_core
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-RightCrossValidation<Integrator_noPoly, ORDER, mydim, ndim>::
-  RightCrossValidation(const DataProblem<Integrator_noPoly, ORDER, mydim, ndim>& dp,
-   const FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>& fp,
-   std::shared_ptr<MinimizationAlgorithm<Integrator_noPoly, ORDER, mydim, ndim>> ma):
-   CrossValidation<Integrator_noPoly, ORDER, mydim, ndim>(dp, fp, ma){
+template<UInt ORDER, UInt mydim, UInt ndim>
+RightCrossValidation<ORDER, mydim, ndim>::
+  RightCrossValidation(const DataProblem<ORDER, mydim, ndim>& dp,
+   const FunctionalProblem<ORDER, mydim, ndim>& fp,
+   std::shared_ptr<MinimizationAlgorithm<ORDER, mydim, ndim>> ma):
+   CrossValidation<ORDER, mydim, ndim>(dp, fp, ma){
 
       best_loss_.resize(this->dataProblem_.getNlambda(), std::numeric_limits<double>::max());
 
 }
 
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 void
-RightCrossValidation<Integrator_noPoly, ORDER, mydim, ndim>::performCV_core(UInt fold, const SpMat& Psi_train, const SpMat& Psi_valid){
+RightCrossValidation<ORDER, mydim, ndim>::performCV_core(UInt fold, const SpMat& Psi_train, const SpMat& Psi_valid){
 
   for (UInt l=0; l < this->dataProblem_.getNlambda(); l++){
 
-     std::unique_ptr<MinimizationAlgorithm<Integrator_noPoly, ORDER, mydim, ndim>>
+     std::unique_ptr<MinimizationAlgorithm<ORDER, mydim, ndim>>
      minimizationAlgo = this->minAlgo_->clone();
 
      if(this->dataProblem_.Print()){

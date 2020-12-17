@@ -54,11 +54,11 @@ class  FPCAObject
 
 
 		//! A method returning a reference to the scores vector
-		inline VectorXr const & getScores() const {return scores_;}
+		VectorXr const & getScores() const {return scores_;}
 		//! A method returning a reference to the loadings vector
-		inline VectorXr const & getLoadings() const {return loadings_;}
+		VectorXr const & getLoadings() const {return loadings_;}
 		//! A method returning a reference to the observation data vector
-		inline VectorXr const & getObservationData() const {return ObservationData_;}
+		VectorXr const & getObservationData() const {return ObservationData_;}
 };
 
 #endif

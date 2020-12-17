@@ -1,27 +1,22 @@
 #ifndef __AD_TREE_IMP_H__
 #define __AD_TREE_IMP_H__
 
+
 template<class Shape>
-// Initialize header_ and data_
-ADTree<Shape>::ADTree(TreeHeader<Shape> const & header): header_(header) {
-  /*
-   * The first element in the tree nodes vector is the head.
-   * It stores the address of the tree root (i.e. the first node in the tree).
-   * If it stores 0 it means that the tree is empty.
-   */
-  data_.reserve(header_.gettreeloc()+1);
-
-  // Id, obj are arbitrary parameters. Remember that data_[0] is the head, not a tree node.
-  Shape obj;
-  Id id = std::numeric_limits<UInt>::max();
-  data_.push_back(TreeNode<Shape>(id,obj));
-
+ADTree<Shape>::ADTree(SEXP Rmesh){
+  if((XLENGTH(Rmesh)==11 || TYPEOF(VECTOR_ELT(Rmesh, 11))==0)){
+    RNumericMatrix points(VECTOR_ELT(Rmesh, 0));
+    RIntegerMatrix elements(VECTOR_ELT(Rmesh, 3));
+    setTree(points, elements);
+  }
+  else
+    setTree(Rmesh);
 }
 
 
 //Shape is given as Element<NNODES,myDim,nDim> from mesh.h
 template<class Shape>
-ADTree<Shape>::ADTree(const RNumericMatrix& points, const RIntegerMatrix& triangle) {
+void ADTree<Shape>::setTree(const RNumericMatrix& points, const RIntegerMatrix& triangle) {
     int ndimp = Shape::dp(); //physical dimension
     int nvertex = Shape::numVertices; //number of nodes at each Element (not total number of nodes!)
 
@@ -78,7 +73,7 @@ ADTree<Shape>::ADTree(const RNumericMatrix& points, const RIntegerMatrix& triang
 
 
 template<class Shape>
-ADTree<Shape>::ADTree(SEXP Rmesh){
+void ADTree<Shape>::setTree(SEXP Rmesh){
   int tree_loc_ = INTEGER(Rf_getAttrib(VECTOR_ELT(Rmesh, 3), R_DimSymbol))[0];
   int tree_lev_ = INTEGER(VECTOR_ELT(Rmesh, 11))[0];
   int ndimp_ = Shape::dp();
@@ -278,19 +273,8 @@ int ADTree<Shape>::adtrb(Id shapeid, std::vector<Real> const & coords) {
 
 template<class Shape>
 int ADTree<Shape>::handledomerr(Id shapeid, std::vector<Real> const & coords) {
-  try {
     int iloc = adtrb(shapeid, coords);
     return iloc;
-  }
-  catch(TreeDomainError<Shape> de) {
-    // Handle a TreeDomainError exception.
-    // std::cout << "error!  " << de.getnelep1() << "-th object which is to be inserted into the tree is out of domain"
-    //     << std::endl;
-    // std::cout << "Coordinates" << std::endl;
-    // std::cout << "-----------" << std::endl;
-    // std::cout << de;
-    std::exit(EXIT_FAILURE);
-  }
 }
 
 template<class Shape>

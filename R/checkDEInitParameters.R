@@ -27,9 +27,6 @@ checkParametersDE_init <- function(data, FEMbasis, lambda, heatStep, heatIter, i
   if(!is.numeric(search))
     stop("'search' needs to be an integer.")
   
-  if(search != 1 && search != 2)
-    stop("'search' needs to be an integer either equal to 1 or equal to 2.")
-
   if (is.null(init)) 
     stop("'init' is required;  is NULL.")
   else{

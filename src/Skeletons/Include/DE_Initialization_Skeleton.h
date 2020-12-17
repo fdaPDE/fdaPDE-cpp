@@ -15,20 +15,20 @@
 #include "../../Density_Estimation/Include/Optimization_Algorithm_Factory.h"
 #include "../../Density_Estimation/Include/FE_Density_Estimation.h"
 
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 SEXP DE_init_skeleton(SEXP Rdata, SEXP Rorder, SEXP Rfvec, SEXP RheatStep, SEXP RheatIter, SEXP Rlambda, SEXP Rnfolds, SEXP Rnsim, SEXP RstepProposals,
 	SEXP Rtol1, SEXP Rtol2, SEXP Rprint, SEXP Rmesh, SEXP Rsearch, const std::string & init, UInt init_fold)
 {
 	// Construct data problem object
-	DataProblem<Integrator_noPoly, ORDER, mydim, ndim> dataProblem(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rsearch, Rmesh);
+	DataProblem<ORDER, mydim, ndim> dataProblem(Rdata, Rorder, Rfvec, RheatStep, RheatIter, Rlambda, Rnfolds, Rnsim, RstepProposals, Rtol1, Rtol2, Rprint, Rsearch, Rmesh);
 
 	// Construct functional problem object
-	FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim> functionalProblem(dataProblem);
+	FunctionalProblem<ORDER, mydim, ndim> functionalProblem(dataProblem);
 
 	if(init == "Heat"){
 
 		// Construct densityInit object
-		std::unique_ptr<DensityInitialization<Integrator_noPoly, ORDER, mydim, ndim>> densityInit = make_unique<HeatProcess<Integrator_noPoly, ORDER, mydim, ndim>>(dataProblem, functionalProblem);
+		std::unique_ptr<DensityInitialization<ORDER, mydim, ndim>> densityInit = make_unique<HeatProcess<ORDER, mydim, ndim>>(dataProblem, functionalProblem);
 
 		// fill fInit
 		std::vector<VectorXr> fInit(dataProblem.getNlambda());
@@ -56,7 +56,7 @@ SEXP DE_init_skeleton(SEXP Rdata, SEXP Rorder, SEXP Rfvec, SEXP RheatStep, SEXP 
 	else if(init=="CV"){
 
 		// Construct densityInit object
-		std::unique_ptr<Heat_CV<Integrator_noPoly, ORDER, mydim, ndim>> densityInit = make_unique<Heat_CV<Integrator_noPoly, ORDER, mydim, ndim>>(dataProblem, functionalProblem, init_fold);
+		std::unique_ptr<Heat_CV<ORDER, mydim, ndim>> densityInit = make_unique<Heat_CV<ORDER, mydim, ndim>>(dataProblem, functionalProblem, init_fold);
 
 		// fill fInit
 		VectorXr fInit;

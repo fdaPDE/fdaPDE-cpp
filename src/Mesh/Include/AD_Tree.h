@@ -64,40 +64,15 @@ protected:
   inline double delta(int const & lev, int const & dim) const {
     return std::pow(0.5, int(lev/dim)+1);
   }
+
+    /** It fills all the locations of the tree. Object's coordinates are stored to perform searching operations.
+   *  See mesh_handler to verify what points and triangle must contain.
+   */
+  void setTree(SEXP Rmesh);
+
+  void setTree(const RNumericMatrix& points, const RIntegerMatrix& triangle);
+
 public:
-  /**	A default constructor.
-   *
-   *	It initializes the tree header and reserve a suitable number of memory
-   *	locations to store tree nodes. It doesn't fill the tree.
-   */
-  ADTree():header_() {
-    /*
-     * The first element in the tree nodes vector is the head.
-     * It stores the address of the tree root (i.e. the first node in the tree).
-     * If it stores 0 it means that the tree is empty.
-     */
-   	data_.reserve(header_.gettreeloc()+1);
-
-    // Id, obj are arbitrary parameters. Remember that data_[0] is the head, not a tree node.
-  	Shape obj;
-  	Id id = std::numeric_limits<UInt>::max();
-  	data_.push_back(TreeNode<Shape>(id, obj));
-	};
-
-  /**	A base constructor.
-   *
-   *	It initializes the tree header and reserve a suitable number of memory
-   *	locations to store tree nodes. It doesn't fill the tree.
-   */
-  ADTree(TreeHeader<Shape> const & header);
-
-  // constructor in case there is already tree information
-  ADTree(TreeHeader<Shape> const & header, std::vector<TreeNode<Shape>> const & data):header_(header), data_(data) {};
-
-  /** It fills all the locations of the tree. Object's coordinates are stored to perform searching operations.
-   * 	See mesh_handler to verify what points and triangle must contain.
-   */
-  ADTree(const RNumericMatrix& points, const RIntegerMatrix& triangle);
 
 	ADTree(SEXP Rmesh);
 

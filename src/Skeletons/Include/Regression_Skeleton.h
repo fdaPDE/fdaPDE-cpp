@@ -63,7 +63,7 @@ SEXP regression_skeleton(InputHandler & regressionData, OptimizationData & optim
 		}
 	}
 
- 	return Solution_Builders::build_solution_plain_regression<InputHandler, ORDER, mydim, ndim>(solution_bricks.first,solution_bricks.second,mesh,regressionData);
+ 	return Solution_Builders::build_solution_plain_regression<InputHandler, ORDER, mydim, ndim>(solution_bricks.first, solution_bricks.second, mesh, regressionData, regression);
 }
 
 //! Function to select the right optimization method

@@ -6,15 +6,15 @@
 #include "K_Fold_CV_L2_Error.h"
 
 //! @brief An abtract base class to perform the preprocess phase.
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 class Preprocess{
   protected:
     // A member to acess the data problem methods
-    const DataProblem<Integrator_noPoly, ORDER, mydim, ndim>& dataProblem_;
+    const DataProblem<ORDER, mydim, ndim>& dataProblem_;
     // A member to acess the functional methods
-    const FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>& funcProblem_;
+    const FunctionalProblem<ORDER, mydim, ndim>& funcProblem_;
     // A member to do density initialization
-    std::unique_ptr<DensityInitialization<Integrator_noPoly, ORDER, mydim, ndim>> densityInit_;
+    std::unique_ptr<DensityInitialization<ORDER, mydim, ndim>> densityInit_;
 
     // It saves the initial f-density for each lambda
     std::vector<const VectorXr*> fInit_;
@@ -28,8 +28,8 @@ class Preprocess{
 
   public:
     //! A constructor.
-    Preprocess(const DataProblem<Integrator_noPoly, ORDER, mydim, ndim>& dp,
-      const FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>& fp);
+    Preprocess(const DataProblem<ORDER, mydim, ndim>& dp,
+      const FunctionalProblem<ORDER, mydim, ndim>& fp);
     //! A destructor.
     virtual ~Preprocess(){};
     //! A pure virtual method to perform the preprocess task.
@@ -45,13 +45,13 @@ class Preprocess{
 
 
 //! @brief A class to handle the preprocess phase when there is only one smoothere parameter.
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-class NoCrossValidation : public Preprocess<Integrator_noPoly, ORDER, mydim, ndim>{
+template<UInt ORDER, UInt mydim, UInt ndim>
+class NoCrossValidation : public Preprocess<ORDER, mydim, ndim>{
   public:
     //! A constructor
-    NoCrossValidation(const DataProblem<Integrator_noPoly, ORDER, mydim, ndim>& dp,
-      const FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>& fp):
-      Preprocess<Integrator_noPoly, ORDER, mydim, ndim>(dp, fp){};
+    NoCrossValidation(const DataProblem<ORDER, mydim, ndim>& dp,
+      const FunctionalProblem<ORDER, mydim, ndim>& fp):
+      Preprocess<ORDER, mydim, ndim>(dp, fp){};
 
     //! Overridden method to perform the preprocess phase.
     void performPreprocessTask() override;
@@ -63,13 +63,13 @@ class NoCrossValidation : public Preprocess<Integrator_noPoly, ORDER, mydim, ndi
 /*! @brief An abstract class to handle the preprocess phase when cross-validation needs to be performed to select one smoothing parameter.
 It contanis members useful to perfotm the cross-validation techinque.
 */
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-class CrossValidation : public Preprocess<Integrator_noPoly, ORDER, mydim, ndim>{
+template<UInt ORDER, UInt mydim, UInt ndim>
+class CrossValidation : public Preprocess<ORDER, mydim, ndim>{
   protected:
     // A member to do the minimization phase
-    std::shared_ptr<MinimizationAlgorithm<Integrator_noPoly, ORDER, mydim, ndim>> minAlgo_;
+    std::shared_ptr<MinimizationAlgorithm<ORDER, mydim, ndim>> minAlgo_;
     // Callable object for computing corss-validation  error in L2 norm
-    KfoldCV_L2_error<Integrator_noPoly, ORDER, mydim, ndim> error_;
+    KfoldCV_L2_error<ORDER, mydim, ndim> error_;
     // It contains indices cyclically partitioned
     std::vector<UInt> K_folds_;
     // It contains, for each lambda, the sum of errors in k-fold CV
@@ -84,9 +84,9 @@ class CrossValidation : public Preprocess<Integrator_noPoly, ORDER, mydim, ndim>
 
   public:
     //! A constructor.
-    CrossValidation(const DataProblem<Integrator_noPoly, ORDER, mydim, ndim>& dp,
-       const FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>& fp,
-       std::shared_ptr<MinimizationAlgorithm<Integrator_noPoly, ORDER, mydim, ndim>> ma);
+    CrossValidation(const DataProblem<ORDER, mydim, ndim>& dp,
+       const FunctionalProblem<ORDER, mydim, ndim>& fp,
+       std::shared_ptr<MinimizationAlgorithm<ORDER, mydim, ndim>> ma);
     //! A destructor.
     virtual ~CrossValidation(){};
     //! Overridden method to perform the preprocess phase.
@@ -98,25 +98,25 @@ class CrossValidation : public Preprocess<Integrator_noPoly, ORDER, mydim, ndim>
 
 
 //! @brief A class to perform the simplified version of cross-validation.
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-class SimplifiedCrossValidation : public CrossValidation<Integrator_noPoly, ORDER, mydim, ndim>{
+template<UInt ORDER, UInt mydim, UInt ndim>
+class SimplifiedCrossValidation : public CrossValidation<ORDER, mydim, ndim>{
   private:
     //! Overridden method to perform simplified cross-validation.
     void performCV_core (UInt fold, const SpMat& Psi_train, const SpMat& Psi_valid) override;
 
   public:
     //! A delegating constructor.
-    SimplifiedCrossValidation(const DataProblem<Integrator_noPoly, ORDER, mydim, ndim>& dp,
-       const FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>& fp,
-       std::shared_ptr<MinimizationAlgorithm<Integrator_noPoly, ORDER, mydim, ndim>> ma):
-       CrossValidation<Integrator_noPoly, ORDER, mydim, ndim>(dp, fp, ma){};
+    SimplifiedCrossValidation(const DataProblem<ORDER, mydim, ndim>& dp,
+       const FunctionalProblem<ORDER, mydim, ndim>& fp,
+       std::shared_ptr<MinimizationAlgorithm<ORDER, mydim, ndim>> ma):
+       CrossValidation<ORDER, mydim, ndim>(dp, fp, ma){};
 
 };
 
 
 //! @brief A class to perform the right version of cross-validation.
-template<typename Integrator_noPoly, UInt ORDER, UInt mydim, UInt ndim>
-class RightCrossValidation : public CrossValidation<Integrator_noPoly, ORDER, mydim, ndim>{
+template<UInt ORDER, UInt mydim, UInt ndim>
+class RightCrossValidation : public CrossValidation<ORDER, mydim, ndim>{
   private:
     // It saves the best loss reached, among all the folds, for each lambda
     std::vector<Real> best_loss_;
@@ -126,9 +126,9 @@ class RightCrossValidation : public CrossValidation<Integrator_noPoly, ORDER, my
 
   public:
     //! A constructor
-    RightCrossValidation(const DataProblem<Integrator_noPoly, ORDER, mydim, ndim>& dp,
-       const FunctionalProblem<Integrator_noPoly, ORDER, mydim, ndim>& fp,
-       std::shared_ptr<MinimizationAlgorithm<Integrator_noPoly, ORDER, mydim, ndim>> ma);
+    RightCrossValidation(const DataProblem<ORDER, mydim, ndim>& dp,
+       const FunctionalProblem<ORDER, mydim, ndim>& fp,
+       std::shared_ptr<MinimizationAlgorithm<ORDER, mydim, ndim>> ma);
 
 };
 

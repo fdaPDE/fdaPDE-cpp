@@ -229,16 +229,17 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
     optim[3] = 1
   }
   
-  # Search algorithm
-  if(search=="naive")
-  {
+    # Search algorithm
+  if(search=="naive"){
     search=1
-  }else if(search=="tree")
-  {
+  }else if(search=="tree"){
     search=2
-  }else
-  {
-    stop("search must be either tree or naive.")
+  }else if(search=="walking" & class(FEMbasis$mesh) == "mesh.2.5D"){
+    stop("walking search is not available for mesh class mesh.2.5D.")
+  }else if(search=="walking" & class(FEMbasis$mesh) != "mesh.2.5D"){
+    search=3
+  }else{
+    stop("'search' must must belong to the following list: 'naive', 'tree' or 'walking'.")
   }
 
   # If locations is null but bary.locations is not null, use the locations in bary.locations

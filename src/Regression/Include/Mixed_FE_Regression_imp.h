@@ -145,14 +145,12 @@ void MixedFERegressionBase<InputHandler>::setPsi(const MeshHandler<ORDER, mydim,
 	else if(regressionData_.isLocationsByBarycenter() && (regressionData_.getNumberOfRegions() == 0)) // Pointwise data -- by barycenter
 	{
 		// Exploit isLocationsByBarycenter simplyfication
-		constexpr UInt Nodes = mydim==2 ? 3*ORDER : 6*ORDER-2;
-		Element<Nodes, mydim, ndim> tri_activated;	// Dummy for element search
-		Real evaluator;					// Dummy for evaluation storage
+		static constexpr UInt EL_NNODES = how_many_nodes(ORDER,mydim);
 
 		for(UInt i=0; i<nlocations;i++)
 		{ // Update Psi looping on all locations
 			// We already know the id of the element containing the point
-			tri_activated = mesh_.getElement(regressionData_.getElementId(i));
+			Element<EL_NNODES, mydim, ndim> tri_activated = mesh_.getElement(regressionData_.getElementId(i));
 
 			if(tri_activated.getId() == Identifier::NVAL)
 			{ // Invald id --> error
@@ -160,9 +158,9 @@ void MixedFERegressionBase<InputHandler>::setPsi(const MeshHandler<ORDER, mydim,
 			}
 			else
 			{ // tri_activated.getId() found, it's action might be felt a priori by all the psi of the element, one for each node
-				for(UInt node=0; node<Nodes ; ++node)
+				for(UInt node=0; node<EL_NNODES ; ++node)
 				{// Loop on all the nodes of the found element and update the related entries of Psi
-					evaluator = regressionData_.getBarycenter(i,node); // We already know the value to add
+					Real evaluator = regressionData_.getBarycenter(i,node); // We already know the value to add
 					// Insert the value in the column given by the GLOBAL indexing of the evaluated NODE
 					psi_.insert(i, tri_activated[node].getId()) = evaluator;
 				}
@@ -174,26 +172,16 @@ void MixedFERegressionBase<InputHandler>::setPsi(const MeshHandler<ORDER, mydim,
 		// THEORETICAL REMARK:
 		// If isLocationsByNodes && isLocationsByBarycenters are false
 		// locations are unspecified points, so we have to evaluate them directly
-		constexpr UInt Nodes = mydim==2 ? 3*ORDER : 6*ORDER-2;
-		Element<Nodes, mydim, ndim> tri_activated;	// Dummy for element search
-		Eigen::Matrix<Real,Nodes,1> coefficients;	// Dummy for point evaluation
-		Real evaluator;					// Dummy for evaluation storage
+		static constexpr UInt EL_NNODES = how_many_nodes(ORDER,mydim);
 
 		// Resize for info storage
-		this->barycenters_.resize(nlocations, Nodes);
+		this->barycenters_.resize(nlocations, EL_NNODES);
 		this->element_ids_.resize(nlocations);
 
 		for(UInt i=0; i<nlocations;i++)
 		{ // Update Psi looping on all locations
 			// [[GM missing a defaulted else, raising a WARNING!]]
-			if(regressionData_.getSearch() == 1)
-			{ // Use Naive search
-				tri_activated = mesh_.findLocationNaive(regressionData_.template getLocations<ndim>(i));
-			}
-			else if(regressionData_.getSearch() == 2)
-			{ // Use Tree search (default)
-				tri_activated = mesh_.findLocationTree(regressionData_.template getLocations<ndim>(i));
-			}
+			Element<EL_NNODES, mydim, ndim> tri_activated = mesh_.findLocation(regressionData_.template getLocations<ndim>(i));
 
 			// Search the element containing the point
 			if(tri_activated.getId() == Identifier::NVAL)
@@ -204,13 +192,10 @@ void MixedFERegressionBase<InputHandler>::setPsi(const MeshHandler<ORDER, mydim,
 			{ // tri_activated.getId() found, it's action might be felt a priori by all the psi of the element, one for each node
 				element_ids_(i) = tri_activated.getId(); // Save the id of the ELEMENT containing the location
 
-				for(UInt node=0; node<Nodes ; ++node)
+				for(UInt node=0; node<EL_NNODES ; ++node)
 				{// Loop on all the nodes of the found element and update the related entries of Psi
-					// Define vector of all zeros but "node" component (necessary for function evaluate_point)
-					coefficients = Eigen::Matrix<Real,Nodes,1>::Zero();
-					coefficients(node) = 1; //Activates only current base-node
 					// Evaluate psi in the node
-					evaluator = tri_activated.evaluate_point(regressionData_.template getLocations<ndim>(i), coefficients);
+					Real evaluator = tri_activated.evaluate_point(regressionData_.template getLocations<ndim>(i), Eigen::Matrix<Real,EL_NNODES,1>::Unit(node));
 					// Save barycenter information
 					barycenters_(i,node)=tri_activated.getBaryCoordinates(regressionData_.template getLocations<ndim>(i))[node];
 					// Insert the value in the column given by the GLOBAL indexing of the evaluated NODE
@@ -221,7 +206,7 @@ void MixedFERegressionBase<InputHandler>::setPsi(const MeshHandler<ORDER, mydim,
 	}
 	else // Areal data
 	{
-		constexpr UInt Nodes = mydim==2 ? 3*ORDER : 6*ORDER-2;
+		static constexpr UInt EL_NNODES = how_many_nodes(ORDER,mydim);
 		Real * tab; // Psi_i temporary storage
 		tab = (Real*) malloc(sizeof(Real)*nnodes);
 
@@ -233,10 +218,10 @@ void MixedFERegressionBase<InputHandler>::setPsi(const MeshHandler<ORDER, mydim,
 			{
 				if((*(regressionData_.getIncidenceMatrix()))(i,j) == 1) // Element j is in region i
 				{ // Location is related to that mesh element
-					Element<Nodes, mydim, ndim> tri = mesh_.getElement(j); // Identify the element
-					for(UInt k=0; k<Nodes; k++)
+					Element<EL_NNODES, mydim, ndim> tri = mesh_.getElement(j); // Identify the element
+					for(UInt k=0; k<EL_NNODES; k++)
 					{ // Add contribution of the area to right location
-						tab[tri[k].getId()] += tri.integrate(Eigen::Matrix<Real,Nodes,1>::Unit(k)); // integral over tri of psi_k
+						tab[tri[k].getId()] += tri.integrate(Eigen::Matrix<Real,EL_NNODES,1>::Unit(k)); // integral over tri of psi_k
 					}
 				}
 			}
@@ -1117,8 +1102,8 @@ class MixedFERegression<RegressionData>: public MixedFERegressionBase<Regression
 	public:
 		MixedFERegression(const RegressionData & regressionData,  OptimizationData & optimizationData, UInt nnodes_):
 			MixedFERegressionBase<RegressionData>(regressionData, optimizationData, nnodes_) {};
-		MixedFERegression(const std::vector<Real> & mesh_time, const RegressionData & regressionData, OptimizationData & optimizationData, UInt nnodes_, UInt spline_degree):
-			MixedFERegressionBase<RegressionData>(mesh_time, regressionData, optimizationData, nnodes_, spline_degree) {};
+		MixedFERegression(const std::vector<Real> & mesh_time, const RegressionData & regressionData, OptimizationData & optimizationData, UInt nnodes_):
+			MixedFERegressionBase<RegressionData>(mesh_time, regressionData, optimizationData, nnodes_) {};
 
 		template<UInt ORDER, UInt mydim, UInt ndim>
 		void preapply(const MeshHandler<ORDER,mydim,ndim> & mesh)
@@ -1134,8 +1119,8 @@ class MixedFERegression<RegressionDataElliptic>: public MixedFERegressionBase<Re
 	public:
 		MixedFERegression(const RegressionDataElliptic & regressionData,  OptimizationData & optimizationData, UInt nnodes_):
 			MixedFERegressionBase<RegressionDataElliptic>(regressionData, optimizationData, nnodes_) {};
-		MixedFERegression(const std::vector<Real> & mesh_time, const RegressionDataElliptic & regressionData,  OptimizationData & optimizationData, UInt nnodes_, UInt spline_degree):
-			MixedFERegressionBase<RegressionDataElliptic>(mesh_time, regressionData, optimizationData, nnodes_, spline_degree) {};
+		MixedFERegression(const std::vector<Real> & mesh_time, const RegressionDataElliptic & regressionData,  OptimizationData & optimizationData, UInt nnodes_):
+			MixedFERegressionBase<RegressionDataElliptic>(mesh_time, regressionData, optimizationData, nnodes_) {};
 
 		template<UInt ORDER, UInt mydim, UInt ndim>
 		void preapply(const MeshHandler<ORDER,mydim,ndim> & mesh)
@@ -1159,8 +1144,8 @@ class MixedFERegression<RegressionDataEllipticSpaceVarying> : public MixedFERegr
 	public:
 		MixedFERegression(const RegressionDataEllipticSpaceVarying & regressionData,  OptimizationData & optimizationData, UInt nnodes_):
 			MixedFERegressionBase<RegressionDataEllipticSpaceVarying>(regressionData, optimizationData, nnodes_) {};
-		MixedFERegression(const std::vector<Real> & mesh_time, const RegressionDataEllipticSpaceVarying & regressionData,  OptimizationData & optimizationData, UInt nnodes_, UInt spline_degree):
-			MixedFERegressionBase<RegressionDataEllipticSpaceVarying>(mesh_time, regressionData, optimizationData, nnodes_, spline_degree) {};
+		MixedFERegression(const std::vector<Real> & mesh_time, const RegressionDataEllipticSpaceVarying & regressionData,  OptimizationData & optimizationData, UInt nnodes_):
+			MixedFERegressionBase<RegressionDataEllipticSpaceVarying>(mesh_time, regressionData, optimizationData, nnodes_) {};
 
 
 		template< UInt ORDER, UInt mydim, UInt ndim>
