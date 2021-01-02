@@ -46,6 +46,7 @@ class MixedFERegressionBase
 		SpMat 		R0_lambda;
 		SpMat 		R1_lambda;
 		SpMat 		psi_;  		//!< Psi matrix of the model
+		SpMat       psi_mini;   //!< (Marti) It saves the psi_before the tensor product
 		SpMat 		psi_t_;  	//!< Psi ^T matrix of the model
 		SpMat 		Ptk_; 		//!< kron(Pt,IN) (separable version)
 		SpMat 		LR0k_; 		//!< kron(L,R0) (parabolic version)
@@ -76,7 +77,12 @@ class MixedFERegressionBase
 		MatrixXr _GCV;			//!< A Eigen::MatrixXr storing the computed GCV
 		MatrixXv _beta;			//!< A Eigen::MatrixXv storing the computed beta coefficients
 
-		//Flag to avoid the computation of R0, R1, Psi_ onece already performed
+		// members for the iterative method
+        MatrixXr _solution_k_;       //!< A Eigen::MatrixXr: Stores the solution for each time instant
+        VectorXr _solution_f_old_;  //!< A Eigen::VectorXr: Stores the old system solution
+        VectorXr _rightHandSide_k_; //!< A Eigen::VectorXr: Stores the update system right hand side
+
+        //Flag to avoid the computation of R0, R1, Psi_ onece already performed
 		bool isAComputed   = false;
 		bool isPsiComputed = false;
 		bool isR0Computed  = false;
@@ -113,6 +119,8 @@ class MixedFERegressionBase
 		void getRightHandData(VectorXr& rightHandData);
 		//! A method which builds all the matrices needed for assembling matrixNoCov_
 		void buildSpaceTimeMatrices();
+        //! A method which builds Psi_tilde and the modifications for the rhs (Iterative method)
+        void buildSpaceTimeMatrices_iterative();
 		//! A method computing dofs in case of exact GCV, it is called by computeDegreesOfFreedom
 		void computeDegreesOfFreedomExact(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT);
 		//! A method computing dofs in case of stochastic GCV, it is called by computeDegreesOfFreedom
@@ -125,6 +133,8 @@ class MixedFERegressionBase
 		void buildSystemMatrix(Real lambda);
 		//! Space-time version
 		void buildSystemMatrix(Real lambdaS, Real lambdaT);
+        //! iterative version
+        void buildSystemMatrix_iter_cov(Real lambdaS, Real lambdaT, UInt time_index);
 
 		// -- FACTORIZER --
 	  	//! A function to factorize the system, using Woodbury decomposition when there are covariates
@@ -135,6 +145,17 @@ class MixedFERegressionBase
 		template<typename Derived>
 		MatrixXr system_solve(const Eigen::MatrixBase<Derived>&);
 
+        // -- methods for the iterative method --
+        //! A method to initialize f
+        void initialize_f(Real lambdaS, UInt& lambdaS_index, UInt& lambdaT_index);
+         //! A method to initialize g
+        void initialize_g(Real lambdaT, UInt& lambdaS_index, UInt& lambdaT_index);
+        //! A method that stops the iterative algorithm based on difference between functionals J_k J_k+1 or n_iterations > max_num_iterations .
+        bool stopping_criterion(UInt& index, Real J, Real J_old);
+        //!A method that computes and return the current value of the functional J. It is divided in parametric and non parametric part.
+        Real compute_J(UInt& lambdaS_index, UInt& lambdaT_index);
+        //!  A methdd that update the system rhs for each time instant
+        void update_rhs(UInt& time_index, Real lambdaS, Real lambdaT, UInt& lambdaS_index, UInt& lambdaT_index);
 	public:
 		//!A Constructor.
 		MixedFERegressionBase( const InputHandler & regressionData, OptimizationData & optimizationData,  UInt nnodes_) :

@@ -56,6 +56,10 @@ class  RegressionData
 		bool flag_SpaceTime_; // TRUE if space time smoothing
 		UInt search_; // search algorith type
 
+        // Iterative method
+        UInt max_num_iterations_; //!< Max number of iterations allowed.
+        Real threshold_; //!< Limit in difference among J_k and J_k+1 for which we stop iterative method.
+
 		// -- SETTERS --
 		void setObservations(SEXP Robservations);
 		void setObservationsTime(SEXP Robservations);
@@ -86,12 +90,14 @@ class  RegressionData
 		        \param Rsearch an R-integer to decide the search algorithm type (tree or naive or walking search algorithm).
 		        \param Rtune an R-double parameter used in the computation of the GCV. The default value is 1.
 		        \param RarealDataAvg an R boolean indicating whether the areal data are averaged or not.
+
+
 		*/
 		explicit RegressionData(SEXP Rlocations, SEXP RbaryLocations, SEXP Robservations, SEXP Rorder, SEXP Rcovariates,
 			SEXP RBCIndices, SEXP RBCValues, SEXP RincidenceMatrix, SEXP RarealDataAvg, SEXP Rsearch);
 
 		explicit RegressionData(SEXP Rlocations, SEXP RbaryLocations, SEXP Rtime_locations, SEXP Robservations, SEXP Rorder, SEXP Rcovariates,
-			SEXP RBCIndices, SEXP RBCValues, SEXP RincidenceMatrix, SEXP RarealDataAvg, SEXP Rflag_mass, SEXP Rflag_parabolic, SEXP Rflag_iterative,  SEXP Ric, SEXP Rsearch);
+			SEXP RBCIndices, SEXP RBCValues, SEXP RincidenceMatrix, SEXP RarealDataAvg, SEXP Rflag_mass, SEXP Rflag_parabolic, SEXP Rflag_iterative,SEXP Rmax_num_iteration, SEXP Rthreshold, SEXP Ric, SEXP Rsearch);
 
 		explicit RegressionData(Real* locations, UInt n_locations, UInt ndim, VectorXr & observations, UInt order, MatrixXr & covariates,
 			 VectorXr & WeightsMatrix, std::vector<UInt> & bc_indices, std::vector<Real> & bc_values,  MatrixXi & incidenceMatrix, bool arealDataAvg, UInt search);
@@ -114,6 +120,10 @@ class  RegressionData
 		inline UInt getNumberofTimeObservations(void) const {return time_locations_.size();}
 		inline const std::vector<UInt> * getObservationsIndices(void) const {return &observations_indices_;}
 		inline const std::vector<UInt> * getObservationsNA(void) const {return &observations_na_;}
+        //! A method returning the maximum iteration for the iterative method
+        inline UInt get_maxiter() const {return max_num_iterations_;}
+        //! A method returning the treshold
+        inline Real get_treshold() const {return threshold_;}
 
 		// Locations [[GM passng to const pointers??]]
 		//! A method returning the locations of the observations
@@ -199,7 +209,7 @@ class  RegressionDataElliptic:public RegressionData
 
 		explicit RegressionDataElliptic(SEXP Rlocations, SEXP RbaryLocations, SEXP Rtime_locations, SEXP Robservations, SEXP Rorder,
 			SEXP RK, SEXP Rbeta, SEXP Rc, SEXP Rcovariates, SEXP RBCIndices, SEXP RBCValues,
-			SEXP RincidenceMatrix, SEXP RarealDataAvg, SEXP Rflag_mass, SEXP Rflag_parabolic, SEXP Rflag_iterative, SEXP Ric, SEXP Rsearch);
+			SEXP RincidenceMatrix, SEXP RarealDataAvg, SEXP Rflag_mass, SEXP Rflag_parabolic, SEXP Rflag_iterative, SEXP Rmax_num_iteration, SEXP Rthreshold, SEXP Ric, SEXP Rsearch);
 
 		inline Diffusion<PDEParameterOptions::Constant> const & getK() const {return K_;}
 		inline Advection<PDEParameterOptions::Constant> const & getBeta() const {return beta_;}
@@ -243,7 +253,7 @@ class RegressionDataEllipticSpaceVarying:public RegressionData
 
 		explicit RegressionDataEllipticSpaceVarying(SEXP Rlocations, SEXP RbaryLocations, SEXP Rtime_locations, SEXP Robservations, SEXP Rorder,
 			SEXP RK, SEXP Rbeta, SEXP Rc, SEXP Ru, SEXP Rcovariates, SEXP RBCIndices, SEXP RBCValues, SEXP RincidenceMatrix, SEXP RarealDataAvg,
-			SEXP Rflag_mass, SEXP Rflag_parabolic, SEXP Rflag_iterative, SEXP Ric, SEXP Rsearch);
+			SEXP Rflag_mass, SEXP Rflag_parabolic, SEXP Rflag_iterative, SEXP Rmax_num_iteration, SEXP Rthreshold, SEXP Ric, SEXP Rsearch);
 
 		inline Diffusion<PDEParameterOptions::SpaceVarying> const & getK() const {return K_;}
 		inline Advection<PDEParameterOptions::SpaceVarying> const & getBeta() const {return beta_;}

@@ -43,7 +43,7 @@ RegressionData::RegressionData(SEXP Rlocations, SEXP RbaryLocations, SEXP Robser
 }
 
 RegressionData::RegressionData(SEXP Rlocations, SEXP RbaryLocations, SEXP Rtime_locations, SEXP Robservations, SEXP Rorder, SEXP Rcovariates,
-	SEXP RBCIndices, SEXP RBCValues, SEXP RincidenceMatrix, SEXP RarealDataAvg, SEXP Rflag_mass, SEXP Rflag_parabolic, SEXP Rflag_iterative, SEXP Ric, SEXP Rsearch) :
+	SEXP RBCIndices, SEXP RBCValues, SEXP RincidenceMatrix, SEXP RarealDataAvg, SEXP Rflag_mass, SEXP Rflag_parabolic, SEXP Rflag_iterative, SEXP Rmax_num_iteration, SEXP Rthreshold, SEXP Ric, SEXP Rsearch) :
 		locations_(Rlocations)
 {
 	flag_SpaceTime_ = true;
@@ -59,6 +59,8 @@ RegressionData::RegressionData(SEXP Rlocations, SEXP RbaryLocations, SEXP Rtime_
 	flag_mass_ = INTEGER(Rflag_mass)[0];
 	flag_parabolic_ = INTEGER(Rflag_parabolic)[0];
 	flag_iterative_ = INTEGER(Rflag_iterative)[0];
+    max_num_iterations_ = INTEGER(Rmax_num_iteration)[0];
+    threshold_ =  REAL(Rthreshold)[0];
 
 	UInt length_indexes = Rf_length(RBCIndices);
 	bc_indices_.assign(INTEGER(RBCIndices), INTEGER(RBCIndices) +  length_indexes);
@@ -84,9 +86,9 @@ RegressionDataElliptic::RegressionDataElliptic(SEXP Rlocations, SEXP RbaryLocati
 
 RegressionDataElliptic::RegressionDataElliptic(SEXP Rlocations, SEXP RbaryLocations, SEXP Rtime_locations, SEXP Robservations, SEXP Rorder,
 	SEXP RK, SEXP Rbeta, SEXP Rc, SEXP Rcovariates, SEXP RBCIndices, SEXP RBCValues,
-	SEXP RincidenceMatrix, SEXP RarealDataAvg, SEXP Rflag_mass, SEXP Rflag_parabolic, SEXP Rflag_iterative, SEXP Ric, SEXP Rsearch):
+	SEXP RincidenceMatrix, SEXP RarealDataAvg, SEXP Rflag_mass, SEXP Rflag_parabolic, SEXP Rflag_iterative, SEXP Rmax_num_iteration, SEXP Rthreshold, SEXP Ric, SEXP Rsearch):
 	RegressionData(Rlocations, RbaryLocations, Rtime_locations, Robservations, Rorder, Rcovariates,
-		RBCIndices, RBCValues, RincidenceMatrix, RarealDataAvg, Rflag_mass, Rflag_parabolic, Rflag_iterative, Ric, Rsearch),
+		RBCIndices, RBCValues, RincidenceMatrix, RarealDataAvg, Rflag_mass, Rflag_parabolic, Rflag_iterative, Rmax_num_iteration, Rthreshold, Ric, Rsearch),
 			K_(RK), beta_(Rbeta), c_(REAL(Rc)[0]) {}
 
 RegressionDataEllipticSpaceVarying::RegressionDataEllipticSpaceVarying(SEXP Rlocations, SEXP RbaryLocations, SEXP Robservations, SEXP Rorder,
@@ -98,9 +100,9 @@ RegressionDataEllipticSpaceVarying::RegressionDataEllipticSpaceVarying(SEXP Rloc
 
 RegressionDataEllipticSpaceVarying::RegressionDataEllipticSpaceVarying(SEXP Rlocations, SEXP RbaryLocations, SEXP Rtime_locations, SEXP Robservations, SEXP Rorder,
 	SEXP RK, SEXP Rbeta, SEXP Rc, SEXP Ru, SEXP Rcovariates, SEXP RBCIndices, SEXP RBCValues, SEXP RincidenceMatrix, SEXP RarealDataAvg,
-	SEXP Rflag_mass, SEXP Rflag_parabolic, SEXP Rflag_iterative, SEXP Ric, SEXP Rsearch):
+	SEXP Rflag_mass, SEXP Rflag_parabolic, SEXP Rflag_iterative,SEXP Rmax_num_iteration,SEXP Rthreshold, SEXP Ric, SEXP Rsearch):
 	RegressionData(Rlocations, RbaryLocations, Rtime_locations, Robservations, Rorder, Rcovariates,
-		RBCIndices, RBCValues, RincidenceMatrix, RarealDataAvg, Rflag_mass, Rflag_parabolic, Rflag_iterative, Ric, Rsearch),
+		RBCIndices, RBCValues, RincidenceMatrix, RarealDataAvg, Rflag_mass, Rflag_parabolic, Rflag_iterative, Rmax_num_iteration, Rthreshold, Ric, Rsearch),
 	K_(RK), beta_(Rbeta), c_(Rc), u_(Ru)
 {;}
 
