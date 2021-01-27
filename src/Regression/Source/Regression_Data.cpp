@@ -148,7 +148,7 @@ void RegressionData::setObservationsTime(SEXP Robservations)
 	observations_indices_.reserve(n_obs_);
 
 	UInt count = 0;
-	locations_by_nodes_ = (locations_.nrows() == 0 && nRegions_ == 0) ? true : false;
+	locations_by_nodes_ = (locations_.nrows() == 0 && nRegions_ == 0);
 
 	for(auto i=0;i<n_obs_;++i)
 	{

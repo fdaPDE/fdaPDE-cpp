@@ -1,7 +1,7 @@
 #ifndef __REGRESSION_DATA_IMP_H__
 #define __REGRESSION_DATA_IMP_H__
 
-
+// -- GAM CONSTRUCTORS --
 // Laplace
 template<typename RegressionHandler>
 RegressionDataGAM<RegressionHandler>::RegressionDataGAM(SEXP Rlocations, SEXP RbaryLocations, SEXP Robservations, SEXP Rorder,

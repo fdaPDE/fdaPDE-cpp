@@ -9,8 +9,6 @@
 template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
 SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & optimizationData, SEXP Rmesh, SEXP Rmesh_time)
 {
-	constexpr UInt SPLINE_DEGREE=MixedSplineRegression<InputHandler>::SPLINE_DEGREE;
-
 	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh, regressionData.getSearch());//! load the mesh
 	UInt n_time = Rf_length(Rmesh_time);
 	std::vector<Real> mesh_time(n_time);
@@ -18,7 +16,7 @@ SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & 
 	{
 		mesh_time[i] = REAL(Rmesh_time)[i];
 	}
-	MixedFERegression<InputHandler> regression(mesh_time, regressionData, optimizationData, mesh.num_nodes(), SPLINE_DEGREE);//! load data in a C++ object
+	MixedFERegression<InputHandler> regression(mesh_time, regressionData, optimizationData, mesh.num_nodes());//! load data in a C++ object
 
 	regression.preapply(mesh); //! solve the problem (compute the _solution, _dof, _GCV, _beta)
 

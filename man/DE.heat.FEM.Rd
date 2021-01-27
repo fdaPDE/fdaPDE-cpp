@@ -4,8 +4,8 @@
 \alias{DE.heat.FEM}
 \title{Density initialization}
 \usage{
-DE.heat.FEM(data, FEMbasis, lambda, heatStep=0.1, heatIter=500, 
-                   init="Heat", nFolds=5, search = 2)
+DE.heat.FEM(data, FEMbasis, lambda=NULL, heatStep=0.1, heatIter=500, 
+                   init="Heat", nFolds=5, search = "tree")
 }
 \arguments{
 \item{data}{A matrix of dimensions #observations-by-ndim. Data are locations: each row corresponds to one point, 
@@ -25,8 +25,7 @@ and, if ndim=3, the third column corresponds to the \code{z}-coordinates.}
 \item{nFolds}{An integer specifying the number of folds used in cross validation techinque. It is useful only 
 for the case \code{init = 'CV'}.}
 
-\item{search}{An integer specifying the search algorithm to use. It is either 1 (Naive search algorithm) or 2 (Tree search algorithm).
-The default is 2.}
+\item{search}{a flag to decide the search algorithm type (tree or naive or walking search algorithm).}
 }
 \value{
 If \code{init = 'Heat'} it returns a matrix in which each column contains the initial vector 

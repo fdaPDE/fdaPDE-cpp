@@ -2,7 +2,7 @@
 #define __SOLUTION_BUILDERS_IMP_H__
 
 template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
-SEXP Solution_Builders::build_solution_plain_regression(const MatrixXr & solution, const output_Data & output, const MeshHandler<ORDER, mydim, ndim> & mesh , const InputHandler & regressionData )
+SEXP Solution_Builders::build_solution_plain_regression(const MatrixXr & solution, const output_Data & output, const MeshHandler<ORDER, mydim, ndim> & mesh , const InputHandler & regressionData, const MixedFERegression<InputHandler>& regression)
 {
         // ---- Preparation ----
         // Prepare regresion coefficients space
@@ -33,8 +33,8 @@ SEXP Solution_Builders::build_solution_plain_regression(const MatrixXr & solutio
                 code_string = 2;
         }
 
-        const MatrixXr & barycenters = regressionData.getBarycenters();
-        const VectorXi & elementIds = regressionData.getElementIds();
+        const MatrixXr & barycenters = (regressionData.isLocationsByBarycenter()) ? regressionData.getBarycenters() : regression.getBarycenters();
+        const VectorXi & elementIds = (regressionData.isLocationsByBarycenter()) ? regressionData.getElementIds() : regression.getElementIds();
 
         // ---- Copy results in R memory ----
         SEXP result = NILSXP;  // Define emty term --> never pass to R empty or is "R session aborted"
