@@ -119,12 +119,18 @@ class MixedFERegressionBase
 		void getRightHandData(VectorXr& rightHandData);
 		//! A method which builds all the matrices needed for assembling matrixNoCov_
 		void buildSpaceTimeMatrices();
-        //! A method which builds Psi_tilde and the modifications for the rhs (Iterative method)
+        //! A method which compute the tensorized psi for iterative method
         void buildSpaceTimeMatrices_iterative();
 		//! A method computing dofs in case of exact GCV, it is called by computeDegreesOfFreedom
 		void computeDegreesOfFreedomExact(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT);
+        //! Exact GCV: iterative method
+		void computeDOFExact_iterative(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT);
+
+
 		//! A method computing dofs in case of stochastic GCV, it is called by computeDegreesOfFreedom
 		void computeDegreesOfFreedomStochastic(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT);
+		//! Stochastic GCV: iterative method
+        void computeDOFStochastic_iterative(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT);
 		//! A method computing GCV from the dofs
 		void computeGeneralizedCrossValidation(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT);
 
@@ -133,8 +139,7 @@ class MixedFERegressionBase
 		void buildSystemMatrix(Real lambda);
 		//! Space-time version
 		void buildSystemMatrix(Real lambdaS, Real lambdaT);
-        //! iterative version
-        void buildSystemMatrix_iter_cov(Real lambdaS, Real lambdaT, UInt time_index);
+
 
 		// -- FACTORIZER --
 	  	//! A function to factorize the system, using Woodbury decomposition when there are covariates
@@ -144,6 +149,10 @@ class MixedFERegressionBase
 		//! A function which solves the factorized system
 		template<typename Derived>
 		MatrixXr system_solve(const Eigen::MatrixBase<Derived>&);
+
+        //! A function which solves the factorized system in presence of covariates
+        template<typename Derived>
+        MatrixXr solve_covariates_iter(const Eigen::MatrixBase<Derived>&, UInt time_index);
 
         // -- methods for the iterative method --
         //! A method to initialize f
