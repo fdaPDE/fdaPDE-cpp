@@ -1,4 +1,4 @@
-# fdaPDE: iterative methos for ST-PDE
+# fdaPDE: iterative method for ST-PDE
 
 
 This repository contains the development version of fdaPDE package. In particular it contains the implementation of an iterative method for ST-PDE models.
