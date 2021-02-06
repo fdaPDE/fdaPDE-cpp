@@ -1505,7 +1505,7 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply_iterative(void) {
                 i++;
             }
 
-            Rprintf("Solution found after %d iterations (max number of iterations: %d)\n", i, regressionData_.get_maxiter());
+            Rprintf("Solution found after %d iterations (max number of iterations: %d)\n", i, (regressionData_.get_maxiter()+1));
 
             if(optimizationData_.get_loss_function()=="GCV" && (!isGAMData&&regressionData_.isSpaceTime()))
             {
