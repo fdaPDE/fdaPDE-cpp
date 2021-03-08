@@ -57,7 +57,7 @@ class  RegressionData
 		UInt search_; // search algorith type
 
         // Iterative method
-        UInt max_num_iterations_; //!< Max number of iterations allowed.
+        UInt max_num_iterations_; //!< Max number of iterations allowed
         Real threshold_; //!< Limit in difference among J_k and J_k+1 for which we stop iterative method.
 
 		// -- SETTERS --
@@ -123,7 +123,7 @@ class  RegressionData
 		const std::vector<UInt> * getObservationsNA(void) const {return &observations_na_;}
         //! A method returning the maximum iteration for the iterative method
         const UInt get_maxiter() const {return max_num_iterations_;}
-        //! A method returning the treshold
+        //! A method returning the treshold (iterative methos)
         const Real get_treshold() const {return threshold_;}
 
 		// Locations [[GM passng to const pointers??]]
@@ -167,7 +167,7 @@ class  RegressionData
         bool isSpaceTime(void) const {return flag_SpaceTime_;}
 		bool getFlagMass(void) const {return flag_mass_;}
 		bool getFlagParabolic(void) const {return flag_parabolic_;}
-        bool getFlagIterative(void) const {return flag_iterative_;}    //!<True if iterative-method for space time smoothing is selected
+        bool getFlagIterative(void) const {return flag_iterative_;}
 		bool getisGAM(void) const {return isGAM;}
 
 		// Search

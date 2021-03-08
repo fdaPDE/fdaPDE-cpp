@@ -52,7 +52,7 @@ class MixedFERegressionBase
 		SpMat 		R0_lambda;
 		SpMat 		R1_lambda;
 		SpMat 		psi_;  		//!< Psi matrix of the model
-		SpMat       psi_mini;   //!< (Marti) It saves the psi_before the tensor product
+		SpMat       psi_mini;   //!< Psi only space version
 		SpMat 		psi_t_;  	//!< Psi ^T matrix of the model
 		SpMat 		Ptk_; 		//!< kron(Pt,IN) (separable version)
 		SpMat 		LR0k_; 		//!< kron(L,R0) (parabolic version)
@@ -84,9 +84,9 @@ class MixedFERegressionBase
 		MatrixXv _beta;			//!< A Eigen::MatrixXv storing the computed beta coefficients
 
 		// members for the iterative method
-        MatrixXr _solution_k_;       //!< A Eigen::MatrixXr: Stores the solution for each time instant
-        VectorXr _solution_f_old_;  //!< A Eigen::VectorXr: Stores the old system solution
-        VectorXr _rightHandSide_k_; //!< A Eigen::VectorXr: Stores the update system right hand side
+        MatrixXr _solution_k_;       //!< A Eigen::MatrixXr: Stores the solution for each time instant (iterative method)
+        VectorXr _solution_f_old_;  //!< A Eigen::VectorXr: Stores the old system solution (iterative method)
+        VectorXr _rightHandSide_k_; //!< A Eigen::VectorXr: Stores the update system right hand side (iterative method)
 
         //Flag to avoid the computation of R0, R1, Psi_ onece already performed
 		bool isAComputed   = false;
@@ -156,7 +156,7 @@ class MixedFERegressionBase
 		template<typename Derived>
 		MatrixXr system_solve(const Eigen::MatrixBase<Derived>&);
 
-        //! A function which solves the factorized system in presence of covariates
+        //! A function which solves the factorized system in presence of covariates (iterative method)
         template<typename Derived>
         MatrixXr solve_covariates_iter(const Eigen::MatrixBase<Derived>&, UInt time_index);
 
@@ -169,7 +169,7 @@ class MixedFERegressionBase
         bool stopping_criterion(UInt& index, Real J, Real J_old);
         //!A method that computes and return the current value of the functional J. It is divided in parametric and non parametric part.
         Real compute_J(UInt& lambdaS_index, UInt& lambdaT_index);
-        //!  A methdd that update the system rhs for each time instant
+        //!  A methdd that update the system rhs for each time instant (iterative method)
         void update_rhs(UInt& time_index, Real lambdaS, Real lambdaT, UInt& lambdaS_index, UInt& lambdaT_index);
 	public:
 
