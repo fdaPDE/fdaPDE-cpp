@@ -80,8 +80,8 @@ private:
   std::vector<bool> duplicates;
   std::vector<UInt> distinct_indexes;
 
-  const RNumericMatrix nodes;
   const RIntegerMatrix elements;
+  const RNumericMatrix nodes;
 
   const bool isTriangleContainer;
 

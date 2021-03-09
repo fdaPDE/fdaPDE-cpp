@@ -93,6 +93,7 @@ class MixedFERegressionBase
 		bool isPsiComputed = false;
 		bool isR0Computed  = false;
 		bool isR1Computed  = false;
+		bool isUVComputed  = false;
 
 		bool isSpaceVarying = false; //!< used to distinguish whether to use the forcing term u in apply() or not
 		bool isGAMData;
@@ -164,7 +165,7 @@ class MixedFERegressionBase
         //! A method to initialize f
         void initialize_f(Real lambdaS, UInt& lambdaS_index, UInt& lambdaT_index);
          //! A method to initialize g
-        void initialize_g(Real lambdaT, UInt& lambdaS_index, UInt& lambdaT_index);
+        void initialize_g(Real lambdaS, Real lambdaT, UInt& lambdaS_index, UInt& lambdaT_index);
         //! A method that stops the iterative algorithm based on difference between functionals J_k J_k+1 or n_iterations > max_num_iterations .
         bool stopping_criterion(UInt& index, Real J, Real J_old);
         //!A method that computes and return the current value of the functional J. It is divided in parametric and non parametric part.
