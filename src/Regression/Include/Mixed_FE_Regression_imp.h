@@ -907,6 +907,7 @@ void MixedFERegressionBase<InputHandler>::computeDOFExact_iterative(UInt output_
           X1 =  miniA_.asDiagonal() * Q_k;
           }
 
+      psi_mini = psi_.block(k * nlocations, k* N_, nlocations, N_);
       X1=psi_mini.transpose()*X1*psi_mini;
 
       if (isRcomputed_ == false)
@@ -1087,6 +1088,7 @@ void MixedFERegressionBase<InputHandler>::computeDOFStochastic_iterative(UInt ou
     }
     for(UInt k=0; k<M_; ++k){
         // Define the first right hand side : | I  0 |^T * psi^T * A * Q * u
+        psi_mini = psi_.block(k * nlocations, k* N_, nlocations, N_);
         MatrixXr b = MatrixXr::Zero(2*N_,u.cols());
 					MatrixXr Qu=LeftMultiplybyQ(u);
         if (regressionData_.getNumberOfRegions() == 0){
@@ -1399,6 +1401,7 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply_iterative(void) {
     UInt nnodes = N_ * M_; // Define number of space-times nodes
     Real delta = mesh_time_[1] - mesh_time_[0]; // Time interval
     const VectorXr *obsp = regressionData_.getObservations(); // Get observations
+    UInt nlocations = regressionData_.isSpaceTime() ? regressionData_.getNumberofSpaceObservations() : regressionData_.getNumberofObservations();
 
     UInt sizeLambdaS = optimizationData_.get_size_S();
     if (!regressionData_.isSpaceTime() && !isGAMData)
@@ -1479,7 +1482,7 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply_iterative(void) {
                     if (regressionData_.getObservationsNA()->size()!= 0)
                     //modifying psi_mini to take care of missing values
                     {
-                        psi_mini = psi_.block(k * N_, k* N_, N_, N_);
+                        psi_mini = psi_.block(k * nlocations, k* N_, nlocations, N_);
                         DMat_ = psi_mini.transpose()* psi_mini;
                         buildSystemMatrix(lambdaS, lambdaT);
                         if (regressionData_.getDirichletIndices()->size() != 0)
@@ -1543,6 +1546,7 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply_iterative(void) {
 template<typename InputHandler>
 void MixedFERegressionBase<InputHandler>::initialize_f(Real lambdaS, UInt& lambdaS_index, UInt& lambdaT_index) {
     UInt nnodes = N_ * M_; // Define number of space-times nodes
+    UInt nlocations = regressionData_.isSpaceTime() ? regressionData_.getNumberofSpaceObservations() : regressionData_.getNumberofObservations();
     if (regressionData_.getObservationsNA()->size() == 0) {
         buildSystemMatrix(lambdaS);
         // Applying boundary conditions if necessary
@@ -1556,7 +1560,7 @@ void MixedFERegressionBase<InputHandler>::initialize_f(Real lambdaS, UInt& lambd
         if (regressionData_.getObservationsNA()->size()!= 0)
             //modifying psi_mini to take care of missing values
         {
-            psi_mini = psi_.block(k * N_, k* N_, N_, N_);
+            psi_mini = psi_.block(k * nlocations, k* N_, nlocations, N_);
             DMat_ = psi_mini.transpose()* psi_mini;
             buildSystemMatrix(lambdaS);
             if (regressionData_.getDirichletIndices()->size() != 0)
@@ -1590,7 +1594,7 @@ void MixedFERegressionBase<InputHandler>::initialize_g(Real lambdaS, Real lambda
         if (regressionData_.getObservationsNA()->size()!= 0)
             //modifying psi_mini to take care of missing values
         {
-            psi_mini = psi_.block((k - 1) * N_, (k - 1) * N_, N_, N_);
+            psi_mini = psi_.block((k - 1) * nlocations, (k - 1) * N_, nlocations, N_);
             DMat_ = psi_mini.transpose()* psi_mini;
         }
 
@@ -1666,14 +1670,14 @@ Real MixedFERegressionBase<InputHandler>::compute_J(UInt& lambdaS_index, UInt& l
     Real J_MSE = 0;
     Real J_reg = 0;
     Real lambdaS = (optimizationData_.get_lambda_S())[lambdaS_index];
-    const VectorXr *obsp = regressionData_.getObservations();
     UInt nlocations = regressionData_.isSpaceTime() ? regressionData_.getNumberofSpaceObservations() : regressionData_.getNumberofObservations();
+    const VectorXr *obsp = regressionData_.getObservations();
 
     if (regressionData_.getCovariates()->rows() != 0) {
         MatrixXr W(*(this->regressionData_.getCovariates()));
         for (UInt k = 0; k < M_; ++k) {
+            psi_mini = psi_.block(k  * nlocations, k * N_, nlocations, N_);
             MatrixXr W_k_ = W.block(k * nlocations,0,nlocations ,W.cols());
-
             J_MSE += ((*obsp).segment(k * nlocations,nlocations) - psi_mini * _solution(lambdaS_index, lambdaT_index).segment(k * N_, N_)-  W_k_ * _beta(lambdaS_index, lambdaT_index)).transpose() *
                      ((*obsp).segment(k * nlocations,nlocations) - psi_mini * _solution(lambdaS_index, lambdaT_index).segment(k * N_, N_)- W_k_ * _beta(lambdaS_index, lambdaT_index));
             J_reg += lambdaS * (_solution(lambdaS_index, lambdaT_index).segment(N_*M_ + k  * N_, N_)).transpose() * ( _solution(lambdaS_index, lambdaT_index).segment(N_*M_ + k * N_, N_));
@@ -1681,7 +1685,7 @@ Real MixedFERegressionBase<InputHandler>::compute_J(UInt& lambdaS_index, UInt& l
     }
     else {
         for (UInt k = 0; k < M_; ++k) {
-
+            psi_mini = psi_.block(k * nlocations, k * N_, N_, N_);
             J_MSE += ((*obsp).segment(k * nlocations,nlocations) -
                     psi_mini * _solution(lambdaS_index, lambdaT_index).segment(k * N_, N_)).transpose() *
                      ((*obsp).segment(k * nlocations,nlocations) - psi_mini *  _solution(lambdaS_index, lambdaT_index).segment(k * N_, N_));

@@ -20,8 +20,6 @@ checkSmoothingParameters_time<-function(locations = NULL, time_locations=NULL, o
   {
     if(any(is.na(locations)))
       stop("Missing values not admitted in 'locations'.")
-    if(any(is.na(observations)))
-      stop("Missing values not admitted in 'observations' when 'locations' are specified.")
   }
 
   if(is.null(time_locations) && is.null(time_mesh))
