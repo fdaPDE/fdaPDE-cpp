@@ -8,7 +8,7 @@ class FiniteElement;
 enum class PDEParameterOptions;
 
 template<PDEParameterOptions OPTION>
-struct Diffusion;
+class Diffusion;
 
 
 struct Stiff {

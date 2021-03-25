@@ -1,6 +1,7 @@
-# fdaPDE
+# fdaPDE: iterative method for ST-PDE
 
-This repository contains the development version of fdaPDE package. In particular it contains the possibility of using iterative optimization methods (Newton's methods) to find the best smoothing parameter from the minimization of the GCV. 
+
+This repository contains the development version of fdaPDE package. In particular it contains the implementation of an iterative method for ST-PDE models.
 
 New features wrt CRAN: smooth regression for manifold and volumetric domains, also with areal data. Smooth fPCA over 2D, 2.5D and 3D domains, also with areal data.
 
@@ -18,13 +19,13 @@ Compiled in Win RStudio, Ubuntu using g++ compiler and in macOS: for the precise
 
 /data contains the data to run the tests in /tests.
 
-/tests contains the test to be run: smooth.FEM.2D.tests, smooth.FEM.2.5D.tests.R, smooth.FEM.3D.tests.R. 
+/tests contains the test to be run: smooth.FEM.2D.tests, smooth.FEM.2.5D.tests.R, smooth.FEM.3D.tests.R.  In particular for the iterative method:   smooth.FEM.time.tests.R
 ## Installation:
 Two different methods are proposed in order to install the package in the R environment.  
 Download the `.zip` file from the repository, unzip it, and for the installation choose one of the two following methods:  
 
 - R console:
-        ```install.packages("/path/to/PACS_merettipoiatti-master", type='source', repos=NULL)```
+        ```install.packages("/path/to/fdaPDE_Massardi_Spaziani-master", type='source', repos=NULL)```
 
 - From the Terminal: 
         ```$ R CMD build <path to folder to be installed>```     

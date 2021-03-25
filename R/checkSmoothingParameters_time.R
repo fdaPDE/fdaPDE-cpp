@@ -1,4 +1,4 @@
-checkSmoothingParameters_time<-function(locations = NULL, time_locations=NULL, observations, FEMbasis, time_mesh = NULL, covariates = NULL, PDE_parameters=NULL, BC = NULL, incidence_matrix = NULL, areal.data.avg = TRUE, FLAG_MASS = FALSE, FLAG_PARABOLIC = FALSE, IC = NULL, search, bary.locations = NULL, optim, lambdaS = NULL, lambdaT = NULL, DOF.stochastic.realizations = 100, DOF.stochastic.seed = 0, DOF.matrix = NULL, GCV.inflation.factor = 1, lambda.optimization.tolerance = 0.05)
+checkSmoothingParameters_time<-function(locations = NULL, time_locations=NULL, observations, FEMbasis, time_mesh = NULL, covariates = NULL, PDE_parameters=NULL, BC = NULL, incidence_matrix = NULL, areal.data.avg = TRUE, FLAG_MASS = FALSE, FLAG_PARABOLIC = FALSE, FLAG_ITERATIVE = FALSE, threshold, max.steps, IC = NULL, search, bary.locations = NULL, optim, lambdaS = NULL, lambdaT = NULL, DOF.stochastic.realizations = 100, DOF.stochastic.seed = 0, DOF.matrix = NULL, GCV.inflation.factor = 1, lambda.optimization.tolerance = 0.05)
 {
   #################### Parameter Check #########################
   
@@ -20,8 +20,6 @@ checkSmoothingParameters_time<-function(locations = NULL, time_locations=NULL, o
   {
     if(any(is.na(locations)))
       stop("Missing values not admitted in 'locations'.")
-    if(any(is.na(observations)))
-      stop("Missing values not admitted in 'observations' when 'locations' are specified.")
   }
 
   if(is.null(time_locations) && is.null(time_mesh))
@@ -100,6 +98,20 @@ checkSmoothingParameters_time<-function(locations = NULL, time_locations=NULL, o
     stop("FLAG_PARABOLIC required;  is NULL.")
   if(!is.logical(FLAG_PARABOLIC))
     stop("'FLAG_PARABOLIC' is not logical")
+  
+  if (is.null(FLAG_ITERATIVE))
+    stop("FLAG_ITERATIVE required;  is NULL.")
+  if(!is.logical(FLAG_ITERATIVE))
+    stop("'FLAG_ITERATIVE' is not logical")
+  
+  if(FLAG_PARABOLIC==FALSE & FLAG_ITERATIVE==TRUE)
+    stop("The iterative method cannot be chosen for the separable case")
+  
+  # Check max.steps and threshold for the iterative method 
+  if(!all.equal(max.steps, as.integer(max.steps)) || max.steps <= 0 )
+    stop("'max.steps' must be a positive integer.")
+  if( !is.numeric(threshold) || threshold <= 0)
+    stop("'threshold' must be a real positive")
   
   
   # Check the locations in 'bary.locations' and 'locations' are the same

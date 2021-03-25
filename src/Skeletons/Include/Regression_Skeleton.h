@@ -119,7 +119,7 @@ std::pair<MatrixXr, output_Data> optimizer_method_selection(CarrierType & carrie
 				solution.col(j) = carrier.apply(carrier.get_opt_data()->get_lambda_S()[j]);
 			}
 			optim.combine_output_prediction(solution.topRows(solution.rows()/2).col(j),output,j);
-			if(carrier.get_model()->getBeta().cols()>0 & carrier.get_model()->getBeta().rows()>0)
+			if(carrier.get_model()->getBeta().cols()>0 && carrier.get_model()->getBeta().rows()>0)
 				betas.coeffRef(j,0)=carrier.get_model()->getBeta().coeffRef(0,0);
 		}
 

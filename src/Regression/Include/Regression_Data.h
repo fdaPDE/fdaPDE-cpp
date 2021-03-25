@@ -20,7 +20,8 @@ class  RegressionData
 		UInt 		   nRegions_; 			//!< For areal data.
 		bool 		   arealDataAvg_; 		//!< Is areal data averaged ?
 		VectorXr	   WeightsMatrix_; 		//!< Weighted regression.
-		bool               isGAM = false;
+		bool           isGAM = false;
+
 
 	private:
 		std::vector<UInt> observations_indices_;
@@ -49,12 +50,15 @@ class  RegressionData
 		// Areal data
 		MatrixXi incidenceMatrix_;
 
-
 		bool flag_mass_;				//!< Mass penalization, only for separable version (flag_parabolic_==FALSE)
 		bool flag_parabolic_;
+		bool flag_iterative_;     //!<True if iterative-method for space time smoothing is selected
 		bool flag_SpaceTime_; // TRUE if space time smoothing
-
 		UInt search_; // search algorith type
+
+        // Iterative method
+        UInt max_num_iterations_; //!< Max number of iterations allowed
+        Real threshold_; //!< Limit in difference among J_k and J_k+1 for which we stop iterative method.
 
 		// -- SETTERS --
 		void setObservations(SEXP Robservations);
@@ -86,12 +90,14 @@ class  RegressionData
 		        \param Rsearch an R-integer to decide the search algorithm type (tree or naive or walking search algorithm).
 		        \param Rtune an R-double parameter used in the computation of the GCV. The default value is 1.
 		        \param RarealDataAvg an R boolean indicating whether the areal data are averaged or not.
+
+
 		*/
 		explicit RegressionData(SEXP Rlocations, SEXP RbaryLocations, SEXP Robservations, SEXP Rorder, SEXP Rcovariates,
 			SEXP RBCIndices, SEXP RBCValues, SEXP RincidenceMatrix, SEXP RarealDataAvg, SEXP Rsearch);
 
 		explicit RegressionData(SEXP Rlocations, SEXP RbaryLocations, SEXP Rtime_locations, SEXP Robservations, SEXP Rorder, SEXP Rcovariates,
-			SEXP RBCIndices, SEXP RBCValues, SEXP RincidenceMatrix, SEXP RarealDataAvg, SEXP Rflag_mass, SEXP Rflag_parabolic, SEXP Ric, SEXP Rsearch);
+			SEXP RBCIndices, SEXP RBCValues, SEXP RincidenceMatrix, SEXP RarealDataAvg, SEXP Rflag_mass, SEXP Rflag_parabolic, SEXP Rflag_iterative,SEXP Rmax_num_iteration, SEXP Rthreshold, SEXP Ric, SEXP Rsearch);
 
 		explicit RegressionData(Real* locations, UInt n_locations, UInt ndim, VectorXr & observations, UInt order, MatrixXr & covariates,
 			 VectorXr & WeightsMatrix, std::vector<UInt> & bc_indices, std::vector<Real> & bc_values,  MatrixXi & incidenceMatrix, bool arealDataAvg, UInt search);
@@ -111,9 +117,14 @@ class  RegressionData
 		//! A method returning the number of space observations
 		UInt getNumberofSpaceObservations(void) const {return observations_.size()/time_locations_.size();}
 		//! A method returning the number of time observations
+
 		UInt getNumberofTimeObservations(void) const {return time_locations_.size();}
 		const std::vector<UInt> * getObservationsIndices(void) const {return &observations_indices_;}
 		const std::vector<UInt> * getObservationsNA(void) const {return &observations_na_;}
+        //! A method returning the maximum iteration for the iterative method
+        const UInt get_maxiter() const {return max_num_iterations_;}
+        //! A method returning the treshold (iterative methos)
+        const Real get_treshold() const {return threshold_;}
 
 		// Locations [[GM passng to const pointers??]]
 		//! A method returning the locations of the observations
@@ -153,9 +164,10 @@ class  RegressionData
 		//! A method returning a const pointer to the matrix of weights
 		const VectorXr * getWeightsMatrix(void) const {return &WeightsMatrix_;}
 
-		bool isSpaceTime(void) const {return flag_SpaceTime_;}
+        bool isSpaceTime(void) const {return flag_SpaceTime_;}
 		bool getFlagMass(void) const {return flag_mass_;}
 		bool getFlagParabolic(void) const {return flag_parabolic_;}
+        bool getFlagIterative(void) const {return flag_iterative_;}
 		bool getisGAM(void) const {return isGAM;}
 
 		// Search
@@ -198,7 +210,7 @@ class  RegressionDataElliptic:public RegressionData
 
 		explicit RegressionDataElliptic(SEXP Rlocations, SEXP RbaryLocations, SEXP Rtime_locations, SEXP Robservations, SEXP Rorder,
 			SEXP RK, SEXP Rbeta, SEXP Rc, SEXP Rcovariates, SEXP RBCIndices, SEXP RBCValues,
-			SEXP RincidenceMatrix, SEXP RarealDataAvg, SEXP Rflag_mass, SEXP Rflag_parabolic, SEXP Ric, SEXP Rsearch);
+			SEXP RincidenceMatrix, SEXP RarealDataAvg, SEXP Rflag_mass, SEXP Rflag_parabolic, SEXP Rflag_iterative, SEXP Rmax_num_iteration, SEXP Rthreshold, SEXP Ric, SEXP Rsearch);
 
 		Diffusion<PDEParameterOptions::Constant> const & getK() const {return K_;}
 		Advection<PDEParameterOptions::Constant> const & getBeta() const {return beta_;}
@@ -242,7 +254,7 @@ class RegressionDataEllipticSpaceVarying:public RegressionData
 
 		explicit RegressionDataEllipticSpaceVarying(SEXP Rlocations, SEXP RbaryLocations, SEXP Rtime_locations, SEXP Robservations, SEXP Rorder,
 			SEXP RK, SEXP Rbeta, SEXP Rc, SEXP Ru, SEXP Rcovariates, SEXP RBCIndices, SEXP RBCValues, SEXP RincidenceMatrix, SEXP RarealDataAvg,
-			SEXP Rflag_mass, SEXP Rflag_parabolic, SEXP Ric, SEXP Rsearch);
+			SEXP Rflag_mass, SEXP Rflag_parabolic, SEXP Rflag_iterative, SEXP Rmax_num_iteration, SEXP Rthreshold, SEXP Ric, SEXP Rsearch);
 
 		Diffusion<PDEParameterOptions::SpaceVarying> const & getK() const {return K_;}
 		Advection<PDEParameterOptions::SpaceVarying> const & getBeta() const {return beta_;}
