@@ -1,11 +1,9 @@
-# fdaPDE: iterative method for ST-PDE
+# fdaPDE
 
 
-This repository contains the development version of fdaPDE package. In particular it contains the implementation of an iterative method for ST-PDE models.
+This repository contains the development version of fdaPDE package. 
 
-New features wrt CRAN: smooth regression for manifold and volumetric domains, also with areal data. Smooth fPCA over 2D, 2.5D and 3D domains, also with areal data.
-
-Bugs corrected in the areal data smoothing.
+New features wrt CRAN: smooth regression for manifold and volumetric domains, also with areal data. Smooth fPCA over 2D, 2.5D and 3D domains, also with areal data. Smooth regression for space-time problems.
 
 smooth.FEM.basis, smooth.PDE.FEM.basis, smooth.FEM.PDE.sv.basis are deprecated, smooth.FEM has to be used in all cases.
 
@@ -25,7 +23,7 @@ Two different methods are proposed in order to install the package in the R envi
 Download the `.zip` file from the repository, unzip it, and for the installation choose one of the two following methods:  
 
 - R console:
-        ```install.packages("/path/to/fdaPDE_Massardi_Spaziani-master", type='source', repos=NULL)```
+        ```install.packages("/path/to/fdaPDE", type='source', repos=NULL)```
 
 - From the Terminal: 
         ```$ R CMD build <path to folder to be installed>```     
