@@ -322,6 +322,16 @@ class Temporal
 };
 //----------------------------------------------------------------------------//
 
+class Separable : public Temporal 
+{
+
+};
+
+class Parabolic : public Temporal 
+{
+
+};
+
 // *** CARRIER BUILDER ***
 
 
