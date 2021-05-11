@@ -307,6 +307,7 @@ class Forced
 
                 // SETTERS
                 inline void set_up(const VectorXr * up_) {this->up = up_;}      //!< Setter of up \param up_ new up
+        
 };
 
 //! Temporal extension for Carrier
@@ -319,18 +320,79 @@ class Forced
 class Temporal
 {
         // [[ TO BE IMPLEMENTED]]
+    public:
+                Temporal() = default;
+                virtual ~Temporal() = default;
 };
 //----------------------------------------------------------------------------//
 
-class Separable : public Temporal 
+class Separable : public Temporal
 {
+    private:
+        const SpMat * Ptkp;     // pointer to Ptk_
+
+    public:
+                // CONSTRUCTORS
+                //! Default constructor
+                Separable() = default;
+
+                //! Constructor taking parameters
+                /*!
+                 \param Ptkp_ pointer to Ptkp
+                */
+                Separable(const SpMat * Ptkp_): Ptkp(Ptkp_) {};
+
+                //! Universal setter of the class: fills all parabolic term parameters
+                /*!
+                 \param Ptkp_ pointer to Ptkp
+                */
+                inline void set_all_parabolic(const SpMat * Ptkp_)
+                {
+                        set_Ptkp(Ptkp_);
+                }
+
+                // GETTERS
+                inline const SpMat * get_Ptkp(void) const {return this->Ptkp;}   //!< Getter of Ptkp \return Ptkp
+
+                // SETTERS
+                inline void set_Ptkp(const SpMat * Ptkp_) {this->Ptkp = Ptkp_;}      //!< Setter of Ptkp \param Ptkp_ new Ptkp
+};
+
+class Parabolic : public Temporal
+{
+    private:
+        const SpMat * LR0kp;    // pointer to LR0k_
+
+    public:
+                // CONSTRUCTORS
+                //! Default constructor
+                Parabolic() = default;
+
+                //! Constructor taking parameters
+                /*!
+                 \param LR0kp_ pointer to LR0kp
+                */
+                Parabolic(const SpMat * LR0kp_): LR0kp(LR0kp_) {};
+
+                //! Universal setter of the class: fills all parabolic term parameters
+                /*!
+                 \param LR0kp_ pointer to LR0kp
+                */
+                inline void set_all_parabolic(const SpMat * LR0kp_)
+                {
+                        set_LR0kp(LR0kp_);
+                }
+
+                // GETTERS
+                inline const SpMat * get_LR0kp(void) const {return this->LR0kp;}   //!< Getter of LR0kp \return LR0kp
+
+                // SETTERS
+                inline void set_LR0kp(const SpMat * LR0kp_) {this->LR0kp = LR0kp_;}      //!< Setter of LR0kp \param LR0kp_ new LR0kp
+
+
 
 };
 
-class Parabolic : public Temporal 
-{
-
-};
 
 // *** CARRIER BUILDER ***
 
@@ -389,6 +451,8 @@ class CarrierBuilder
                 {
                         car.set_all_forced(mc.getu_());
                 }
+
+   
 
         public:
                 //! Plain pointwise Carrier static builder
@@ -454,6 +518,8 @@ class CarrierBuilder
 
                         return car;
                 }
+
+
 };
 
 #endif

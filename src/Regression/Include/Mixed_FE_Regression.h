@@ -236,8 +236,12 @@ class MixedFERegressionBase
 		const VectorXr *	getrhs_(void) const {return &this->_rightHandSide;}
 		//! A method returning the forcing term
 		const VectorXr *	getu_(void) const {return &this->rhs_ft_correction_;}
-		//! A method returning the number of nodes of the mesh
+		//! A method returning Ptk_
+		const SpMat *  getPtk_(void) const {return &this->Ptk_;}
+		//! A method returning LR0k_
+		const SpMat *  getLR0k_(void) const {return &this->LR0k_;}
 
+		//! A method returning the number of nodes of the mesh
 		UInt getnnodes_(void) const {return this->N_;}
 		bool isSV(void) const {return this->isSpaceVarying;}
 		bool isIter(void) const {return this->isIterative;}
