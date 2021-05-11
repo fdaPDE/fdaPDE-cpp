@@ -214,6 +214,22 @@ class Carrier: public Extensions...
                         return (this->model->apply())(0,0);
                 }
 
+                //! Method to the system given lambdaS and lambdaT [right hand side is the usual of the problem]
+                /*!
+                 \param lambdaS the optimization parameter with which to build the system matrix
+                 \param lambdaT the optimization parameter with which to build the system matrix
+                 \return the solution of the system
+                 \note apply is called here in order not to make the non const pointer public
+                */
+                inline MatrixXr apply(Real lambdaS, Real lambdaT)
+                {
+                        this->opt_data->set_current_lambdaS(lambdaS); // set the lambdaS value
+                        this->opt_data->set_current_lambdaT(lambdaT); // set the lambdaT value
+                        return (this->model->apply())(0,0);
+                }
+
+
+
                 //! Method to take advantage of simplified multiplication by Q
                 /*!
                  \param u the vector or matrix onto which to perform multiplication
