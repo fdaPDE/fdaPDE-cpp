@@ -346,7 +346,7 @@ class Separable : public Temporal
                 /*!
                  \param Ptkp_ pointer to Ptkp
                 */
-                inline void set_all_parabolic(const SpMat * Ptkp_)
+                inline void set_all_separable(const SpMat * Ptkp_)
                 {
                         set_Ptkp(Ptkp_);
                 }
@@ -452,7 +452,23 @@ class CarrierBuilder
                         car.set_all_forced(mc.getu_());
                 }
 
-   
+                //! Method to fill the eventual Temporal part of a temporal carrier
+                /*!
+                  \tparam Extensions... further information that has to be included into the Carrier
+                  \param car a Carrier type object to undergo the temporal setter
+                  \param data DataHandler from which to build the temporal Carrier
+                  \param mc MixedFERegressionBase<DataHandler> from which to build the temporal Carrier
+                  \param optimizationData optimization data to store in the Carrier
+                */
+                template<typename... Extensions>
+                static void set_temporal_data(Carrier<DataHandler, Extensions...> & car, const DataHandler & data, MixedFERegressionBase<DataHandler> & mc, OptimizationData & optimizationData)
+                {
+                        //set all temporal?
+                        if(TRUE)//optimizationData.getFlagParabolic())
+                            car.set_all_parabolic(mc.getLR0k_());
+                        else
+                            car.set_all_separable(mc.getPtk_());
+                }
 
         public:
                 //! Plain pointwise Carrier static builder
@@ -519,6 +535,27 @@ class CarrierBuilder
                         return car;
                 }
 
+                //! Temporal pointwise Carrier static builder
+                /*!
+                  \param data DataHandler from which to build the Carrier
+                  \param mc MixedFERegressionBase<DataHandler> from which to build the Carrier
+                  \param optimizationData optimization data to store in the Carrier
+                  \return the built Carrier
+                */
+                static Carrier<DataHandler, Temporal> build_temporal_carrier(const DataHandler & data, MixedFERegressionBase<DataHandler> & mc, OptimizationData & optimizationData)
+                {
+                        Carrier<DataHandler, Temporal> car;
+                        if(data.getFlagParabolic())
+                            car = Carrier<DataHandler, Parabolic>();
+                        else
+                            car = Carrier<DataHandler, Separable>();
+                        set_plain_data(car, data, mc, optimizationData);
+                        set_temporal_data(car, data, mc, optimizationData);
+
+                        return car;
+                }
+
+          
 
 };
 
