@@ -1280,11 +1280,17 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply(void)
 	const VectorXr * obsp = regressionData_.getObservations(); // Get observations
 
 	UInt sizeLambdaS;
-	if (!regressionData_.isSpaceTime() && !isGAMData)
+	UInt sizeLambdaT;
+	if (!isGAMData)
+	{
 	   sizeLambdaS=1;
+	   sizeLambdaT=1;
+   	}
 	else
+	{
 	   sizeLambdaS = optimizationData_.get_size_S();
-	UInt sizeLambdaT = optimizationData_.get_size_T();
+	   sizeLambdaT = optimizationData_.get_size_T();
+   	}
 
 	this->_solution.resize(sizeLambdaS,sizeLambdaT);
 	this->_dof.resize(sizeLambdaS,sizeLambdaT);
@@ -1301,14 +1307,18 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply(void)
 		for(UInt t=0; t<sizeLambdaT; ++t)
 		{
                         Real lambdaS;
-			if(!regressionData_.isSpaceTime() && !isGAMData) //at the moment only space is implemented
+                        Real lambdaT;
+			if(!isGAMData) //at the moment only space and space-time are implemented
 				{
 					lambdaS = optimizationData_.get_current_lambdaS();
+					lambdaT = optimizationData_.get_current_lambdaT();
 				}
 			else
-			 	lambdaS = (optimizationData_.get_lambda_S())[s];
-
-			Real lambdaT = (optimizationData_.get_lambda_T())[t];
+				{
+				 	lambdaS = (optimizationData_.get_lambda_S())[s];
+				 	lambdaT = (optimizationData_.get_lambda_T())[t];
+		 		}
+		 		
 			_rightHandSide = rhs;
 
 			if(isGAMData || regressionData_.isSpaceTime() || optimizationData_.get_current_lambdaS()!=optimizationData_.get_last_lS_used())
@@ -1352,7 +1362,8 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply(void)
 			// system solution
 			_solution(s,t) = this->template system_solve(this->_rightHandSide);
 
-
+			
+			//calcolo del GCV, da portare fuori per implementare griglia a livello di regression_skeleton_time
 			if(optimizationData_.get_loss_function()=="GCV" && (!isGAMData&&regressionData_.isSpaceTime()))
 			{
 				if (optimizationData_.get_DOF_evaluation()!="not_required")
@@ -1366,6 +1377,7 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply(void)
 				_dof(s,t) = -1;
 				_GCV(s,t) = -1;
 			}
+			//
 
 			// covariates computation
 			if(regressionData_.getCovariates()->rows()!=0)
@@ -1385,9 +1397,12 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply(void)
 			}
 		}
 	}
-	if(!(isGAMData||regressionData_.isSpaceTime()) && optimizationData_.get_current_lambdaS()!=optimizationData_.get_last_lS_used())
+	if(!isGAMData &&
+	(optimizationData_.get_current_lambdaS()!=optimizationData_.get_last_lS_used() ||
+	optimizationData_.get_current_lambdaS()!=optimizationData_.get_last_lS_used()))
 	{
 		optimizationData_.set_last_lS_used(optimizationData_.get_current_lambdaS());
+		optimizationData_.set_last_lT_used(optimizationData_.get_current_lambdaT());
 	}
 	_rightHandSide = rhs; // Return rhs to original status for next apply call
 

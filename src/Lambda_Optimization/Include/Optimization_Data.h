@@ -108,6 +108,7 @@ class  OptimizationData
                 inline Real get_tuning(void) const {return tuning;}                                     //!< Getter of tuning \return tuning
                 inline Real get_stopping_criterion_tol(void) const {return stopping_criterion_tol;}     //!< Getter of stopping_criterion_tol \return stopping_criterion_tol
                 inline Real get_current_lambdaS(void) const {return current_lambdaS;}                   //!< Getter of current_lambdaS \return current_lambdaS
+                inline Real get_current_lambdaT(void) const {return current_lambdaT;}                   //!< Getter of current_lambdaT \return current_lambdaT
                 inline const std::vector<Real> * get_LambdaS_vector() const {return &lambdaS_backup;}   //!< Getter of backup lamnda_S vector for GAM problems \return &lambdaS_backup
 
                 // Debugging
