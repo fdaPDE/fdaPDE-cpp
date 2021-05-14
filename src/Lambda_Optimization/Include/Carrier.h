@@ -478,14 +478,15 @@ class CarrierBuilder
                   \param mc MixedFERegressionBase<DataHandler> from which to build the temporal Carrier
                   \param optimizationData optimization data to store in the Carrier
                 */
+                
                 template<typename... Extensions>
                 static void set_temporal_data(Carrier<DataHandler, Extensions...> & car, const DataHandler & data, MixedFERegressionBase<DataHandler> & mc, OptimizationData & optimizationData)
                 {
                         //set all temporal?
-                        if(data.getFlagParabolic())
+                        //if(data.getFlagParabolic())
                             car.set_all_parabolic(mc.getLR0k_());
-                        else
-                            car.set_all_separable(mc.getPtk_());
+                        //else
+                            //car.set_all_separable(mc.getPtk_());
                 }
 
         public:
@@ -561,10 +562,9 @@ class CarrierBuilder
                   \return the built Carrier
                 */
                 
-                template<typename TemporalType>
-                static Carrier<DataHandler, TemporalType> build_temporal_carrier(const DataHandler & data, MixedFERegressionBase<DataHandler> & mc, OptimizationData & optimizationData)
+                static Carrier<DataHandler, Parabolic> build_temporal_carrier(const DataHandler & data, MixedFERegressionBase<DataHandler> & mc, OptimizationData & optimizationData)
                 {
-                        Carrier<DataHandler, TemporalType> car;
+                        Carrier<DataHandler, Parabolic> car;
                         set_plain_data(car, data, mc, optimizationData);
                         set_temporal_data(car, data, mc, optimizationData);
 
