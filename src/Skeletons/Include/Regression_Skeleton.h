@@ -159,7 +159,7 @@ std::pair<MatrixXr, output_Data> optimizer_strategy_selection(EvaluationType & o
 
 		// this will be used when grid will be correctly implemented, also for return elements
 
-		Eval_GCV<EvaluationType> eval(Fun, optr->get_lambda_S());
+		Eval_GCV<Real, Real, EvaluationType> eval(Fun, optr->get_lambda_S());
 		output_Data output = eval.Get_optimization_vectorial();
 
 		// Rprintf("WARNING: partial time after the optimization method\n");

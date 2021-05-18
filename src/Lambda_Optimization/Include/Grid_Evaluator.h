@@ -85,8 +85,8 @@ class Vec_evaluation
  \tparam Hessian image type of the Hessian of the function: if the dimension of the image is >1 (and domain >1), problems to store the hessian, it's a tensor
  \tparam Extensions input class if the computations need members already stored in a class
 */
-template <typename ...Extensions>
-class Eval_GCV: public Vec_evaluation<Real, Real, Extensions...>
+template <typename Tuple, typename Hessian, typename ...Extensions>
+class Eval_GCV: public Vec_evaluation<Tuple, Hessian, Extensions...>
 {
         protected:
                 //! Computes specific parameters needed for GCV
@@ -110,8 +110,8 @@ class Eval_GCV: public Vec_evaluation<Real, Real, Extensions...>
                 \param F_ the function wrapper F performing the evaluation
                 \param lambda_vec_ the lambda_vec, vector of lambdas to be evaluated
                 */
-                Eval_GCV(Function_Wrapper<Real, Real, Real, Real, Extensions...> & F_, const std::vector<Real> & lambda_vec_):
-                        Vec_evaluation<Real, Real, Extensions...>(F_,lambda_vec_) {};
+                Eval_GCV(Function_Wrapper<Tuple, Real, Tuple, Hessian, Extensions...> & F_, const std::vector<Tuple> & lambda_vec_):
+                        Vec_evaluation<Tuple, Hessian, Extensions...>(F_, lambda_vec_) {};
 
                 //! Function to build the output data
                 /*!
