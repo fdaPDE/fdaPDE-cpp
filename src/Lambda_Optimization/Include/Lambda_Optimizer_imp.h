@@ -19,7 +19,7 @@
  \return full output_Data struct
 */
 template<typename InputCarrier>
-output_Data GCV_Family<InputCarrier, 1>::get_output(std::pair<Real,UInt> optimal_pair, const timespec & time_count, const std::vector<Real> & GCV_v, const std::vector<Real> & lambda_v, int termination_)
+output_Data<Real> GCV_Family<InputCarrier, 1>::get_output(std::pair<Real,UInt> optimal_pair, const timespec & time_count, const std::vector<Real> & GCV_v, const std::vector<Real> & lambda_v, int termination_)
 {
         this->output.content            = "full_optimization";
         this->output.lambda_sol         = optimal_pair.first;
@@ -54,7 +54,7 @@ void GCV_Family<InputCarrier, 1>::set_output_partial(void)
  \return the full output_Data struct
 */
 template<typename InputCarrier>
-output_Data GCV_Family<InputCarrier, 1>::get_output_full(void)
+output_Data<Real> GCV_Family<InputCarrier, 1>::get_output_full(void)
 {
         return this->output;
 }
@@ -79,7 +79,7 @@ void GCV_Family<InputCarrier, 1>::set_output_partial_best(void)
  \return output_Data struct containing predictions
 */
 template<typename InputCarrier>
-void GCV_Family<InputCarrier, 1>::combine_output_prediction(const VectorXr & f_hat, output_Data & outp, UInt cols)
+void GCV_Family<InputCarrier, 1>::combine_output_prediction(const VectorXr & f_hat, output_Data<Real> & outp, UInt cols)
 {
         this->compute_z_hat_from_f_hat(f_hat);
         this->compute_eps_hat();

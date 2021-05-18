@@ -2,7 +2,7 @@
 #define __SOLUTION_BUILDERS_IMP_H__
 
 template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
-SEXP Solution_Builders::build_solution_plain_regression(const MatrixXr & solution, const output_Data & output, const MeshHandler<ORDER, mydim, ndim> & mesh , const InputHandler & regressionData, const MixedFERegression<InputHandler>& regression)
+SEXP Solution_Builders::build_solution_plain_regression(const MatrixXr & solution, const output_Data<Real> & output, const MeshHandler<ORDER, mydim, ndim> & mesh , const InputHandler & regressionData, const MixedFERegression<InputHandler>& regression)
 {
         // ---- Preparation ----
         // Prepare regresion coefficients space

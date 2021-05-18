@@ -108,7 +108,7 @@ class GCV_Family<InputCarrier, 1>: Lambda_optimizer<InputCarrier, 1>
                 Real            rmse = 0.0;             //!< Model root mean squared error
                 Real            sigma_hat_sq = 0.0;     //!< Model estimated variance of error
                 UInt            s;                      //!< Model number of observations (i.e. #locations)
-                output_Data     output;                 //!< Output, needed to be user-available, necessarily public
+                output_Data<Real>     output;                 //!< Output, needed to be user-available, necessarily public
 
                 // Degrees of freedom
                 Real            dof = 0.0;              //!< tr(S) + q, degrees of freedom of the model
@@ -157,11 +157,11 @@ class GCV_Family<InputCarrier, 1>: Lambda_optimizer<InputCarrier, 1>
         virtual Real compute_f( Real lambda) = 0;       //!< Main function, represents the gcv computation
 
                 // OUTPUT MANAGERS
-                output_Data  get_output(std::pair<Real, UInt> optimal_pair, const timespec & time_count, const std::vector<Real> & GCV_v, const std::vector<Real> & lambda_v, int termination_);
+                output_Data<Real>  get_output(std::pair<Real, UInt> optimal_pair, const timespec & time_count, const std::vector<Real> & GCV_v, const std::vector<Real> & lambda_v, int termination_);
                 void set_output_partial_best(void);
-                output_Data get_output_full(void);
+                output_Data<Real> get_output_full(void);
                 void set_output_partial(void);
-                void combine_output_prediction(const VectorXr & f_hat, output_Data & outp, UInt cols);
+                void combine_output_prediction(const VectorXr & f_hat, output_Data<Real> & outp, UInt cols);
                 //! Virtual Destuctor
         virtual ~GCV_Family(){};
 };
