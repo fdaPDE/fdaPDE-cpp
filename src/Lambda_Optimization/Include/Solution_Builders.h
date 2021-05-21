@@ -70,6 +70,9 @@ namespace Solution_Builders
         */
         template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
         static SEXP build_solution_plain_regression(const MatrixXr & solution, const output_Data<Real> & output, const MeshHandler<ORDER, mydim, ndim> & mesh, const InputHandler & regressionData, const MixedFERegression<InputHandler>& regression);
+        
+        template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
+        static SEXP build_solution_temporal_regression(const MatrixXr & solution, const output_Data<Real> & output, const MeshHandler<ORDER, mydim, ndim> & mesh, const InputHandler & regressionData, const MixedFERegression<InputHandler>& regression);
 };
 
 #include "Solution_Builders_imp.h"
