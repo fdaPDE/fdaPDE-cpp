@@ -202,7 +202,7 @@ SEXP Solution_Builders::build_solution_plain_regression(const MatrixXr & solutio
 
 
 template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
-static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr & solution, const output_Data<Real> & output, const MeshHandler<ORDER, mydim, ndim> & mesh, const InputHandler & regressionData, const MixedFERegression<InputHandler>& regression)
+static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr & solution, const output_Data<std::pair<Real, Real>> & output, const MeshHandler<ORDER, mydim, ndim> & mesh, const InputHandler & regressionData, const MixedFERegression<InputHandler>& regression)
 {
     /*
     if (regression.isIter())
@@ -213,12 +213,10 @@ static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr
     
     std::vector<Real> const & dof = output.dof;
     std::vector<Real> const & GCV = output.GCV_evals;
-    //div_t divresult = div(output.lambda_pos, output.sizeT); // from the pair index, reconstruct the original indices of LambdaS, LambdaT
-    //UInt bestLambdaS_index = divresult.quot;
-    //UInt bestLambdaT_index = divresult.rem;
-    UInt bestLambdaS = output.lambda_sol.first;
-    UInt bestLambdaT = output.lambda_sol.second;
-
+    div_t divresult = div(output.lambda_pos, output.size_T); // from the pair index, reconstruct the original indices of LambdaS, LambdaT
+    UInt bestLambdaS = divresult.quot;
+    UInt bestLambdaT = divresult.rem;
+    
     MatrixXv beta;
     if(regressionData.getCovariates()->rows()==0)
     {
@@ -236,8 +234,8 @@ static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr
     SEXP result = NILSXP;
     result = PROTECT(Rf_allocVector(VECSXP, 5+5+2));
     SET_VECTOR_ELT(result, 0, Rf_allocMatrix(REALSXP, solution.rows(), solution.cols()));
-    SET_VECTOR_ELT(result, 1, Rf_allocMatrix(REALSXP, output.sizeS, output.sizeT));
-    SET_VECTOR_ELT(result, 2, Rf_allocMatrix(REALSXP, output.sizeS, output.sizeT));
+    SET_VECTOR_ELT(result, 1, Rf_allocMatrix(REALSXP, output.size_S, output.size_T));
+    SET_VECTOR_ELT(result, 2, Rf_allocMatrix(REALSXP, output.size_S, output.size_T));
     SET_VECTOR_ELT(result, 3, Rf_allocVector(INTSXP, 2)); //best lambdas
     SET_VECTOR_ELT(result, 4, Rf_allocMatrix(REALSXP, beta(0,0).size(), beta.rows()*beta.cols()));
 
@@ -250,11 +248,11 @@ static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr
     //! Copy dof matrix
     UInt size_dof = dof.size();
     Real *rans1 = REAL(VECTOR_ELT(result, 1));
-    for(UInt i = 0; i < size_vec; i++)
+    for(UInt i = 0; i < size_dof; i++)
         rans1[i] = dof[i];
     
     //! Copy GCV matrix
-    UInt size_vec = GCV.size()
+    UInt size_vec = GCV.size();
     Real *rans2 = REAL(VECTOR_ELT(result, 2));
     for(UInt i = 0; i < size_vec; i++)
         rans2[i] = GCV[i];

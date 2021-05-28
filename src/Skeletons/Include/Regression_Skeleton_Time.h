@@ -125,8 +125,8 @@ std::pair<MatrixXr, output_Data<std::pair<Real, Real>>> optimizer_method_selecti
         // postponed after apply in order to have betas computed
         output.betas = betas;
 
-        output.sizeS = carrier.get_opt_data()->get_size_S();
-        output.sizeT = carrier.get_opt_data()->get_size_T();
+        output.size_S = carrier.get_opt_data()->get_size_S();
+        output.size_T = carrier.get_opt_data()->get_size_T();
         return {solution, output};
 	//}
 }

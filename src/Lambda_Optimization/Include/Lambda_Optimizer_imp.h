@@ -94,6 +94,23 @@ void GCV_Family<InputCarrier, 1>::combine_output_prediction(const VectorXr & f_h
         outp.rmse.push_back(this->rmse);
 }
 
+template<typename InputCarrier>
+void GCV_Family<InputCarrier, 2>::combine_output_prediction(const VectorXr & f_hat, output_Data<std::pair<Real, Real>> & outp, UInt cols)
+{
+        this->compute_z_hat_from_f_hat(f_hat);
+        this->compute_eps_hat();
+        this->compute_SS_res();
+        this->compute_rmse();
+
+        if(outp.content != "prediction")
+                outp.content = "prediction";
+
+        outp.z_hat.col(cols) = this->z_hat;
+
+        outp.rmse.push_back(this->rmse);
+}
+
+
 // -- Setters --
 //! Utility to compute the predicted value in the locations given system solution f_hat
 /*!
@@ -101,6 +118,29 @@ void GCV_Family<InputCarrier, 1>::combine_output_prediction(const VectorXr & f_h
 */
 template<typename InputCarrier>
 void GCV_Family<InputCarrier, 1>::compute_z_hat_from_f_hat(const VectorXr & f_hat)
+{
+        // z_hat  = H*z+Q*Psi*g_hat
+
+        if (this->the_carrier.has_W())
+        {
+                this->z_hat = (*this->the_carrier.get_Hp())*(*this->the_carrier.get_zp()) + this->the_carrier.lmbQ((*this->the_carrier.get_psip())*f_hat);
+        }
+        else
+        {
+                this->z_hat = (*this->the_carrier.get_psip())*f_hat;
+        }
+
+        // Debugging purpose print
+        /* Rprintf("z_hat \n");
+           for(UInt i = 0; i < this->s-1; i++)
+                  Rprintf("%f, ", this->z_hat[i]);
+           Rprintf("%f", this->z_hat[s-1]);
+           Rprintf("\n");
+        */
+}
+
+template<typename InputCarrier>
+void GCV_Family<InputCarrier, 2>::compute_z_hat_from_f_hat(const VectorXr & f_hat)
 {
         // z_hat  = H*z+Q*Psi*g_hat
 
@@ -141,6 +181,21 @@ void GCV_Family<InputCarrier, 1>::compute_eps_hat(void)
         */
 }
 
+template<typename InputCarrier>
+void GCV_Family<InputCarrier, 2>::compute_eps_hat(void)
+{
+        // eps_hat = z-z_hat
+        this->eps_hat = (*this->the_carrier.get_zp())-this->z_hat;
+
+        // Debugging purpose print
+        /* Rprintf("Eps_hat \n");
+           for(UInt i = 0; i < this->s-1; i++)
+                  Rprintf("%f, ", this->eps_hat[i]);
+           Rprintf("%f", this->eps_hat[s-1]);
+           Rprintf("\n");
+        */
+}
+
 //! Utility to compute the sum of the squares of the residuals
 /*!
  \pre compute_eps_hat() must have been called
@@ -156,6 +211,16 @@ void GCV_Family<InputCarrier, 1>::compute_SS_res(void)
         // Rprintf("SS_res  = %f\n", this->SS_res);
 }
 
+template<typename InputCarrier>
+void GCV_Family<InputCarrier, 2>::compute_SS_res(void)
+{
+        // SS_res = ||eps_hat||^2
+        this->SS_res = this->eps_hat.squaredNorm();
+
+        // Debugging purpose print
+        // Rprintf("SS_res  = %f\n", this->SS_res);
+}
+
 //! Utility to compute the root mean square error
 /*!
  \pre compute_SS_res() must have been called
@@ -163,6 +228,15 @@ void GCV_Family<InputCarrier, 1>::compute_SS_res(void)
 */
 template<typename InputCarrier>
 void GCV_Family<InputCarrier, 1>::compute_rmse(void)
+{
+        // rmse =std::sqrt(SS_res/#locations)
+        this->rmse = std::sqrt(this->SS_res/Real(this->s));
+
+        // Debugging purpose print
+        // Rprintf("RMSE  = %f\n", this->rmse);
+}
+template<typename InputCarrier>
+void GCV_Family<InputCarrier, 2>::compute_rmse(void)
 {
         // rmse =std::sqrt(SS_res/#locations)
         this->rmse = std::sqrt(this->SS_res/Real(this->s));
@@ -189,6 +263,17 @@ void GCV_Family<InputCarrier, 1>::compute_sigma_hat_sq(void)
 //! Utility to compute the size of the model
 template<typename InputCarrier>
 void GCV_Family<InputCarrier, 1>::compute_s(void)
+{
+        // s = #locations
+        this->s = this->the_carrier.get_n_obs();
+
+        // Debugging purpose print
+        // Rprintf("s [# locations]  = %d\n", this->s);
+}
+
+//! Utility to compute the size of the model
+template<typename InputCarrier>
+void GCV_Family<InputCarrier, 2>::compute_s(void)
 {
         // s = #locations
         this->s = this->the_carrier.get_n_obs();
