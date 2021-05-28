@@ -43,7 +43,7 @@ struct output_Data<std::pair<Real, Real>>
         Real                    sigma_hat_sq    = -1.0;    //!< Model estimated variance of errors
         std::vector<Real>       dof             = {};      //!< tr(S) + q, degrees of freedom of the model
         std::pair<Real, Real>   lambda_sol = std::make_pair(0.0, 0.0); //!< Lambda obtained in the solution
-        UInt                    lambda_pos      = 0;       //!< Position of optimal lambda, only for grid evaluation, in R numebring starting from 1 (0 means no grid used)
+        UInt                    lambda_pos      = 0;       //!< Position of optimal lambda pair, only for grid evaluation, in R numebring starting from 1 (0 means no grid used)
         UInt                    n_it            = 0;       //!< Number of iterations for the method
         Real                    time_partial    = 0.0;     //!< Time, from beginning to end of the optimization method
         std::vector<Real>       GCV_evals       = {-1};    //!< GCV evaluations vector of explored lambda, with the optimization iterative method or grid
@@ -51,6 +51,8 @@ struct output_Data<std::pair<Real, Real>>
         Real                    GCV_opt         = -1;      //!< GCV optimal comptued in the vector of lambdas
         int                     termination     = -2;      //!< Reason of termination of the iterative optimization method (reached tolerance or max number of iterations)
         MatrixXv                betas;                     //!< Regression coefficients of the optimal solution
+        UInt                    size_S;                    //!< Size of the lambdaS vector
+        UInt                    size_T;                    //!< Size of the lambdaT vector
 };
 
 //! Unique namespace to manage the output

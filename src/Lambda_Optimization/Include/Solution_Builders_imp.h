@@ -211,15 +211,14 @@ static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr
         regression.apply();
     */
     
-    //! copy result in R memory
-    //MatrixXv const & solution = regression.getSolution(); //solution ci viene passato tra i parametri della funzione
-							    //Adesso è una MatrixXr, ogni colonna una soluzione per una coppia di lambda
-							    //diversi secondo l'ordine i*size(lambdaT)+j
-    MatrixXr const & dof = regression.getDOF(); //dof e gcv li prendiamo da output. Al momento si aspetta una matrice, noi abbiamo vettori,
-						//ma non è un problema perchè poi comunque per il passaggio ad r "Vettorizza" comunque
-    MatrixXr const & GCV = regression.getGCV();
-    UInt bestLambdaS = optimizationData.get_best_lambda_S(); //prendiamo da output_data il pair ottimo e facciamo .first e .second
-    UInt bestLambdaT = optimizationData.get_best_lambda_T();
+    std::vector<Real> const & dof = output.dof;
+    std::vector<Real> const & GCV = output.GCV_evals;
+    //div_t divresult = div(output.lambda_pos, output.sizeT); // from the pair index, reconstruct the original indices of LambdaS, LambdaT
+    //UInt bestLambdaS_index = divresult.quot;
+    //UInt bestLambdaT_index = divresult.rem;
+    UInt bestLambdaS = output.lambda_sol.first;
+    UInt bestLambdaT = output.lambda_sol.second;
+
     MatrixXv beta;
     if(regressionData.getCovariates()->rows()==0)
     {
@@ -228,75 +227,49 @@ static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr
         beta(0,0)(0) = 10e20;
     }
     else
-         beta = regression.getBeta(); //output_data.betas, vettora colonna, ogni elemento un vettore con i beta (vettore di vettori)
+         beta = output.betas;
 
     const MatrixXr & barycenters = regression.getBarycenters();
     const VectorXi & elementIds = regression.getElementIds();
+
     //!Copy result in R memory
     SEXP result = NILSXP;
     result = PROTECT(Rf_allocVector(VECSXP, 5+5+2));
-    //alloca una matrice per solution con tante righe quanti gli elementi di una f, tante colonne quante le coppie di lambda
-    //a noi basta solution.rows(), solution.cols perchè la solution è già della forma giusta
-    SET_VECTOR_ELT(result, 0, Rf_allocMatrix(REALSXP, solution(0,0).size(), solution.rows()*solution.cols()));
-    //anche per dof e gcv, ok continuare ad allocare matrice anche se noi li abbiamo sotto forma di vettore (il fatto
-    //che allochiamo matrice è importante solo per la forma in cui vogliamo far arrivare i dati ad R)
-    //però bisogna cambiare dove prendiamo le dimensioni. dof.rows diventa size di lambda_s e dof.cols diventa size di lambdaT
-    SET_VECTOR_ELT(result, 1, Rf_allocMatrix(REALSXP, dof.rows(), dof.cols()));
-    SET_VECTOR_ELT(result, 2, Rf_allocMatrix(REALSXP, GCV.rows(), GCV.cols()));
-    SET_VECTOR_ELT(result, 3, Rf_allocVector(INTSXP, 2)); //cos'è??
-    SET_VECTOR_ELT(result, 4, Rf_allocMatrix(REALSXP, beta(0,0).size(), beta.rows()*beta.cols())); //il nostro beta dovrebbe essere uguale al loro
+    SET_VECTOR_ELT(result, 0, Rf_allocMatrix(REALSXP, solution.rows(), solution.cols()));
+    SET_VECTOR_ELT(result, 1, Rf_allocMatrix(REALSXP, output.sizeS, output.sizeT));
+    SET_VECTOR_ELT(result, 2, Rf_allocMatrix(REALSXP, output.sizeS, output.sizeT));
+    SET_VECTOR_ELT(result, 3, Rf_allocVector(INTSXP, 2)); //best lambdas
+    SET_VECTOR_ELT(result, 4, Rf_allocMatrix(REALSXP, beta(0,0).size(), beta.rows()*beta.cols()));
 
     //! Copy solution
     Real *rans = REAL(VECTOR_ELT(result, 0));
-    for(UInt i = 0; i < solution.rows(); i++)
-    {
-        for(UInt j = 0; j < solution.cols(); j++)
-        {
-            for(UInt k = 0; k < solution(0,0).size(); k++)
-                rans[k + solution(0,0).size()*i + solution(0,0).size()*solution.rows()*j] = solution.coeff(i,j)(k);
-        } //a noi basta un for in meno, perchè loro hanno una MatrixXv, per ogni lambdaS e lambdaT hanno un vettore soluzione
-        //diverso. Noi invece abbiamo le soluzioni una colonna accanto all'altra in una MatrixXr, una dimensione in meno
-        /*for(j=colonne (diverse coppie di lambda) di solution)
-        	for(i=righe (ogni elemento della soluzione relativa a una coppia) di solution)
-        		rans[j+i*solution.rows()] = solution.coeff(i, j) //verificare che siano inserite nello stesso ordine*/
-        		
-    }
+    for(UInt j = 0; j < solution.cols(); j++)
+        for(UInt i = 0; i < solution.rows(); i++)
+            rans[i + solution.rows()*j] = solution.coeff(i,j);    
+
     //! Copy dof matrix
-    //noi non abbiamo una matrice di dof, ma un vettore
+    UInt size_dof = dof.size();
     Real *rans1 = REAL(VECTOR_ELT(result, 1));
-    for(UInt i = 0; i < dof.rows(); i++)
-    {
-        for(UInt j = 0; j < dof.cols(); j++)
-        {
-        rans1[i + dof.rows()*j] = dof.coeff(i,j);
-        }
-    } //dovrebbe essere sufficiente un unico for perchè dato che fa prima rows e poi cols i dof sono già nell'ordine giusto nel nostro vettore
-    //stessa cosa per GCV
+    for(UInt i = 0; i < size_vec; i++)
+        rans1[i] = dof[i];
     
     //! Copy GCV matrix
+    UInt size_vec = GCV.size()
     Real *rans2 = REAL(VECTOR_ELT(result, 2));
-    for(UInt i = 0; i < GCV.rows(); i++)
-    {
-        for(UInt j = 0; j < GCV.cols(); j++)
-        {
-        rans2[i + GCV.rows()*j] = GCV.coeff(i,j);
-        }
-    }
+    for(UInt i = 0; i < size_vec; i++)
+        rans2[i] = GCV[i];
+
     //! Copy best lambdas
     UInt *rans3 = INTEGER(VECTOR_ELT(result, 3));
-    rans3[0] = bestLambdaS; //output.lambda_vec(output.lambda_pos).first e .second
+    rans3[0] = bestLambdaS;
     rans3[1] = bestLambdaT;
-    //! Copy betas //nel nostro caso beta viene creato come vettore colonna in Regression_skeleton_time. Sarebbe possibile renderlo una matrice,
-    //in regression_skeleton time ma per coerenza con quanto fatto prima potremmo tenerlo colonna e togliere un for
+
+    //! Copy betas
     Real *rans4 = REAL(VECTOR_ELT(result, 4));
     for(UInt i = 0; i < beta.rows(); i++)
-    {
-        for(UInt j = 0; j < beta.cols(); j++)
-        {
-            for(UInt k = 0; k < beta(0,0).size(); k++)
-                rans4[k + beta(0,0).size()*i + beta(0,0).size()*beta.rows()*j] = beta.coeff(i,j)(k);
-        }
-    }
+        for(UInt k = 0; k < beta(0,0).size(); k++)
+            rans4[k + beta(0,0).size()*i] = beta.coeff(i,0)(k);
+
     //da qui in poi sembra identico. Cambiano solo i numeri degli elementi rispetto al caso regression_skeleton space-only
     //ma è solo perchè in quel caso aggiunge delle info. Potremmo anche noi inviare info aggiuntive ad R (ad esempio il tempo
     //di esecuzione). Bisogna ricordarsi di cambiare anche l'interfaccia con R.
