@@ -13,9 +13,10 @@
 #include "../../Lambda_Optimization/Include/Optimization_Data.h"
 
 template<typename CarrierType>
-std::pair<MatrixXr, output_Data<std::pair<Real, Real>>> optimizer_method_selection(CarrierType & carrier);
-template<typename EvaluationType, typename CarrierType>
-std::pair<MatrixXr, output_Data<std::pair<Real, Real>>> optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier);
+typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, t_type>::value,
+	std::pair<MatrixXr, output_Data<std::pair<Real, Real>>> >::type optimizer_method_selection(CarrierType & carrier);
+//template<typename EvaluationType, typename CarrierType>
+//std::pair<MatrixXr, output_Data<std::pair<Real, Real>>> optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier);
 
 template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
 SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & optimizationData, SEXP Rmesh, SEXP Rmesh_time)
@@ -57,7 +58,8 @@ SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & 
  \return the solution to pass to the Solution_Builders
 */
 template<typename CarrierType>
-std::pair<MatrixXr, output_Data<std::pair<Real, Real>>> optimizer_method_selection(CarrierType & carrier)
+typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, t_type>::value,
+std::pair<MatrixXr, output_Data<std::pair<Real, Real>>> >::type optimizer_method_selection(CarrierType & carrier)
 {
 	// Build the optimizer
 	const OptimizationData * optr = carrier.get_opt_data();

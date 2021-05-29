@@ -13,7 +13,8 @@
 #include "../../Regression/Include/Mixed_FE_Regression.h"
 
 template<typename CarrierType>
-std::pair<MatrixXr, output_Data<Real>> optimizer_method_selection(CarrierType & carrier);
+typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, f_type>::value,
+	std::pair<MatrixXr, output_Data<Real>> >::type optimizer_method_selection(CarrierType & carrier);
 template<typename EvaluationType, typename CarrierType>
 std::pair<MatrixXr, output_Data<Real>> optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier);
 
@@ -73,7 +74,8 @@ SEXP regression_skeleton(InputHandler & regressionData, OptimizationData & optim
  \return the solution to pass to the Solution_Builders
 */
 template<typename CarrierType>
-std::pair<MatrixXr, output_Data<Real>> optimizer_method_selection(CarrierType & carrier)
+typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, f_type>::value,
+std::pair<MatrixXr, output_Data<Real>> >::type optimizer_method_selection(CarrierType & carrier)
 {
 	// Build the optimizer
 	const OptimizationData * optr = carrier.get_opt_data();

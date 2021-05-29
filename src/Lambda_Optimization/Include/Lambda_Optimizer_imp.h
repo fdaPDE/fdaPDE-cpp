@@ -850,6 +850,13 @@ void GCV_Stochastic<InputCarrier, 1>::update_parameters(Real lambda)
         this->update_errors(lambda);
 }
 
+template<typename InputCarrier>
+void GCV_Stochastic<InputCarrier, 2>::update_parameters(std::pair<Real, Real> lambda)
+{
+        this->compute_z_hat(lambda);
+        this->update_errors(lambda);
+}
+
 // -- GCV function --
 // GCV function and derivatives
 //! Main function computes the gcv in an exact fashion, depending on lambda
