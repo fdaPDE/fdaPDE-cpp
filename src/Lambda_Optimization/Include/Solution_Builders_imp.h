@@ -213,7 +213,7 @@ static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr
     
     std::vector<Real> const & dof = output.dof;
     std::vector<Real> const & GCV = output.GCV_evals;
-    div_t divresult = div(output.lambda_pos, output.size_T); // from the pair index, reconstruct the original indices of LambdaS, LambdaT
+    div_t divresult = div(output.lambda_pos, output.size_T+1); // from the pair index, reconstruct the original indices of LambdaS, LambdaT
     UInt bestLambdaS = divresult.quot;
     UInt bestLambdaT = divresult.rem;
     

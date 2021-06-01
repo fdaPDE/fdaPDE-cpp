@@ -27,8 +27,8 @@ class MixedFERegressionBase
 	protected:
 
 		const std::vector<Real> mesh_time_;
-		const UInt N_; 			//!< Number of spatial basis functions.
-		const UInt M_;
+		const UInt N_; 			//!< Number of spatial basis functions
+		const UInt M_;			//!< Number of temporal nodes
 
 		const InputHandler & regressionData_;
         OptimizationData & optimizationData_; //!<COnst reference to OptimizationData class
@@ -242,7 +242,7 @@ class MixedFERegressionBase
 		const SpMat *  getLR0k_(void) const {return &this->LR0k_;}
 
 		//! A method returning the number of nodes of the mesh
-		UInt getnnodes_(void) const {return this->N_;}
+		UInt getnnodes_(void) const {return this->N_ * this->M_;}
 		bool isSV(void) const {return this->isSpaceVarying;}
 		bool isIter(void) const {return this->isIterative;}
 

@@ -221,10 +221,10 @@ class Carrier: public Extensions...
                  \return the solution of the system
                  \note apply is called here in order not to make the non const pointer public
                 */
-                inline MatrixXr apply(Real lambdaS, Real lambdaT)
+                inline MatrixXr apply(std::pair<Real, Real> lambda)
                 {
-                        this->opt_data->set_current_lambdaS(lambdaS); // set the lambdaS value
-                        this->opt_data->set_current_lambdaT(lambdaT); // set the lambdaT value
+                        this->opt_data->set_current_lambdaS(lambda.first); // set the lambdaS value
+                        this->opt_data->set_current_lambdaT(lambda.second); // set the lambdaT value
                         return (this->model->apply())(0,0);
                 }
 

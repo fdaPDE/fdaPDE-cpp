@@ -175,12 +175,17 @@ class GCV_Family<InputCarrier, 1>: Lambda_optimizer<InputCarrier, 1>
                         Lambda_optimizer<InputCarrier, 1>(the_carrier_)
                         {
                                 this->compute_s();      // stores immediately the number of locations
+                                output.size_S = the_carrier_.get_opt_data()->get_size_S();
+				output.size_T = the_carrier_.get_opt_data()->get_size_T();
                         }
 
         public:
                 // UTILITY FOR DOF MATRIX
-        inline  void set_index(UInt index){this->use_index = index;}
-
+        inline  void set_index(UInt index)
+		{
+			div_t divresult = div(index, output.size_T+1);
+			this->use_index = std::make_pair(divresult.quot, divresult.rem);
+        	}
                 // PUBLIC UPDATERS
         virtual void update_parameters(Real lambda) = 0; //!< Utility to update all the prameters of the model
 
@@ -228,7 +233,7 @@ class GCV_Family<InputCarrier, 2>: Lambda_optimizer<InputCarrier, 2>
                 Real            dof = 0.0;              //!< tr(S) + q, degrees of freedom of the model
                 Real            dor = 0.0;              //!< s - dof, degrees of freedom of the residuals
 
-                UInt            use_index = -1;         //!< Index of the DOF_matrix to be used, if non empty
+                std::pair<UInt, UInt> use_index = std::make_pair(-1, -1); //!< Indices of the DOF_matrix to be used, if non empty
 
                 // SETTERS of the output data
         virtual void compute_z_hat(std::pair<Real, Real> lambda) = 0;    //!< Utility to compute the size of predicted value in the locations
@@ -256,11 +261,17 @@ class GCV_Family<InputCarrier, 2>: Lambda_optimizer<InputCarrier, 2>
                         Lambda_optimizer<InputCarrier, 2>(the_carrier_)
                         {
                                 this->compute_s();      // stores immediately the number of locations
+                                output.size_S = the_carrier_.get_opt_data()->get_size_S();
+				output.size_T = the_carrier_.get_opt_data()->get_size_T();
                         }
 
         public:
                 // UTILITY FOR DOF MATRIX
-        inline  void set_index(UInt index){this->use_index = index;}
+        inline  void set_index(UInt index)
+		{
+			div_t divresult = div(index, output.size_T+1);
+			this->use_index = std::make_pair(divresult.quot, divresult.rem);
+        	}
 
                 // PUBLIC UPDATERS
         virtual void update_parameters(std::pair<Real, Real> lambda) = 0; //!< Utility to update all the prameters of the model

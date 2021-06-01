@@ -301,6 +301,18 @@ void GCV_Family<InputCarrier, 1>::update_errors(Real lambda)
         this->compute_sigma_hat_sq();
 }
 
+template<typename InputCarrier>
+void GCV_Family<InputCarrier, 2>::update_errors(std::pair<Real, Real> lambda)
+{
+        // this order must be kept
+        this->compute_eps_hat();
+        this->compute_SS_res();
+        this->compute_rmse();
+        this->update_dof(lambda);
+        this->update_dor(lambda);
+        this->compute_sigma_hat_sq();
+}
+
 //! Update all parameters needed to compute the gcv function, depending on lambda
 /*!
  \param lambda the actual value of lambda to be used for the update
@@ -788,6 +800,64 @@ void GCV_Stochastic<InputCarrier, 1>::update_dof(Real lambda)
         }
 }
 
+template<typename InputCarrier>
+void GCV_Stochastic<InputCarrier, 2>::update_dof(std::pair<Real, Real> lambda)
+{
+        MatrixXr m = this->the_carrier.get_opt_data()->get_DOF_matrix();
+        if(m.cols() == 0 || m.rows()<=this->use_index.first || m.cols()<=this->use_index.second)
+        {
+                /* Debugging purpose timer [part I]
+                 timer Time_partial;
+                 Time_partial.start();
+                 Rprintf("WARNING: start taking time update_dof\n");
+                */
+
+        	UInt nnodes = this->the_carrier.get_n_nodes();
+                UInt nr     = this->the_carrier.get_opt_data()->get_nrealizations();
+
+                if(this->us == false) // check is US matrix has been defined
+                {
+                        this->set_US_();
+                }
+
+
+        	// Solve the system
+            	MatrixXr x = this->the_carrier.apply_to_b(b, lambda);
+
+        	VectorXr edf_vect(nr);
+        	Real q = 0;
+
+        	// Degrees of freedom = q + E[ u^T * psi * | I  0 |* x ]
+        	if (this->the_carrier.has_W())
+                {
+        		q = this->the_carrier.get_Wp()->cols();
+        	}
+
+        	// For any realization we calculate the degrees of freedom
+        	for (UInt i = 0; i < nr; ++i)
+                {
+        		edf_vect(i) = this->USTpsi.row(i).dot(x.col(i).head(nnodes)) + q;
+        	}
+
+        	// Estimates: sample mean, sample variance
+        	this->dof = edf_vect.sum()/nr;
+
+                // Deugging purpose print
+                // Rprintf("DOF:%f\n", this->dof);
+
+                /* Debugging purpose timer [part II]
+                 Rprintf("WARNING: time after the update_dof method\n");
+                 timespec T = Time_partial.stop();
+                */
+        }
+        else
+        {
+                Rprintf("No DOF computation required\n");
+                this->dof = m(this->use_index.first, this->use_index.second);
+                //std::cout<< this->dof << std::endl;
+        }
+}
+
 //! Utility to compute the degrees of freedom of the residuals
 /*!
  \param lambda value of the optimization parameter
@@ -817,6 +887,28 @@ void GCV_Stochastic<InputCarrier, 1>::update_dor(Real lambda)
 */
 template<typename InputCarrier>
 void GCV_Stochastic<InputCarrier, 1>::compute_z_hat(Real lambda)
+{
+        /* Debugging purpose timer [part I]
+         timer Time_partial;
+         Time_partial.start();
+         Rprintf("WARNING: start taking time compute_z_hat\n");
+        */
+
+        // Solve the system to find the predicted values of the spline coefficients
+        const UInt nnodes    = this->the_carrier.get_n_nodes();
+        const VectorXr f_hat = VectorXr(this->the_carrier.apply(lambda)).head(nnodes);
+
+        // Compute the predicted values in the locations from the f_hat
+        this->compute_z_hat_from_f_hat(f_hat);
+
+        /* Debugging purpose timer [part II]
+         Rprintf("WARNING: time after the compute_z_hat method\n");
+         timespec T = Time_partial.stop();
+        */
+}
+
+template<typename InputCarrier>
+void GCV_Stochastic<InputCarrier, 2>::compute_z_hat(std::pair<Real, Real> lambda)
 {
         /* Debugging purpose timer [part I]
          timer Time_partial;

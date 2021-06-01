@@ -101,17 +101,18 @@ std::pair<MatrixXr, output_Data<std::pair<Real, Real>>> >::type optimizer_method
 			{
 				Real lambdaS = carrier.get_opt_data()->get_lambda_S()[i];
 				Real lambdaT = carrier.get_opt_data()->get_lambda_T()[j];
-				output.lambda_vec.push_back(std::make_pair(lambdaS, lambdaT));
+				std::pair<Real, Real> lambda = std::make_pair(lambdaS, lambdaT);
+				output.lambda_vec.push_back(lambda);
 				UInt couple_index = i*carrier.get_opt_data()->get_size_T()+j;
 				if(i==0 && j==0)
 				{
-					MatrixXr sol = carrier.apply(lambdaS, lambdaT);
+					MatrixXr sol = carrier.apply(lambda);
 					solution.resize(sol.rows(),lambdas_count);
 					solution.col(couple_index) = sol;
 				}
 				else
 				{
-					solution.col(couple_index) = carrier.apply(lambdaS, lambdaT);
+					solution.col(couple_index) = carrier.apply(lambda);
 				}
 				optim.combine_output_prediction(solution.topRows(solution.rows()/2).col(couple_index),output,couple_index);
 				if(carrier.get_model()->getBeta().cols()>0 && carrier.get_model()->getBeta().rows()>0)
@@ -126,9 +127,7 @@ std::pair<MatrixXr, output_Data<std::pair<Real, Real>>> >::type optimizer_method
 
         // postponed after apply in order to have betas computed
         output.betas = betas;
-
-        output.size_S = carrier.get_opt_data()->get_size_S();
-        output.size_T = carrier.get_opt_data()->get_size_T();
+        
         return {solution, output};
 	//}
 }
