@@ -175,17 +175,11 @@ class GCV_Family<InputCarrier, 1>: Lambda_optimizer<InputCarrier, 1>
                         Lambda_optimizer<InputCarrier, 1>(the_carrier_)
                         {
                                 this->compute_s();      // stores immediately the number of locations
-                                output.size_S = the_carrier_.get_opt_data()->get_size_S();
-				output.size_T = the_carrier_.get_opt_data()->get_size_T();
                         }
 
         public:
                 // UTILITY FOR DOF MATRIX
-        inline  void set_index(UInt index)
-		{
-			div_t divresult = div(index, output.size_T+1);
-			this->use_index = std::make_pair(divresult.quot, divresult.rem);
-        	}
+        inline  void set_index(UInt index){this->use_index = index;}
                 // PUBLIC UPDATERS
         virtual void update_parameters(Real lambda) = 0; //!< Utility to update all the prameters of the model
 
