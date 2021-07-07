@@ -1399,7 +1399,7 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply(void)
 	}
 	if(!isGAMData &&
 	(optimizationData_.get_current_lambdaS()!=optimizationData_.get_last_lS_used() ||
-	optimizationData_.get_current_lambdaS()!=optimizationData_.get_last_lS_used()))
+	optimizationData_.get_current_lambdaT()!=optimizationData_.get_last_lT_used()))
 	{
 		optimizationData_.set_last_lS_used(optimizationData_.get_current_lambdaS());
 		optimizationData_.set_last_lT_used(optimizationData_.get_current_lambdaT());
