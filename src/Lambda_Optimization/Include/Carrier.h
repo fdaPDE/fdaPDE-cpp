@@ -225,7 +225,10 @@ class Carrier: public Extensions...
                 {
                         this->opt_data->set_current_lambdaS(lambda.first); // set the lambdaS value
                         this->opt_data->set_current_lambdaT(lambda.second); // set the lambdaT value
-                        return (this->model->apply())(0,0);
+                        if(this->model->isIter())
+                        	return (this->model->apply_iterative())(0,0);
+                        else
+                        	return (this->model->apply())(0,0);
                 }
 
 
