@@ -14,9 +14,9 @@
 
 template<typename CarrierType>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, t_type>::value,
-	std::pair<MatrixXr, output_Data<std::pair<Real, Real>>> >::type optimizer_method_selection(CarrierType & carrier);
+	std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierType & carrier);
 //template<typename EvaluationType, typename CarrierType>
-//std::pair<MatrixXr, output_Data<std::pair<Real, Real>>> optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier);
+//std::pair<MatrixXr, output_Data<2>> optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier);
 
 template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
 SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & optimizationData, SEXP Rmesh, SEXP Rmesh_time)
@@ -32,7 +32,7 @@ SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & 
 
 	regression.preapply(mesh); // preliminary apply (preapply) to store all problem matrices
 
-    std::pair<MatrixXr, output_Data<std::pair<Real, Real>>> solution_bricks;	// Prepare solution to be filled
+    std::pair<MatrixXr, output_Data<2>> solution_bricks;	// Prepare solution to be filled
 /*
     if(regressionData.getFlagParabolic()){
     	//DO forced areal
@@ -59,7 +59,7 @@ SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & 
 */
 template<typename CarrierType>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, t_type>::value,
-std::pair<MatrixXr, output_Data<std::pair<Real, Real>>> >::type optimizer_method_selection(CarrierType & carrier)
+std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierType & carrier)
 {
 	// Build the optimizer
 	const OptimizationData * optr = carrier.get_opt_data();
@@ -87,7 +87,7 @@ std::pair<MatrixXr, output_Data<std::pair<Real, Real>>> >::type optimizer_method
 		// Rprintf("WARNING: start taking time\n");
 
 		// Get the solution
-		output_Data<std::pair<Real, Real>> output;
+		output_Data<2> output;
 		UInt lambdas_count = carrier.get_opt_data()->get_size_S()*carrier.get_opt_data()->get_size_T(); // Valutare se spostare nel Carrier dentro estensione Temporal
 		output.z_hat.resize(carrier.get_psip()->rows(), lambdas_count);
 		output.lambda_vec.reserve(lambdas_count);

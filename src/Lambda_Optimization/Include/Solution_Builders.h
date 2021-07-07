@@ -10,13 +10,13 @@
 #include "../../Regression/Include/Regression_Data.h"
 
 //! Output struct to be used to return values in R
-template<typename Tuple>
+template<UInt size>
 struct output_Data
 {
 };
 
 template<>
-struct output_Data<Real>
+struct output_Data<1>
 {
         std::string             content{"Empty"};          //!< Suggests what the output is containing and how it should be used
         MatrixXr                z_hat;                     //!< Model predicted values in the locations
@@ -35,7 +35,7 @@ struct output_Data<Real>
 };
 
 template<>
-struct output_Data<std::pair<Real, Real>>
+struct output_Data<2>
 {
         std::string             content{"Empty"};          //!< Suggests what the output is containing and how it should be used
         MatrixXr                z_hat;                     //!< Model predicted values in the locations
@@ -71,10 +71,10 @@ namespace Solution_Builders
          \return SEXP containg all the data that will be managed by R code
         */
         template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
-        static SEXP build_solution_plain_regression(const MatrixXr & solution, const output_Data<Real> & output, const MeshHandler<ORDER, mydim, ndim> & mesh, const InputHandler & regressionData, const MixedFERegression<InputHandler>& regression);
+        static SEXP build_solution_plain_regression(const MatrixXr & solution, const output_Data<1> & output, const MeshHandler<ORDER, mydim, ndim> & mesh, const InputHandler & regressionData, const MixedFERegression<InputHandler>& regression);
         
         template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
-        static SEXP build_solution_temporal_regression(const MatrixXr & solution, const output_Data<std::pair<Real, Real>> & output, const MeshHandler<ORDER, mydim, ndim> & mesh, const InputHandler & regressionData, const MixedFERegression<InputHandler>& regression);
+        static SEXP build_solution_temporal_regression(const MatrixXr & solution, const output_Data<2> & output, const MeshHandler<ORDER, mydim, ndim> & mesh, const InputHandler & regressionData, const MixedFERegression<InputHandler>& regression);
 };
 
 #include "Solution_Builders_imp.h"

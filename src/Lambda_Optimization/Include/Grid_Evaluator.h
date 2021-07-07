@@ -88,6 +88,8 @@ class Vec_evaluation
 template <typename Tuple, typename Hessian, typename ...Extensions>
 class Eval_GCV: public Vec_evaluation<Tuple, Hessian, Extensions...>
 {
+	using output_type = typename std::conditional<std::is_same<Real,Tuple>::value,output_Data<1>,output_Data<2>>::type;
+	
         protected:
                 //! Computes specific parameters needed for GCV
                 void compute_specific_parameters(void) override
@@ -117,10 +119,10 @@ class Eval_GCV: public Vec_evaluation<Tuple, Hessian, Extensions...>
                 /*!
                  \return output_Data which contains the almost complete output to be returned to R
                 */
-                output_Data<Tuple> Get_optimization_vectorial(void)
+                output_type Get_optimization_vectorial(void)
                 {
                         std::pair<std::vector<Real>, UInt> p = this->compute_vector();
-                        output_Data<Tuple> output=this->F.get_output_full();
+                        output_type output=this->F.get_output_full();
                         output.GCV_evals  = p.first;
                         output.lambda_sol = this->lambda_vec.at(p.second);      // Safer use of at instead of []
                         output.lambda_pos = 1+p.second;                         // In R numbering

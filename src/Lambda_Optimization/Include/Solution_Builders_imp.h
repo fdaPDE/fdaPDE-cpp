@@ -2,7 +2,7 @@
 #define __SOLUTION_BUILDERS_IMP_H__
 
 template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
-SEXP Solution_Builders::build_solution_plain_regression(const MatrixXr & solution, const output_Data<Real> & output, const MeshHandler<ORDER, mydim, ndim> & mesh , const InputHandler & regressionData, const MixedFERegression<InputHandler>& regression)
+SEXP Solution_Builders::build_solution_plain_regression(const MatrixXr & solution, const output_Data<1> & output, const MeshHandler<ORDER, mydim, ndim> & mesh , const InputHandler & regressionData, const MixedFERegression<InputHandler>& regression)
 {
         // ---- Preparation ----
         // Prepare regresion coefficients space
@@ -202,7 +202,7 @@ SEXP Solution_Builders::build_solution_plain_regression(const MatrixXr & solutio
 
 
 template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
-static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr & solution, const output_Data<std::pair<Real, Real>> & output, const MeshHandler<ORDER, mydim, ndim> & mesh, const InputHandler & regressionData, const MixedFERegression<InputHandler>& regression)
+static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr & solution, const output_Data<2> & output, const MeshHandler<ORDER, mydim, ndim> & mesh, const InputHandler & regressionData, const MixedFERegression<InputHandler>& regression)
 {
     /*
     if (regression.isIter())

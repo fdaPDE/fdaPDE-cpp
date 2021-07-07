@@ -14,9 +14,9 @@
 
 template<typename CarrierType>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, f_type>::value,
-	std::pair<MatrixXr, output_Data<Real>> >::type optimizer_method_selection(CarrierType & carrier);
+	std::pair<MatrixXr, output_Data<1>> >::type optimizer_method_selection(CarrierType & carrier);
 template<typename EvaluationType, typename CarrierType>
-std::pair<MatrixXr, output_Data<Real>> optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier);
+std::pair<MatrixXr, output_Data<1>> optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier);
 
 template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
 SEXP regression_skeleton(InputHandler & regressionData, OptimizationData & optimizationData, SEXP Rmesh)
@@ -26,7 +26,7 @@ SEXP regression_skeleton(InputHandler & regressionData, OptimizationData & optim
 
 	regression.preapply(mesh); // preliminary apply (preapply) to store all problem matrices
 
-    std::pair<MatrixXr, output_Data<Real>> solution_bricks;	// Prepare solution to be filled
+    std::pair<MatrixXr, output_Data<1>> solution_bricks;	// Prepare solution to be filled
 
 	// Build the Carrier according to problem type
 	if(regression.isSV())
@@ -75,7 +75,7 @@ SEXP regression_skeleton(InputHandler & regressionData, OptimizationData & optim
 */
 template<typename CarrierType>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, f_type>::value,
-std::pair<MatrixXr, output_Data<Real>> >::type optimizer_method_selection(CarrierType & carrier)
+std::pair<MatrixXr, output_Data<1>> >::type optimizer_method_selection(CarrierType & carrier)
 {
 	// Build the optimizer
 	const OptimizationData * optr = carrier.get_opt_data();
@@ -101,7 +101,7 @@ std::pair<MatrixXr, output_Data<Real>> >::type optimizer_method_selection(Carrie
 		// Rprintf("WARNING: start taking time\n");
 
 		// Get the solution
-		output_Data<Real> output;
+		output_Data<1> output;
 		output.z_hat.resize(carrier.get_psip()->rows(),carrier.get_opt_data()->get_size_S());
 		output.lambda_vec = carrier.get_opt_data()->get_lambda_S();
 		MatrixXr solution;
@@ -146,7 +146,7 @@ std::pair<MatrixXr, output_Data<Real>> >::type optimizer_method_selection(Carrie
  \return the solution to pass to the Solution_Builders
 */
 template<typename EvaluationType, typename CarrierType>
-std::pair<MatrixXr, output_Data<Real>> optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
+std::pair<MatrixXr, output_Data<1>> optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 {
 	// Build wrapper and newton method
 	Function_Wrapper<Real, Real, Real, Real, EvaluationType> Fun(optim);
@@ -162,7 +162,7 @@ std::pair<MatrixXr, output_Data<Real>> optimizer_strategy_selection(EvaluationTy
 		// this will be used when grid will be correctly implemented, also for return elements
 
 		Eval_GCV<Real, Real, EvaluationType> eval(Fun, optr->get_lambda_S());
-		output_Data<Real> output = eval.Get_optimization_vectorial();
+		output_Data<1> output = eval.Get_optimization_vectorial();
 
 		// Rprintf("WARNING: partial time after the optimization method\n");
 		timespec T = Time_partial.stop();
@@ -209,7 +209,7 @@ std::pair<MatrixXr, output_Data<Real>> optimizer_strategy_selection(EvaluationTy
 
 		// postponed after apply in order to have betas computed
 		// now the last values in GCV_exact are the correct ones, related to the last iteration
-		output_Data<Real> output = Fun.get_output(lambda_couple, T, GCV_v_, lambda_v_, ch.which());
+		output_Data<1> output = Fun.get_output(lambda_couple, T, GCV_v_, lambda_v_, ch.which());
 		// the copy is necessary for the bulders outside
 
 		return {solution, output};
