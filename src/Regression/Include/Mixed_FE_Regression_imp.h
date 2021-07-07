@@ -1321,7 +1321,8 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply(void)
 		 		
 			_rightHandSide = rhs;
 
-			if(isGAMData || regressionData_.isSpaceTime() || optimizationData_.get_current_lambdaS()!=optimizationData_.get_last_lS_used())
+			if(isGAMData || optimizationData_.get_current_lambdaS()!=optimizationData_.get_last_lS_used() ||
+				optimizationData_.get_current_lambdaT()!=optimizationData_.get_last_lT_used())
 			{
 				if(!regressionData_.isSpaceTime())
 				{
@@ -1354,7 +1355,8 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply(void)
 
 
 			//f Factorization of the system for woodbury decomposition
-			if(isGAMData || regressionData_.isSpaceTime() || optimizationData_.get_current_lambdaS()!=optimizationData_.get_last_lS_used())
+			if(isGAMData || optimizationData_.get_current_lambdaS()!=optimizationData_.get_last_lS_used() ||
+				optimizationData_.get_current_lambdaT()!=optimizationData_.get_last_lT_used())
 			{
 				system_factorize();
 			}
