@@ -35,6 +35,8 @@
 typedef double Real;
 typedef int UInt;
 
+template<UInt size>
+using lambda_type = typename std::conditional<size==1,Real,std::pair<Real,Real>>::type;
 
 typedef Eigen::Matrix<Real,Eigen::Dynamic,Eigen::Dynamic> MatrixXr;
 typedef Eigen::Matrix<UInt,Eigen::Dynamic,Eigen::Dynamic> MatrixXi;

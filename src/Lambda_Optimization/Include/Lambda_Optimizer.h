@@ -19,27 +19,10 @@
  performing evaluations.
  \tparam InputCarrier Carrier-type parameter that contains insight about the problem to be solved
  \tparam size specialization parameter used to characterize the size of the lambda to be used
- \todo 2-D lambda optimization still to be implemented
 */
 template <typename InputCarrier, UInt size>
 class Lambda_optimizer
 {
-/*
-        [[ VERSION WITH TIMES STILL TO BE IMPLEMENTED ]]
-*/
-};
-
-
-//! Father class used for unidimenional lambda optimization purposes
-/*!
- This virtual class stores the model to be used by all its children,
- i. e. the classes actually instantiating a real optimization method and
- performing evaluations. Specialized version for unidimensional problems.
- \tparam InputCarrier Carrier-type parameter that contains insight about the problem to be solved
-*/
-template <typename InputCarrier>
-class Lambda_optimizer<InputCarrier, 1>
-{
         protected:
                 //! Model containing all the information necessary for the computation of the optimal value
                 InputCarrier & the_carrier;
@@ -49,7 +32,7 @@ class Lambda_optimizer<InputCarrier, 1>
                 /*!
                  \param the_carrier the structure from which to take all the data for the derived classes
                 */
-                Lambda_optimizer<InputCarrier, 1>(InputCarrier & the_carrier_):
+                Lambda_optimizer<InputCarrier, size>(InputCarrier & the_carrier_):
                         the_carrier(the_carrier_) {}
 
                 // UPDATERS
@@ -57,41 +40,7 @@ class Lambda_optimizer<InputCarrier, 1>
                 /*!
                  \param lambda the value of lambda with which to perform the update
                 */
-        virtual void update_parameters(Real lambda) = 0;
-
-        public:
-                //! Virtual Destuctor
-                virtual ~Lambda_optimizer(){};
-};
-
-//! Father class used for bidimenional lambda optimization purposes
-/*!
- This virtual class stores the model to be used by all its children,
- i. e. the classes actually instantiating a real optimization method and
- performing evaluations. Specialized version for bidimensional problems.
- \tparam InputCarrier Carrier-type parameter that contains insight about the problem to be solved
-*/
-template <typename InputCarrier>
-class Lambda_optimizer<InputCarrier, 2>
-{
-        protected:
-                //! Model containing all the information necessary for the computation of the optimal value
-                InputCarrier & the_carrier;
-
-                // CONSTRUCTORS
-                //! Constructor of the class given the InputCarrier
-                /*!
-                 \param the_carrier the structure from which to take all the data for the derived classes
-                */
-                Lambda_optimizer<InputCarrier, 2>(InputCarrier & the_carrier_):
-                        the_carrier(the_carrier_) {}
-
-                // UPDATERS
-                //! A pure virtual member used in children classes for updates of internal data
-                /*!
-                 \param lambda the value of lambda with which to perform the update
-                */
-        virtual void update_parameters(std::pair<Real, Real> lambda) = 0;
+        virtual void update_parameters(lambda_type<size> lambda) = 0;
 
         public:
                 //! Virtual Destuctor
