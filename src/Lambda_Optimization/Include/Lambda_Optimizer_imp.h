@@ -260,6 +260,12 @@ void GCV_Family<InputCarrier, 1>::compute_sigma_hat_sq(void)
         // Rprintf("sigma_hat_sq = %f\n", this->sigma_hat_sq);
 }
 
+template<typename InputCarrier>
+void GCV_Family<InputCarrier, 2>::compute_sigma_hat_sq(void)
+{
+        Rprintf("compute_sigma_hat_sq non ancora implementato");
+}
+
 //! Utility to compute the size of the model
 template<typename InputCarrier>
 void GCV_Family<InputCarrier, 1>::compute_s(void)
@@ -287,10 +293,10 @@ void GCV_Family<InputCarrier, 2>::compute_s(void)
 //! Utility to update the output-error parameters, fundamental for a correct computation of the gcv
 /*!
  \param lambda the actual value of lambda to be used for the update
- \sa compute_eps_hat(), compute_SS_res(), compute_rmse(), update_dof(Real lambda),update_dor(Real lambda) and compute_sigma_hat_sq().
+ \sa compute_eps_hat(), compute_SS_res(), compute_rmse(), update_dof(lambda_type<1> lambda),update_dor(lambda_type<1> lambda) and compute_sigma_hat_sq().
 */
 template<typename InputCarrier>
-void GCV_Family<InputCarrier, 1>::update_errors(Real lambda)
+void GCV_Family<InputCarrier, 1>::update_errors(lambda_type<1> lambda)
 {
         // this order must be kept
         this->compute_eps_hat();
@@ -302,7 +308,7 @@ void GCV_Family<InputCarrier, 1>::update_errors(Real lambda)
 }
 
 template<typename InputCarrier>
-void GCV_Family<InputCarrier, 2>::update_errors(std::pair<Real, Real> lambda)
+void GCV_Family<InputCarrier, 2>::update_errors(lambda_type<2> lambda)
 {
         // this order must be kept
         this->compute_eps_hat();
@@ -316,13 +322,19 @@ void GCV_Family<InputCarrier, 2>::update_errors(std::pair<Real, Real> lambda)
 //! Update all parameters needed to compute the gcv function, depending on lambda
 /*!
  \param lambda the actual value of lambda to be used for the update
- \sa update_parameters(Real lambda)
+ \sa update_parameters(lambda_type<1> lambda)
 */
 template<typename InputCarrier>
-void GCV_Family<InputCarrier, 1>::zero_updater(Real lambda)
+void GCV_Family<InputCarrier, 1>::zero_updater(lambda_type<1> lambda)
 {
         // Virtual update, depends on the gcv computational method [exact or stochastic]
         this->update_parameters(lambda);
+}
+
+template<typename InputCarrier>
+void GCV_Family<InputCarrier, 2>::zero_updater(lambda_type<2> lambda)
+{
+        Rprintf("zero_updater non ancora implementato");
 }
 
 //----------------------------------------------------------------------------//
@@ -358,7 +370,7 @@ void GCV_Exact<InputCarrier, 1>::set_R_(void)
  \param lambda the value for which to perform the optimization
 */
 template<typename InputCarrier>
-void GCV_Exact<InputCarrier, 1>::set_T_(Real lambda)
+void GCV_Exact<InputCarrier, 1>::set_T_(lambda_type<1> lambda)
 {
         this->T_ = lambda*this->R_;
         const UInt ret = AuxiliaryOptimizer::universal_T_setter<InputCarrier>(this->T_, this->the_carrier);
@@ -368,7 +380,7 @@ void GCV_Exact<InputCarrier, 1>::set_T_(Real lambda)
 /*!
  \remark V = T^{-1}*Psi^t*Q
  \pre set_T_ must be called before set_V_
- \sa set_T_(Real lambda)
+ \sa set_T_(lambda_type<1> lambda)
 */
 template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 1>::set_V_(void)
@@ -482,7 +494,7 @@ void GCV_Exact<InputCarrier, 1>::LeftMultiplybyPsiAndTrace(Real & trace, MatrixX
  \param lambda value of the optimization parameter
 */
 template<typename InputCarrier>
-void GCV_Exact<InputCarrier, 1>::compute_z_hat(Real lambda)
+void GCV_Exact<InputCarrier, 1>::compute_z_hat(lambda_type<1> lambda)
 {
         UInt ret;
         if (this->the_carrier.get_bc_indicesp()->size()==0)
@@ -510,7 +522,7 @@ void GCV_Exact<InputCarrier, 1>::compute_z_hat(Real lambda)
  \param lambda value of the optimization parameter
 */
 template<typename InputCarrier>
-void GCV_Exact<InputCarrier, 1>::update_dof(Real lambda)
+void GCV_Exact<InputCarrier, 1>::update_dof(lambda_type<1> lambda)
 {
         // dof = tr(S) + #covariates
 	this->dof = this->trS_;
@@ -529,7 +541,7 @@ void GCV_Exact<InputCarrier, 1>::update_dof(Real lambda)
  \sa update_dof()
 */
 template<typename InputCarrier>
-void GCV_Exact<InputCarrier, 1>::update_dor(Real lambda)
+void GCV_Exact<InputCarrier, 1>::update_dor(lambda_type<1> lambda)
 {
         // dor = #locations - dof
         this->dor = this->s-this->dof*this->the_carrier.get_opt_data()->get_tuning();
@@ -549,10 +561,10 @@ void GCV_Exact<InputCarrier, 1>::update_dor(Real lambda)
 //! Utility to update the gcv-exact parameters, fundamental for a correct computation of the gcv
 /*!
  \param lambda the actual value of lambda to be used for the update
- \sa set_T(Real lambda), set_V(), set_S_and_trS_() and compute_z_hat(Real lambda)
+ \sa set_T(lambda_type<1> lambda), set_V(), set_S_and_trS_() and compute_z_hat(lambda_type<1> lambda)
 */
 template<typename InputCarrier>
-void GCV_Exact<InputCarrier, 1>::update_matrices(Real lambda)
+void GCV_Exact<InputCarrier, 1>::update_matrices(lambda_type<1> lambda)
 {
         // this order must be kept
         this->set_T_(lambda);
@@ -565,10 +577,10 @@ void GCV_Exact<InputCarrier, 1>::update_matrices(Real lambda)
 //! Setting all the parameters which are recursively lambda dependent
 /*!
  \remark The order in which functions are invoked is essential for the consistency of the procedure
- \sa update_matrices(Real lambda), update_errors(Real lambda)
+ \sa update_matrices(lambda_type<1> lambda), update_errors(lambda_type<1> lambda)
 */
 template<typename InputCarrier>
-void GCV_Exact<InputCarrier, 1>::update_parameters(Real lambda)
+void GCV_Exact<InputCarrier, 1>::update_parameters(lambda_type<1> lambda)
 {
         // this order must be kept
         this->update_matrices(lambda);
@@ -578,10 +590,10 @@ void GCV_Exact<InputCarrier, 1>::update_parameters(Real lambda)
 //! Update all parameters needed to compute the gcv fist derivative, depending on lambda
 /*!
  \param lambda the actual value of lambda to be used for the update
- \sa zero_updater(Real lambda), second_updater(Real lambda)
+ \sa zero_updater(lambda_type<1> lambda), second_updater(lambda_type<1> lambda)
 */
 template<typename InputCarrier>
-void GCV_Exact<InputCarrier, 1>::first_updater(Real lambda)
+void GCV_Exact<InputCarrier, 1>::first_updater(lambda_type<1> lambda)
 {
         this->set_dS_and_trdS_();       // set first derivative of S and its trace
         UInt ret = AuxiliaryOptimizer::universal_first_updater<InputCarrier>(this->adt, this->the_carrier, this->dS_, this->eps_hat, lambda);
@@ -590,10 +602,10 @@ void GCV_Exact<InputCarrier, 1>::first_updater(Real lambda)
 //! Update all parameters needed to compute the gcv second derivative, depending on lambda
 /*!
  \param lambda the actual value of lambda to be used for the update
- \sa zero_updater(Real lambda), first_updater(Real lambda)
+ \sa zero_updater(lambda_type<1> lambda), first_updater(lambda_type<1> lambda)
 */
 template<typename InputCarrier>
-void GCV_Exact<InputCarrier, 1>::second_updater(Real lambda)
+void GCV_Exact<InputCarrier, 1>::second_updater(lambda_type<1> lambda)
 {
         this->set_ddS_and_trddS_();     // set second derivative of S and its trace
         UInt ret = AuxiliaryOptimizer::universal_second_updater<InputCarrier>(this->adt, this->the_carrier, this->ddS_, this->eps_hat, lambda);
@@ -611,7 +623,7 @@ void GCV_Exact<InputCarrier, 1>::second_updater(Real lambda)
  \return the value of the gcv
 */
 template<typename InputCarrier>
-Real GCV_Exact<InputCarrier, 1>::compute_f(Real lambda)
+Real GCV_Exact<InputCarrier, 1>::compute_f(lambda_type<1> lambda)
 {
         // call external updater to update [if needed] the parameters for gcv calculus
         this->gu.call_to(0, lambda, this);
@@ -637,10 +649,10 @@ Real GCV_Exact<InputCarrier, 1>::compute_f(Real lambda)
  summing: 2*s/(dor^2) * (sigma_hat_^2*tr(dS/dlambda) - eps_hat*dS/dlambda*z)
  \param lambda the actual value of lambda to be used for the computation
  \return the value of the gcv first derivative
- \sa compute_f(Real lambda)
+ \sa compute_f(lambda_type<1> lambda)
 */
 template<typename InputCarrier>
-Real GCV_Exact<InputCarrier, 1>::compute_fp(Real lambda)
+Real GCV_Exact<InputCarrier, 1>::compute_fp(lambda_type<1> lambda)
 {
         // call external updater to update [if needed] the parameters for gcv first derivative
         this->gu.call_to(1, lambda, this);
@@ -659,10 +671,10 @@ Real GCV_Exact<InputCarrier, 1>::compute_fp(Real lambda)
 /*!
  \param lambda the actual value of lambda to be used for the computation
  \return the value of the gcv second derivative
- \sa compute_f(Real lambda), compute_fp(Real lambda)
+ \sa compute_f(lambda_type<1> lambda), compute_fp(lambda_type<1> lambda)
 */
 template<typename InputCarrier>
-Real GCV_Exact<InputCarrier, 1>::compute_fs(Real lambda)
+Real GCV_Exact<InputCarrier, 1>::compute_fs(lambda_type<1> lambda)
 {
         // call external updater to update [if needed] the parameters for gcv second derivative
         this->gu.call_to(2, lambda, this);
@@ -743,7 +755,7 @@ void GCV_Stochastic<InputCarrier, 1>::set_US_(void)
  \param lambda value of the optimization parameter
 */
 template<typename InputCarrier>
-void GCV_Stochastic<InputCarrier, 1>::update_dof(Real lambda)
+void GCV_Stochastic<InputCarrier, 1>::update_dof(lambda_type<1> lambda)
 {
         MatrixXr m = this->the_carrier.get_opt_data()->get_DOF_matrix();
         if(m.cols()!=1 || m.rows()<=this->use_index)
@@ -801,61 +813,9 @@ void GCV_Stochastic<InputCarrier, 1>::update_dof(Real lambda)
 }
 
 template<typename InputCarrier>
-void GCV_Stochastic<InputCarrier, 2>::update_dof(std::pair<Real, Real> lambda)
+void GCV_Stochastic<InputCarrier, 2>::update_dof(lambda_type<2> lambda)
 {
-        MatrixXr m = this->the_carrier.get_opt_data()->get_DOF_matrix();
-        if(m.cols() == 0 || m.rows()<=this->use_index.first || m.cols()<=this->use_index.second)
-        {
-                /* Debugging purpose timer [part I]
-                 timer Time_partial;
-                 Time_partial.start();
-                 Rprintf("WARNING: start taking time update_dof\n");
-                */
-
-        	UInt nnodes = this->the_carrier.get_n_nodes();
-                UInt nr     = this->the_carrier.get_opt_data()->get_nrealizations();
-
-                if(this->us == false) // check is US matrix has been defined
-                {
-                        this->set_US_();
-                }
-
-
-        	// Solve the system
-            	MatrixXr x = this->the_carrier.apply_to_b(b, lambda);
-
-        	VectorXr edf_vect(nr);
-        	Real q = 0;
-
-        	// Degrees of freedom = q + E[ u^T * psi * | I  0 |* x ]
-        	if (this->the_carrier.has_W())
-                {
-        		q = this->the_carrier.get_Wp()->cols();
-        	}
-
-        	// For any realization we calculate the degrees of freedom
-        	for (UInt i = 0; i < nr; ++i)
-                {
-        		edf_vect(i) = this->USTpsi.row(i).dot(x.col(i).head(nnodes)) + q;
-        	}
-
-        	// Estimates: sample mean, sample variance
-        	this->dof = edf_vect.sum()/nr;
-
-                // Deugging purpose print
-                // Rprintf("DOF:%f\n", this->dof);
-
-                /* Debugging purpose timer [part II]
-                 Rprintf("WARNING: time after the update_dof method\n");
-                 timespec T = Time_partial.stop();
-                */
-        }
-        else
-        {
-                Rprintf("No DOF computation required\n");
-                this->dof = m(this->use_index.first, this->use_index.second);
-                //std::cout<< this->dof << std::endl;
-        }
+	Rprintf("Update dof non ancora implementato");
 }
 
 //! Utility to compute the degrees of freedom of the residuals
@@ -865,7 +825,7 @@ void GCV_Stochastic<InputCarrier, 2>::update_dof(std::pair<Real, Real> lambda)
  \sa update_dof()
 */
 template<typename InputCarrier>
-void GCV_Stochastic<InputCarrier, 1>::update_dor(Real lambda)
+void GCV_Stochastic<InputCarrier, 1>::update_dor(lambda_type<1> lambda)
 {
         // dor = #locations - dof
         this->dor = this->s-this->dof*this->the_carrier.get_opt_data()->get_tuning();
@@ -881,12 +841,24 @@ void GCV_Stochastic<InputCarrier, 1>::update_dor(Real lambda)
         // Rprintf("DOR: %f\n", this->dor);
 }
 
+//! Utility to compute the degrees of freedom of the residuals
+/*!
+ \param lambda value of the optimization parameter
+ \pre update_dof() must have been called
+ \sa update_dof()
+*/
+template<typename InputCarrier>
+void GCV_Stochastic<InputCarrier, 2>::update_dor(lambda_type<2> lambda)
+{
+	Rprintf("update_dor non implementato");
+}
+
 //! Utility to compute the predicted values in the locations
 /*!
  \param lambda value of the optimization parameter
 */
 template<typename InputCarrier>
-void GCV_Stochastic<InputCarrier, 1>::compute_z_hat(Real lambda)
+void GCV_Stochastic<InputCarrier, 1>::compute_z_hat(lambda_type<1> lambda)
 {
         /* Debugging purpose timer [part I]
          timer Time_partial;
@@ -908,7 +880,7 @@ void GCV_Stochastic<InputCarrier, 1>::compute_z_hat(Real lambda)
 }
 
 template<typename InputCarrier>
-void GCV_Stochastic<InputCarrier, 2>::compute_z_hat(std::pair<Real, Real> lambda)
+void GCV_Stochastic<InputCarrier, 2>::compute_z_hat(lambda_type<2> lambda)
 {
         /* Debugging purpose timer [part I]
          timer Time_partial;
@@ -933,17 +905,17 @@ void GCV_Stochastic<InputCarrier, 2>::compute_z_hat(std::pair<Real, Real> lambda
 //! Setting all the parameters which are recursively lambda dependent
 /*!
  \remark The order in which functions are invoked is essential for the consistency of the procedure
- \sa compute_z_hat(Real lambda), update_errors(Real lambda)
+ \sa compute_z_hat(lambda_type<1> lambda), update_errors(lambda_type<1> lambda)
 */
 template<typename InputCarrier>
-void GCV_Stochastic<InputCarrier, 1>::update_parameters(Real lambda)
+void GCV_Stochastic<InputCarrier, 1>::update_parameters(lambda_type<1> lambda)
 {
         this->compute_z_hat(lambda);
         this->update_errors(lambda);
 }
 
 template<typename InputCarrier>
-void GCV_Stochastic<InputCarrier, 2>::update_parameters(std::pair<Real, Real> lambda)
+void GCV_Stochastic<InputCarrier, 2>::update_parameters(lambda_type<2> lambda)
 {
         this->compute_z_hat(lambda);
         this->update_errors(lambda);
@@ -961,7 +933,7 @@ void GCV_Stochastic<InputCarrier, 2>::update_parameters(std::pair<Real, Real> la
  \return the value of the gcv
 */
 template<typename InputCarrier>
-Real GCV_Stochastic<InputCarrier, 1>::compute_f(Real lambda)
+Real GCV_Stochastic<InputCarrier, 1>::compute_f(lambda_type<1> lambda)
 {
         // call external updater to update [if needed] the parameters for gcv calculus
         this->gu.call_to(0, lambda, this);
@@ -975,6 +947,14 @@ Real GCV_Stochastic<InputCarrier, 1>::compute_f(Real lambda)
 	// Rprintf("GCV = %f\n",GCV_val);
 
 	return GCV_val;
+}
+
+template<typename InputCarrier>
+Real GCV_Stochastic<InputCarrier, 2>::compute_f(lambda_type<2> lambda)
+{
+	Rprintf("compute_f not implemented");
+
+	return 1;
 }
 
 //----------------------------------------------------------------------------//
