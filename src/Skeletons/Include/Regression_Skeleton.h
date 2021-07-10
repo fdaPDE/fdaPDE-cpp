@@ -16,7 +16,8 @@ template<typename CarrierType>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, f_type>::value,
 	std::pair<MatrixXr, output_Data<1>> >::type optimizer_method_selection(CarrierType & carrier);
 template<typename EvaluationType, typename CarrierType>
-std::pair<MatrixXr, output_Data<1>> optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier);
+typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, f_type>::value,
+	std::pair<MatrixXr, output_Data<1>> >::type optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier);
 
 template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
 SEXP regression_skeleton(InputHandler & regressionData, OptimizationData & optimizationData, SEXP Rmesh)
@@ -146,7 +147,8 @@ std::pair<MatrixXr, output_Data<1>> >::type optimizer_method_selection(CarrierTy
  \return the solution to pass to the Solution_Builders
 */
 template<typename EvaluationType, typename CarrierType>
-std::pair<MatrixXr, output_Data<1>> optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
+typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, f_type>::value,
+std::pair<MatrixXr, output_Data<1>> >::type optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 {
 	// Build wrapper and newton method
 	Function_Wrapper<Real, Real, Real, Real, EvaluationType> Fun(optim);

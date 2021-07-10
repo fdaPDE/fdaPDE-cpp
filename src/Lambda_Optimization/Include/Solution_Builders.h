@@ -34,11 +34,11 @@ struct output_Data
         private:
         template<UInt s=size>
         typename std::enable_if<s==1, lambda_type<1>>::type
-        lambda_init(lambda_type<1> value) {return value;}
+        lambda_init(Real value) {return value;}
         
         template<UInt s=size>
         typename std::enable_if<s==2, lambda_type<2>>::type
-        lambda_init(lambda_type<1> value) {return std::make_pair(value, value);}
+        lambda_init(Real value) {return std::make_pair(value, value);}
 };
 
 //! Unique namespace to manage the output

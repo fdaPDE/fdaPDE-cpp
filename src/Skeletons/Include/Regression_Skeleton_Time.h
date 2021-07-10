@@ -15,8 +15,9 @@
 template<typename CarrierType>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, t_type>::value,
 	std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierType & carrier);
-//template<typename EvaluationType, typename CarrierType>
-//std::pair<MatrixXr, output_Data<2>> optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier);
+template<typename EvaluationType, typename CarrierType>
+typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, t_type>::value,
+	std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier);
 
 template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
 SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & optimizationData, SEXP Rmesh, SEXP Rmesh_time)
@@ -32,18 +33,18 @@ SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & 
 
 	regression.preapply(mesh); // preliminary apply (preapply) to store all problem matrices
 
-    std::pair<MatrixXr, output_Data<2>> solution_bricks;	// Prepare solution to be filled
-/*
-    if(regressionData.getFlagParabolic()){
-    	//DO forced areal
+	std::pair<MatrixXr, output_Data<2>> solution_bricks;	// Prepare solution to be filled
+	/*
+	if(regressionData.getFlagParabolic()){
+		//DO forced areal
 
-    }
-    else{
-    	//DO forced areal SEPARABLE
-    }
-*/
-    Carrier<InputHandler,Parabolic>
-				carrier = CarrierBuilder<InputHandler>::build_temporal_carrier(regressionData, regression, optimizationData);
+	}
+	else{
+		//DO forced areal SEPARABLE
+	}
+	*/
+	Carrier<InputHandler,Parabolic>
+		carrier = CarrierBuilder<InputHandler>::build_temporal_carrier(regressionData, regression, optimizationData);
 	solution_bricks = optimizer_method_selection<Carrier<InputHandler, Parabolic>>(carrier);
 	//Se si riesce, usare plain anche nel caso temporal
  	return Solution_Builders::build_solution_temporal_regression<InputHandler, ORDER, mydim, ndim>(solution_bricks.first, solution_bricks.second, mesh, regressionData, regression);
@@ -70,7 +71,7 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
 		GCV_Exact<CarrierType, 2> optim(carrier);
 		return optimizer_strategy_selection<GCV_Exact<CarrierType, 2>, CarrierType>(optim, carrier);
 	}
-	else if(optr->get_loss_function() == "GCV" && (optr->get_DOF_evaluation() == "stochastic" || optr->get_DOF_evaluation() == "not_required"))
+	else*/ if(optr->get_loss_function() == "GCV" && (optr->get_DOF_evaluation() == "stochastic" || optr->get_DOF_evaluation() == "not_required"))
 	{
 		//Rprintf("GCV stochastic\n");
 		GCV_Stochastic<CarrierType, 2> optim(carrier, true);
@@ -78,7 +79,6 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
 	}
 	else // if(optr->get_loss_function() == "unused" && optr->get_DOF_evaluation() == "not_required")
 	{
-		*/
 		//Rprintf("Pure evaluation\n");
 		GCV_Stochastic<CarrierType, 2> optim(carrier, false);
 
@@ -125,11 +125,11 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
 
 		output.time_partial = T.tv_sec + 1e-9*T.tv_nsec;
 
-        // postponed after apply in order to have betas computed
-        output.betas = betas;
-        
-        return {solution, output};
-	//}
+		// postponed after apply in order to have betas computed
+		output.betas = betas;
+		
+		return {solution, output};
+	}
 }
 
 //! Function to apply the optimization strategy, grid or Newton
@@ -140,25 +140,41 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
  \param carrier the Carrier used for the methods
  \return the solution to pass to the Solution_Builders
 */
-/*
 template<typename EvaluationType, typename CarrierType>
-std::pair<MatrixXr, output_Data<Real>> optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
+typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, t_type>::value,
+std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 {
 	// Build wrapper and newton method
-	Function_Wrapper<Real, Real, Real, Real, EvaluationType> Fun(optim);
-	typedef Function_Wrapper<Real, Real, Real, Real, EvaluationType> FunWr;
+	//anche l'ultimo real bisogna modificarlo, perchè è la dimensione dell'Hessiano*#*#*#*#*#*#*#*#*#*#*#*#*#
+	//capire come fare quando si tratterà newton
+	Function_Wrapper<lambda_type<2>, Real, lambda_type<2>, Real, EvaluationType> Fun(optim);
+	typedef Function_Wrapper<lambda_type<2>, Real, lambda_type<2>, Real, EvaluationType> FunWr;
 
 	const OptimizationData * optr = carrier.get_opt_data();
-	if(optr->get_criterion() == "grid")
-	{
+	//if(optr->get_criterion() == "grid")
+	//{
 		timer Time_partial; // Of the sole optimization
 		Time_partial.start();
 		// Rprintf("WARNING: start taking time\n");
 
 		// this will be used when grid will be correctly implemented, also for return elements
+		
+		UInt lambdas_count = carrier.get_opt_data()->get_size_S()*carrier.get_opt_data()->get_size_T();
+		std::vector<lambda_type<2>> lambda_vec;
+		lambda_vec.reserve(lambdas_count);
+		for(UInt i=0; i<carrier.get_opt_data()->get_size_S(); i++)
+			for(UInt j=0; j<carrier.get_opt_data()->get_size_T(); j++)
+			{
+				Real lambdaS = carrier.get_opt_data()->get_lambda_S()[i];
+				Real lambdaT = carrier.get_opt_data()->get_lambda_T()[j];
+				std::pair<Real, Real> lambda = std::make_pair(lambdaS, lambdaT);
+				lambda_vec.push_back(lambda);
+			}
 
-		Eval_GCV<Real, Real, EvaluationType> eval(Fun, optr->get_lambda_S());
-		output_Data<Real> output = eval.Get_optimization_vectorial();
+		//anche qui il secondo Real è l'Hessian*#*#*#*#*#*#*#*#*#*#*#*#*#
+		//*#*#*#*#*#*#*#*#*#*#*#
+		Eval_GCV<lambda_type<2>, Real, EvaluationType> eval(Fun, lambda_vec);
+		output_Data<2> output = eval.Get_optimization_vectorial();
 
 		// Rprintf("WARNING: partial time after the optimization method\n");
 		timespec T = Time_partial.stop();
@@ -173,44 +189,7 @@ std::pair<MatrixXr, output_Data<Real>> optimizer_strategy_selection(EvaluationTy
 
                 return {solution, output};
 
-	}
-	else // 'not_required' optimization can't enter here!! [checked in R code]
-	{
-		std::unique_ptr<Opt_methods<Real,Real,EvaluationType>> optim_p =
-			Opt_method_factory<Real, Real, EvaluationType>::create_Opt_method(optr->get_criterion(), Fun);
-
-                // Compute optimal lambda
-		Checker ch;
-		std::vector<Real> lambda_v_;
-		std::vector<Real> GCV_v_;
-		Real lambda = optr->get_initial_lambda_S();
-
-		if(lambda<=0)
-		{
-			lambda = -1.0;
-		}
-
-		timer Time_partial; // Of the sole optimization
-		Time_partial.start();
-		// Rprintf("WARNING: start taking time\n");
-
-		std::pair<Real, UInt> lambda_couple = optim_p->compute(lambda, optr->get_stopping_criterion_tol(), 40, ch, GCV_v_, lambda_v_);
-
-		//Rprintf("WARNING: partial time after the optimization method\n");
-		timespec T = Time_partial.stop();
-
-		// Get the solution
-		// to compute f and g hat
-		MatrixXr solution = carrier.apply(lambda_couple.first);
-
-		// postponed after apply in order to have betas computed
-		// now the last values in GCV_exact are the correct ones, related to the last iteration
-		output_Data<Real> output = Fun.get_output(lambda_couple, T, GCV_v_, lambda_v_, ch.which());
-		// the copy is necessary for the bulders outside
-
-		return {solution, output};
-	}
+	//}/* NEWTON NON ANCORA IMPLEMENTATO (bisogna aggiungere un else, vedere in Regression_skeleton
 }
-*/
 
 #endif
