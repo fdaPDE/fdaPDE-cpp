@@ -196,32 +196,46 @@ class Carrier: public Extensions...
                  \return the solution of the system
                  \note specific for spatial case
                 */
-                inline MatrixXr apply_to_b(const MatrixXr & b, Real lambda)
+                inline MatrixXr apply_to_b(const MatrixXr & b, lambda_type<1> lambda)
                 {
                         this->opt_data->set_current_lambdaS(lambda); // set the lambda value
                         return this->model->apply_to_b(b);
                 }
+                
+                //! Method to the system given a lambdaS and a lambdaT and a right hand side of the system
+                /*!
+                 \param b the right hand side of the system to be solved via system matrix
+                 \param lambda the optimization parameter with which to build the system matrix
+                 \return the solution of the system
+                 \note specific for spatial case
+                */
+                inline MatrixXr apply_to_b(const MatrixXr & b, lambda_type<2> lambda)
+                {
+                        this->opt_data->set_current_lambdaS(lambda.first); // set the lambdaS value
+                        this->opt_data->set_current_lambdaT(lambda.second); // set the lambdaT value
+                        return this->model->apply_to_b(b); /////********Va fatto anche nel caso iterative?? vedere apply poche righe più sotto
+                }
 
-                //! Method to the system given a lambda [right hand side is the usual of the problem]
+                //! Method to solve the system given a lambda [right hand side is the usual of the problem]
                 /*!
                  \param lambda the optimization parameter with which to build the system matrix
                  \return the solution of the system
                  \note apply is called here in order not to make the non const pointer public
                 */
-                inline MatrixXr apply(Real lambda)
+                inline MatrixXr apply(lambda_type<1> lambda)
                 {
                         this->opt_data->set_current_lambdaS(lambda); // set the lambda value
                         return (this->model->apply())(0,0);
                 }
 
-                //! Method to the system given lambdaS and lambdaT [right hand side is the usual of the problem]
+                //! Method to solve the system given lambdaS and lambdaT [right hand side is the usual of the problem]
                 /*!
                  \param lambdaS the optimization parameter with which to build the system matrix
                  \param lambdaT the optimization parameter with which to build the system matrix
                  \return the solution of the system
                  \note apply is called here in order not to make the non const pointer public
                 */
-                inline MatrixXr apply(std::pair<Real, Real> lambda)
+                inline MatrixXr apply(lambda_type<2> lambda)
                 {
                         this->opt_data->set_current_lambdaS(lambda.first); // set the lambdaS value
                         this->opt_data->set_current_lambdaT(lambda.second); // set the lambdaT value

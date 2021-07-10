@@ -1253,11 +1253,16 @@ void MixedFERegressionBase<InputHandler>::buildSystemMatrix(Real lambdaS, Real l
 template<typename InputHandler>
 MatrixXr MixedFERegressionBase<InputHandler>::apply_to_b(const MatrixXr & b)
 {
-	const Real last_lambda = optimizationData_.get_last_lS_used();
-	const Real lambda_ = optimizationData_.get_current_lambdaS();
-        if(lambda_ != last_lambda)
-        {
-                this->buildSystemMatrix(lambda_);
+	const Real last_lambdaS = optimizationData_.get_last_lS_used();
+	const Real last_lambdaT = optimizationData_.get_last_lT_used();
+	const Real lambdaS = optimizationData_.get_current_lambdaS();
+	const Real lambdaT = optimizationData_.get_current_lambdaT();
+        if(lambdaS!=last_lambdaS || lambdaT!=last_lambdaT)
+	{
+		if(!regressionData_.isSpaceTime())
+			buildSystemMatrix(lambdaS);
+        	else
+			buildSystemMatrix(lambdaS, lambdaT);
 
 		if(regressionData_.getDirichletIndices()->size() > 0)  // if areal data NO BOUNDARY CONDITIONS
 		{
@@ -1267,7 +1272,8 @@ MatrixXr MixedFERegressionBase<InputHandler>::apply_to_b(const MatrixXr & b)
                 this->system_factorize();
         }
 
-	optimizationData_.set_last_lS_used(lambda_);
+	optimizationData_.set_last_lS_used(lambdaS);
+	optimizationData_.set_last_lT_used(lambdaT);
 
         return this->template system_solve(b);
 }

@@ -584,8 +584,8 @@ Real GCV_Exact<InputCarrier, 1>::compute_fs(lambda_type<1> lambda)
 
 // -- Setters --
 //! Setter of the stochastic binary matrix US_ needed for dof methods
-template<typename InputCarrier>
-void GCV_Stochastic<InputCarrier, 1>::set_US_(void)
+template<typename InputCarrier, UInt size>
+void GCV_Stochastic<InputCarrier, size>::set_US_(void)
 {
         /* Debugging purpose timer [part I]
          timer Time_partial;
@@ -644,11 +644,13 @@ void GCV_Stochastic<InputCarrier, 1>::set_US_(void)
 /*!
  \param lambda value of the optimization parameter
 */
-template<typename InputCarrier>
-void GCV_Stochastic<InputCarrier, 1>::update_dof(lambda_type<1> lambda)
+template<typename InputCarrier, UInt size>
+void GCV_Stochastic<InputCarrier, size>::update_dof(lambda_type<size> lambda)
 {
         MatrixXr m = this->the_carrier.get_opt_data()->get_DOF_matrix();
-        if(m.cols()!=1 || m.rows()<=this->use_index)
+        
+        div_t divresult = div(this->use_index, this->the_carrier.get_opt_data()->get_size_S());
+        if(m.cols()==0 || m.rows()<divresult.rem+1 || m.cols()<divresult.quot+1)
         {
                 /* Debugging purpose timer [part I]
                  timer Time_partial;
@@ -697,22 +699,9 @@ void GCV_Stochastic<InputCarrier, 1>::update_dof(lambda_type<1> lambda)
         else
         {
                 Rprintf("No DOF computation required\n");
-                this->dof = m(this->use_index,0);
+                this->dof = m(divresult.rem,divresult.quot);
                 //std::cout<< this->dof << std::endl;
         }
-}
-
-template<typename InputCarrier>
-void GCV_Stochastic<InputCarrier, 2>::update_dof(lambda_type<2> lambda)
-{
-	/*
-		Nel caso ,2 bisogna convertire lo use_index da singolo numero a due numeri
-		div_t divresult = div(index, output.size_T+1);
-		use_index_2 = std::make_pair(divresult.quot, divresult.rem);
-		
-		vedere ad esempio in grid_eval come viene impostato se è coerente
-	*/
-	Rprintf("Update dof non ancora implementato");
 }
 
 //! Utility to compute the degrees of freedom of the residuals
@@ -721,8 +710,8 @@ void GCV_Stochastic<InputCarrier, 2>::update_dof(lambda_type<2> lambda)
  \pre update_dof() must have been called
  \sa update_dof()
 */
-template<typename InputCarrier>
-void GCV_Stochastic<InputCarrier, 1>::update_dor(lambda_type<1> lambda)
+template<typename InputCarrier, UInt size>
+void GCV_Stochastic<InputCarrier, size>::update_dor(lambda_type<size> lambda)
 {
         // dor = #locations - dof
         this->dor = this->s-this->dof*this->the_carrier.get_opt_data()->get_tuning();
@@ -731,53 +720,20 @@ void GCV_Stochastic<InputCarrier, 1>::update_dor(lambda_type<1> lambda)
         {
                 Rprintf("WARNING: Some values of the trace of the matrix S('lambda') are inconstistent.\n");
                 Rprintf("This might be due to ill-conditioning of the linear system.\n");
-                Rprintf("Try increasing value of 'lambda'. Value of 'lambda' that produces an error is: %e \n", lambda);
+                //printing not generalized for uni- and bi- dimensional lambda
+                //Rprintf("Try increasing value of 'lambda'. Value of 'lambda' that produces an error is: %e \n", lambda);
         }
 
         // Debugging purpose
         // Rprintf("DOR: %f\n", this->dor);
 }
 
-//! Utility to compute the degrees of freedom of the residuals
-/*!
- \param lambda value of the optimization parameter
- \pre update_dof() must have been called
- \sa update_dof()
-*/
-template<typename InputCarrier>
-void GCV_Stochastic<InputCarrier, 2>::update_dor(lambda_type<2> lambda)
-{
-	Rprintf("update_dor non implementato");
-}
-
 //! Utility to compute the predicted values in the locations
 /*!
  \param lambda value of the optimization parameter
 */
-template<typename InputCarrier>
-void GCV_Stochastic<InputCarrier, 1>::compute_z_hat(lambda_type<1> lambda)
-{
-        /* Debugging purpose timer [part I]
-         timer Time_partial;
-         Time_partial.start();
-         Rprintf("WARNING: start taking time compute_z_hat\n");
-        */
-
-        // Solve the system to find the predicted values of the spline coefficients
-        const UInt nnodes    = this->the_carrier.get_n_nodes();
-        const VectorXr f_hat = VectorXr(this->the_carrier.apply(lambda)).head(nnodes);
-
-        // Compute the predicted values in the locations from the f_hat
-        this->compute_z_hat_from_f_hat(f_hat);
-
-        /* Debugging purpose timer [part II]
-         Rprintf("WARNING: time after the compute_z_hat method\n");
-         timespec T = Time_partial.stop();
-        */
-}
-
-template<typename InputCarrier>
-void GCV_Stochastic<InputCarrier, 2>::compute_z_hat(lambda_type<2> lambda)
+template<typename InputCarrier, UInt size>
+void GCV_Stochastic<InputCarrier, size>::compute_z_hat(lambda_type<size> lambda)
 {
         /* Debugging purpose timer [part I]
          timer Time_partial;
@@ -804,15 +760,8 @@ void GCV_Stochastic<InputCarrier, 2>::compute_z_hat(lambda_type<2> lambda)
  \remark The order in which functions are invoked is essential for the consistency of the procedure
  \sa compute_z_hat(lambda_type<1> lambda), update_errors(lambda_type<1> lambda)
 */
-template<typename InputCarrier>
-void GCV_Stochastic<InputCarrier, 1>::update_parameters(lambda_type<1> lambda)
-{
-        this->compute_z_hat(lambda);
-        this->update_errors(lambda);
-}
-
-template<typename InputCarrier>
-void GCV_Stochastic<InputCarrier, 2>::update_parameters(lambda_type<2> lambda)
+template<typename InputCarrier, UInt size>
+void GCV_Stochastic<InputCarrier, size>::update_parameters(lambda_type<size> lambda)
 {
         this->compute_z_hat(lambda);
         this->update_errors(lambda);
@@ -829,8 +778,8 @@ void GCV_Stochastic<InputCarrier, 2>::update_parameters(lambda_type<2> lambda)
  \param lambda the actual value of lambda to be used for the computation
  \return the value of the gcv
 */
-template<typename InputCarrier>
-Real GCV_Stochastic<InputCarrier, 1>::compute_f(lambda_type<1> lambda)
+template<typename InputCarrier, UInt size>
+Real GCV_Stochastic<InputCarrier, size>::compute_f(lambda_type<size> lambda)
 {
         // call external updater to update [if needed] the parameters for gcv calculus
         this->gu.call_to(0, lambda, this);
@@ -844,14 +793,6 @@ Real GCV_Stochastic<InputCarrier, 1>::compute_f(lambda_type<1> lambda)
 	// Rprintf("GCV = %f\n",GCV_val);
 
 	return GCV_val;
-}
-
-template<typename InputCarrier>
-Real GCV_Stochastic<InputCarrier, 2>::compute_f(lambda_type<2> lambda)
-{
-	Rprintf("compute_f not implemented");
-
-	return 1;
 }
 
 //----------------------------------------------------------------------------//

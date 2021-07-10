@@ -235,31 +235,13 @@ class GCV_Exact<InputCarrier, 1>: public GCV_Family<InputCarrier, 1>
  of any carrier to perform its computations.
  \tparam InputCarrier Carrier-type parameter that contains insight about the problem to be solved
  \tparam size specialization parameter used to characterize the size of the lambda to be used
- \todo 2-D lambda optimization still to be implemented
 */
 template<typename InputCarrier, UInt size>
 class GCV_Stochastic: public GCV_Family<InputCarrier, size>
 {
-/*
-        [[ VERSION WITH TIMES STILL TO BE IMPLEMENTED ]]
-*/
-};
-
-//! Derived class used for unidimensional lambda stochastic gcv-based methods
-/*!
- This class implements an efficent stochastic approximation method to identify
- a sound approximation of the gcv. The algorithm involved is known as Stochastic
- Woodbury decomposition and directly takes advantage of the function apply proper
- of any Carrier to perform its computations. This template is a specialization for
- the unidimensional case.
- \tparam InputCarrier Carrier-type parameter that contains insight about the problem to be solved
-*/
-template<typename InputCarrier>
-class GCV_Stochastic<InputCarrier, 1>: public GCV_Family<InputCarrier, 1>
-{
         private:
                 //! An external updater whose purpose is keeping the internal values coherent with the computations to be made from time to time
-                GOF_updater<GCV_Stochastic<InputCarrier, 1>, Real> gu;
+                GOF_updater<GCV_Stochastic<InputCarrier, size>, lambda_type<size>> gu;
 
                 // INTERNAL DATA STRUCTURES
                 MatrixXr US_;           //!< binary{+1/-1} random matrix used for stochastic gcv computations [size s x #realizations]
@@ -268,9 +250,9 @@ class GCV_Stochastic<InputCarrier, 1>: public GCV_Family<InputCarrier, 1>
                 bool     us = false;    //!< keeps track of US_ matrix being already computed or not
 
                 // COMPUTERS and DOF methods
-                void compute_z_hat (lambda_type<1> lambda) override;
-                void update_dof(lambda_type<1> lambda)     override;
-                void update_dor(lambda_type<1> lambda)     override;
+                void compute_z_hat (lambda_type<size> lambda) override;
+                void update_dof(lambda_type<size> lambda)     override;
+                void update_dor(lambda_type<size> lambda)     override;
 
                 // SETTERS
                 void set_US_(void);
@@ -282,8 +264,8 @@ class GCV_Stochastic<InputCarrier, 1>: public GCV_Family<InputCarrier, 1>
                  \param the_carrier the structure from which to take all the data for the derived classes
                  \sa set_US_()
                 */
-                GCV_Stochastic<InputCarrier, 1>(InputCarrier & the_carrier_, bool flag_used):
-                        GCV_Family<InputCarrier, 1>(the_carrier_)
+                GCV_Stochastic(InputCarrier & the_carrier_, bool flag_used):
+                        GCV_Family<InputCarrier, size>(the_carrier_)
                         {
                                 MatrixXr m = this->the_carrier.get_opt_data()->get_DOF_matrix();
                                 if(m.cols()>0 && m.rows()>0 && flag_used)
@@ -293,80 +275,18 @@ class GCV_Stochastic<InputCarrier, 1>: public GCV_Family<InputCarrier, 1>
                         }
 
                 // PUBLIC UPDATERS
-                void update_parameters(lambda_type<1> lambda) override;
+                void update_parameters(lambda_type<size> lambda) override;
 
-                void first_updater(lambda_type<1> lambda)  {; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
-                void second_updater(lambda_type<1> lambda) {; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
+                void first_updater(lambda_type<size> lambda)  {; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
+                void second_updater(lambda_type<size> lambda) {; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
 
                 // GCV-COMPUTATION
-                Real compute_f( lambda_type<1> lambda) override;
-                Real compute_fp(lambda_type<1> lambda) {return 0; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
-                Real compute_fs(lambda_type<1> lambda) {return 0; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
+                Real compute_f( lambda_type<size> lambda) override;
+                Real compute_fp(lambda_type<size> lambda) {return 0; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
+                Real compute_fs(lambda_type<size> lambda) {return 0; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
                 //! Virtual Destuctor
         virtual ~GCV_Stochastic(){};
 };
-
-//! Derived class used for bidimensional lambda stochastic gcv-based methods
-/*!
- This class implements an efficent stochastic approximation method to identify
- a sound approximation of the gcv. The algorithm involved is known as Stochastic
- Woodbury decomposition and directly takes advantage of the function apply proper
- of any Carrier to perform its computations. This template is a specialization for
- the bidimensional case.
- \tparam InputCarrier Carrier-type parameter that contains insight about the problem to be solved
-*/
-template<typename InputCarrier>
-class GCV_Stochastic<InputCarrier, 2>: public GCV_Family<InputCarrier, 2>
-{
-        private:
-                //! An external updater whose purpose is keeping the internal values coherent with the computations to be made from time to time
-                GOF_updater<GCV_Stochastic<InputCarrier, 2>, std::pair<Real, Real>> gu;
-
-                // INTERNAL DATA STRUCTURES
-                MatrixXr US_;           //!< binary{+1/-1} random matrix used for stochastic gcv computations [size s x #realizations]
-                MatrixXr USTpsi;       //!< US^T*Psi
-                MatrixXr b;             //! Right hand side o solution
-                bool     us = false;    //!< keeps track of US_ matrix being already computed or not
-
-                // COMPUTERS and DOF methods
-                void compute_z_hat (lambda_type<2> lambda) override;
-                void update_dof(lambda_type<2> lambda)     override;
-                void update_dor(lambda_type<2> lambda)     override;
-
-                // SETTERS
-                void set_US_(void);
-
-        public:
-                // CONSTRUCTORS
-                //! Constructor of the class given the InputCarrier, also computes the US_ matrix
-                /*!
-                 \param the_carrier the structure from which to take all the data for the derived classes
-                 \sa set_US_()
-                */
-                GCV_Stochastic<InputCarrier, 2>(InputCarrier & the_carrier_, bool flag_used):
-                        GCV_Family<InputCarrier, 2>(the_carrier_)
-                        {
-                                MatrixXr m = this->the_carrier.get_opt_data()->get_DOF_matrix();
-                                if(m.cols()>0 && m.rows()>0 && flag_used)
-                                {
-                                        this->set_US_(); // this matrix is unchanged during the whole procedure, thus it's set once and for all
-                                }
-                        }
-
-                // PUBLIC UPDATERS
-                void update_parameters(lambda_type<2> lambda) override;
-
-                void first_updater(lambda_type<2> lambda)  {; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
-                void second_updater(lambda_type<2> lambda) {; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
-
-                // GCV-COMPUTATION
-                Real compute_f( lambda_type<2> lambda) override;
-                Real compute_fp(lambda_type<2> lambda) {return 0; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
-                Real compute_fs(lambda_type<2> lambda) {return 0; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
-                //! Virtual Destuctor
-        virtual ~GCV_Stochastic(){};
-};
-
 
 //----------------------------------------------------------------------------//
 // *** K-FOLD CV ***
