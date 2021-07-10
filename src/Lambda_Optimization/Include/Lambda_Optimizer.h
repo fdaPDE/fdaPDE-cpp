@@ -32,7 +32,7 @@ class Lambda_optimizer
                 /*!
                  \param the_carrier the structure from which to take all the data for the derived classes
                 */
-                Lambda_optimizer<InputCarrier, size>(InputCarrier & the_carrier_):
+                Lambda_optimizer(InputCarrier & the_carrier_):
                         the_carrier(the_carrier_) {}
 
                 // UPDATERS
@@ -60,28 +60,11 @@ class Lambda_optimizer
  \tparam size specialization parameter used to characterize the size of the lambda to be used
 */
 template <typename InputCarrier, UInt size>
-class GCV_Family: public Lambda_optimizer<InputCarrier, size>
-{
-/*
-        [[ VERSION WITH TIMES STILL TO BE IMPLEMENTED ]]
-*/
-};
-
-//! Father class used for unidimensional lambda gcv-based methods
-/*!
- This virtual class inherits from the generic unidimensional optimizer Lambda_optimizer
- and contains the methods used to compute the main statistics
- related to the optimization problem, like predicted output, errors and variances
- also stores a container to retrieve the data and pass them to the user.
- Specialized version for unidimensional problems.
- \tparam InputCarrier Carrier-type parameter that contains insight about the problem to be solved
-*/
-template <typename InputCarrier>
-class GCV_Family<InputCarrier, 1>: Lambda_optimizer<InputCarrier, 1>
+class GCV_Family: Lambda_optimizer<InputCarrier, size>
 {
         protected:
                 //! Model containing all the information necessary for the computation of the optimal value
-                using Lambda_optimizer<InputCarrier, 1>::the_carrier;
+                using Lambda_optimizer<InputCarrier, size>::the_carrier;
 
                 // Output data
                 VectorXr        z_hat;                  //!< Model predicted values in the locations [size s]
@@ -90,7 +73,7 @@ class GCV_Family<InputCarrier, 1>: Lambda_optimizer<InputCarrier, 1>
                 Real            rmse = 0.0;             //!< Model root mean squared error
                 Real            sigma_hat_sq = 0.0;     //!< Model estimated variance of error
                 UInt            s;                      //!< Model number of observations (i.e. #locations)
-                output_Data<1>     output;                 //!< Output, needed to be user-available, necessarily public
+                output_Data<size>     output;		//!< Output, needed to be user-available, necessarily public
 
                 // Degrees of freedom
                 Real            dof = 0.0;              //!< tr(S) + q, degrees of freedom of the model
@@ -99,7 +82,7 @@ class GCV_Family<InputCarrier, 1>: Lambda_optimizer<InputCarrier, 1>
                 UInt            use_index = -1;         //!< Index of the DOF_matrix to be used, if non empty
 
                 // SETTERS of the output data
-        virtual void compute_z_hat(lambda_type<1> lambda) = 0;    //!< Utility to compute the size of predicted value in the locations
+        virtual void compute_z_hat(lambda_type<size> lambda) = 0;    //!< Utility to compute the size of predicted value in the locations
                 void compute_z_hat_from_f_hat(const VectorXr & f_hat);
                 void compute_eps_hat(void);
                 void compute_SS_res(void);
@@ -108,11 +91,11 @@ class GCV_Family<InputCarrier, 1>: Lambda_optimizer<InputCarrier, 1>
                 void compute_s(void);
 
                 // UPDATERS
-                void update_errors(lambda_type<1> lambda);
+                void update_errors(lambda_type<size> lambda);
 
                 // DOF methods
-        virtual void update_dof(lambda_type<1> lambda) = 0;       //!< Utility to compute the degrees of freedom of the model
-        virtual void update_dor(lambda_type<1> lambda) = 0;       //!< Utility to compute the degrees of freedom of the residuals
+        virtual void update_dof(lambda_type<size> lambda) = 0;       //!< Utility to compute the degrees of freedom of the model
+        virtual void update_dor(lambda_type<size> lambda) = 0;       //!< Utility to compute the degrees of freedom of the residuals
 
                 // CONSTRUCTORS
                 //! Constructor of the class given the InputCarrier
@@ -120,116 +103,31 @@ class GCV_Family<InputCarrier, 1>: Lambda_optimizer<InputCarrier, 1>
                  \param the_carrier the structure from which to take all the data for the derived classes
                  \sa compute_s()
                 */
-                GCV_Family<InputCarrier, 1>(InputCarrier & the_carrier_):
-                        Lambda_optimizer<InputCarrier, 1>(the_carrier_)
+                GCV_Family(InputCarrier & the_carrier_):
+                        Lambda_optimizer<InputCarrier, size>(the_carrier_)
                         {
                                 this->compute_s();      // stores immediately the number of locations
+                                output.size_S = the_carrier_.get_opt_data()->get_size_S();
+				output.size_T = (size == 1) ? 0 : the_carrier_.get_opt_data()->get_size_T();
                         }
 
         public:
                 // UTILITY FOR DOF MATRIX
         inline  void set_index(UInt index){this->use_index = index;}
                 // PUBLIC UPDATERS
-        virtual void update_parameters(lambda_type<1> lambda) = 0; //!< Utility to update all the prameters of the model
+        virtual void update_parameters(lambda_type<size> lambda) = 0; //!< Utility to update all the prameters of the model
 
-                void zero_updater(lambda_type<1> lambda);
-
-                // GCV-COMPUTATION
-        virtual Real compute_f(lambda_type<1> lambda) = 0;       //!< Main function, represents the gcv computation
-
-                // OUTPUT MANAGERS
-                output_Data<1>  get_output(std::pair<Real, UInt> optimal_pair, const timespec & time_count, const std::vector<Real> & GCV_v, const std::vector<lambda_type<1>> & lambda_v, int termination_);
-                void set_output_partial_best(void);
-                output_Data<1> get_output_full(void);
-                void set_output_partial(void);
-                void combine_output_prediction(const VectorXr & f_hat, output_Data<1> & outp, UInt cols);
-                //! Virtual Destuctor
-        virtual ~GCV_Family(){};
-};
-
-//! Father class used for bidimensional lambda gcv-based methods
-/*!
- This virtual class inherits from the generic bidimensional optimizer Lambda_optimizer
- and contains the methods used to compute the main statistics
- related to the optimization problem, like predicted output, errors and variances
- also stores a container to retrieve the data and pass them to the user.
- Specialized version for bidimensional problems.
- \tparam InputCarrier Carrier-type parameter that contains insight about the problem to be solved
-*/
-template <typename InputCarrier>
-class GCV_Family<InputCarrier, 2>: Lambda_optimizer<InputCarrier, 2>
-{
-        protected:
-                //! Model containing all the information necessary for the computation of the optimal value
-                using Lambda_optimizer<InputCarrier, 2>::the_carrier;
-
-                // Output data
-                VectorXr        z_hat;                  //!< Model predicted values in the locations [size s]
-                VectorXr        eps_hat;                //!< Model predicted error in the locations (residuals) [size s]
-                Real            SS_res = 0.0;           //!< Model predicted sum of squares of the residuals
-                Real            rmse = 0.0;             //!< Model root mean squared error
-                Real            sigma_hat_sq = 0.0;     //!< Model estimated variance of error
-                UInt            s;                      //!< Model number of observations (i.e. #locations) ??each time??
-                output_Data<2>     output;                 //!< Output, needed to be user-available, necessarily public
-
-                // Degrees of freedom
-                Real            dof = 0.0;              //!< tr(S) + q, degrees of freedom of the model
-                Real            dor = 0.0;              //!< s - dof, degrees of freedom of the residuals
-
-                std::pair<UInt, UInt> use_index = std::make_pair(-1, -1); //!< Indices of the DOF_matrix to be used, if non empty
-
-                // SETTERS of the output data
-        virtual void compute_z_hat(lambda_type<2> lambda) = 0;    //!< Utility to compute the size of predicted value in the locations
-                void compute_z_hat_from_f_hat(const VectorXr & f_hat);
-                void compute_eps_hat(void);
-                void compute_SS_res(void);
-                void compute_rmse(void);
-                void compute_sigma_hat_sq(void);
-                void compute_s(void);
-
-                // UPDATERS
-                void update_errors(lambda_type<2> lambda);
-
-                // DOF methods
-        virtual void update_dof(lambda_type<2> lambda) = 0;       //!< Utility to compute the degrees of freedom of the model
-        virtual void update_dor(lambda_type<2> lambda) = 0;       //!< Utility to compute the degrees of freedom of the residuals
-
-                // CONSTRUCTORS
-                //! Constructor of the class given the InputCarrier
-                /*!
-                 \param the_carrier the structure from which to take all the data for the derived classes
-                 \sa compute_s()
-                */
-                GCV_Family<InputCarrier, 2>(InputCarrier & the_carrier_):
-                        Lambda_optimizer<InputCarrier, 2>(the_carrier_)
-                        {
-                                this->compute_s();      // stores immediately the number of locations
-                                output.size_S = the_carrier_.get_opt_data()->get_size_S();
-				output.size_T = the_carrier_.get_opt_data()->get_size_T();
-                        }
-
-        public:
-                // UTILITY FOR DOF MATRIX
-        inline  void set_index(UInt index)
-		{
-			div_t divresult = div(index, output.size_T+1);
-			this->use_index = std::make_pair(divresult.quot, divresult.rem);
-        	}
-
-                // PUBLIC UPDATERS
-        virtual void update_parameters(lambda_type<2> lambda) = 0; //!< Utility to update all the prameters of the model
-
-                void zero_updater(lambda_type<2> lambda);
+                void zero_updater(lambda_type<size> lambda);
 
                 // GCV-COMPUTATION
-        virtual Real compute_f(lambda_type<2> lambda) = 0;       //!< Main function, represents the gcv computation
+        virtual Real compute_f(lambda_type<size> lambda) = 0;       //!< Main function, represents the gcv computation
 
                 // OUTPUT MANAGERS
-                output_Data<2>  get_output(std::pair<Real, UInt> optimal_pair, const timespec & time_count, const std::vector<Real> & GCV_v, const std::vector<lambda_type<2>> & lambda_v, int termination_);
+                output_Data<size>  get_output(std::pair<lambda_type<size>, UInt> optimal_pair, const timespec & time_count, const std::vector<Real> & GCV_v, const std::vector<lambda_type<size>> & lambda_v, int termination_);
                 void set_output_partial_best(void);
-                output_Data<2> get_output_full(void);
+                output_Data<size> get_output_full(void);
                 void set_output_partial(void);
-                void combine_output_prediction(const VectorXr & f_hat, output_Data<2> & outp, UInt cols);
+                void combine_output_prediction(const VectorXr & f_hat, output_Data<size> & outp, UInt cols);
                 //! Virtual Destuctor
         virtual ~GCV_Family(){};
 };

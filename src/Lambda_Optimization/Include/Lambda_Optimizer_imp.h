@@ -18,8 +18,8 @@
  \param time_count counts how much time was consumed by the optimization method
  \return full output_Data struct
 */
-template<typename InputCarrier>
-output_Data<1> GCV_Family<InputCarrier, 1>::get_output(std::pair<Real,UInt> optimal_pair, const timespec & time_count, const std::vector<Real> & GCV_v, const std::vector<Real> & lambda_v, int termination_)
+template<typename InputCarrier, UInt size>
+output_Data<size> GCV_Family<InputCarrier, size>::get_output(std::pair<lambda_type<size>,UInt> optimal_pair, const timespec & time_count, const std::vector<Real> & GCV_v, const std::vector<lambda_type<size>> & lambda_v, int termination_)
 {
         this->output.content            = "full_optimization";
         this->output.lambda_sol         = optimal_pair.first;
@@ -41,20 +41,20 @@ output_Data<1> GCV_Family<InputCarrier, 1>::get_output(std::pair<Real,UInt> opti
 //! Full output for dof computation
 /*! Set and return all output data, dof included.
 */
-template<typename InputCarrier>
-void GCV_Family<InputCarrier, 1>::set_output_partial(void)
+template<typename InputCarrier, UInt size>
+void GCV_Family<InputCarrier, size>::set_output_partial(void)
 {
         (this->output.rmse).push_back(this->rmse);
         (this->output.dof).push_back(this->dof);
 
 }
 
-//! Getter of the fill output
+//! Getter of the full output
 /*!
  \return the full output_Data struct
 */
-template<typename InputCarrier>
-output_Data<1> GCV_Family<InputCarrier, 1>::get_output_full(void)
+template<typename InputCarrier, UInt size>
+output_Data<size> GCV_Family<InputCarrier, size>::get_output_full(void)
 {
         return this->output;
 }
@@ -64,8 +64,8 @@ output_Data<1> GCV_Family<InputCarrier, 1>::get_output_full(void)
 /*! Set and return all output data, dof included.
  \return output_Data struct containing predictions and dof
 */
-template<typename InputCarrier>
-void GCV_Family<InputCarrier, 1>::set_output_partial_best(void)
+template<typename InputCarrier, UInt size>
+void GCV_Family<InputCarrier, size>::set_output_partial_best(void)
 {
         this->output.content            = "full_dof_grid";
         this->output.z_hat              = MatrixXr(this->z_hat);
@@ -78,8 +78,8 @@ void GCV_Family<InputCarrier, 1>::set_output_partial_best(void)
  \param f_hat the system soultion from which to evaluate the predictions
  \return output_Data struct containing predictions
 */
-template<typename InputCarrier>
-void GCV_Family<InputCarrier, 1>::combine_output_prediction(const VectorXr & f_hat, output_Data<1> & outp, UInt cols)
+template<typename InputCarrier, UInt size>
+void GCV_Family<InputCarrier, size>::combine_output_prediction(const VectorXr & f_hat, output_Data<size> & outp, UInt cols)
 {
         this->compute_z_hat_from_f_hat(f_hat);
         this->compute_eps_hat();
@@ -93,54 +93,14 @@ void GCV_Family<InputCarrier, 1>::combine_output_prediction(const VectorXr & f_h
 
         outp.rmse.push_back(this->rmse);
 }
-
-template<typename InputCarrier>
-void GCV_Family<InputCarrier, 2>::combine_output_prediction(const VectorXr & f_hat, output_Data<2> & outp, UInt cols)
-{
-        this->compute_z_hat_from_f_hat(f_hat);
-        this->compute_eps_hat();
-        this->compute_SS_res();
-        this->compute_rmse();
-
-        if(outp.content != "prediction")
-                outp.content = "prediction";
-
-        outp.z_hat.col(cols) = this->z_hat;
-
-        outp.rmse.push_back(this->rmse);
-}
-
 
 // -- Setters --
 //! Utility to compute the predicted value in the locations given system solution f_hat
 /*!
  \param f_hat top block of solution vector produced by apply methods
 */
-template<typename InputCarrier>
-void GCV_Family<InputCarrier, 1>::compute_z_hat_from_f_hat(const VectorXr & f_hat)
-{
-        // z_hat  = H*z+Q*Psi*g_hat
-
-        if (this->the_carrier.has_W())
-        {
-                this->z_hat = (*this->the_carrier.get_Hp())*(*this->the_carrier.get_zp()) + this->the_carrier.lmbQ((*this->the_carrier.get_psip())*f_hat);
-        }
-        else
-        {
-                this->z_hat = (*this->the_carrier.get_psip())*f_hat;
-        }
-
-        // Debugging purpose print
-        /* Rprintf("z_hat \n");
-           for(UInt i = 0; i < this->s-1; i++)
-                  Rprintf("%f, ", this->z_hat[i]);
-           Rprintf("%f", this->z_hat[s-1]);
-           Rprintf("\n");
-        */
-}
-
-template<typename InputCarrier>
-void GCV_Family<InputCarrier, 2>::compute_z_hat_from_f_hat(const VectorXr & f_hat)
+template<typename InputCarrier, UInt size>
+void GCV_Family<InputCarrier, size>::compute_z_hat_from_f_hat(const VectorXr & f_hat)
 {
         // z_hat  = H*z+Q*Psi*g_hat
 
@@ -166,23 +126,8 @@ void GCV_Family<InputCarrier, 2>::compute_z_hat_from_f_hat(const VectorXr & f_ha
 /*!
  \pre z_hat must have been computed
 */
-template<typename InputCarrier>
-void GCV_Family<InputCarrier, 1>::compute_eps_hat(void)
-{
-        // eps_hat = z-z_hat
-        this->eps_hat = (*this->the_carrier.get_zp())-this->z_hat;
-
-        // Debugging purpose print
-        /* Rprintf("Eps_hat \n");
-           for(UInt i = 0; i < this->s-1; i++)
-                  Rprintf("%f, ", this->eps_hat[i]);
-           Rprintf("%f", this->eps_hat[s-1]);
-           Rprintf("\n");
-        */
-}
-
-template<typename InputCarrier>
-void GCV_Family<InputCarrier, 2>::compute_eps_hat(void)
+template<typename InputCarrier, UInt size>
+void GCV_Family<InputCarrier, size>::compute_eps_hat(void)
 {
         // eps_hat = z-z_hat
         this->eps_hat = (*this->the_carrier.get_zp())-this->z_hat;
@@ -201,18 +146,8 @@ void GCV_Family<InputCarrier, 2>::compute_eps_hat(void)
  \pre compute_eps_hat() must have been called
  \sa compute_eps_hat()
 */
-template<typename InputCarrier>
-void GCV_Family<InputCarrier, 1>::compute_SS_res(void)
-{
-        // SS_res = ||eps_hat||^2
-        this->SS_res = this->eps_hat.squaredNorm();
-
-        // Debugging purpose print
-        // Rprintf("SS_res  = %f\n", this->SS_res);
-}
-
-template<typename InputCarrier>
-void GCV_Family<InputCarrier, 2>::compute_SS_res(void)
+template<typename InputCarrier, UInt size>
+void GCV_Family<InputCarrier, size>::compute_SS_res(void)
 {
         // SS_res = ||eps_hat||^2
         this->SS_res = this->eps_hat.squaredNorm();
@@ -226,17 +161,8 @@ void GCV_Family<InputCarrier, 2>::compute_SS_res(void)
  \pre compute_SS_res() must have been called
  \sa compute_SS_res()
 */
-template<typename InputCarrier>
-void GCV_Family<InputCarrier, 1>::compute_rmse(void)
-{
-        // rmse =std::sqrt(SS_res/#locations)
-        this->rmse = std::sqrt(this->SS_res/Real(this->s));
-
-        // Debugging purpose print
-        // Rprintf("RMSE  = %f\n", this->rmse);
-}
-template<typename InputCarrier>
-void GCV_Family<InputCarrier, 2>::compute_rmse(void)
+template<typename InputCarrier, UInt size>
+void GCV_Family<InputCarrier, size>::compute_rmse(void)
 {
         // rmse =std::sqrt(SS_res/#locations)
         this->rmse = std::sqrt(this->SS_res/Real(this->s));
@@ -250,8 +176,8 @@ void GCV_Family<InputCarrier, 2>::compute_rmse(void)
  \pre compute_SS_res() and compute_dor() must have been called
  \sa compute_SS_res(), compute_dor()
 */
-template<typename InputCarrier>
-void GCV_Family<InputCarrier, 1>::compute_sigma_hat_sq(void)
+template<typename InputCarrier, UInt size>
+void GCV_Family<InputCarrier, size>::compute_sigma_hat_sq(void)
 {
         // sigma_hat^2 = SS_res/dor
         this->sigma_hat_sq = this->SS_res/Real(this->dor);
@@ -260,15 +186,9 @@ void GCV_Family<InputCarrier, 1>::compute_sigma_hat_sq(void)
         // Rprintf("sigma_hat_sq = %f\n", this->sigma_hat_sq);
 }
 
-template<typename InputCarrier>
-void GCV_Family<InputCarrier, 2>::compute_sigma_hat_sq(void)
-{
-        Rprintf("compute_sigma_hat_sq non ancora implementato");
-}
-
 //! Utility to compute the size of the model
-template<typename InputCarrier>
-void GCV_Family<InputCarrier, 1>::compute_s(void)
+template<typename InputCarrier, UInt size>
+void GCV_Family<InputCarrier, size>::compute_s(void)
 {
         // s = #locations
         this->s = this->the_carrier.get_n_obs();
@@ -276,18 +196,6 @@ void GCV_Family<InputCarrier, 1>::compute_s(void)
         // Debugging purpose print
         // Rprintf("s [# locations]  = %d\n", this->s);
 }
-
-//! Utility to compute the size of the model
-template<typename InputCarrier>
-void GCV_Family<InputCarrier, 2>::compute_s(void)
-{
-        // s = #locations
-        this->s = this->the_carrier.get_n_obs();
-
-        // Debugging purpose print
-        // Rprintf("s [# locations]  = %d\n", this->s);
-}
-
 
 // -- Updaters --
 //! Utility to update the output-error parameters, fundamental for a correct computation of the gcv
@@ -295,20 +203,8 @@ void GCV_Family<InputCarrier, 2>::compute_s(void)
  \param lambda the actual value of lambda to be used for the update
  \sa compute_eps_hat(), compute_SS_res(), compute_rmse(), update_dof(lambda_type<1> lambda),update_dor(lambda_type<1> lambda) and compute_sigma_hat_sq().
 */
-template<typename InputCarrier>
-void GCV_Family<InputCarrier, 1>::update_errors(lambda_type<1> lambda)
-{
-        // this order must be kept
-        this->compute_eps_hat();
-        this->compute_SS_res();
-        this->compute_rmse();
-        this->update_dof(lambda);
-        this->update_dor(lambda);
-        this->compute_sigma_hat_sq();
-}
-
-template<typename InputCarrier>
-void GCV_Family<InputCarrier, 2>::update_errors(lambda_type<2> lambda)
+template<typename InputCarrier, UInt size>
+void GCV_Family<InputCarrier, size>::update_errors(lambda_type<size> lambda)
 {
         // this order must be kept
         this->compute_eps_hat();
@@ -324,17 +220,11 @@ void GCV_Family<InputCarrier, 2>::update_errors(lambda_type<2> lambda)
  \param lambda the actual value of lambda to be used for the update
  \sa update_parameters(lambda_type<1> lambda)
 */
-template<typename InputCarrier>
-void GCV_Family<InputCarrier, 1>::zero_updater(lambda_type<1> lambda)
+template<typename InputCarrier, UInt size>
+void GCV_Family<InputCarrier, size>::zero_updater(lambda_type<size> lambda)
 {
         // Virtual update, depends on the gcv computational method [exact or stochastic]
         this->update_parameters(lambda);
-}
-
-template<typename InputCarrier>
-void GCV_Family<InputCarrier, 2>::zero_updater(lambda_type<2> lambda)
-{
-        Rprintf("zero_updater non ancora implementato");
 }
 
 //----------------------------------------------------------------------------//
@@ -815,6 +705,13 @@ void GCV_Stochastic<InputCarrier, 1>::update_dof(lambda_type<1> lambda)
 template<typename InputCarrier>
 void GCV_Stochastic<InputCarrier, 2>::update_dof(lambda_type<2> lambda)
 {
+	/*
+		Nel caso ,2 bisogna convertire lo use_index da singolo numero a due numeri
+		div_t divresult = div(index, output.size_T+1);
+		use_index_2 = std::make_pair(divresult.quot, divresult.rem);
+		
+		vedere ad esempio in grid_eval come viene impostato se è coerente
+	*/
 	Rprintf("Update dof non ancora implementato");
 }
 

@@ -13,46 +13,32 @@
 template<UInt size>
 struct output_Data
 {
-};
-
-template<>
-struct output_Data<1>
-{
         std::string             content{"Empty"};          //!< Suggests what the output is containing and how it should be used
         MatrixXr                z_hat;                     //!< Model predicted values in the locations
         std::vector<Real>       rmse;                      //!< Model root mean squared error
         Real                    sigma_hat_sq    = -1.0;    //!< Model estimated variance of errors
         std::vector<Real>       dof             = {};      //!< tr(S) + q, degrees of freedom of the model
-        Real                    lambda_sol      = 0.0;     //!< Lambda obtained in the solution
+	lambda_type<size>	lambda_sol = lambda_init<size>(0.0); //!< Lambda obtained in the solution
         UInt                    lambda_pos      = 0;       //!< Position of optimal lambda, only for grid evaluation, in R numebring starting from 1 (0 means no grid used)
         UInt                    n_it            = 0;       //!< Number of iterations for the method
         Real                    time_partial    = 0.0;     //!< Time, from beginning to end of the optimization method
         std::vector<Real>       GCV_evals       = {-1};    //!< GCV evaluations vector of explored lambda, with the optimization iterative method or grid
-        std::vector<Real>       lambda_vec      = {-1};    //!< Vector of explored lambda with with the optimization iterative method or grid
+        std::vector<lambda_type<size>> lambda_vec = {lambda_init<size>(-1)}; //!< Vector of explored lambda with with the optimization iterative method or grid
         Real                    GCV_opt         = -1;      //!< GCV optimal comptued in the vector of lambdas
         int                     termination     = -2;      //!< Reason of termination of the iterative optimization method (reached tolerance or max number of iterations)
         MatrixXv                betas;                     //!< Regression coefficients of the optimal solution
-};
-
-template<>
-struct output_Data<2>
-{
-        std::string             content{"Empty"};          //!< Suggests what the output is containing and how it should be used
-        MatrixXr                z_hat;                     //!< Model predicted values in the locations
-        std::vector<Real>       rmse;                      //!< Model root mean squared error
-        Real                    sigma_hat_sq    = -1.0;    //!< Model estimated variance of errors
-        std::vector<Real>       dof             = {};      //!< tr(S) + q, degrees of freedom of the model
-        std::pair<Real, Real>   lambda_sol = std::make_pair(0.0, 0.0); //!< Lambda obtained in the solution
-        UInt                    lambda_pos      = 0;       //!< Position of optimal lambda pair, only for grid evaluation, in R numebring starting from 1 (0 means no grid used)
-        UInt                    n_it            = 0;       //!< Number of iterations for the method
-        Real                    time_partial    = 0.0;     //!< Time, from beginning to end of the optimization method
-        std::vector<Real>       GCV_evals       = {-1};    //!< GCV evaluations vector of explored lambda, with the optimization iterative method or grid
-        std::vector<std::pair<Real, Real>> lambda_vec = {std::make_pair(-1, -1)}; //!< Vector of explored lambda with with the optimization iterative method or grid
-        Real                    GCV_opt         = -1;      //!< GCV optimal comptued in the vector of lambdas
-        int                     termination     = -2;      //!< Reason of termination of the iterative optimization method (reached tolerance or max number of iterations)
-        MatrixXv                betas;                     //!< Regression coefficients of the optimal solution
-        UInt                    size_S;                    //!< Size of the lambdaS vector
-        UInt                    size_T;                    //!< Size of the lambdaT vector
+        //the following two are to be able to deduce the single lambdaS and lambdaT indices from the pair index (e.g. lambda_pos) in the temporal case
+	UInt                    size_S = 0;		   //!< Size of the lambdaS vector
+        UInt                    size_T = 0;		   //!< Size of the lambdaT vector
+        
+        private:
+        template<UInt s=size>
+        typename std::enable_if<s==1, lambda_type<1>>::type
+        lambda_init(lambda_type<1> value) {return value;}
+        
+        template<UInt s=size>
+        typename std::enable_if<s==2, lambda_type<2>>::type
+        lambda_init(lambda_type<1> value) {return std::make_pair(value, value);}
 };
 
 //! Unique namespace to manage the output
