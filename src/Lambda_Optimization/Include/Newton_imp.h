@@ -71,7 +71,7 @@ std::pair<Tuple, UInt> Newton_ex<Tuple, Hessian, Extensions...>::compute (const 
 
                x_old = x;
                Auxiliary<Tuple>::divide(fsx, fpx, x);
-               x = x_old - x;
+               x = Auxiliary<Tuple>::subtract(x_old, x);
 
                if (x<=0)
                {
