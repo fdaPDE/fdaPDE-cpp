@@ -213,9 +213,9 @@ static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr
     
     std::vector<Real> const & dof = output.dof;
     std::vector<Real> const & GCV = output.GCV_evals;
-    div_t divresult = div(output.lambda_pos, output.size_T+1); // from the pair index, reconstruct the original indices of LambdaS, LambdaT
-    UInt bestLambdaS = divresult.quot;
-    UInt bestLambdaT = divresult.rem;
+    div_t divresult = div(output.lambda_pos, output.size_S); // from the pair index, reconstruct the original indices of LambdaS, LambdaT
+    UInt bestLambdaS = divresult.rem;
+    UInt bestLambdaT = divresult.quot;
     
     MatrixXv beta;
     if(regressionData.getCovariates()->rows()==0)
@@ -237,7 +237,7 @@ static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr
     SET_VECTOR_ELT(result, 1, Rf_allocMatrix(REALSXP, output.size_S, output.size_T));
     SET_VECTOR_ELT(result, 2, Rf_allocMatrix(REALSXP, output.size_S, output.size_T));
     SET_VECTOR_ELT(result, 3, Rf_allocVector(INTSXP, 2)); //best lambdas
-    SET_VECTOR_ELT(result, 4, Rf_allocMatrix(REALSXP, beta(0,0).size(), beta.rows()*beta.cols()));
+    SET_VECTOR_ELT(result, 4, Rf_allocMatrix(REALSXP, beta(0,0).size(), beta.rows()));
 
     //! Copy solution
     Real *rans = REAL(VECTOR_ELT(result, 0));
