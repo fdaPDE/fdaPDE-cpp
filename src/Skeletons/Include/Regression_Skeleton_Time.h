@@ -120,15 +120,15 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
  		MatrixXv betas;
 		betas.resize(lambdas_count, 1);
 
-		for(UInt i=0; i<carrier.get_opt_data()->get_size_S(); i++)
+		for(UInt j=0; j<carrier.get_opt_data()->get_size_T(); j++)
 		{
-			for(UInt j=0; j<carrier.get_opt_data()->get_size_T(); j++)
+			for(UInt i=0; i<carrier.get_opt_data()->get_size_S(); i++)
 			{
 				Real lambdaS = carrier.get_opt_data()->get_lambda_S()[i];
 				Real lambdaT = carrier.get_opt_data()->get_lambda_T()[j];
 				std::pair<Real, Real> lambda = std::make_pair(lambdaS, lambdaT);
 				output.lambda_vec.push_back(lambda);
-				UInt couple_index = i*carrier.get_opt_data()->get_size_T()+j;
+				UInt couple_index = j*carrier.get_opt_data()->get_size_S()+i;
 				if(i==0 && j==0)
 				{
 					MatrixXr sol = carrier.apply(lambda);
@@ -187,14 +187,16 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(Evaluat
 		UInt lambdas_count = carrier.get_opt_data()->get_size_S()*carrier.get_opt_data()->get_size_T();
 		std::vector<lambda_type<2>> lambda_vec;
 		lambda_vec.reserve(lambdas_count);
-		for(UInt i=0; i<carrier.get_opt_data()->get_size_S(); i++)
-			for(UInt j=0; j<carrier.get_opt_data()->get_size_T(); j++)
+		for(UInt j=0; j<carrier.get_opt_data()->get_size_T(); j++)
+		{
+			Real lambdaT = carrier.get_opt_data()->get_lambda_T()[j];
+			for(UInt i=0; i<carrier.get_opt_data()->get_size_S(); i++)
 			{
 				Real lambdaS = carrier.get_opt_data()->get_lambda_S()[i];
-				Real lambdaT = carrier.get_opt_data()->get_lambda_T()[j];
 				std::pair<Real, Real> lambda = std::make_pair(lambdaS, lambdaT);
 				lambda_vec.push_back(lambda);
 			}
+		}
 
 		//anche qui il secondo Real è l'Hessian*#*#*#*#*#*#*#*#*#*#*#*#*#
 		//*#*#*#*#*#*#*#*#*#*#*#
