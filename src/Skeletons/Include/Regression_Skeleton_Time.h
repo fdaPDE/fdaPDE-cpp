@@ -34,18 +34,43 @@ SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & 
 	regression.preapply(mesh); // preliminary apply (preapply) to store all problem matrices
 
 	std::pair<MatrixXr, output_Data<2>> solution_bricks;	// Prepare solution to be filled
-	/*
-	if(regressionData.getFlagParabolic()){
-		//DO forced areal
-
+	
+	// Build the Carrier according to problem type
+	if(regression.isSV())
+	{
+		if(regressionData.getNumberOfRegions()>0)
+		{
+			//Rprintf("Temporal, Areal-forced\n");
+			Carrier<InputHandler,Temporal,Forced,Areal>
+				carrier = CarrierBuilder<InputHandler>::build_temporal_forced_areal_carrier(regressionData, regression, optimizationData);
+			solution_bricks = optimizer_method_selection<Carrier<InputHandler,Temporal,Forced,Areal>>(carrier);
+		}
+		else
+		{
+			//Rprintf("Temporal, Pointwise-forced\n");
+			Carrier<InputHandler,Temporal,Forced>
+				carrier = CarrierBuilder<InputHandler>::build_temporal_forced_carrier(regressionData, regression, optimizationData);
+			solution_bricks = optimizer_method_selection<Carrier<InputHandler,Temporal,Forced>>(carrier);
+		}
 	}
-	else{
-		//DO forced areal SEPARABLE
+	else
+	{
+		if(regressionData.getNumberOfRegions()>0)
+		{
+			//Rprintf("Temporal, Areal\n");
+			Carrier<InputHandler,Temporal,Areal>
+				carrier = CarrierBuilder<InputHandler>::build_temporal_areal_carrier(regressionData, regression, optimizationData);
+			solution_bricks = optimizer_method_selection<Carrier<InputHandler,Temporal,Areal>>(carrier);
+		}
+		else
+		{
+			//Rprintf("Temporal, Pointwise\n");
+			Carrier<InputHandler,Temporal>
+				carrier = CarrierBuilder<InputHandler>::build_temporal_plain_carrier(regressionData, regression, optimizationData);
+			solution_bricks = optimizer_method_selection<Carrier<InputHandler,Temporal>>(carrier);
+		}
 	}
-	*/
-	Carrier<InputHandler,Parabolic>
-		carrier = CarrierBuilder<InputHandler>::build_temporal_carrier(regressionData, regression, optimizationData);
-	solution_bricks = optimizer_method_selection<Carrier<InputHandler, Parabolic>>(carrier);
+	
 	//Se si riesce, usare plain anche nel caso temporal
  	return Solution_Builders::build_solution_temporal_regression<InputHandler, ORDER, mydim, ndim>(solution_bricks.first, solution_bricks.second, mesh, regressionData, regression);
 }
