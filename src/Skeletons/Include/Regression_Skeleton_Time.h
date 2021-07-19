@@ -131,13 +131,13 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
 				UInt couple_index = j*carrier.get_opt_data()->get_size_S()+i;
 				if(i==0 && j==0)
 				{
-					MatrixXr sol = carrier.apply(lambda);
+					MatrixXr sol = carrier.apply(lambda); //apply_iterative
 					solution.resize(sol.rows(),lambdas_count);
 					solution.col(couple_index) = sol;
 				}
 				else
 				{
-					solution.col(couple_index) = carrier.apply(lambda);
+					solution.col(couple_index) = carrier.apply(lambda); //apply_iterative
 				}
 				optim.combine_output_prediction(solution.topRows(solution.rows()/2).col(couple_index),output,couple_index);
 				if(carrier.get_model()->getBeta().cols()>0 && carrier.get_model()->getBeta().rows()>0)
@@ -207,7 +207,7 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(Evaluat
 		timespec T = Time_partial.stop();
 
 		// Get the solution
-		MatrixXr solution = carrier.apply(output.lambda_sol);
+		MatrixXr solution = carrier.apply(output.lambda_sol); //apply_iterative
 
 		output.time_partial = T.tv_sec + 1e-9*T.tv_nsec;
 
@@ -216,7 +216,45 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(Evaluat
 
                 return {solution, output};
 
-	//}/* NEWTON NON ANCORA IMPLEMENTATO (bisogna aggiungere un else, vedere in Regression_skeleton
+	//}
+	//else // 'not_required' optimization can't enter here!! [checked in R code]
+	//{
+		//il Real dopo lambda_type<2> è Hessian, bisogna gestirlo
+		/*std::unique_ptr<Opt_methods<lambda_type<2>,Real,EvaluationType>> optim_p =
+			Opt_method_factory<lambda_type<2>, Real, EvaluationType>::create_Opt_method(optr->get_criterion(), Fun);
+
+                // Compute optimal lambda
+		Checker ch;
+		std::vector<lambda_type<2>> lambda_v_;
+		std::vector<Real> GCV_v_;
+		Real lambdaS = optr->get_initial_lambda_S();
+		Real lambdaT = optr->get_initial_lambda_T();
+
+		if(lambdaS<=0) lambdaS = -1.0;
+		if(lambdaT<=0) lambdaT = -1.0;
+		
+		lambda_type<2> lambda = std::make_pair(lambdaS, lambdaT);
+
+		timer Time_partial; // Of the sole optimization
+		Time_partial.start();
+		// Rprintf("WARNING: start taking time\n");
+
+		std::pair<lambda_type<2>, UInt> lambda_couple = optim_p->compute(lambda, optr->get_stopping_criterion_tol(), 40, ch, GCV_v_, lambda_v_);
+
+		//Rprintf("WARNING: partial time after the optimization method\n");
+		timespec T = Time_partial.stop();
+
+		// Get the solution
+		// to compute f and g hat
+		MatrixXr solution = carrier.apply(lambda_couple.first); //apply_iterative (potrebbe esistere nel GCV un apply_to_b iterative?)
+
+		// postponed after apply in order to have betas computed
+		// now the last values in GCV_exact are the correct ones, related to the last iteration
+		output_Data<2> output = Fun.get_output(lambda_couple, T, GCV_v_, lambda_v_, ch.which());
+		// the copy is necessary for the bulders outside
+
+		return {solution, output};
+	}*/
 }
 
 #endif
