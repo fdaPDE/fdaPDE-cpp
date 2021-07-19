@@ -153,7 +153,7 @@ struct Auxiliary<VectorXr>
                  };
 
                  //! Apply Newton's method
-                 std::pair<Tuple, UInt> compute(const Tuple & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<Real> & lambda_v) override;
+                 std::pair<Tuple, UInt> compute(const Tuple & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<Tuple> & lambda_v) override;
 
                  //! Virtual Destuctor
                  virtual ~Newton_ex(){};

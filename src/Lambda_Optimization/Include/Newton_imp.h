@@ -12,7 +12,7 @@
  \return std::pair<Tuple, UInt>, a pair which containns the optimal lambda found and the number of iterations to reach the tolerance
 */
 template <typename Tuple, typename Hessian, typename ...Extensions>
-std::pair<Tuple, UInt> Newton_ex<Tuple, Hessian, Extensions...>::compute (const Tuple & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<Real> & lambda_v)
+std::pair<Tuple, UInt> Newton_ex<Tuple, Hessian, Extensions...>::compute (const Tuple & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<Tuple> & lambda_v)
 {
        // Initialize the algorithm
        Tuple x_old;
