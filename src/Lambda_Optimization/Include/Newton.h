@@ -66,7 +66,7 @@ class Opt_methods
         public:
 
                 //! Function to apply the optimization method and obtain as a result the couple (optimal lambda, optimal value of the function)
-                virtual std::pair<Tuple, UInt> compute (const Tuple & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<Real> & lambda_v) = 0;
+                virtual std::pair<Tuple, UInt> compute (const Tuple & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<Tuple> & lambda_v) = 0;
 
                 //! Virtual Destuctor
                 virtual ~Opt_methods(){};
