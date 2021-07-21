@@ -170,10 +170,8 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, C
 std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 {
 	// Build wrapper and newton method
-	//anche l'ultimo real bisogna modificarlo, perchè è la dimensione dell'Hessiano*#*#*#*#*#*#*#*#*#*#*#*#*#
-	//capire come fare quando si tratterà newton
-	Function_Wrapper<lambda_type<2>, Real, lambda_type<2>, Real, EvaluationType> Fun(optim);
-	typedef Function_Wrapper<lambda_type<2>, Real, lambda_type<2>, Real, EvaluationType> FunWr;
+	Function_Wrapper<lambda_type<2>, Real, lambda_type<2>, MatrixXr, EvaluationType> Fun(optim);
+	typedef Function_Wrapper<lambda_type<2>, Real, lambda_type<2>, MatrixXr, EvaluationType> FunWr;
 
 	const OptimizationData * optr = carrier.get_opt_data();
 	//if(optr->get_criterion() == "grid")
@@ -197,10 +195,8 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(Evaluat
 				lambda_vec.push_back(lambda);
 			}
 		}
-
-		//anche qui il secondo Real è l'Hessian*#*#*#*#*#*#*#*#*#*#*#*#*#
-		//*#*#*#*#*#*#*#*#*#*#*#
-		Eval_GCV<lambda_type<2>, Real, EvaluationType> eval(Fun, lambda_vec);
+		
+		Eval_GCV<lambda_type<2>, MatrixXr, EvaluationType> eval(Fun, lambda_vec);
 		output_Data<2> output = eval.Get_optimization_vectorial();
 
 		// Rprintf("WARNING: partial time after the optimization method\n");
@@ -219,9 +215,8 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(Evaluat
 	//}
 	//else // 'not_required' optimization can't enter here!! [checked in R code]
 	//{
-		//il Real dopo lambda_type<2> è Hessian, bisogna gestirlo
-		/*std::unique_ptr<Opt_methods<lambda_type<2>,Real,EvaluationType>> optim_p =
-			Opt_method_factory<lambda_type<2>, Real, EvaluationType>::create_Opt_method(optr->get_criterion(), Fun);
+		/*std::unique_ptr<Opt_methods<lambda_type<2>,MatrixXr,EvaluationType>> optim_p =
+			Opt_method_factory<lambda_type<2>,MatrixXr,EvaluationType>::create_Opt_method(optr->get_criterion(), Fun);
 
                 // Compute optimal lambda
 		Checker ch;
