@@ -64,7 +64,7 @@ class GOF_updater
 		
 		template<typename S=T>
 		typename std::enable_if<std::is_same<S,lambda_type<2>>::value, lambda_type<2>>::type
-		lambda_init(Real value) {return std::make_pair(value, value);}
+		lambda_init(Real value) {return (lambda_type<2>() << value, value).finished();}
 
         public:
                 // -- CONSTRUCTORS --

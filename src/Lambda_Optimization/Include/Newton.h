@@ -87,11 +87,10 @@ struct Auxiliary<lambda_type<1>>
 
                 static inline bool isNull(Real n)                       {return (n == 0);}      //!< Check if the input value is zero \param n number to be checked
                 static inline void divide(Real a, Real b, Real & x)     {x = b/a;}              //!< Apply a division \param a denominator \param b numerator \param x reference to result
-                static inline Real subtract(Real a, Real b)		{return a-b;}
                 static inline Real residual(Real a)                     {return std::abs(a);}   //!< Compute the norm of the residual \param a take the absolute value of this number \return the absolute value of a
 };
 
-//! Auxiliary class to perform elementary mathematical operations and checks: specialization for 2d case
+//! Auxiliary class to perform elementary mathematical operations and checks: specialization for n dimensional case
 template<>
 struct Auxiliary<lambda_type<2>>
 {
@@ -114,66 +113,7 @@ struct Auxiliary<lambda_type<2>>
                  \param b right-hand side
                  \param x reference to result vector
                 */
-                static inline void divide(const MatrixXr & A, const lambda_type<2> & pair, lambda_type<2> & sol)
-                {
-                	VectorXr b(2);
-                	b(0) = pair.first;
-                	b(1) = pair.second;
-                	VectorXr x(2);
-                        Cholesky::solve(A, b, x);
-                        sol.first = x(0);
-                        sol.second = x(1);
-                }
-                
-                //! Subtract
-                /*!
-                 \param a
-                 \param b
-                 \return a-b element by element
-                */
-                static inline lambda_type<2> subtract(const lambda_type<2> & a, const lambda_type<2> & b)
-                {
-                	return std::make_pair(a.first-b.first, a.second-b.second);
-                }
-
-                //! Compute the norm of the residual
-                /*!
-                 \param a vector of which compute the norm
-                 \return the computed norm
-                */
-                static inline Real residual(lambda_type<2> pair)
-                {
-                	VectorXr a(2);
-                	a(0) = pair.first;
-                	a(2) = pair.second;
-                        return a.norm();
-                }
-};
-
-//! Auxiliary class to perform elementary mathematical operations and checks: specialization for n dimensional case
-template<>
-struct Auxiliary<VectorXr>
-{
-        public:
-                Auxiliary(void) {};
-
-                //! Check if the input value is zero
-                /*!
-                 \param n matrix to be checked
-                */
-                static inline bool isNull(MatrixXr n)
-                {
-                        UInt sz = n.size();
-                        return (n == MatrixXr::Zero(sz,sz));
-                }
-
-                //! Solve a linear system in the optimization method
-                /*!
-                 \param A system matrix
-                 \param b right-hand side
-                 \param x reference to result vector
-                */
-                static inline void divide(const MatrixXr & A, const VectorXr & b, VectorXr & x)
+                static inline void divide(const MatrixXr & A, const lambda_type<2> & b, lambda_type<2> & x)
                 {
                         Cholesky::solve(A, b, x);
                 }
@@ -183,7 +123,7 @@ struct Auxiliary<VectorXr>
                  \param a vector of which compute the norm
                  \return the computed norm
                 */
-                static inline Real residual(VectorXr a)
+                static inline Real residual(lambda_type<2> a)
                 {
                         return a.norm();
                 }

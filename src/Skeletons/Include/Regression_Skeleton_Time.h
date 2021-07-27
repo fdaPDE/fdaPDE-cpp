@@ -22,6 +22,7 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, C
 template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
 SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & optimizationData, SEXP Rmesh, SEXP Rmesh_time)
 {
+	Eigen::Matrix<Real,2,1> Topolino = (Eigen::Matrix<Real,2,1>() << 1.3, 3.5).finished();
 	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh, regressionData.getSearch());//! load the mesh
 	UInt n_time = Rf_length(Rmesh_time);
 	std::vector<Real> mesh_time(n_time);
@@ -126,7 +127,7 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
 			{
 				Real lambdaS = carrier.get_opt_data()->get_lambda_S()[i];
 				Real lambdaT = carrier.get_opt_data()->get_lambda_T()[j];
-				std::pair<Real, Real> lambda = std::make_pair(lambdaS, lambdaT);
+				lambda_type<2> lambda = (lambda_type<2>() << lambdaS, lambdaT).finished();
 				output.lambda_vec.push_back(lambda);
 				UInt couple_index = j*carrier.get_opt_data()->get_size_S()+i;
 				if(i==0 && j==0)
@@ -191,7 +192,7 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(Evaluat
 			for(UInt i=0; i<carrier.get_opt_data()->get_size_S(); i++)
 			{
 				Real lambdaS = carrier.get_opt_data()->get_lambda_S()[i];
-				std::pair<Real, Real> lambda = std::make_pair(lambdaS, lambdaT);
+				lambda_type<2> lambda = (lambda_type<2>() << lambdaS, lambdaT).finished();
 				lambda_vec.push_back(lambda);
 			}
 		}
@@ -228,7 +229,7 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(Evaluat
 		if(lambdaS<=0) lambdaS = -1.0;
 		if(lambdaT<=0) lambdaT = -1.0;
 		
-		lambda_type<2> lambda = std::make_pair(lambdaS, lambdaT);
+		lambda_type<2> lambda = (lambda_type<2>() << lambdaS, lambdaT).finished();
 
 		timer Time_partial; // Of the sole optimization
 		Time_partial.start();

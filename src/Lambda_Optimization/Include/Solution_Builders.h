@@ -38,7 +38,7 @@ struct output_Data
         
         template<UInt s=size>
         typename std::enable_if<s==2, lambda_type<2>>::type
-        lambda_init(Real value) {return std::make_pair(value, value);}
+        lambda_init(Real value) {return (lambda_type<2>() << value, value).finished();}
 };
 
 //! Unique namespace to manage the output

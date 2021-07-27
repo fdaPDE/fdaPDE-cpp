@@ -211,8 +211,8 @@ class Carrier: public Extensions...
                 */
                 inline MatrixXr apply_to_b(const MatrixXr & b, lambda_type<2> lambda)
                 {
-                        this->opt_data->set_current_lambdaS(lambda.first); // set the lambdaS value
-                        this->opt_data->set_current_lambdaT(lambda.second); // set the lambdaT value
+                        this->opt_data->set_current_lambdaS(lambda(0)); // set the lambdaS value
+                        this->opt_data->set_current_lambdaT(lambda(1)); // set the lambdaT value
                         return this->model->apply_to_b(b); /////********Va fatto anche nel caso iterative?? vedere apply poche righe più sotto
                 }
 
@@ -237,8 +237,8 @@ class Carrier: public Extensions...
                 */
                 inline MatrixXr apply(lambda_type<2> lambda)
                 {
-                        this->opt_data->set_current_lambdaS(lambda.first); // set the lambdaS value
-                        this->opt_data->set_current_lambdaT(lambda.second); // set the lambdaT value
+                        this->opt_data->set_current_lambdaS(lambda(0)); // set the lambdaS value
+                        this->opt_data->set_current_lambdaT(lambda(1)); // set the lambdaT value
                         if(this->model->isIter())
                         	return (this->model->apply_iterative())(0,0);
                         else

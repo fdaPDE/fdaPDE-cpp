@@ -35,9 +35,6 @@
 typedef double Real;
 typedef int UInt;
 
-template<UInt size>
-using lambda_type = typename std::conditional<size==1,Real,std::pair<Real,Real>>::type;
-
 typedef Eigen::Matrix<Real,Eigen::Dynamic,Eigen::Dynamic> MatrixXr;
 typedef Eigen::Matrix<UInt,Eigen::Dynamic,Eigen::Dynamic> MatrixXi;
 typedef Eigen::Matrix<Real,Eigen::Dynamic,1> VectorXr;
@@ -46,6 +43,9 @@ typedef Eigen::Matrix<VectorXr,Eigen::Dynamic,Eigen::Dynamic> MatrixXv;
 typedef Eigen::SparseMatrix<Real> SpMat;
 typedef Eigen::SparseVector<Real> SpVec;
 typedef Eigen::Triplet<Real> coeff;
+
+template<UInt size>
+using lambda_type = typename std::conditional<size==1, Real, VectorXr>::type;
 
 #include "Global_Utilities/Include/RObjects.h"
 
