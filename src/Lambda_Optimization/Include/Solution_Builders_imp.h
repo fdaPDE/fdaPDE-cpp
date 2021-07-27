@@ -204,13 +204,6 @@ SEXP Solution_Builders::build_solution_plain_regression(const MatrixXr & solutio
 template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
 static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr & solution, const output_Data<2> & output, const MeshHandler<ORDER, mydim, ndim> & mesh, const InputHandler & regressionData, const MixedFERegression<InputHandler>& regression)
 {
-    /*
-    if (regression.isIter())
-        regression.apply_iterative();
-    else
-        regression.apply();
-    */
-    
     std::vector<Real> const & dof = output.dof;
     std::vector<Real> const & GCV = output.GCV_evals;
     div_t divresult = div(output.lambda_pos, output.size_S); // from the pair index, reconstruct the original indices of LambdaS, LambdaT

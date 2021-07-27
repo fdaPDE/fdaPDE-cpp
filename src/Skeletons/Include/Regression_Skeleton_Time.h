@@ -22,7 +22,6 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, C
 template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
 SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & optimizationData, SEXP Rmesh, SEXP Rmesh_time)
 {
-	Eigen::Matrix<Real,2,1> Topolino = (Eigen::Matrix<Real,2,1>() << 1.3, 3.5).finished();
 	MeshHandler<ORDER, mydim, ndim> mesh(Rmesh, regressionData.getSearch());//! load the mesh
 	UInt n_time = Rf_length(Rmesh_time);
 	std::vector<Real> mesh_time(n_time);
