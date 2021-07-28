@@ -219,7 +219,7 @@ static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr
     }
     else
          beta = output.betas;
-
+         
     const MatrixXr & barycenters = regression.getBarycenters();
     const VectorXi & elementIds = regression.getElementIds();
 
@@ -317,7 +317,7 @@ static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr
         for(UInt i = 0; i < barycenters.rows(); i++)
             rans11[i + barycenters.rows()*j] = barycenters(i,j);
     }
-
+    
     UNPROTECT(1);
     return(result);
 }

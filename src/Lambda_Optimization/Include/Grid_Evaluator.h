@@ -8,6 +8,7 @@
 #include "../../FdaPDE.h"
 #include "Function_Variadic.h"
 #include "Solution_Builders.h"
+#include "../../Global_Utilities/Include/Lambda.h"
 
 // CLASSES
 //! Father class for a scalar function evaluation of a given vector of lambda values computing the minimum fuction value

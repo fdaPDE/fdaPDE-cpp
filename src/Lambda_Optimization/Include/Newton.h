@@ -9,6 +9,7 @@
 #include "../../FdaPDE.h"
 #include "../../FE_Assemblers_Solvers/Include/Solver.h"
 #include "Function_Variadic.h"
+#include "../../Global_Utilities/Include/Lambda.h"
 
 // CLASSES
 //! Checker, contains data regarding the last process, used in optimization processes
@@ -80,7 +81,7 @@ struct Auxiliary
 
 //! Auxiliary class to perform elementary mathematical operations and checks: specialization for 1 dimensional case
 template<>
-struct Auxiliary<lambda_type<1>>
+struct Auxiliary<lambda::type<1>>
 {
         public:
                 Auxiliary(void) {};
@@ -92,7 +93,7 @@ struct Auxiliary<lambda_type<1>>
 
 //! Auxiliary class to perform elementary mathematical operations and checks: specialization for n dimensional case
 template<>
-struct Auxiliary<lambda_type<2>>
+struct Auxiliary<lambda::type<2>>
 {
         public:
                 Auxiliary(void) {};
@@ -113,7 +114,7 @@ struct Auxiliary<lambda_type<2>>
                  \param b right-hand side
                  \param x reference to result vector
                 */
-                static inline void divide(const MatrixXr & A, const lambda_type<2> & b, lambda_type<2> & x)
+                static inline void divide(const MatrixXr & A, const lambda::type<2> & b, lambda::type<2> & x)
                 {
                         Cholesky::solve(A, b, x);
                 }
@@ -123,7 +124,7 @@ struct Auxiliary<lambda_type<2>>
                  \param a vector of which compute the norm
                  \return the computed norm
                 */
-                static inline Real residual(lambda_type<2> a)
+                static inline Real residual(lambda::type<2> a)
                 {
                         return a.norm();
                 }
@@ -174,7 +175,7 @@ class Newton_fd: public Opt_methods<Tuple, Hessian, Extensions...>
  \tparam Extensions input class if the computations need members already stored in a class
 */
 template <typename ...Extensions>
-class Newton_fd<lambda_type<1>, Real, Extensions...>: public Opt_methods<lambda_type<1>, Real, Extensions...>
+class Newton_fd<lambda::type<1>, Real, Extensions...>: public Opt_methods<lambda::type<1>, Real, Extensions...>
 {
         public:
 
@@ -183,10 +184,10 @@ class Newton_fd<lambda_type<1>, Real, Extensions...>: public Opt_methods<lambda_
                  \param F_ the function wrapper F to be optimized
                  \note F cannot be const, it must be modified
                 */
-                Newton_fd(Function_Wrapper<lambda_type<1>, Real, lambda_type<1>, Real, Extensions...> & F_): Opt_methods<lambda_type<1>, Real, Extensions...>(F_) {};
+                Newton_fd(Function_Wrapper<lambda::type<1>, Real, lambda::type<1>, Real, Extensions...> & F_): Opt_methods<lambda::type<1>, Real, Extensions...>(F_) {};
 
                 //! Apply Newton fd method
-                std::pair<Real, UInt> compute(const lambda_type<1> & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<lambda_type<1>> & lambda_v) override;
+                std::pair<Real, UInt> compute(const lambda::type<1> & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<lambda::type<1>> & lambda_v) override;
 
 
                 //! Virtual Destuctor
@@ -196,7 +197,7 @@ class Newton_fd<lambda_type<1>, Real, Extensions...>: public Opt_methods<lambda_
 };
 
 template <typename ...Extensions>
-class Newton_fd<lambda_type<2>, MatrixXr, Extensions...>: public Opt_methods<lambda_type<2>, MatrixXr, Extensions...>
+class Newton_fd<lambda::type<2>, MatrixXr, Extensions...>: public Opt_methods<lambda::type<2>, MatrixXr, Extensions...>
 {
         public:
 
@@ -205,10 +206,10 @@ class Newton_fd<lambda_type<2>, MatrixXr, Extensions...>: public Opt_methods<lam
                  \param F_ the function wrapper F to be optimized
                  \note F cannot be const, it must be modified
                 */
-                Newton_fd(Function_Wrapper<lambda_type<2>, Real, lambda_type<2>, MatrixXr, Extensions...> & F_): Opt_methods<lambda_type<2>, MatrixXr, Extensions...>(F_) {};
+                Newton_fd(Function_Wrapper<lambda::type<2>, Real, lambda::type<2>, MatrixXr, Extensions...> & F_): Opt_methods<lambda::type<2>, MatrixXr, Extensions...>(F_) {};
 
                 //! Apply Newton fd method
-                std::pair<lambda_type<2>, UInt> compute(const lambda_type<2> & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<lambda_type<2>> & lambda_v) override;
+                std::pair<lambda::type<2>, UInt> compute(const lambda::type<2> & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<lambda::type<2>> & lambda_v) override;
 
 
                 //! Virtual Destuctor

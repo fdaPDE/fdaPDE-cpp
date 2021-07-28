@@ -121,7 +121,7 @@ std::pair<Tuple, UInt> Newton_ex<Tuple, Hessian, Extensions...>::compute (const 
  \return std::pair<Real, UInt>, a pair which containns the optimal lambda found and the number of iterations to reach the tolerance
 */
 template <typename ...Extensions>
-std::pair<lambda_type<1>, UInt> Newton_fd<lambda_type<1>, Real, Extensions...>::compute (const lambda_type<1> & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<lambda_type<1>> & lambda_v)
+std::pair<lambda::type<1>, UInt> Newton_fd<lambda::type<1>, Real, Extensions...>::compute (const lambda::type<1> & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<lambda::type<1>> & lambda_v)
 {
         // Initialize the algorithm
         Real x_old;
@@ -233,11 +233,11 @@ std::pair<lambda_type<1>, UInt> Newton_fd<lambda_type<1>, Real, Extensions...>::
 }
 
 template <typename ...Extensions>
-std::pair<lambda_type<2>, UInt> Newton_fd<lambda_type<2>, MatrixXr, Extensions...>::compute (const lambda_type<2> & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<lambda_type<2>> & lambda_v)
+std::pair<lambda::type<2>, UInt> Newton_fd<lambda::type<2>, MatrixXr, Extensions...>::compute (const lambda::type<2> & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<lambda::type<2>> & lambda_v)
 {
         // Initialize the algorithm
-        lambda_type<2> x_old;
-        lambda_type<2> x = x0;
+        lambda::type<2> x_old;
+        lambda::type<2> x = x0;
         UInt n_iter = 0;
         Real error  = std::numeric_limits<Real>::infinity();
         Real h      = 4e-6;
@@ -246,19 +246,19 @@ std::pair<lambda_type<2>, UInt> Newton_fd<lambda_type<2>, MatrixXr, Extensions..
         // Rprintf("\n Starting Initializing lambda phase"); /*! Start from 6 lambda and find the minimum value of GCV to start from it the newton's method*/
 
         Real valmin, valcur;
-        lambda_type<2> lambda_min;
+        lambda::type<2> lambda_min;
         UInt Nm = 6;
         std::vector<Real> vals = {5.000000e-05, 1.442700e-03, 4.162766e-02, 1.201124e+00, 3.465724e+01, 1.000000e+03};
 
 	for(UInt i=0; i<Nm; i++)
 		for(UInt j=0; j<Nm; j++)
 		{
-		        valcur = this->F.evaluate_f((lambda_type<2>() << vals[i],vals[j]).finished());
+		        valcur = this->F.evaluate_f(lambda::make_pair(vals[i],vals[j]));
 
 		        if(valcur<valmin || (i==0 && j==0))
 		        {
 		                valmin = valcur;
-		                lambda_min = (lambda_type<2>() << vals[i],vals[j]).finished();
+		                lambda_min = lambda::make_pair(vals[i],vals[j]);
 		        }
 		}
 
@@ -271,26 +271,26 @@ std::pair<lambda_type<2>, UInt> Newton_fd<lambda_type<2>, MatrixXr, Extensions..
 
         // Only the first time applied here
         // Rprintf("Forward: \n");
-        Real space_fxph = this->F.evaluate_f((lambda_type<2>() << x(0)+h, x(1)).finished());
-        Real time_fxph = this->F.evaluate_f((lambda_type<2>() << x(0), x(1)+h).finished());
+        Real space_fxph = this->F.evaluate_f(lambda::make_pair(x(0)+h, x(1)));
+        Real time_fxph = this->F.evaluate_f(lambda::make_pair(x(0), x(1)+h));
         //Rprintf("Backward: \n");
-        Real space_fxmh = this->F.evaluate_f((lambda_type<2>() << x(0)-h, x(1)).finished());
-        Real time_fxmh = this->F.evaluate_f((lambda_type<2>() << x(0), x(1)-h).finished());
+        Real space_fxmh = this->F.evaluate_f(lambda::make_pair(x(0)-h, x(1)));
+        Real time_fxmh = this->F.evaluate_f(lambda::make_pair(x(0), x(1)-h));
         // Rprintf("Center: \n");
         Real fx  = this->F.evaluate_f(x); //space_fx = time_fx (no h movements)
 
         Real space_fpx = (space_fxph-space_fxmh)/(2*h);
         Real time_fpx = (time_fxph-time_fxmh)/(2*h);
-       	lambda_type<2> fpx = (lambda_type<2>() << space_fpx, time_fpx).finished();
+       	lambda::type<2> fpx = lambda::make_pair(space_fpx, time_fpx);
         // Rprintf("fp(x): %f\n", fpx);
 
         Real space_fsx = (space_fxph+space_fxmh-(2*fx))/(h*h);
         Real time_fsx = (time_fxph+time_fxmh-(2*fx))/(h*h);
         //https://scicomp.stackexchange.com/questions/11294/2nd-order-centered-finite-difference-approximation-of-u-xy
-        Real mixed_fsx = (this->F.evaluate_f((lambda_type<2>() << x(0)+h, x(1)+h).finished())-
-        		this->F.evaluate_f((lambda_type<2>() << x(0)+h, x(1)-h).finished())-
-        		this->F.evaluate_f((lambda_type<2>() << x(0)-h, x(1)+h).finished())-
-        		this->F.evaluate_f((lambda_type<2>() << x(0)-h, x(1)-h).finished()))/(4*h*h);
+        Real mixed_fsx = (this->F.evaluate_f(lambda::make_pair(x(0)+h, x(1)+h))-
+        		this->F.evaluate_f(lambda::make_pair(x(0)+h, x(1)-h))-
+        		this->F.evaluate_f(lambda::make_pair(x(0)-h, x(1)+h))-
+        		this->F.evaluate_f(lambda::make_pair(x(0)-h, x(1)-h)))/(4*h*h);
         MatrixXr fsx(2,2);
         fsx(0,0) = space_fsx; fsx(0,1) = mixed_fsx;
         fsx(1,0) = mixed_fsx; fsx(1,1) = time_fsx;
@@ -302,7 +302,7 @@ std::pair<lambda_type<2>, UInt> Newton_fd<lambda_type<2>, MatrixXr, Extensions..
                 lambda_v.push_back(x);
 
                 //Debugging purpose f(x)
-                if (Auxiliary<lambda_type<2>>::isNull(fsx))
+                if (Auxiliary<lambda::type<2>>::isNull(fsx))
                 {
                         // Debug message
                         // std::cout << "Division by zero" << std::endl;
@@ -313,7 +313,7 @@ std::pair<lambda_type<2>, UInt> Newton_fd<lambda_type<2>, MatrixXr, Extensions..
 
 
                 x_old = x;
-                Auxiliary<lambda_type<2>>::divide(fsx, fpx, x);
+                Auxiliary<lambda::type<2>>::divide(fsx, fpx, x);
                 x = x_old - x;
 
                 if (x(0)<=0||x(1)<=0)
@@ -326,20 +326,20 @@ std::pair<lambda_type<2>, UInt> Newton_fd<lambda_type<2>, MatrixXr, Extensions..
 
                 // Put here the updates in order to compute error on the correct derivative and to have z_hat updated for the solution
                 // Rprintf("Forward:\n");
-		Real space_fxph = this->F.evaluate_f((lambda_type<2>() <<x(0)+h, x(1)).finished());
-		Real time_fxph = this->F.evaluate_f((lambda_type<2>() <<x(0), x(1)+h).finished());
+		Real space_fxph = this->F.evaluate_f(lambda::make_pair(x(0)+h, x(1)));
+		Real time_fxph = this->F.evaluate_f(lambda::make_pair(x(0), x(1)+h));
 		//Rprintf("Backward: \n");
-		Real space_fxmh = this->F.evaluate_f((lambda_type<2>() <<x(0)-h, x(1)).finished());
-		Real time_fxmh = this->F.evaluate_f((lambda_type<2>() <<x(0), x(1)-h).finished());
+		Real space_fxmh = this->F.evaluate_f(lambda::make_pair(x(0)-h, x(1)));
+		Real time_fxmh = this->F.evaluate_f(lambda::make_pair(x(0), x(1)-h));
 		// Rprintf("Center: \n");
 		Real fx  = this->F.evaluate_f(x); //space_fx = time_fx (no h movements)
 
 		Real space_fpx = (space_fxph-space_fxmh)/(2*h);
 		Real time_fpx = (time_fxph-time_fxmh)/(2*h);
-	       	lambda_type<2> fpx = (lambda_type<2>() << space_fpx, time_fpx).finished();
+	       	lambda::type<2> fpx = lambda::make_pair(space_fpx, time_fpx);
 		// Rprintf("fp(x): %f\n", fpx);
 
-                error = Auxiliary<lambda_type<2>>::residual(fpx);
+                error = Auxiliary<lambda::type<2>>::residual(fpx);
 
                 Rprintf("\nStep number %d  of FD-NEWTON: residual = %f\n", n_iter, error);
 
@@ -356,10 +356,10 @@ std::pair<lambda_type<2>, UInt> Newton_fd<lambda_type<2>, MatrixXr, Extensions..
                 Real space_fsx = (space_fxph+space_fxmh-(2*fx))/(h*h);
 		Real time_fsx = (time_fxph+time_fxmh-(2*fx))/(h*h);
 		//https://scicomp.stackexchange.com/questions/11294/2nd-order-centered-finite-difference-approximation-of-u-xy
-		Real mixed_fsx = (this->F.evaluate_f((lambda_type<2>() <<x(0)+h, x(1)+h).finished())-
-				this->F.evaluate_f((lambda_type<2>() <<x(0)+h, x(1)-h).finished())-
-				this->F.evaluate_f((lambda_type<2>() <<x(0)-h, x(1)+h).finished())-
-				this->F.evaluate_f((lambda_type<2>() <<x(0)-h, x(1)-h).finished()))/(4*h*h);
+		Real mixed_fsx = (this->F.evaluate_f(lambda::make_pair(x(0)+h, x(1)+h))-
+				this->F.evaluate_f(lambda::make_pair(x(0)+h, x(1)-h))-
+				this->F.evaluate_f(lambda::make_pair(x(0)-h, x(1)+h))-
+				this->F.evaluate_f(lambda::make_pair(x(0)-h, x(1)-h)))/(4*h*h);
 		MatrixXr fsx(2,2);
 		fsx(0,0) = space_fsx; fsx(0,1) = mixed_fsx;
 		fsx(1,0) = mixed_fsx; fsx(1,1) = time_fsx;

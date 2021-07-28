@@ -11,6 +11,7 @@
 #include "../../Mesh/Include/Mesh.h"
 #include "../../Regression/Include/Mixed_FE_Regression.h"
 #include "../../Lambda_Optimization/Include/Optimization_Data.h"
+#include "../../Global_Utilities/Include/Lambda.h"
 
 template<typename CarrierType>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, t_type>::value,
@@ -113,20 +114,21 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
 
 		// Get the solution
 		output_Data<2> output;
+		output.size_S = carrier.get_opt_data()->get_size_S(); //controllare se è il caso di farlo qui
+		output.size_T = carrier.get_opt_data()->get_size_T(); //
 		UInt lambdas_count = carrier.get_opt_data()->get_size_S()*carrier.get_opt_data()->get_size_T(); // Valutare se spostare nel Carrier dentro estensione Temporal
 		output.z_hat.resize(carrier.get_psip()->rows(), lambdas_count);
 		output.lambda_vec.reserve(lambdas_count);
 		MatrixXr solution;
  		MatrixXv betas;
 		betas.resize(lambdas_count, 1);
-
 		for(UInt j=0; j<carrier.get_opt_data()->get_size_T(); j++)
 		{
 			for(UInt i=0; i<carrier.get_opt_data()->get_size_S(); i++)
 			{
 				Real lambdaS = carrier.get_opt_data()->get_lambda_S()[i];
 				Real lambdaT = carrier.get_opt_data()->get_lambda_T()[j];
-				lambda_type<2> lambda = (lambda_type<2>() << lambdaS, lambdaT).finished();
+				lambda::type<2> lambda = lambda::make_pair(lambdaS, lambdaT);
 				output.lambda_vec.push_back(lambda);
 				UInt couple_index = j*carrier.get_opt_data()->get_size_S()+i;
 				if(i==0 && j==0)
@@ -170,9 +172,9 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, C
 std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 {
 	// Build wrapper and newton method
-	Function_Wrapper<lambda_type<2>, Real, lambda_type<2>, MatrixXr, EvaluationType> Fun(optim);
-	typedef Function_Wrapper<lambda_type<2>, Real, lambda_type<2>, MatrixXr, EvaluationType> FunWr;
-
+	Function_Wrapper<lambda::type<2>, Real, lambda::type<2>, MatrixXr, EvaluationType> Fun(optim);
+	typedef Function_Wrapper<lambda::type<2>, Real, lambda::type<2>, MatrixXr, EvaluationType> FunWr;
+	
 	const OptimizationData * optr = carrier.get_opt_data();
 	//if(optr->get_criterion() == "grid")
 	//{
@@ -183,7 +185,7 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(Evaluat
 		// this will be used when grid will be correctly implemented, also for return elements
 		
 		UInt lambdas_count = carrier.get_opt_data()->get_size_S()*carrier.get_opt_data()->get_size_T();
-		std::vector<lambda_type<2>> lambda_vec;
+		std::vector<lambda::type<2>> lambda_vec;
 		lambda_vec.reserve(lambdas_count);
 		for(UInt j=0; j<carrier.get_opt_data()->get_size_T(); j++)
 		{
@@ -191,12 +193,12 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(Evaluat
 			for(UInt i=0; i<carrier.get_opt_data()->get_size_S(); i++)
 			{
 				Real lambdaS = carrier.get_opt_data()->get_lambda_S()[i];
-				lambda_type<2> lambda = (lambda_type<2>() << lambdaS, lambdaT).finished();
+				lambda::type<2> lambda = lambda::make_pair(lambdaS, lambdaT);
 				lambda_vec.push_back(lambda);
 			}
 		}
 		
-		Eval_GCV<lambda_type<2>, MatrixXr, EvaluationType> eval(Fun, lambda_vec);
+		Eval_GCV<lambda::type<2>, MatrixXr, EvaluationType> eval(Fun, lambda_vec);
 		output_Data<2> output = eval.Get_optimization_vectorial();
 
 		// Rprintf("WARNING: partial time after the optimization method\n");
@@ -215,12 +217,12 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(Evaluat
 	//}
 	//else // 'not_required' optimization can't enter here!! [checked in R code]
 	//{
-		/*std::unique_ptr<Opt_methods<lambda_type<2>,MatrixXr,EvaluationType>> optim_p =
-			Opt_method_factory<lambda_type<2>,MatrixXr,EvaluationType>::create_Opt_method(optr->get_criterion(), Fun);
+		/*std::unique_ptr<Opt_methods<lambda::type<2>,MatrixXr,EvaluationType>> optim_p =
+			Opt_method_factory<lambda::type<2>,MatrixXr,EvaluationType>::create_Opt_method(optr->get_criterion(), Fun);
 
                 // Compute optimal lambda
 		Checker ch;
-		std::vector<lambda_type<2>> lambda_v_;
+		std::vector<lambda::type<2>> lambda_v_;
 		std::vector<Real> GCV_v_;
 		Real lambdaS = optr->get_initial_lambda_S();
 		Real lambdaT = optr->get_initial_lambda_T();
@@ -228,13 +230,13 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(Evaluat
 		if(lambdaS<=0) lambdaS = -1.0;
 		if(lambdaT<=0) lambdaT = -1.0;
 		
-		lambda_type<2> lambda = (lambda_type<2>() << lambdaS, lambdaT).finished();
+		lambda::type<2> lambda = lambda::make_pair(lambdaS, lambdaT);
 
 		timer Time_partial; // Of the sole optimization
 		Time_partial.start();
 		// Rprintf("WARNING: start taking time\n");
 
-		std::pair<lambda_type<2>, UInt> lambda_couple = optim_p->compute(lambda, optr->get_stopping_criterion_tol(), 40, ch, GCV_v_, lambda_v_);
+		std::pair<lambda::type<2>, UInt> lambda_couple = optim_p->compute(lambda, optr->get_stopping_criterion_tol(), 40, ch, GCV_v_, lambda_v_);
 
 		//Rprintf("WARNING: partial time after the optimization method\n");
 		timespec T = Time_partial.stop();

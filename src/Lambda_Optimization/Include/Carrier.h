@@ -8,6 +8,7 @@
 #include "../../Regression/Include/Mixed_FE_Regression.h"
 #include "../../Regression/Include/Regression_Data.h"
 #include "Optimization_Data.h"
+#include "../../Global_Utilities/Include/Lambda.h"
 
 // Declaration of classes that will be used as Extensions for Carrier
 class Areal;
@@ -196,7 +197,7 @@ class Carrier: public Extensions...
                  \return the solution of the system
                  \note specific for spatial case
                 */
-                inline MatrixXr apply_to_b(const MatrixXr & b, lambda_type<1> lambda)
+                inline MatrixXr apply_to_b(const MatrixXr & b, lambda::type<1> lambda)
                 {
                         this->opt_data->set_current_lambdaS(lambda); // set the lambda value
                         return this->model->apply_to_b(b);
@@ -209,7 +210,7 @@ class Carrier: public Extensions...
                  \return the solution of the system
                  \note specific for spatial case
                 */
-                inline MatrixXr apply_to_b(const MatrixXr & b, lambda_type<2> lambda)
+                inline MatrixXr apply_to_b(const MatrixXr & b, lambda::type<2> lambda)
                 {
                         this->opt_data->set_current_lambdaS(lambda(0)); // set the lambdaS value
                         this->opt_data->set_current_lambdaT(lambda(1)); // set the lambdaT value
@@ -222,7 +223,7 @@ class Carrier: public Extensions...
                  \return the solution of the system
                  \note apply is called here in order not to make the non const pointer public
                 */
-                inline MatrixXr apply(lambda_type<1> lambda)
+                inline MatrixXr apply(lambda::type<1> lambda)
                 {
                         this->opt_data->set_current_lambdaS(lambda); // set the lambda value
                         return (this->model->apply())(0,0);
@@ -235,7 +236,7 @@ class Carrier: public Extensions...
                  \return the solution of the system
                  \note apply is called here in order not to make the non const pointer public
                 */
-                inline MatrixXr apply(lambda_type<2> lambda)
+                inline MatrixXr apply(lambda::type<2> lambda)
                 {
                         this->opt_data->set_current_lambdaS(lambda(0)); // set the lambdaS value
                         this->opt_data->set_current_lambdaT(lambda(1)); // set the lambdaT value

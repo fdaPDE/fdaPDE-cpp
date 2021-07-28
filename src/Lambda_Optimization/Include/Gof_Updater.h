@@ -4,6 +4,7 @@
 // HEADERS
 #include <functional>
 #include "../../FdaPDE.h"
+#include "../../Global_Utilities/Include/Lambda.h"
 
 // CLASSES
 //! External updater for Lambda Optimizer
@@ -59,12 +60,12 @@ class GOF_updater
                 }
                 
 		template<typename S=T>
-		typename std::enable_if<std::is_same<S,lambda_type<1>>::value, lambda_type<1>>::type
+		typename std::enable_if<std::is_same<S,lambda::type<1>>::value, lambda::type<1>>::type
 		lambda_init(Real value) {return value;}
 		
 		template<typename S=T>
-		typename std::enable_if<std::is_same<S,lambda_type<2>>::value, lambda_type<2>>::type
-		lambda_init(Real value) {return (lambda_type<2>() << value, value).finished();}
+		typename std::enable_if<std::is_same<S,lambda::type<2>>::value, lambda::type<2>>::type
+		lambda_init(Real value) {return lambda::make_pair(value, value);}
 
         public:
                 // -- CONSTRUCTORS --

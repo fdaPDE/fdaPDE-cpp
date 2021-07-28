@@ -8,6 +8,7 @@
 #include "Gof_Updater.h"
 #include "../../FE_Assemblers_Solvers/Include/Solver.h"
 #include <algorithm>
+#include "../../Global_Utilities/Include/Lambda.h"
 
 // CLASSES
 // **** GENERAL METHODS ***
@@ -40,7 +41,7 @@ class Lambda_optimizer
                 /*!
                  \param lambda the value of lambda with which to perform the update
                 */
-        virtual void update_parameters(lambda_type<size> lambda) = 0;
+        virtual void update_parameters(lambda::type<size> lambda) = 0;
 
         public:
                 //! Virtual Destuctor
@@ -82,7 +83,7 @@ class GCV_Family: Lambda_optimizer<InputCarrier, size>
                 UInt            use_index = -1;         //!< Index of the DOF_matrix to be used, if non empty
 
                 // SETTERS of the output data
-        virtual void compute_z_hat(lambda_type<size> lambda) = 0;    //!< Utility to compute the size of predicted value in the locations
+        virtual void compute_z_hat(lambda::type<size> lambda) = 0;    //!< Utility to compute the size of predicted value in the locations
                 void compute_z_hat_from_f_hat(const VectorXr & f_hat);
                 void compute_eps_hat(void);
                 void compute_SS_res(void);
@@ -91,11 +92,11 @@ class GCV_Family: Lambda_optimizer<InputCarrier, size>
                 void compute_s(void);
 
                 // UPDATERS
-                void update_errors(lambda_type<size> lambda);
+                void update_errors(lambda::type<size> lambda);
 
                 // DOF methods
-        virtual void update_dof(lambda_type<size> lambda) = 0;       //!< Utility to compute the degrees of freedom of the model
-        virtual void update_dor(lambda_type<size> lambda) = 0;       //!< Utility to compute the degrees of freedom of the residuals
+        virtual void update_dof(lambda::type<size> lambda) = 0;       //!< Utility to compute the degrees of freedom of the model
+        virtual void update_dor(lambda::type<size> lambda) = 0;       //!< Utility to compute the degrees of freedom of the residuals
 
                 // CONSTRUCTORS
                 //! Constructor of the class given the InputCarrier
@@ -115,15 +116,15 @@ class GCV_Family: Lambda_optimizer<InputCarrier, size>
                 // UTILITY FOR DOF MATRIX
         inline  void set_index(UInt index){this->use_index = index;}
                 // PUBLIC UPDATERS
-        virtual void update_parameters(lambda_type<size> lambda) = 0; //!< Utility to update all the prameters of the model
+        virtual void update_parameters(lambda::type<size> lambda) = 0; //!< Utility to update all the prameters of the model
 
-                void zero_updater(lambda_type<size> lambda);
+                void zero_updater(lambda::type<size> lambda);
 
                 // GCV-COMPUTATION
-        virtual Real compute_f(lambda_type<size> lambda) = 0;       //!< Main function, represents the gcv computation
+        virtual Real compute_f(lambda::type<size> lambda) = 0;       //!< Main function, represents the gcv computation
 
                 // OUTPUT MANAGERS
-                output_Data<size>  get_output(std::pair<lambda_type<size>, UInt> optimal_pair, const timespec & time_count, const std::vector<Real> & GCV_v, const std::vector<lambda_type<size>> & lambda_v, int termination_);
+                output_Data<size>  get_output(std::pair<lambda::type<size>, UInt> optimal_pair, const timespec & time_count, const std::vector<Real> & GCV_v, const std::vector<lambda::type<size>> & lambda_v, int termination_);
                 void set_output_partial_best(void);
                 output_Data<size> get_output_full(void);
                 void set_output_partial(void);
@@ -179,13 +180,13 @@ class GCV_Exact<InputCarrier, 1>: public GCV_Family<InputCarrier, 1>
                 AuxiliaryData<InputCarrier> adt;
 
                 // COMPUTERS and DOF methods
-                void compute_z_hat (lambda_type<1> lambda) override;
-                void update_dof(lambda_type<1> lambda)     override;
-                void update_dor(lambda_type<1> lambda)     override;
+                void compute_z_hat (lambda::type<1> lambda) override;
+                void update_dof(lambda::type<1> lambda)     override;
+                void update_dor(lambda::type<1> lambda)     override;
 
                 // SETTERS
                 void set_R_(void);
-                void set_T_(lambda_type<1> lambda);
+                void set_T_(lambda::type<1> lambda);
                 void set_V_(void);
                 void set_S_and_trS_(void);
                 void set_dS_and_trdS_(void);
@@ -195,7 +196,7 @@ class GCV_Exact<InputCarrier, 1>: public GCV_Family<InputCarrier, 1>
                 void LeftMultiplybyPsiAndTrace(Real & trace, MatrixXr & ret, const MatrixXr & mat);
 
                 // GLOBAL UPDATERS
-                void update_matrices(lambda_type<1> lambda);
+                void update_matrices(lambda::type<1> lambda);
 
         public:
                 // CONSTRUCTORS
@@ -211,15 +212,15 @@ class GCV_Exact<InputCarrier, 1>: public GCV_Family<InputCarrier, 1>
                         }
 
                 // PUBLIC UPDATERS
-                void update_parameters(lambda_type<1> lambda) override;
+                void update_parameters(lambda::type<1> lambda) override;
 
-                void first_updater(lambda_type<1> lambda);
-                void second_updater(lambda_type<1> lambda);
+                void first_updater(lambda::type<1> lambda);
+                void second_updater(lambda::type<1> lambda);
 
                 // GCV-COMPUTATION
-                Real compute_f( lambda_type<1> lambda) override;
-                Real compute_fp(lambda_type<1> lambda);
-                Real compute_fs(lambda_type<1> lambda);
+                Real compute_f( lambda::type<1> lambda) override;
+                Real compute_fp(lambda::type<1> lambda);
+                Real compute_fs(lambda::type<1> lambda);
                 //! Virtual Destuctor
         virtual ~GCV_Exact(){};
 };
@@ -241,7 +242,7 @@ class GCV_Stochastic: public GCV_Family<InputCarrier, size>
 {
         private:
                 //! An external updater whose purpose is keeping the internal values coherent with the computations to be made from time to time
-                GOF_updater<GCV_Stochastic<InputCarrier, size>, lambda_type<size>> gu;
+                GOF_updater<GCV_Stochastic<InputCarrier, size>, lambda::type<size>> gu;
 
                 // INTERNAL DATA STRUCTURES
                 MatrixXr US_;           //!< binary{+1/-1} random matrix used for stochastic gcv computations [size s x #realizations]
@@ -250,9 +251,9 @@ class GCV_Stochastic: public GCV_Family<InputCarrier, size>
                 bool     us = false;    //!< keeps track of US_ matrix being already computed or not
 
                 // COMPUTERS and DOF methods
-                void compute_z_hat (lambda_type<size> lambda) override;
-                void update_dof(lambda_type<size> lambda)     override;
-                void update_dor(lambda_type<size> lambda)     override;
+                void compute_z_hat (lambda::type<size> lambda) override;
+                void update_dof(lambda::type<size> lambda)     override;
+                void update_dor(lambda::type<size> lambda)     override;
 
                 // SETTERS
                 void set_US_(void);
@@ -275,15 +276,15 @@ class GCV_Stochastic: public GCV_Family<InputCarrier, size>
                         }
 
                 // PUBLIC UPDATERS
-                void update_parameters(lambda_type<size> lambda) override;
+                void update_parameters(lambda::type<size> lambda) override;
 
-                void first_updater(lambda_type<size> lambda)  {; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
-                void second_updater(lambda_type<size> lambda) {; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
+                void first_updater(lambda::type<size> lambda)  {; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
+                void second_updater(lambda::type<size> lambda) {; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
 
                 // GCV-COMPUTATION
-                Real compute_f( lambda_type<size> lambda) override;
-                Real compute_fp(lambda_type<size> lambda) {return 0; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
-                Real compute_fs(lambda_type<size> lambda) {return 0; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
+                Real compute_f( lambda::type<size> lambda) override;
+                Real compute_fp(lambda::type<size> lambda) {return 0; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
+                Real compute_fs(lambda::type<size> lambda) {return 0; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
                 //! Virtual Destuctor
         virtual ~GCV_Stochastic(){};
 };
