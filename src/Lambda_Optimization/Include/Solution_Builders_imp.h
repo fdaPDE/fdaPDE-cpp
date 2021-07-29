@@ -220,12 +220,21 @@ static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr
     else
          beta = output.betas;
          
+    // Define string for optimzation method
+    UInt code_string;
+    if(output.content == "full_optimization")
+        code_string = 0;
+    else if(output.content == "full_dof_grid")
+        code_string = 1;
+    else
+        code_string = 2;
+         
     const MatrixXr & barycenters = regression.getBarycenters();
     const VectorXi & elementIds = regression.getElementIds();
 
     //!Copy result in R memory
     SEXP result = NILSXP;
-    result = PROTECT(Rf_allocVector(VECSXP, 5+5+2));
+    result = PROTECT(Rf_allocVector(VECSXP, 5+5+2+11));
     SET_VECTOR_ELT(result, 0, Rf_allocMatrix(REALSXP, solution.rows(), solution.cols()));
     SET_VECTOR_ELT(result, 1, Rf_allocMatrix(REALSXP, output.size_S, output.size_T));
     SET_VECTOR_ELT(result, 2, Rf_allocMatrix(REALSXP, output.size_S, output.size_T));
@@ -261,11 +270,6 @@ static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr
         for(UInt k = 0; k < beta(0,0).size(); k++)
             rans4[k + beta(0,0).size()*i] = beta.coeff(i,0)(k);
 
-    //da qui in poi sembra identico. Cambiano solo i numeri degli elementi rispetto al caso regression_skeleton space-only
-    //ma è solo perchè in quel caso aggiunge delle info. Potremmo anche noi inviare info aggiuntive ad R (ad esempio il tempo
-    //di esecuzione). Bisogna ricordarsi di cambiare anche l'interfaccia con R.
-    //se non vogliamo cambiare l'interfaccia con R possiamo anche pensare di aggiungere in coda altri elementi che eventualmente
-    //semplicemente non verrebbero presi ma bisogna capire se funziona proprio così. Verificare
     if(regressionData.getSearch()==2){
         //SEND TREE INFORMATION TO R
         SET_VECTOR_ELT(result, 5, Rf_allocVector(INTSXP, 1)); //tree_header information
@@ -317,6 +321,69 @@ static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr
         for(UInt i = 0; i < barycenters.rows(); i++)
             rans11[i + barycenters.rows()*j] = barycenters(i,j);
     }
+    
+    SET_VECTOR_ELT(result, 12, Rf_allocMatrix(REALSXP, output.z_hat.rows(), output.z_hat.cols())); //z_hat
+    UInt size_rmse = output.rmse.size();
+    SET_VECTOR_ELT(result, 13, Rf_allocVector(REALSXP, size_rmse)); //rmse
+    SET_VECTOR_ELT(result, 14, Rf_allocVector(REALSXP, 1)); //sigma_hat_sq
+    SET_VECTOR_ELT(result, 15, Rf_allocVector(REALSXP, 2)); //best lambda values
+    SET_VECTOR_ELT(result, 16, Rf_allocVector(REALSXP, 1)); //GCV opt
+    SET_VECTOR_ELT(result, 17, Rf_allocVector(INTSXP, 1)); //number of iterations
+    SET_VECTOR_ELT(result, 18, Rf_allocVector(INTSXP, 1)); //termination criterion
+    SET_VECTOR_ELT(result, 19, Rf_allocVector(INTSXP, 1)); //code string
+    UInt size_lambda = output.lambda_vec.size();
+    SET_VECTOR_ELT(result, 20, Rf_allocVector(REALSXP, size_lambda)); //lambdaS
+    SET_VECTOR_ELT(result, 21, Rf_allocVector(REALSXP, size_lambda)); //lambdaT
+    SET_VECTOR_ELT(result, 22, Rf_allocVector(REALSXP, 1)); //time partial
+    
+    // Add prediction in locations
+    Real *rans12 = REAL(VECTOR_ELT(result, 12));
+    for(UInt j = 0; j < output.z_hat.cols(); j++)
+    	for(UInt i = 0; i < output.z_hat.rows(); i++)
+	    rans12[i + output.z_hat.rows()*j] = output.z_hat(i,j);
+    
+    // Add rmse
+    Real *rans13 = REAL(VECTOR_ELT(result, 13));
+    for(UInt j = 0; j < size_rmse; j++)
+    	rans13[j] = output.rmse[j];
+
+    // Add predicted variance of error
+    Real *rans14 = REAL(VECTOR_ELT(result, 14));
+    rans14[0] = output.sigma_hat_sq;
+
+    // Add best lambda values
+    Real *rans15 = REAL(VECTOR_ELT(result, 15));
+    rans15[0] = output.lambda_sol(0);
+    rans15[1] = output.lambda_sol(1);
+    
+    // Add GCV value
+    Real *rans16 = REAL(VECTOR_ELT(result, 16));
+    rans16[0] = output.GCV_opt;
+
+    // Add number of iterations
+    UInt *rans17 = INTEGER(VECTOR_ELT(result, 17));
+    rans17[0] = output.n_it;
+
+    // Add termination criterion
+    UInt *rans18 = INTEGER(VECTOR_ELT(result, 18));
+    rans18[0] = output.termination;
+
+    // Add code to identify the optimization method
+    UInt *rans19 = INTEGER(VECTOR_ELT(result, 19));
+    rans3[0] = code_string;
+    
+    // Add the vectors of lambdaS and lambdaT
+    Real *rans20 = REAL(VECTOR_ELT(result, 20));
+    Real *rans21 = REAL(VECTOR_ELT(result, 21));
+    for(UInt j = 0; j < size_lambda; j++)
+    {
+        rans20[j] = output.lambda_vec[j](0);
+        rans21[j] = output.lambda_vec[j](1);
+    }
+    
+    // Add time employed
+    Real *rans22 = REAL(VECTOR_ELT(result, 22));
+    rans22[0] = output.time_partial;
     
     UNPROTECT(1);
     return(result);
