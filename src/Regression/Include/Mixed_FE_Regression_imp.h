@@ -1376,9 +1376,9 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply(void)
 			{
 				if (optimizationData_.get_DOF_evaluation()!="not_required")
 				{
-					computeDegreesOfFreedom(s,t,lambdaS,lambdaT);
+					//computeDegreesOfFreedom(s,t,lambdaS,lambdaT);
 				}
-				computeGeneralizedCrossValidation(s,t,lambdaS,lambdaT);
+				//computeGeneralizedCrossValidation(s,t,lambdaS,lambdaT);
 			}
 			else
 			{
@@ -1549,9 +1549,9 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply_iterative(void) {
             {
                 if (optimizationData_.get_DOF_evaluation()!="not_required")
                 {
-                    computeDegreesOfFreedom(s,t,lambdaS,lambdaT);
+                    //computeDegreesOfFreedom(s,t,lambdaS,lambdaT);
                 }
-                computeGeneralizedCrossValidation(s,t,lambdaS,lambdaT);
+                //computeGeneralizedCrossValidation(s,t,lambdaS,lambdaT);
             }
             else
             {

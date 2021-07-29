@@ -80,7 +80,7 @@ SEXP Solution_Builders::build_solution_plain_regression(const MatrixXr & solutio
         // Add best lambda position
         SET_VECTOR_ELT(result, 5, Rf_allocVector(INTSXP, 1));
         UInt *rans1 = INTEGER(VECTOR_ELT(result, 5));
-        rans1[0] = output.lambda_pos;
+        rans1[0] = output.lambda_pos+1; //in R numbering
 
         // Add GCV value
         SET_VECTOR_ELT(result, 6, Rf_allocVector(REALSXP, 1));
@@ -208,7 +208,7 @@ static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr
     std::vector<Real> const & GCV = output.GCV_evals;
     div_t divresult = div(output.lambda_pos, output.size_S); // from the pair index, reconstruct the original indices of LambdaS, LambdaT
     UInt bestLambdaS = divresult.rem;
-    UInt bestLambdaT = divresult.quot;
+    UInt bestLambdaT = divresult.quot; //+1 is added in R
     
     MatrixXv beta;
     if(regressionData.getCovariates()->rows()==0)

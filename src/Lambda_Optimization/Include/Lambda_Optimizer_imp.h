@@ -32,7 +32,7 @@ output_Data<size> GCV_Family<InputCarrier, size>::get_output(std::pair<lambda::t
         this->output.GCV_evals          = GCV_v;
         this->output.GCV_opt            = GCV_v[GCV_v.size()-1];
         this->output.lambda_vec         = lambda_v;
-        this->output.lambda_pos         = GCV_v.size();
+        this->output.lambda_pos         = GCV_v.size()-1; //R numbering in solution_builders (+1)
         this->output.termination        = termination_;
         this->output.betas              = this->the_carrier.get_model()->getBeta();
         return this->output;
@@ -668,33 +668,54 @@ void GCV_Stochastic<InputCarrier, size>::update_dof(lambda::type<size> lambda)
 
 
         	// Solve the system
-            	MatrixXr x = this->the_carrier.apply_to_b(b, lambda);
+        	//if(not iterative)
+        	//{
+            		MatrixXr x = this->the_carrier.apply_to_b(b, lambda);
 
-        	VectorXr edf_vect(nr);
-        	Real q = 0;
+				VectorXr edf_vect(nr);
+				Real q = 0;
 
-        	// Degrees of freedom = q + E[ u^T * psi * | I  0 |* x ]
-        	if (this->the_carrier.has_W())
-                {
-        		q = this->the_carrier.get_Wp()->cols();
-        	}
+				// Degrees of freedom = q + E[ u^T * psi * | I  0 |* x ]
+				if (this->the_carrier.has_W())
+				{
+					q = this->the_carrier.get_Wp()->cols();
+				}
 
-        	// For any realization we calculate the degrees of freedom
-        	for (UInt i = 0; i < nr; ++i)
-                {
-        		edf_vect(i) = this->USTpsi.row(i).dot(x.col(i).head(nnodes)) + q;
-        	}
+				// For any realization we calculate the degrees of freedom
+				for (UInt i = 0; i < nr; ++i)
+				{
+					edf_vect(i) = this->USTpsi.row(i).dot(x.col(i).head(nnodes)) + q;
+				}
 
-        	// Estimates: sample mean, sample variance
-        	this->dof = edf_vect.sum()/nr;
+				// Estimates: sample mean, sample variance
+				this->dof = edf_vect.sum()/nr;
 
-                // Deugging purpose print
-                // Rprintf("DOF:%f\n", this->dof);
+				// Deugging purpose print
+				// Rprintf("DOF:%f\n", this->dof);
 
-                /* Debugging purpose timer [part II]
-                 Rprintf("WARNING: time after the update_dof method\n");
-                 timespec T = Time_partial.stop();
-                */
+				/* Debugging purpose timer [part II]
+				 Rprintf("WARNING: time after the update_dof method\n");
+				 timespec T = Time_partial.stop();
+				*/
+		/*}
+                else
+    		{
+    			for della risoluzione iterativa for(UInt k=0; k<M_; ++k){
+    				b viene calcolato ad ogni iterazione, quindi forse quello di set_US
+    				viene sovrascritto
+    				
+    				ci sarà questo if
+    				if (regressionData_.getCovariates()->rows() == 0)
+				    x = this->template system_solve(b);->sostituito con apply_to_b (carrier->apply to b in lambda_optimizer)
+				else
+				    x = this->template solve_covariates_iter(b,k); -> sostituito con una funzione nuova nel carrier che chiama solve_cov_iter del mixed fe e in più fa i check sui lambda come per apply_to_b
+				    
+				    
+				    quindi in mixed fe ci sarà un applied_to_b_iterative che fa i check su lambda e chiama solve_cov_iter
+				    in carrier ci sarà un apply_to_b_iterative
+				    
+				    dentro il for aggiorna dof ad ogni iterazione
+    		}*/
         }
         else
         {

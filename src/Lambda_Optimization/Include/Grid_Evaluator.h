@@ -126,7 +126,7 @@ class Eval_GCV: public Vec_evaluation<Tuple, Hessian, Extensions...>
                         output_type output=this->F.get_output_full();
                         output.GCV_evals  = p.first;
                         output.lambda_sol = this->lambda_vec.at(p.second);      // Safer use of at instead of []
-                        output.lambda_pos = 1+p.second;                         // In R numbering
+                        output.lambda_pos = p.second;
                         output.lambda_vec = this->lambda_vec;
                         output.GCV_opt    = p.first.at(p.second);
 
