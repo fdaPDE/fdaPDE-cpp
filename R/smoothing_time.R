@@ -416,9 +416,15 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
 
   dof = bigsol[[2]]
   GCV_ = bigsol[[3]]
-  bestlambda = bigsol[[4]]+1
+
+
   if(!is.null(covariates))
-    beta = array(data=bigsol[[5]],dim=c(ncol(covariates),length(lambdaS),length(lambdaT)))
+  {
+    if(optim[1]==0 & is.null(DOF.matrix) & optim[3]==0)
+      beta = array(data=bigsol[[5]],dim=c(ncol(covariates),length(lambdaS),length(lambdaT)))
+    else
+      beta = array(data=bigsol[[5]],dim=c(ncol(covariates),1,1))
+  }
   else
     beta = NULL
 
@@ -427,8 +433,61 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
   else
     ICestimated = list(IC.FEM=bigsol[[13]],bestlambdaindex=bigsol[[14]],bestlambda=bigsol[[15]],beta=bigsol[[16]])
 
-    # Save information of Tree Mesh
-     tree_mesh = list(
+  bestlambda = bigsol[[4]]+1
+
+  if(optim[1]==0)
+  {
+    if(bestlambda[1] == 1 || bestlambda[1] == length(lambdaS))
+      warning("Your optimal 'GCV' is on the border of lambdaS sequence")
+    if(bestlambda[2] == 1 || bestlambda[2] == length(lambdaT))
+      warning("Your optimal 'GCV' is on the border of lambdaT sequence")
+  }
+
+  if (is.null(lambda.selection.lossfunction))
+    sd = -1
+  else
+    sd = sqrt(bigsol[[15]])
+
+  solution = list(
+    f = f,
+    g = g,
+    z_hat = bigsol[[13]],
+    rmse = bigsol[[14]],
+    estimated_sd=sd
+  )
+  term = bigsol[[19]]
+  ot = bigsol[[20]]
+
+  if(term == 1)
+    termination = "reached tolerance"
+  else if(term == 2)
+    termination = "reached max number iterations"
+  else
+    termination = "uninformative"
+
+  if(ot == 0)
+    optimization_type = "full optimization"
+  else if(ot == 1)
+    optimization_type = "full DOF grid"
+  else
+    optimization_type = "uninformative"
+  
+  optimization = list(
+    lambda_solution = bigsol[[16]],
+    lambda_position = bestlambda,
+    optimization_details = list(
+        iterations = bigsol[[18]],
+        termination = termination,
+        optimization_type = optimization_type),
+    dof = dof,
+    lambda_vector = matrix(c(bigsol[[21]], bigsol[[22]]), nrow=length(lambdaS), ncol=2),
+    GCV_vector = bigsol[[3]]
+  )
+
+  time = bigsol[[23]]
+
+  # Save information of Tree Mesh
+  tree_mesh = list(
      treelev = bigsol[[6]][1],
      header_orig= bigsol[[7]],
      header_scale = bigsol[[8]],
@@ -437,35 +496,27 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
      node_right_child = bigsol[[9]][,3],
      node_box= bigsol[[10]])
 
-   # Reconstruct FEMbasis with tree mesh
-   mesh.class= class(FEMbasis$mesh)
-   if (is.null(FEMbasis$mesh$treelev)) { #if doesn't exist the tree information
-     FEMbasis$mesh = append(FEMbasis$mesh, tree_mesh)
-   } #if already exist the tree information, don't append
+  # Reconstruct FEMbasis with tree mesh
+  mesh.class= class(FEMbasis$mesh)
+  if (is.null(FEMbasis$mesh$treelev)) { #if doesn't exist the tree information
+    FEMbasis$mesh = append(FEMbasis$mesh, tree_mesh)
+  } #if already exist the tree information, don't append
 
-   class(FEMbasis$mesh) = mesh.class
+  class(FEMbasis$mesh) = mesh.class
 
-   # Save information of Barycenter
-   if (is.null(bary.locations)) {
-       bary.locations = list(locations=locations, element_ids = bigsol[[11]], barycenters = bigsol[[12]])
-   }
-   class(bary.locations) = "bary.locations"
+  # Save information of Barycenter
+  if (is.null(bary.locations)) {
+      bary.locations = list(locations=locations, element_ids = bigsol[[11]], barycenters = bigsol[[12]])
+  }
+  class(bary.locations) = "bary.locations"
 
   # Make FEM.time objects
   fit.FEM.time  = FEM.time(f, time_mesh, FEMbasis, FLAG_PARABOLIC)
   PDEmisfit.FEM.time = FEM.time(g, time_mesh, FEMbasis, FLAG_PARABOLIC)
 
   # Prepare return list
-  reslist = NULL
-  
-  if(!is.null(lambda.selection.lossfunction))
-  {
-    stderr=sqrt(GCV_*(sum(!is.na(observations))-dof)/sum(!is.na(observations)))
-    reslist=list(fit.FEM.time = fit.FEM.time, PDEmisfit.FEM.time = PDEmisfit.FEM.time,
-            beta = beta, edf = dof, GCV = GCV_, stderr=stderr, bestlambda = bestlambda, ICestimated=ICestimated, bary.locations = bary.locations)
-  }else{
-    reslist=list(fit.FEM.time = fit.FEM.time, PDEmisfit.FEM.time = PDEmisfit.FEM.time, beta = beta, ICestimated=ICestimated, bary.locations = bary.locations)
-  }
+  reslist = list(fit.FEM.time = fit.FEM.time, PDEmisfit.FEM.time = PDEmisfit.FEM.time, solution = solution,
+                optimization  = optimization, beta = beta, GCV = GCV_,time = time, ICestimated=ICestimated, bary.locations = bary.locations)
 
   return(reslist)
 }
