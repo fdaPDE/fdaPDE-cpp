@@ -370,7 +370,7 @@ static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr
 
     // Add code to identify the optimization method
     UInt *rans19 = INTEGER(VECTOR_ELT(result, 19));
-    rans3[0] = code_string;
+    rans19[0] = code_string;
     
     // Add the vectors of lambdaS and lambdaT
     Real *rans20 = REAL(VECTOR_ELT(result, 20));

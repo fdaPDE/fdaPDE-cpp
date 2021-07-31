@@ -480,7 +480,7 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
         termination = termination,
         optimization_type = optimization_type),
     dof = dof,
-    lambda_vector = matrix(c(bigsol[[21]], bigsol[[22]]), nrow=length(lambdaS), ncol=2),
+    lambda_vector = matrix(c(bigsol[[21]], bigsol[[22]]), nrow=length(lambdaS)*length(lambdaT), ncol=2),
     GCV_vector = bigsol[[3]]
   )
 
