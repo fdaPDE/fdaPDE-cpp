@@ -1371,21 +1371,12 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply(void)
 			_solution(s,t) = this->template system_solve(this->_rightHandSide);
 
 			
-			//calcolo del GCV, da portare fuori per implementare griglia a livello di regression_skeleton_time
-			if(optimizationData_.get_loss_function()=="GCV" && (!isGAMData&&regressionData_.isSpaceTime()))
-			{
-				if (optimizationData_.get_DOF_evaluation()!="not_required")
-				{
-					//computeDegreesOfFreedom(s,t,lambdaS,lambdaT);
-				}
-				//computeGeneralizedCrossValidation(s,t,lambdaS,lambdaT);
-			}
-			else
+			if(optimizationData_.get_loss_function()!="GCV" || isGAMData)
 			{
 				_dof(s,t) = -1;
 				_GCV(s,t) = -1;
 			}
-			//
+			
 
 			// covariates computation
 			if(regressionData_.getCovariates()->rows()!=0)
@@ -1545,19 +1536,11 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply_iterative(void) {
 
             Rprintf("Solution found after %d iterations (max number of iterations: %d)\n", i, (regressionData_.get_maxiter()+1));
 
-            if(optimizationData_.get_loss_function()=="GCV" && (!isGAMData&&regressionData_.isSpaceTime()))
-            {
-                if (optimizationData_.get_DOF_evaluation()!="not_required")
-                {
-                    //computeDegreesOfFreedom(s,t,lambdaS,lambdaT);
-                }
-                //computeGeneralizedCrossValidation(s,t,lambdaS,lambdaT);
-            }
-            else
-            {
-                _dof(s,t) = -1;
-                _GCV(s,t) = -1;
-            }
+			if(optimizationData_.get_loss_function()!="GCV" || isGAMData)
+			{
+				_dof(s,t) = -1;
+				_GCV(s,t) = -1;
+			}
         }
     }
     _rightHandSide = rhs;
