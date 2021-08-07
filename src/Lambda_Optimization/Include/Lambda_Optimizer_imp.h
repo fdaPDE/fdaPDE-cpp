@@ -597,9 +597,7 @@ void GCV_Stochastic<InputCarrier, size>::set_US_(void)
         // set the seed
         UInt seed = this->the_carrier.get_opt_data()->get_seed();
         if(seed == 0)
-        {
-                seed = std::chrono::system_clock::now().time_since_epoch().count();
-        }
+        	seed = std::chrono::system_clock::now().time_since_epoch().count();
 
         std::default_random_engine generator(seed);
 	std::bernoulli_distribution distribution(0.5); // define random Be(p), p = 0.5
@@ -613,21 +611,11 @@ void GCV_Stochastic<InputCarrier, size>::set_US_(void)
                 for (UInt j=0; j<nr; ++j)
                 {
                         if (distribution(generator))
-                        {
                                 this->US_.coeffRef(i, j) = 1.0;
-                        }
                         else
-                        {
                                 this->US_.coeffRef(i, j) = -1.0;
-                        }
                 }
-
-        this->USTpsi = this->US_.transpose()*(*this->the_carrier.get_psip());
-
-        // Define the first right hand side : | I  0 |^T * psi^T * Q * u
-        UInt nnodes = this->the_carrier.get_n_nodes();
-        this->b = MatrixXr::Zero(2*nnodes, this->US_.cols());
-        UInt ret = AuxiliaryOptimizer::universal_b_setter(this->b, this->the_carrier, this->US_, nnodes);
+                
         // Validate the completion of the task
         this->us = true;
         //Debugging purpose
@@ -650,7 +638,7 @@ void GCV_Stochastic<InputCarrier, size>::update_dof(lambda::type<size> lambda)
         MatrixXr m = this->the_carrier.get_opt_data()->get_DOF_matrix();
         
         div_t divresult = div(this->use_index, this->the_carrier.get_opt_data()->get_size_S());
-        if(m.cols()==0 || m.rows()<divresult.rem+1 || m.cols()<divresult.quot+1)
+        if(m.rows() == 0 || m.cols()==0 || m.rows()<divresult.rem+1 || m.cols()<divresult.quot+1)
         {
                 /* Debugging purpose timer [part I]
                  timer Time_partial;
@@ -658,64 +646,84 @@ void GCV_Stochastic<InputCarrier, size>::update_dof(lambda::type<size> lambda)
                  Rprintf("WARNING: start taking time update_dof\n");
                 */
 
-        	UInt nnodes = this->the_carrier.get_n_nodes();
-                UInt nr     = this->the_carrier.get_opt_data()->get_nrealizations();
+		UInt nnodes = this->the_carrier.get_n_nodes();
+		UInt nr     = this->the_carrier.get_opt_data()->get_nrealizations();
 
-                if(this->us == false) // check is US matrix has been defined
-                {
-                        this->set_US_();
-                }
+		if(this->us == false) // check is US matrix has been defined
+			this->set_US_();
 
-
+		Real q = 0;
+		// Degrees of freedom = q + E[ u^T * psi * | I  0 |* x ]
+		if (this->the_carrier.has_W())
+			q = this->the_carrier.get_Wp()->cols();
+			
         	// Solve the system
-        	//if(not iterative)
-        	//{
+        	if(! this->the_carrier.get_model()->isIter())
+        	{
+        		this->USTpsi = this->US_.transpose()*(*this->the_carrier.get_psip());
+
+        		// Define the first right hand side : | I  0 |^T * psi^T * Q * u
+        		this->b = MatrixXr::Zero(2*nnodes, this->US_.cols());
+        		UInt ret = AuxiliaryOptimizer::universal_b_setter(this->b, this->the_carrier, this->US_, nnodes);
+        		
             		MatrixXr x = this->the_carrier.apply_to_b(b, lambda);
 
-				VectorXr edf_vect(nr);
-				Real q = 0;
+			VectorXr edf_vect(nr);
+			
+			// For any realization we calculate the degrees of freedom
+			for (UInt i = 0; i < nr; ++i)
+				edf_vect(i) = this->USTpsi.row(i).dot(x.col(i).head(nnodes)) + q;
 
-				// Degrees of freedom = q + E[ u^T * psi * | I  0 |* x ]
-				if (this->the_carrier.has_W())
-				{
-					q = this->the_carrier.get_Wp()->cols();
-				}
+			// Estimates: sample mean, sample variance
+			this->dof = edf_vect.sum()/nr;
 
-				// For any realization we calculate the degrees of freedom
-				for (UInt i = 0; i < nr; ++i)
-				{
-					edf_vect(i) = this->USTpsi.row(i).dot(x.col(i).head(nnodes)) + q;
-				}
+			// Deugging purpose print
+			// Rprintf("DOF:%f\n", this->dof);
 
-				// Estimates: sample mean, sample variance
-				this->dof = edf_vect.sum()/nr;
-
-				// Deugging purpose print
-				// Rprintf("DOF:%f\n", this->dof);
-
-				/* Debugging purpose timer [part II]
-				 Rprintf("WARNING: time after the update_dof method\n");
-				 timespec T = Time_partial.stop();
-				*/
-		/*}
-                else
+			/* Debugging purpose timer [part II]
+			Rprintf("WARNING: time after the update_dof method\n");
+			timespec T = Time_partial.stop();
+			*/
+		}
+		else //iterative
     		{
-    			for della risoluzione iterativa for(UInt k=0; k<M_; ++k){
-    				b viene calcolato ad ogni iterazione, quindi forse quello di set_US
-    				viene sovrascritto
-    				
-    				ci sarà questo if
-    				if (regressionData_.getCovariates()->rows() == 0)
-				    x = this->template system_solve(b);->sostituito con apply_to_b (carrier->apply to b in lambda_optimizer)
-				else
-				    x = this->template solve_covariates_iter(b,k); -> sostituito con una funzione nuova nel carrier che chiama solve_cov_iter del mixed fe e in più fa i check sui lambda come per apply_to_b
-				    
-				    
-				    quindi in mixed fe ci sarà un applied_to_b_iterative che fa i check su lambda e chiama solve_cov_iter
-				    in carrier ci sarà un apply_to_b_iterative
-				    
-				    dentro il for aggiorna dof ad ogni iterazione
-    		}*/
+			UInt nlocations = this->the_carrier.get_n_space_obs();
+			UInt N_ = this->the_carrier.get_model()->getN_();
+			UInt M_ = this->the_carrier.get_model()->getM_();
+			
+			this->dof = 0;
+			for(UInt k=0; k<M_; ++k)
+			{
+				SpMat psi_mini = (*this->the_carrier.get_psip()).block(k * nlocations, k* N_, nlocations, N_); //forse è importante aggiornare anche quella del mixed_fe
+							//perchè magari serve li per alcuni conti. Non sembra comunque che sia così peche ogni volta se la riprende partendo da psi (tutte le volte che appare nel mixed fe)
+			
+				// Define the first right hand side : | I  0 |^T * psi^T * A * Q * u
+				this->b = MatrixXr::Zero(2*N_, this->US_.cols());
+				UInt ret = AuxiliaryOptimizer::universal_b_setter_iter(this->b, this->the_carrier, this->US_, nlocations, N_, k);
+
+			        // Resolution of the system
+			        MatrixXr x;
+			        if (! this->the_carrier.has_W())
+					x = this->the_carrier.apply_to_b(b, lambda);
+			        else
+            				x = this->the_carrier.apply_to_b_iter(b, lambda, k);
+
+        			MatrixXr uTpsi;
+				MatrixXr ut = this->US_.transpose();
+				ret = AuxiliaryOptimizer::universal_uTpsi_setter(this->the_carrier, nr, ut, uTpsi, nlocations, N_, k);
+				
+        			VectorXr edf_vect(nr);
+
+        			// Degrees of freedom = q + E[ u^T * psi * | I  0 |* x ]
+        			// For any realization we compute the degrees of freedom
+        			for (UInt i=0; i<nr; ++i)
+					edf_vect(i) = uTpsi.row(i).dot(x.col(i).head(N_));
+
+        			// Estimates: sample mean, sample variance
+        			this->dof += edf_vect.sum()/nr;
+			}
+			this->dof += q;
+    		}
         }
         else
         {

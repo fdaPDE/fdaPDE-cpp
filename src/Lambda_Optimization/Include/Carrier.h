@@ -45,6 +45,7 @@ class Carrier: public Extensions...
 
                 // General data for any problem
                 UInt n_obs;                                   //!< number of locations
+                UInt n_space_obs;			    //!< number of spatial observations
                 UInt n_nodes;                                 //!< number of nodes
                 const std::vector<UInt> * obs_indicesp;       //!< indices of the locations for efficient search and storage
 
@@ -84,6 +85,7 @@ class Carrier: public Extensions...
                  \param locations_are_nodes_ boolean to check if locations are nodes [for simplified computations]
                  \param has_covariates_ boolean to check if the problem has regressors [for simplified computations]
                  \param n_obs_ number of locations and hence of observations
+                 \param n_space_obs_ number of spatial observations
                  \param n_noes_number of nodes of the mesh
                  \param obs_indicesp_ pointer collectig the indices of the getObservations
                  \param zp_ pointer to the observations in the locations
@@ -100,7 +102,7 @@ class Carrier: public Extensions...
                  \param bc_indicesp_ pointer to the indices of the boundary conditions
                 */
                 inline void set_all(MixedFERegressionBase<InputHandler> * model_, OptimizationData * opt_data_,
-                        bool locations_are_nodes_, bool has_covariates_, UInt n_obs_, UInt n_nodes_, const std::vector<UInt> * obs_indicesp_,
+                        bool locations_are_nodes_, bool has_covariates_, UInt n_obs_, UInt n_space_obs_, UInt n_nodes_, const std::vector<UInt> * obs_indicesp_,
                         const VectorXr * zp_, const MatrixXr * Wp_, const MatrixXr * Hp_, const MatrixXr * Qp_,
                         const SpMat * DMatp_, const SpMat * R1p_, const SpMat * R0p_, const SpMat * psip_, const SpMat * psi_tp_,
                         const VectorXr * rhsp_, const std::vector<Real> * bc_valuesp_, const std::vector<UInt> * bc_indicesp_)
@@ -111,6 +113,7 @@ class Carrier: public Extensions...
                         set_loc_are_nodes(locations_are_nodes_);
                         set_has_W(has_covariates_);
                         set_n_obs(n_obs_);
+                        set_n_space_obs(n_space_obs);
                         set_n_nodes(n_nodes_);
                         set_obs_indicesp(obs_indicesp_);
                         set_zp(zp_);
@@ -152,6 +155,7 @@ class Carrier: public Extensions...
                 inline bool is_areal(void) const {return this->areal_data;}                                     //!< Getter of areal_data \return areal_data
                 inline bool is_temporal(void) const {return this->temporal_data;}                               //!< Getter of temporal_data \return temporal_data
                 inline UInt get_n_obs(void) const {return this->n_obs;}                                         //!< Getter of n_obs [# locations] \return n_obs
+                inline UInt get_n_space_obs(void) const {return this->n_space_obs;}                             //!< Getter of n_space_obs [# locations] \return n_space_obs
                 inline UInt get_n_nodes(void) const {return this->n_nodes;}                                     //!< Getter of n_nodes [# nodes] \return n_nodes
                 inline const std::vector<UInt> * get_obs_indicesp(void) const {return this->obs_indicesp;}      //!< Getter of obs_indicesp \return obs_indicesp
                 inline const VectorXr * get_zp(void) const {return this->zp;}                                   //!< Getter of zp \return zp
@@ -174,6 +178,7 @@ class Carrier: public Extensions...
                 inline void set_loc_are_nodes(const bool locations_are_nodes_) {this->locations_are_nodes = locations_are_nodes_;}      //!< Setter of locations_are_nodes \param locations_are_nodes_ new loc_are_nodes
                 inline void set_has_W(const bool has_covariates_) {this->has_covariates = has_covariates_;}                             //!< Setter of has_covariates \param has_covariates_ new has_covariates
                 inline void set_n_obs(const UInt n_obs_) {this->n_obs = n_obs_;}                                                        //!< Setter of n_obs \param n_obs_ new n_obs
+                inline void set_n_space_obs(const UInt n_space_obs_) {this->n_space_obs = n_space_obs_;}				    //!< Setter of n_space_obs \param n_space_obs_ new n_space_obs
                 inline void set_n_nodes(const UInt n_nodes_) {this->n_nodes = n_nodes_;}                                                //!< Setter of n_nodes \param n_nodes_ new n_nodes
                 inline void set_obs_indicesp(const std::vector<UInt> * obs_indicesp_) {this->obs_indicesp = obs_indicesp_;}             //!< Setter of obs_indicesp \param obs_indicesp_ new obs_indicesp
                 inline void set_zp(const VectorXr * zp_) {this->zp = zp_;}                                                              //!< Setter of zp \param zp_ new zp
@@ -190,12 +195,11 @@ class Carrier: public Extensions...
                 inline void set_bc_indicesp(const std::vector<UInt> * bc_indicesp_) {this->bc_indicesp = bc_indicesp_;}                 //!< Setter of bc_indicesp \param bc_indicesp_new bc_indicesp
 
                 // APPLY FUNCTIONS
-                //! Method to the system given a lambda and a right hand side of the system
+                //! Method to solve the system given a lambda and a right hand side of the system
                 /*!
                  \param b the right hand side of the system to be solved via system matrix
                  \param lambda the optimization parameter with which to build the system matrix
                  \return the solution of the system
-                 \note specific for spatial case
                 */
                 inline MatrixXr apply_to_b(const MatrixXr & b, lambda::type<1> lambda)
                 {
@@ -203,18 +207,30 @@ class Carrier: public Extensions...
                         return this->model->apply_to_b(b);
                 }
                 
-                //! Method to the system given a lambdaS and a lambdaT and a right hand side of the system
+                //! Method to solve the system given a lambdaS and a lambdaT and a right hand side of the system
                 /*!
                  \param b the right hand side of the system to be solved via system matrix
                  \param lambda the optimization parameter with which to build the system matrix
                  \return the solution of the system
-                 \note specific for spatial case
                 */
                 inline MatrixXr apply_to_b(const MatrixXr & b, lambda::type<2> lambda)
                 {
                         this->opt_data->set_current_lambdaS(lambda(0)); // set the lambdaS value
                         this->opt_data->set_current_lambdaT(lambda(1)); // set the lambdaT value
-                        return this->model->apply_to_b(b); /////********Va fatto anche nel caso iterative?? vedere apply poche righe più sotto
+                        return this->model->apply_to_b(b);
+                }
+                
+                inline MatrixXr apply_to_b_iter(const MatrixXr & b, lambda::type<1> lambda, UInt time_index)  ///in realtà l'iter è solo nel caso time (e parab) quindi questa specializzazione non servirebbe
+                {
+                        this->opt_data->set_current_lambdaS(lambda); // set the lambda value
+                        return this->model->apply_to_b_iter(b, time_index);
+                }
+                
+                inline MatrixXr apply_to_b_iter(const MatrixXr & b, lambda::type<2> lambda, UInt time_index)
+                {
+                        this->opt_data->set_current_lambdaS(lambda(0)); // set the lambdaS value
+                        this->opt_data->set_current_lambdaT(lambda(1)); // set the lambdaT value
+                        return this->model->apply_to_b_iter(b, time_index);
                 }
 
                 //! Method to solve the system given a lambda [right hand side is the usual of the problem]
@@ -384,7 +400,7 @@ class CarrierBuilder
                 {
                         //check di NON costruire CarrierBuilder<InputH, Parabolic, Separable>
                         car.set_all(&mc, &optimizationData, data.isLocationsByNodes(), bool(data.getCovariates()->rows()>0 && data.getCovariates()->cols()>0),
-                                data.getNumberofObservations(), mc.getnnodes_(), data.getObservationsIndices(),
+                                data.getNumberofObservations(), data.getNumberofSpaceObservations(), mc.getnnodes_(), data.getObservationsIndices(),
                                 data.getObservations(), data.getCovariates(), mc.getH_(), mc.getQ_(), mc.getDMat_(), mc.getR1_(),
                                 mc.getR0_(), mc.getpsi_(), mc.getpsi_t_(), mc.getrhs_(), data.getDirichletValues(), data.getDirichletIndices());
                 }

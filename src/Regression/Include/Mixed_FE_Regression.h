@@ -243,6 +243,8 @@ class MixedFERegressionBase
 
 		//! A method returning the number of nodes of the mesh
 		UInt getnnodes_(void) const {return this->N_ * this->M_;}
+		UInt getN_(void) const {return this->N_;}
+		UInt getM_(void) const {return this->M_;}
 		bool isSV(void) const {return this->isSpaceVarying;}
 		bool isIter(void) const {return this->isIterative;}
 
@@ -260,8 +262,9 @@ class MixedFERegressionBase
 		void preapply(EOExpr<A> oper, const ForcingTerm & u, const MeshHandler<ORDER, mydim, ndim> & mesh_ );
 
 		MatrixXv apply(void);
-        MatrixXv apply_iterative(void);
+        	MatrixXv apply_iterative(void);
 		MatrixXr apply_to_b(const MatrixXr & b);
+		MatrixXr apply_to_b_iter(const MatrixXr & b, UInt time_index);
 };
 
 //----------------------------------------------------------------------------//

@@ -234,6 +234,42 @@ struct AuxiliaryOptimizer
         template<typename InputCarrier>
         static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>, f_type>::value, UInt>::type
                 universal_b_setter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & US, const UInt nnodes);
+                
+        //! SFINAE based method to compute right hand term for stochastic (iterative) dof evaluation, areal type
+        /*!
+         \param b a reference to the MatrixXr to be computed
+         \param carrier the Carrier-type object containing the data
+         \param US a stochastic matrix used for purpose of computing stochastic dofs
+         \param nlocations number of space observations
+         \param N_ number of spatial basis functions
+         \param k time index
+         \return an integer signaling the correct ending of the process
+        */
+        template<typename InputCarrier>
+        static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>, t_type>::value, UInt>::type
+                universal_b_setter_iter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & US, const UInt nlocations, const UInt N_, const UInt k);
+
+        //! SFINAE based method to compute right hand term for stochastic (iterative) dof evaluation, pointwise type
+        /*!
+         \param b a reference to the MatrixXr to be computed
+         \param carrier the Carrier-type object containing the data
+         \param US a stochastic matrix used for purpose of computing stochastic dofs
+         \param nlocations number of space observations
+         \param N_ number of spatial basis functions
+         \param k time index
+         \return an integer signaling the correct ending of the process
+        */
+        template<typename InputCarrier>
+        static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>, f_type>::value, UInt>::type
+                universal_b_setter_iter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & US, const UInt nlocations, const UInt N_, const UInt k);
+                
+	template<typename InputCarrier>
+	static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>,t_type>::value, UInt>::type
+        	universal_uTpsi_setter(InputCarrier & carrier, UInt nr, const MatrixXr & ut, MatrixXr & uTpsi, const UInt nlocations, const UInt N_, const UInt k);
+        
+        template<typename InputCarrier>
+	static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>,f_type>::value, UInt>::type
+		universal_uTpsi_setter(InputCarrier & carrier, UInt nr, const MatrixXr & ut, MatrixXr & uTpsi, const UInt nlocations, const UInt N_, const UInt k);
         /* -------------------------------------------------------------------*/
 
         //! SFINAE based method: general updater of first derivative for forcing term data
