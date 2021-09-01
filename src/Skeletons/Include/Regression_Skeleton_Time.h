@@ -176,8 +176,8 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(Evaluat
 	typedef Function_Wrapper<lambda::type<2>, Real, lambda::type<2>, MatrixXr, EvaluationType> FunWr;
 	
 	const OptimizationData * optr = carrier.get_opt_data();
-	//if(optr->get_criterion() == "grid")
-	//{
+	if(optr->get_criterion() == "grid")
+	{
 		timer Time_partial; // Of the sole optimization
 		Time_partial.start();
 		// Rprintf("WARNING: start taking time\n");
@@ -214,13 +214,17 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(Evaluat
 
                 return {solution, output};
 
-	//}
-	//else // 'not_required' optimization can't enter here!! [checked in R code]
-	//{
-		/*std::unique_ptr<Opt_methods<lambda::type<2>,MatrixXr,EvaluationType>> optim_p =
+	}
+	else // 'not_required' optimization can't enter here!! [checked in R code]
+	{
+		/*
+		std::unique_ptr<Opt_methods<lambda::type<2>,MatrixXr,EvaluationType>> optim_p =
 			Opt_method_factory<lambda::type<2>,MatrixXr,EvaluationType>::create_Opt_method(optr->get_criterion(), Fun);
+		*/
+		std::unique_ptr<Opt_methods<lambda::type<2>,MatrixXr,EvaluationType>> optim_p =
+			make_unique<Newton_fd<lambda::type<2>,MatrixXr, EvaluationType>>(Fun);
 
-                // Compute optimal lambda
+        // Compute optimal lambda
 		Checker ch;
 		std::vector<lambda::type<2>> lambda_v_;
 		std::vector<Real> GCV_v_;
@@ -251,7 +255,7 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(Evaluat
 		// the copy is necessary for the bulders outside
 
 		return {solution, output};
-	}*/
+	}
 }
 
 #endif

@@ -176,8 +176,8 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
     stop("'lambda.selection.criterion' must belong to the following list: 'none', 'grid', 'newton', 'newton_fd'.")
   }  
   
-  if(lambda.selection.criterion != 'grid')
-    stop("'lambda.selection.criterion' = 'grid' is the only method implemented for spatio-temporal problems")
+  if(lambda.selection.criterion == 'newton')
+    stop("'lambda.selection.criterion' = 'newton' is not implemented for spatio-temporal problems")
   
   
   if(is.null(DOF.evaluation))
@@ -428,10 +428,10 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
   else
     beta = NULL
 
-  if(all(is.na(bigsol[[13]])))
+  if(all(is.na(bigsol[[24]])))
     ICestimated = NULL
   else
-    ICestimated = list(IC.FEM=bigsol[[13]],bestlambdaindex=bigsol[[14]],bestlambda=bigsol[[15]],beta=bigsol[[16]])
+    ICestimated = list(IC.FEM=bigsol[[24]],bestlambdaindex=bigsol[[25]],bestlambda=bigsol[[26]],beta=bigsol[[27]])
 
   bestlambda = bigsol[[4]]+1
 

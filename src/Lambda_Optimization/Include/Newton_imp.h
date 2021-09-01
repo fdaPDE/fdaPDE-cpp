@@ -235,6 +235,7 @@ std::pair<lambda::type<1>, UInt> Newton_fd<lambda::type<1>, Real, Extensions...>
 template <typename ...Extensions>
 std::pair<lambda::type<2>, UInt> Newton_fd<lambda::type<2>, MatrixXr, Extensions...>::compute (const lambda::type<2> & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<lambda::type<2>> & lambda_v)
 {
+        Rprintf("\nStiamo runnando newton_fd nel caso 2d\n");
         // Initialize the algorithm
         lambda::type<2> x_old;
         lambda::type<2> x = x0;
@@ -298,6 +299,7 @@ std::pair<lambda::type<2>, UInt> Newton_fd<lambda::type<2>, MatrixXr, Extensions
 
         while(n_iter < max_iter)
         {
+                Rprintf("\nNewton iteration %d \n", n_iter);
                 GCV_v.push_back(fx);
                 lambda_v.push_back(x);
 
