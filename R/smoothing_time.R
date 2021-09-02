@@ -394,7 +394,7 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
   N = nrow(FEMbasis$mesh$nodes)
   M = ifelse(FLAG_PARABOLIC,length(time_mesh)-1,length(time_mesh) + 2);
   if(is.null(IC) && FLAG_PARABOLIC)
-    IC = bigsol[[13]]$coeff
+    IC = bigsol[[24]]$coeff
   if(FLAG_PARABOLIC)
   {
     f = array(dim=c(length(IC)+M*N,length(lambdaS),length(lambdaT)))
