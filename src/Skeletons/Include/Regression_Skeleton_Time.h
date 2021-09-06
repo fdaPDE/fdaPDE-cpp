@@ -114,11 +114,13 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
 
 		// Get the solution
 		output_Data<2> output;
-		output.size_S = carrier.get_opt_data()->get_size_S(); //controllare se è il caso di farlo qui
-		output.size_T = carrier.get_opt_data()->get_size_T(); //
-		UInt lambdas_count = carrier.get_opt_data()->get_size_S()*carrier.get_opt_data()->get_size_T(); // Valutare se spostare nel Carrier dentro estensione Temporal
+		output.size_S = carrier.get_opt_data()->get_size_S();
+		output.size_T = carrier.get_opt_data()->get_size_T();
+		UInt lambdas_count = carrier.get_opt_data()->get_size_S()*carrier.get_opt_data()->get_size_T();
 		output.z_hat.resize(carrier.get_psip()->rows(), lambdas_count);
 		output.lambda_vec.reserve(lambdas_count);
+		output.GCV_evals.resize(lambdas_count, -1);
+		output.dof.resize(lambdas_count, -1);
 		MatrixXr solution;
  		MatrixXv betas;
 		betas.resize(lambdas_count, 1);
