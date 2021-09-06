@@ -393,30 +393,31 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
   # ---------- Solution -----------
   N = nrow(FEMbasis$mesh$nodes)
   M = ifelse(FLAG_PARABOLIC,length(time_mesh)-1,length(time_mesh) + 2);
+
+  dim_1 = ifelse(optim[1]==0 & is.null(DOF.matrix) & optim[3]==0, length(lambdaS), 1)
+  dim_2 = ifelse(optim[1]==0 & is.null(DOF.matrix) & optim[3]==0, length(lambdaT), 1)
+  
   if(is.null(IC) && FLAG_PARABOLIC)
     IC = bigsol[[24]]$coeff
   if(FLAG_PARABOLIC)
   {
-    f = array(dim=c(length(IC)+M*N,length(lambdaS),length(lambdaT)))
-    for (i in 1:length(lambdaS))
-     for (j in 1:length(lambdaT))
-       f[,i,j] = c(IC,bigsol[[1]][1:(N*M),i+(j-1)*length(lambdaS)])
+    f = array(dim=c(length(IC)+M*N,dim_1,dim_2))
+    g = array(dim=c(length(IC)+M*N,dim_1,dim_2))
+    for (i in 1:dim_1)
+     for (j in 1:dim_2)
+     {
+       f[,i,j] = c(IC,bigsol[[1]][1:(N*M),i+(j-1)*dim_1])
+       g[,i,j] = c(rep(0,length(IC)),bigsol[[1]][(N*M+1):(2*N*M),i+(j-1)*dim_1])
+     }
   }
   else
-    f = array(data=bigsol[[1]][1:(N*M),],dim = c(N*M,length(lambdaS),length(lambdaT)))
-  if(FLAG_PARABOLIC)
   {
-    g = array(dim=c(length(IC)+M*N,length(lambdaS),length(lambdaT)))
-    for (i in 1:length(lambdaS))
-      for (j in 1:length(lambdaT))
-        g[,i,j] = c(rep(0,length(IC)),bigsol[[1]][(N*M+1):(2*N*M),i+(j-1)*length(lambdaS)])
+    f = array(data=bigsol[[1]][1:(N*M),],dim = c(N*M,dim_1,dim_2))
+    g = array(data=bigsol[[1]][(N*M+1):(2*N*M),],dim = c(N*M,dim_1,dim_2))
   }
-  else
-    g = array(data=bigsol[[1]][(N*M+1):(2*N*M),],dim = c(N*M,length(lambdaS),length(lambdaT)))
 
   dof = bigsol[[2]]
   GCV_ = bigsol[[3]]
-
 
   if(!is.null(covariates))
   {
@@ -432,7 +433,7 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
     ICestimated = NULL
   else
     ICestimated = list(IC.FEM=bigsol[[24]],bestlambdaindex=bigsol[[25]],bestlambda=bigsol[[26]],beta=bigsol[[27]])
-
+    
   bestlambda = bigsol[[4]]+1
 
   if(optim[1]==0)
