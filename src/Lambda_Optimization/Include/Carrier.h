@@ -113,7 +113,7 @@ class Carrier: public Extensions...
                         set_loc_are_nodes(locations_are_nodes_);
                         set_has_W(has_covariates_);
                         set_n_obs(n_obs_);
-                        set_n_space_obs(n_space_obs);
+                        set_n_space_obs(n_space_obs_);
                         set_n_nodes(n_nodes_);
                         set_obs_indicesp(obs_indicesp_);
                         set_zp(zp_);
@@ -155,7 +155,7 @@ class Carrier: public Extensions...
                 inline bool is_areal(void) const {return this->areal_data;}                                     //!< Getter of areal_data \return areal_data
                 inline bool is_temporal(void) const {return this->temporal_data;}                               //!< Getter of temporal_data \return temporal_data
                 inline UInt get_n_obs(void) const {return this->n_obs;}                                         //!< Getter of n_obs [# locations] \return n_obs
-                inline UInt get_n_space_obs(void) const {return this->n_space_obs;}                             //!< Getter of n_space_obs [# locations] \return n_space_obs
+                inline UInt get_n_space_obs(void) const {return this->n_space_obs;}                             //!< Getter of n_space_obs \return n_space_obs
                 inline UInt get_n_nodes(void) const {return this->n_nodes;}                                     //!< Getter of n_nodes [# nodes] \return n_nodes
                 inline const std::vector<UInt> * get_obs_indicesp(void) const {return this->obs_indicesp;}      //!< Getter of obs_indicesp \return obs_indicesp
                 inline const VectorXr * get_zp(void) const {return this->zp;}                                   //!< Getter of zp \return zp

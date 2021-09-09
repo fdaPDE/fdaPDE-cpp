@@ -687,26 +687,38 @@ void GCV_Stochastic<InputCarrier, size>::update_dof(lambda::type<size> lambda)
 		}
 		else //iterative
     		{
-			UInt nlocations = this->the_carrier.get_n_space_obs();
+    			//Rprintf("\n\nCalcolo iterativo GCV stoch\n");
+    			
 			UInt N_ = this->the_carrier.get_model()->getN_();
 			UInt M_ = this->the_carrier.get_model()->getM_();
+			UInt nlocations = this->the_carrier.get_n_space_obs();
+			
+			//Rprintf("nlocations: %d, N_: %d, M_: %d\n", nlocations, N_, M_);
 			
 			this->dof = 0;
 			for(UInt k=0; k<M_; ++k)
 			{
+				//Rprintf("Numero iterazione: %d\n", k);
 				SpMat psi_mini = (*this->the_carrier.get_psip()).block(k * nlocations, k* N_, nlocations, N_); //forse è importante aggiornare anche quella del mixed_fe
 							//perchè magari serve li per alcuni conti. Non sembra comunque che sia così peche ogni volta se la riprende partendo da psi (tutte le volte che appare nel mixed fe)
-			
+				//Rprintf("psi_mini(0,0)=%f,psi_mini(0,1)=%f,psi_mini(1,0)=%f,psi_mini(1,1)=%f\n",
+					//psi_mini.coeff(0,0),psi_mini.coeff(0,1),psi_mini.coeff(1,0),psi_mini.coeff(1,1));
 				// Define the first right hand side : | I  0 |^T * psi^T * A * Q * u
 				this->b = MatrixXr::Zero(2*N_, this->US_.cols());
 				UInt ret = AuxiliaryOptimizer::universal_b_setter_iter(this->b, this->the_carrier, this->US_, nlocations, N_, k);
-
+				
+				//Rprintf("b(0)=%f, b(1)=%f, b(2*N_-2)=%f, b(2*N_-1)=%f\n",
+					//this->b(0), this->b(1), this->b(2*N_-2), this->b(2*N_-1));
+				
 			        // Resolution of the system
 			        MatrixXr x;
 			        if (! this->the_carrier.has_W())
 					x = this->the_carrier.apply_to_b(b, lambda);
 			        else
             				x = this->the_carrier.apply_to_b_iter(b, lambda, k);
+            				
+            			//Rprintf("x(0,0)=%f,x(0,1)=%f,x(1,0)=%f,x(1,1)=%f\n",
+					//x.coeff(0,0),x.coeff(0,1),x.coeff(1,0),x.coeff(1,1));
 
         			MatrixXr uTpsi;
 				MatrixXr ut = this->US_.transpose();

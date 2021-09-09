@@ -31,7 +31,7 @@ SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & 
 		mesh_time[i] = REAL(Rmesh_time)[i];
 	}
 	MixedFERegression<InputHandler> regression(mesh_time, regressionData, optimizationData, mesh.num_nodes());//! load data in a C++ object
-
+	
 	regression.preapply(mesh); // preliminary apply (preapply) to store all problem matrices
 
 	std::pair<MatrixXr, output_Data<2>> solution_bricks;	// Prepare solution to be filled
@@ -207,7 +207,7 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(Evaluat
 		timespec T = Time_partial.stop();
 
 		// Get the solution
-		MatrixXr solution = carrier.apply(output.lambda_sol); //apply_iterative
+		MatrixXr solution = carrier.apply(output.lambda_sol);
 
 		output.time_partial = T.tv_sec + 1e-9*T.tv_nsec;
 

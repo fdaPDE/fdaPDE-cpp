@@ -1444,12 +1444,18 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply_iterative(void) {
     const VectorXr *obsp = regressionData_.getObservations(); // Get observations
     UInt nlocations = regressionData_.isSpaceTime() ? regressionData_.getNumberofSpaceObservations() : regressionData_.getNumberofObservations();
 
-    UInt sizeLambdaS = optimizationData_.get_size_S();
-    if (!regressionData_.isSpaceTime() && !isGAMData)
+    UInt sizeLambdaS;
+    UInt sizeLambdaT;
+    if (!isGAMData)
+    {
         sizeLambdaS=1;
+        sizeLambdaT=1;
+    }
     else
+    {
         sizeLambdaS = optimizationData_.get_size_S();
-    UInt sizeLambdaT = optimizationData_.get_size_T();
+        sizeLambdaT = optimizationData_.get_size_T();
+    }
 
     this->_solution.resize(sizeLambdaS, sizeLambdaT);
     this->_dof.resize(sizeLambdaS,sizeLambdaT);
@@ -1471,8 +1477,18 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply_iterative(void) {
             Real  J = 0, J_old = 10 ^(18);
 
             _solution(s, t) = VectorXr::Zero(2 * nnodes);
-            Real lambdaS = (optimizationData_.get_lambda_S())[s];
-            Real lambdaT = (optimizationData_.get_lambda_T())[t];
+            Real lambdaS;
+            Real lambdaT;
+            if(!isGAMData) //at the moment only space and space-time are implemented
+            {
+            	lambdaS = optimizationData_.get_current_lambdaS();
+            	lambdaT = optimizationData_.get_current_lambdaT();
+            }
+            else
+            {
+                lambdaS = (optimizationData_.get_lambda_S())[s];
+                lambdaT = (optimizationData_.get_lambda_T())[t];
+            }
 
             _rightHandSide = rhs;
             for (UInt i = 0; i < regressionData_.getInitialValues()->rows(); i++)  // p
@@ -1563,13 +1579,22 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply_iterative(void) {
 
             Rprintf("Solution found after %d iterations (max number of iterations: %d)\n", i, (regressionData_.get_maxiter()+1));
 
-			if(optimizationData_.get_loss_function()!="GCV" || isGAMData)
-			{
-				_dof(s,t) = -1;
-				_GCV(s,t) = -1;
-			}
+            if(optimizationData_.get_loss_function()!="GCV" || isGAMData)
+            {
+                _dof(s,t) = -1;
+                _GCV(s,t) = -1;
+            }
         }
     }
+    
+    if(!isGAMData &&
+	(optimizationData_.get_current_lambdaS()!=optimizationData_.get_last_lS_used() ||
+	optimizationData_.get_current_lambdaT()!=optimizationData_.get_last_lT_used()))
+	{
+		optimizationData_.set_last_lS_used(optimizationData_.get_current_lambdaS());
+		optimizationData_.set_last_lT_used(optimizationData_.get_current_lambdaT());
+	}
+	
     _rightHandSide = rhs;
 
     return this->_solution;
