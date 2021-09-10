@@ -1257,53 +1257,45 @@ MatrixXr MixedFERegressionBase<InputHandler>::apply_to_b(const MatrixXr & b)
 	const Real last_lambdaT = optimizationData_.get_last_lT_used();
 	const Real lambdaS = optimizationData_.get_current_lambdaS();
 	const Real lambdaT = optimizationData_.get_current_lambdaT();
-        if(lambdaS!=last_lambdaS || lambdaT!=last_lambdaT)
+    if(lambdaS!=last_lambdaS || lambdaT!=last_lambdaT)
 	{
 		if(!regressionData_.isSpaceTime())
 			buildSystemMatrix(lambdaS);
-        	else
+        else
 			buildSystemMatrix(lambdaS, lambdaT);
 
 		if(regressionData_.getDirichletIndices()->size() > 0)  // if areal data NO BOUNDARY CONDITIONS
-		{
 			this->addDirichletBC_matrix();
-		}
 
-                this->system_factorize();
-        }
+        this->system_factorize();
+    }
 
 	optimizationData_.set_last_lS_used(lambdaS);
 	optimizationData_.set_last_lT_used(lambdaT);
 
-        return this->template system_solve(b);
+    return this->template system_solve(b);
 }
 
 template<typename InputHandler>
 MatrixXr MixedFERegressionBase<InputHandler>::apply_to_b_iter(const MatrixXr & b, UInt time_index)
 {
-	const Real last_lambdaS = optimizationData_.get_last_lS_used();
-	const Real last_lambdaT = optimizationData_.get_last_lT_used();
 	const Real lambdaS = optimizationData_.get_current_lambdaS();
 	const Real lambdaT = optimizationData_.get_current_lambdaT();
-        if(lambdaS!=last_lambdaS || lambdaT!=last_lambdaT)
-	{
-		if(!regressionData_.isSpaceTime())
-			buildSystemMatrix(lambdaS);
-        	else
-			buildSystemMatrix(lambdaS, lambdaT);
 
-		if(regressionData_.getDirichletIndices()->size() > 0)  // if areal data NO BOUNDARY CONDITIONS
-		{
-			this->addDirichletBC_matrix();
-		}
+	if(!regressionData_.isSpaceTime())
+		buildSystemMatrix(lambdaS);
+    else
+		buildSystemMatrix(lambdaS, lambdaT);
 
-                this->system_factorize();
-        }
+	if(regressionData_.getDirichletIndices()->size() > 0)  // if areal data NO BOUNDARY CONDITIONS
+		this->addDirichletBC_matrix();
 
+    this->system_factorize();
+        
 	optimizationData_.set_last_lS_used(lambdaS);
 	optimizationData_.set_last_lT_used(lambdaT);
 
-        return this->template solve_covariates_iter(b, time_index);
+    return this->template solve_covariates_iter(b, time_index);
 }
 
 template<typename InputHandler>
