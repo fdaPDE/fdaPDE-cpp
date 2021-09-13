@@ -42,6 +42,7 @@ class Carrier: public Extensions...
                 bool boundary_conditions = false;             //!< boundary conditions present boolean [depends on inheritance]
                 bool forced_data = false;                     //!< presence of forcing term boolean [depends on inheritance]
                 bool temporal_data = false;                   //!< presence of temporal data  [depends on inheritance]
+                bool flag_parabolic = false;                  //!< parabolic or separable problem
 
                 // General data for any problem
                 UInt n_obs;                                   //!< number of locations
@@ -57,6 +58,8 @@ class Carrier: public Extensions...
                 const SpMat * DMatp;                          //!< pointer to the north-west block of system matrix [size n_nodes x n_nodes]
                 const SpMat * R1p;                            //!< pointer to R1 matrix [size n_nodes x n_nodes]
                 const SpMat * R0p;                            //!< pointer to R0 matrix [size n_nodes x n_nodes]
+                const SpMat * LR0kp;                          //!< pointer to kron(L,R0) matrix (parabolic version)
+                const SpMat * Ptkp;                           //!< pointer to Ptk matrix (separable version)
                 const SpMat * psip;                           //!< pointer to location-to-nodes matrix [size n_obs x n_nodes]
                 const SpMat * psi_tp;                         //!< pointer to the transpose of the location-to-nodes matrix [size n_nodes x n_obs]
 
@@ -95,17 +98,20 @@ class Carrier: public Extensions...
                  \param DMatp_ pointer to the north-west blockk of the system matrix
                  \param R1p_ pointer to R1 matrix
                  \param R0p_ pointer to R0 matrix
+                 \param LR0kp_ pointer to LR0k matrix
+                 \param Ptkp_ pointer to Ptk matrix
                  \param psip_ pointer to Psi matrix
                  \param psi_tp_ pointer to Psi^T matrix
                  \param rhsp_ pointer to the right hand side of system matrix
                  \param bc_values_ pointer to the values of boundary conditions
                  \param bc_indicesp_ pointer to the indices of the boundary conditions
+                 \param flag_parabolic flag to indicate if the problem is separable (false) or parabolic (true)
                 */
                 inline void set_all(MixedFERegressionBase<InputHandler> * model_, OptimizationData * opt_data_,
                         bool locations_are_nodes_, bool has_covariates_, UInt n_obs_, UInt n_space_obs_, UInt n_nodes_, const std::vector<UInt> * obs_indicesp_,
                         const VectorXr * zp_, const MatrixXr * Wp_, const MatrixXr * Hp_, const MatrixXr * Qp_,
-                        const SpMat * DMatp_, const SpMat * R1p_, const SpMat * R0p_, const SpMat * psip_, const SpMat * psi_tp_,
-                        const VectorXr * rhsp_, const std::vector<Real> * bc_valuesp_, const std::vector<UInt> * bc_indicesp_)
+                        const SpMat * DMatp_, const SpMat * R1p_, const SpMat * R0p_, const SpMat * LR0kp_, const SpMat * Ptkp_, const SpMat * psip_, const SpMat * psi_tp_,
+                        const VectorXr * rhsp_, const std::vector<Real> * bc_valuesp_, const std::vector<UInt> * bc_indicesp_, bool flag_parabolic_)
                 {
                         // Set all the data through the private setters
                         set_model(model_);
@@ -123,11 +129,14 @@ class Carrier: public Extensions...
                         set_DMatp(DMatp_);
                         set_R1p(R1p_);
                         set_R0p(R0p_);
+                        set_LR0kp(LR0kp_);
+                        set_Ptkp(Ptkp_);
                         set_psip(psip_);
                         set_psi_tp(psi_tp_);
                         set_rhsp(rhsp_);
                         set_bc_valuesp(bc_valuesp_);
                         set_bc_indicesp(bc_indicesp_);
+                        set_flagParabolic(flag_parabolic_);
 
                         // Update the booleans [note some consistency constraints]
                         if (bc_indicesp_->size() > 0)
@@ -165,12 +174,15 @@ class Carrier: public Extensions...
                 inline const SpMat * get_DMatp(void) const {return this->DMatp;}                                //!< Getter of DMatp \return DMatp
                 inline const SpMat * get_R1p(void) const {return this->R1p;}                                    //!< Getter of R1p \return R1p
                 inline const SpMat * get_R0p(void) const {return this->R0p;}                                    //!< Getter of R0p \return R0p
+                inline const SpMat * get_LR0kp(void) const {return this->LR0kp;}                                //!< Getter of LR0kp \return LR0kp
+                inline const SpMat * get_Ptkp(void) const {return this->Ptkp;}                                  //!< Getter of Ptkp \return Ptkp
                 inline const SpMat * get_psip(void) const {return this->psip;}                                  //!< Getter of psip \return psip
                 inline const SpMat * get_psi_tp(void) const {return this->psi_tp;}                              //!< Getter of psi_tp \return pst_tp
                 inline const VectorXr * get_rhsp(void) const {return this->rhsp;}                               //!< Getter of rhsp \return rhsp
                 inline const std::vector<Real> * get_bc_valuesp(void) const {return this->bc_valuesp;}          //!< Getter of bc_valuesp \return bc_valuesp
                 inline const std::vector<UInt> * get_bc_indicesp(void) const {return this->bc_indicesp;}        //!< Getter of bc_indicesp \return bc_indicesp
                 inline const MixedFERegressionBase<InputHandler> * get_model(void) const {return this->model;}  //!< Getter of model \return model
+                inline const bool * get_flagParabolic(void) const {return this->flag_parabolic;}                //!< Getter of flag_parabolic \return flag_parabolic
 
                 // SETTERS
                 inline void set_model(MixedFERegressionBase<InputHandler> * md) {this->model = md;};                                    //!< Setter of model \param md new model
@@ -187,13 +199,15 @@ class Carrier: public Extensions...
                 inline void set_Qp(const MatrixXr * Qp_) {this->Qp = Qp_;}                                                              //!< Setter of Qp \param Qp_ new Qp
                 inline void set_DMatp(const SpMat * DMatp_) {this->DMatp = DMatp_;}                                                     //!< Setter of DMatp \param DMatp_ new DMatp
                 inline void set_R1p(const SpMat * R1p_) {this->R1p = R1p_;}                                                             //!< Setter of R1p \param R1p_ new R1p
-                inline void set_R0p(const SpMat * R0p_) {this->R0p = R0p_;}                                                             //!< Setter of R0p \param R0p_ new R0p
+                inline void set_R0p(const SpMat * R0p_) {this->R0p = R0p_;}  
+                inline void set_LR0kp(const SpMat * LR0kp_) {this->LR0kp = LR0kp_;}
+                inline void set_Ptkp(const SpMat * Ptkp_) {this->Ptkp = Ptkp_;}                                                         //!< Setter of R0p \param R0p_ new R0p
                 inline void set_psip(const SpMat * psip_) {this->psip = psip_;}                                                         //!< Setter of psip \param psip_ new psip
                 inline void set_psi_tp(const SpMat * psi_tp_) {this->psi_tp = psi_tp_;}                                                 //!< Setter of psi_tp \param psi_tp_ new psip
                 inline void set_rhsp(const VectorXr * rhsp_) {this->rhsp = rhsp_;}                                                      //!< Setter of rhsp \param rhsp_ new rhsp
                 inline void set_bc_valuesp(const std::vector<Real> * bc_valuesp_) {this->bc_valuesp = bc_valuesp_;}                     //!< Setter of bc_valuesp \param bc_valuesp_ new bc_valuesp
                 inline void set_bc_indicesp(const std::vector<UInt> * bc_indicesp_) {this->bc_indicesp = bc_indicesp_;}                 //!< Setter of bc_indicesp \param bc_indicesp_new bc_indicesp
-
+                inline const bool * set_flagParabolic(const bool flag_parabolic_) const {this->flag_parabolic = flag_parabolic_;}       //!< Setter of flag_parabolic \param flag_parabolic new flag_parabolic
                 // APPLY FUNCTIONS
                 //! Method to solve the system given a lambda and a right hand side of the system
                 /*!
@@ -402,7 +416,7 @@ class CarrierBuilder
                         car.set_all(&mc, &optimizationData, data.isLocationsByNodes(), bool(data.getCovariates()->rows()>0 && data.getCovariates()->cols()>0),
                                 data.getNumberofObservations(), data.getNumberofSpaceObservations(), mc.getnnodes_(), data.getObservationsIndices(),
                                 data.getObservations(), data.getCovariates(), mc.getH_(), mc.getQ_(), mc.getDMat_(), mc.getR1_(),
-                                mc.getR0_(), mc.getpsi_(), mc.getpsi_t_(), mc.getrhs_(), data.getDirichletValues(), data.getDirichletIndices());
+                                mc.getR0_(), mc.getLR0k_(), mc.getpsi_(), mc.getpsi_t_(), mc.getrhs_(), data.getDirichletValues(), data.getDirichletIndices(), data.getFlagParabolic());
                 }
 
                 //! Method to fill the eventual Areal part of an areal carrier

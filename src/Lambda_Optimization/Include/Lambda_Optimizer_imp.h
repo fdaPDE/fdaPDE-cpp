@@ -252,6 +252,24 @@ void GCV_Exact<InputCarrier, 1>::set_R_(void)
         */
 }
 
+template<typename InputCarrier>
+void GCV_Exact<InputCarrier, 2>::set_R_(lambda::type<2> lambda)
+{
+        /* Debugging purpose timer [part I]
+         timer Time_partial_n;
+         Time_partial_n.start();
+         Rprintf("WARNING: start taking time to build R inverse matrix \n");
+        */
+        if (this->the_carrier.get_flagParabolic())
+                const UInt ret = AuxiliaryOptimizer::universal_R_setter<InputCarrier>(this->R_, this->the_carrier, this->adt, lambda);
+        else
+                const UInt ret = AuxiliaryOptimizer::universal_R_setter<InputCarrier>(this->R_, this->the_carrier, this->adt);
+
+        /* Debugging purpose timer [part II]
+         Rprintf("WARNING: partial time after the building R inverse matrix\n");
+         timespec T_n = Time_partial_n.stop();
+        */
+}
 //! Method to set the value of member T_
 /*!
  \remark T = D + \lambda * R where D is the top-left block of the matrix DMat
@@ -266,6 +284,21 @@ void GCV_Exact<InputCarrier, 1>::set_T_(lambda::type<1> lambda)
         const UInt ret = AuxiliaryOptimizer::universal_T_setter<InputCarrier>(this->T_, this->the_carrier);
 }
 
+template<typename InputCarrier>
+void GCV_Exact<InputCarrier, 2>::set_T_(lambda::type<2> lambda)
+{ 
+        if (!this->the_carrier.get_flagParabolic())
+                this->T_ = lambda(1)*(*this->the_carrier.get_Ptkp());
+        else
+                this->T_ = MatrixXr::Zero(this->R_.rows(), this->R_.cols());
+
+        const UInt ret = AuxiliaryOptimizer::universal_T_setter<InputCarrier>(this->T_, this->the_carrier);
+
+        this->T_ -= lambda(0)*this->R_;
+
+}
+
+
 //! Method to set the value of member V_
 /*!
  \remark V = T^{-1}*Psi^t*Q
@@ -278,6 +311,13 @@ void GCV_Exact<InputCarrier, 1>::set_V_(void)
         const UInt ret = AuxiliaryOptimizer::universal_V_setter<InputCarrier>(this->V_, this->T_, this->R_, this->the_carrier, this->adt);
 }
 
+template<typename InputCarrier>
+void GCV_Exact<InputCarrier, 2>::set_V_(void)
+{
+        const UInt ret = AuxiliaryOptimizer::universal_V_setter<InputCarrier>(this->V_, this->T_, this->R_, this->the_carrier, this->adt);
+}
+
+
 //! Method to set the value of member S_ and its trace trS_
 /*!
  \remark S = Psi*V
@@ -286,6 +326,13 @@ void GCV_Exact<InputCarrier, 1>::set_V_(void)
 */
 template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 1>::set_S_and_trS_(void)
+{
+        this->trS_ = 0.0;
+        this->LeftMultiplybyPsiAndTrace(this->trS_, this->S_, this->V_);
+}
+
+template<typename InputCarrier>
+void GCV_Exact<InputCarrier, 2>::set_S_and_trS_(void)
 {
         this->trS_ = 0.0;
         this->LeftMultiplybyPsiAndTrace(this->trS_, this->S_, this->V_);
@@ -310,6 +357,10 @@ void GCV_Exact<InputCarrier, 1>::set_dS_and_trdS_(void)
         this->LeftMultiplybyPsiAndTrace(this->trdS_, this->dS_, -this->adt.F_);
 }
 
+template<typename InputCarrier>
+void GCV_Exact<InputCarrier, 2>::set_dS_and_trdS_(void)
+{}
+
 //! Method to set the value of member ddS_ and its trace trddS_
 /*!
  \remark ddS_ = -2*Psi*K^2*V
@@ -326,6 +377,10 @@ void GCV_Exact<InputCarrier, 1>::set_ddS_and_trddS_(void)
         this->LeftMultiplybyPsiAndTrace(this->trddS_, this->ddS_, G_);
 }
 
+template<typename InputCarrier>
+void GCV_Exact<InputCarrier, 2>::set_ddS_and_trddS_(void)
+{}
+
 // -- Utilities --
 //! Utility to left multiply a matrix by Psi_ and compute the trace of the new matrix
 /*!
@@ -336,6 +391,50 @@ void GCV_Exact<InputCarrier, 1>::set_ddS_and_trddS_(void)
 */
 template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 1>::LeftMultiplybyPsiAndTrace(Real & trace, MatrixXr & ret, const MatrixXr & mat)
+{
+        if (this->the_carrier.loc_are_nodes())
+        {
+                // Psi is permutation
+
+                // THEORETICAL REMARK:
+                // Since Psi is a rectangular permutation matrix, if function
+                // k: loctions -> nodes s.t. Psi = Indicator(i,k[i]) then
+                // Psi*F   == Indicator(i,j)*f_{k[i]j}
+
+                // IMPLEMENTATION OF THE REMARK:
+                // the number of non-null entries of E is at most s^2,
+                // we reserve a vector containing such entries and
+                // we set the final matrix from these triplets
+
+                ret = MatrixXr::Zero(this->s,this->s); // Initialize return matrix as #locations*#locations
+
+                const std::vector<UInt> * kp = this->the_carrier.get_obs_indicesp(); // Get z [observations]
+                for (UInt i = 0; i < this->s; i++)
+                        for (UInt j = 0; j < this->s; j++)
+                        {
+                                if (i == j) // diagonal block, also update trace
+                                {
+                                        Real v = mat.coeff((*kp)[i], j);
+                                        trace += v;
+                                        ret.coeffRef(i,i) += mat.coeff((*kp)[i], i);
+                                }
+                                else    // just update return matrix
+                                {
+                                        ret.coeffRef(i,j) += mat.coeff((*kp)[i], j);
+                                }
+                        }
+        }
+        else
+        {
+                // Psi is full, compute matrix and trace directly
+                ret = (*this->the_carrier.get_psip())*mat;
+                for (int i = 0; i < this->s; ++i)
+                        trace += ret.coeff(i, i);
+        }
+}
+
+template<typename InputCarrier>
+void GCV_Exact<InputCarrier, 2>::LeftMultiplybyPsiAndTrace(Real & trace, MatrixXr & ret, const MatrixXr & mat)
 {
         if (this->the_carrier.loc_are_nodes())
         {
@@ -407,6 +506,30 @@ void GCV_Exact<InputCarrier, 1>::compute_z_hat(lambda::type<1> lambda)
         */
 }
 
+template<typename InputCarrier>
+void GCV_Exact<InputCarrier, 2>::compute_z_hat(lambda::type<2> lambda)
+{
+        UInt ret;
+        if (this->the_carrier.get_bc_indicesp()->size()==0)
+                ret = AuxiliaryOptimizer::universal_z_hat_setter<InputCarrier>(this->z_hat, this->the_carrier, this->S_, this->adt, lambda);
+        else {
+
+                const UInt nnodes    = this->the_carrier.get_n_nodes();
+                const VectorXr f_hat = VectorXr(this->the_carrier.apply(lambda)).head(nnodes);
+
+                // Compute the predicted values in the locations from the f_hat
+                this->compute_z_hat_from_f_hat(f_hat);
+
+               }
+        // Debugging purpose print
+        /* Rprintf("z_hat \n");
+           for(UInt i = 0; i < this->s-1; i++)
+                  Rprintf("%f, ", this->z_hat[i]);
+           Rprintf("%f", this->z_hat[s-1]);
+           Rprintf("\n");
+        */
+}
+
 //! Utility to compute the degrees of freedom of the model
 /*!
  \param lambda value of the optimization parameter
@@ -416,6 +539,19 @@ void GCV_Exact<InputCarrier, 1>::update_dof(lambda::type<1> lambda)
 {
         // dof = tr(S) + #covariates
 	this->dof = this->trS_;
+
+        if(this->the_carrier.has_W()) // add number of covariates, if present
+                this->dof += (*this->the_carrier.get_Wp()).cols();
+
+        // Debugging purpose
+        // Rprintf("DOF: %f\n", this->dof);
+}
+
+template<typename InputCarrier>
+void GCV_Exact<InputCarrier, 2>::update_dof(lambda::type<2> lambda)
+{
+        // dof = tr(S) + #covariates
+        this->dof = this->trS_;
 
         if(this->the_carrier.has_W()) // add number of covariates, if present
                 this->dof += (*this->the_carrier.get_Wp()).cols();
@@ -447,6 +583,23 @@ void GCV_Exact<InputCarrier, 1>::update_dor(lambda::type<1> lambda)
         // Rprintf("DOR: %f\n", this->dor);
 }
 
+template<typename InputCarrier>
+void GCV_Exact<InputCarrier, 2>::update_dor(lambda::type<2> lambda)
+{
+        // dor = #locations - dof
+        this->dor = this->s-this->dof*this->the_carrier.get_opt_data()->get_tuning();
+
+        if (this->dor < 0)   // Just in case of bad computation
+        {
+                Rprintf("WARNING: Some values of the trace of the matrix S('lambda') are inconstistent.\n");
+                Rprintf("This might be due to ill-conditioning of the linear system.\n");
+                Rprintf("Try increasing value of 'lambda'. Value of 'lambda' that produces an error is: (%e, %e) \n", lambda(0), lambda(1));
+        }
+
+        // Debugging purpose
+        // Rprintf("DOR: %f\n", this->dor);
+}
+
 // -- Global Updaters --
 //! Utility to update the gcv-exact parameters, fundamental for a correct computation of the gcv
 /*!
@@ -463,6 +616,18 @@ void GCV_Exact<InputCarrier, 1>::update_matrices(lambda::type<1> lambda)
         this->compute_z_hat(lambda);
 }
 
+template<typename InputCarrier>
+void GCV_Exact<InputCarrier, 2>::update_matrices(lambda::type<2> lambda)
+{
+        // this order must be kept
+        if (this->the_carrier.get_flagParabolic())
+                this->set_R_(lambda);
+        this->set_T_(lambda);
+        this->set_V_();
+        this->set_S_and_trS_();   // ************nell'iterativo forse non serve***************************
+        this->compute_z_hat(lambda);
+}
+
 // -- Public updaters --
 //! Setting all the parameters which are recursively lambda dependent
 /*!
@@ -471,6 +636,14 @@ void GCV_Exact<InputCarrier, 1>::update_matrices(lambda::type<1> lambda)
 */
 template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 1>::update_parameters(lambda::type<1> lambda)
+{
+        // this order must be kept
+        this->update_matrices(lambda);
+        this->update_errors(lambda);
+}
+
+template<typename InputCarrier>
+void GCV_Exact<InputCarrier, 2>::update_parameters(lambda::type<2> lambda)
 {
         // this order must be kept
         this->update_matrices(lambda);
@@ -489,6 +662,10 @@ void GCV_Exact<InputCarrier, 1>::first_updater(lambda::type<1> lambda)
         UInt ret = AuxiliaryOptimizer::universal_first_updater<InputCarrier>(this->adt, this->the_carrier, this->dS_, this->eps_hat, lambda);
 }
 
+template<typename InputCarrier>
+void GCV_Exact<InputCarrier, 2>::first_updater(lambda::type<2> lambda)
+{}
+
 //! Update all parameters needed to compute the gcv second derivative, depending on lambda
 /*!
  \param lambda the actual value of lambda to be used for the update
@@ -500,6 +677,10 @@ void GCV_Exact<InputCarrier, 1>::second_updater(lambda::type<1> lambda)
         this->set_ddS_and_trddS_();     // set second derivative of S and its trace
         UInt ret = AuxiliaryOptimizer::universal_second_updater<InputCarrier>(this->adt, this->the_carrier, this->ddS_, this->eps_hat, lambda);
 }
+
+template<typename InputCarrier>
+void GCV_Exact<InputCarrier, 2>::second_updater(lambda::type<2> lambda)
+{}
 
 // -- GCV and derivatives --
 // GCV function and derivatives
@@ -527,6 +708,23 @@ Real GCV_Exact<InputCarrier, 1>::compute_f(lambda::type<1> lambda)
 	//Rprintf("GCV = %f\n",GCV_val);
 
 	return GCV_val;
+}
+
+template<typename InputCarrier>
+Real GCV_Exact<InputCarrier, 2>::compute_f(lambda::type<2> lambda)
+{
+        // call external updater to update [if needed] the parameters for gcv calculus
+        this->gu.call_to(0, lambda, this);
+
+        // compute the value of the gcv
+        Real GCV_val =
+                AuxiliaryOptimizer::universal_GCV<InputCarrier>(this->s, this->sigma_hat_sq, this->dor);
+
+        // Debugging purpose print
+        //Rprintf("LAMBDA = %f\n",lambda);
+        //Rprintf("GCV = %f\n",GCV_val);
+
+        return GCV_val;
 }
 
 //! Computes the gcv firt derivative in an exact fashion, depending on lambda
@@ -557,6 +755,12 @@ Real GCV_Exact<InputCarrier, 1>::compute_fp(lambda::type<1> lambda)
 	return GCV_der_val;
 }
 
+template<typename InputCarrier>
+lambda::type<2> GCV_Exact<InputCarrier, 2>::compute_fp(lambda::type<2> lambda)
+{
+        return lambda::make_pair(-1, -1);
+}
+
 //! Computes the gcv second derivative in an exact fashion, depending on lambda
 /*!
  \param lambda the actual value of lambda to be used for the computation
@@ -577,6 +781,13 @@ Real GCV_Exact<InputCarrier, 1>::compute_fs(lambda::type<1> lambda)
 	//Rprintf("GCV_second_derivative = %f\n", GCV_sec_der_val);
 
 	return GCV_sec_der_val;
+}
+
+template<typename InputCarrier>
+Real GCV_Exact<InputCarrier, 2>::compute_fs(lambda::type<2> lambda)
+{
+        Rprintf("Return type di compute_fs da modificare a MatrixXr\n");
+        return -1;
 }
 
 //----------------------------------------------------------------------------//

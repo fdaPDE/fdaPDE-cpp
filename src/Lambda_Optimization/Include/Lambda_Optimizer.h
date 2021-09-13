@@ -225,6 +225,81 @@ class GCV_Exact<InputCarrier, 1>: public GCV_Family<InputCarrier, 1>
         virtual ~GCV_Exact(){};
 };
 
+
+//! Derived class used for bidimensional lambda exact gcv-based methods
+/*!
+ This class implements exact methods to identify the correct value of the gcv
+ and possibly of its derivatives, by partially solving manually the apply system
+ \tparam InputCarrier Carrier-type parameter that contains insight about the problem to be solved
+*/
+template<typename InputCarrier>
+class GCV_Exact<InputCarrier, 2>: public GCV_Family<InputCarrier, 2>
+{
+        private:
+                //! An external updater whose purpose is keeping the internal values coherent with the computations to be made from time to time
+                GOF_updater<GCV_Exact<InputCarrier, 2>, Real> gu;
+
+                // INTERNAL DATA STRUCTURES
+                MatrixXr  R_;           //!< stores the value of R1^t*R0^{-1}*R1 [size nnodes x nnodes]
+                MatrixXr  T_;           //!< stores the value of Psi^t*Q*Psi+lambda*R [size nnodes x nnodes]
+                MatrixXr  V_;           //!< stores the value of T^{-1}*Psi^t*Q [size nnodes x s]
+                MatrixXr  S_;           //!< stores the value of Psi*V [as in Stu-Hunter Sangalli] [size s x s]
+                Real      trS_ = 0.0;   //!< stores the value of the trace of S
+                MatrixXr  dS_;          //!< stores the derivative of S w.r.t. lambda [size s x s]
+                Real      trdS_ = 0.0 ;  //!< stores the value of the trace of dS
+                MatrixXr  ddS_;         //!< stores the second derivative of S w.r.t. lambda [size s x s]
+                Real      trddS_ = 0.0; //!< stores the value of the trace of ddS
+
+                //! Additional utility matrices [just the ones for the specific carrier that is proper of the problem]
+                AuxiliaryData<InputCarrier> adt;
+
+                // COMPUTERS and DOF methods
+                void compute_z_hat (lambda::type<2> lambda) override;
+                void update_dof(lambda::type<2> lambda)     override;
+                void update_dor(lambda::type<2> lambda)     override;
+
+                // SETTERS
+                void set_R_(lambda::type<2> lambda);
+                void set_T_(lambda::type<2> lambda);
+                void set_V_(void);
+                void set_S_and_trS_(void);
+                void set_dS_and_trdS_(void);
+                void set_ddS_and_trddS_(void);
+
+                // UTILITIES
+                void LeftMultiplybyPsiAndTrace(Real & trace, MatrixXr & ret, const MatrixXr & mat);
+
+                // GLOBAL UPDATERS
+                void update_matrices(lambda::type<2> lambda);
+
+        public:
+                // CONSTRUCTORS
+                //! Constructor of the class given the InputCarrier
+                /*!
+                 \param the_carrier the structure from which to take all the data for the derived classes
+                 \sa set_R_()
+                */
+                GCV_Exact<InputCarrier, 2>(InputCarrier & the_carrier_):
+                        GCV_Family<InputCarrier, 2>(the_carrier_)
+                        {
+                                if (!this->the_carrier.get_flagParabolic())
+                                        this->set_R_(); // this matrix is unchanged during the whole procedure, thus it's set once and for all
+                        }
+
+                // PUBLIC UPDATERS
+                void update_parameters(lambda::type<2> lambda) override;
+
+                void first_updater(lambda::type<2> lambda);
+                void second_updater(lambda::type<2> lambda);
+
+                // GCV-COMPUTATION
+                Real compute_f(lambda::type<2> lambda) override;
+                lambda::type<2> compute_fp(lambda::type<2> lambda);
+                Real compute_fs(lambda::type<2> lambda);
+                //! Virtual Destuctor
+        virtual ~GCV_Exact(){};
+};
+
 //----------------------------------------------------------------------------//
 // ** GCV_STOCHASTIC **
 

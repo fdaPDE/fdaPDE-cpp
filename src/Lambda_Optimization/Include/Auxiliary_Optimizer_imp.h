@@ -54,6 +54,40 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
 
                 return 0;
         }
+// Parabolic case overload
+template<typename InputCarrier>
+typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>,t_type>::value, UInt>::type
+        AuxiliaryOptimizer::universal_R_setter(MatrixXr & R, const InputCarrier & carrier, AuxiliaryData<InputCarrier> & adt, lambda::type<2> lambda)
+        {
+                SpMat  R1p_= *carrier.get_R1p();         // Get the value of matrix R1
+                SpMat  LR0kp_= *carrier.get_LR0kp();     // Get the value of matrix LR0k
+                R1p_ += lambda(1) * LR0kp_;  ///***************************????**********
+                const std::vector<UInt> * bc_indices = carrier.get_bc_indicesp();
+                AuxiliaryOptimizer::bc_utility(R1p_, bc_indices);
+
+                Eigen::SparseLU<SpMat> factorized_R0p(*(carrier.get_R0p()));
+                R = (R1p_).transpose()*factorized_R0p.solve(R1p_);     // R == _R1^t*R0^{-1}*R1
+                adt.f_ = ((R1p_).transpose())*factorized_R0p.solve((*carrier.get_up()));
+
+                return 0;
+        }
+
+// Parabolic case overload
+template<typename InputCarrier>
+typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>,f_type>::value, UInt>::type
+        AuxiliaryOptimizer::universal_R_setter(MatrixXr & R, const InputCarrier & carrier, AuxiliaryData<InputCarrier> & adt, lambda::type<2> lambda)
+        {
+                SpMat  R1p_= *carrier.get_R1p();         // Get the value of matrix R1
+                SpMat  LR0kp_= *carrier.get_LR0kp();     // Get the value of matrix LR0k
+                R1p_ += lambda(1) * LR0kp_;  ///***************************????**********
+                const std::vector<UInt> * bc_indices = carrier.get_bc_indicesp();
+                AuxiliaryOptimizer::bc_utility(R1p_, bc_indices);
+
+                Eigen::SparseLU<SpMat>factorized_R0p(*(carrier.get_R0p()));
+                R = (R1p_).transpose()*factorized_R0p.solve(R1p_);     // R == _R1^t*R0^{-1}*R1
+
+                return 0;
+        }
 
 template<typename InputCarrier>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>,t_type>::value, UInt>::type
