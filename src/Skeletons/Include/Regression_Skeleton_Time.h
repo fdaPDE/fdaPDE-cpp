@@ -119,6 +119,7 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
 		UInt lambdas_count = carrier.get_opt_data()->get_size_S()*carrier.get_opt_data()->get_size_T();
 		output.z_hat.resize(carrier.get_psip()->rows(), lambdas_count);
 		output.lambda_vec.reserve(lambdas_count);
+		output.lambda_vec.clear();
 		output.GCV_evals.resize(lambdas_count, -1);
 		output.dof.resize(lambdas_count, -1);
 		MatrixXr solution;
@@ -131,7 +132,6 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
 				Real lambdaS = carrier.get_opt_data()->get_lambda_S()[i];
 				Real lambdaT = carrier.get_opt_data()->get_lambda_T()[j];
 				lambda::type<2> lambda = lambda::make_pair(lambdaS, lambdaT);
-				Rprintf("LAMBDA: lambda(0) %f, lambda(1) %f\n", lambda(0), lambda(1));
 				output.lambda_vec.push_back(lambda);
 				UInt couple_index = j*carrier.get_opt_data()->get_size_S()+i;
 				if(i==0 && j==0)
