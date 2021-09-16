@@ -16,9 +16,10 @@
 template<typename CarrierType>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, t_type>::value,
 	std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierType & carrier);
-template<typename EvaluationType, typename CarrierType>
-typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, t_type>::value,
-	std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier);
+
+template<typename EvaluationType, typename CarrierType, UInt size>
+typename std::enable_if<size==2, std::pair<MatrixXr, output_Data<2>>>::type
+	optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier);
 
 template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
 SEXP regression_skeleton_time(InputHandler & regressionData, OptimizationData & optimizationData, SEXP Rmesh, SEXP Rmesh_time)
@@ -93,15 +94,50 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
 	
 	if(optr->get_loss_function() == "GCV" && optr->get_DOF_evaluation() == "exact")
 	{
-		Rprintf("GCV exact\n");
-		GCV_Exact<CarrierType, 2> optim(carrier);
-		return optimizer_strategy_selection<GCV_Exact<CarrierType, 2>, CarrierType>(optim, carrier);
+		//Rprintf("GCV exact\n");
+		if(carrier.get_flagParabolic())
+		{
+			std::vector<Real> lambdaT = carrier.get_opt_data()->get_lambda_T();
+			std::pair<MatrixXr, output_Data<2>> res;
+			
+			for(UInt i=0; i<carrier.get_opt_data()->get_size_T(); i++)
+			{				
+				GCV_Exact<CarrierType, 1> optim(carrier, lambdaT[j]);
+				std::pair<MatrixXr, output_Data<1>> par_res = 
+					optimizer_strategy_selection<GCV_Exact<CarrierType, 1>, CarrierType, 1>(optim, carrier);
+
+				// *********Partial implementation*******************
+
+			}
+			
+
+			
+			output_Data<2> a;
+			return std::make_pair(MatrixXr::Zero(2, 2),a);
+		}
+		else
+		{
+			GCV_Exact<CarrierType, 2> optim(carrier);
+			return optimizer_strategy_selection<GCV_Exact<CarrierType, 2>, CarrierType, 2>(optim, carrier);
+		}
 	}
 	else if(optr->get_loss_function() == "GCV" && (optr->get_DOF_evaluation() == "stochastic" || optr->get_DOF_evaluation() == "not_required"))
 	{
+		/*
 		//Rprintf("GCV stochastic\n");
-		GCV_Stochastic<CarrierType, 2> optim(carrier, true);
-		return optimizer_strategy_selection<GCV_Stochastic<CarrierType, 2>, CarrierType>(optim, carrier);
+		if(carrier.get_flagParabolic())
+		{
+			GCV_Stochastic<CarrierType, 1> optim(carrier, true);
+			optimizer_strategy_selection<GCV_Stochastic<CarrierType, 1>, CarrierType, 1>(optim, carrier);
+			output_Data<2> a;
+			return std::make_pair(MatrixXr::Zero(2, 2),a);
+		}
+		else
+		{
+			*/
+			GCV_Stochastic<CarrierType, 2> optim(carrier, true);
+			return optimizer_strategy_selection<GCV_Stochastic<CarrierType, 2>, CarrierType, 2>(optim, carrier);
+		//}
 	}
 	else // if(optr->get_loss_function() == "unused" && optr->get_DOF_evaluation() == "not_required")
 	{
@@ -170,9 +206,9 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
  \param carrier the Carrier used for the methods
  \return the solution to pass to the Solution_Builders
 */
-template<typename EvaluationType, typename CarrierType>
-typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, t_type>::value,
-std::pair<MatrixXr, output_Data<2>> >::type optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
+template<typename EvaluationType, typename CarrierType, UInt size>
+typename std::enable_if<size==2, std::pair<MatrixXr, output_Data<2>>>::type
+optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 {
 	// Build wrapper and newton method
 	Function_Wrapper<lambda::type<2>, Real, lambda::type<2>, MatrixXr, EvaluationType> Fun(optim);

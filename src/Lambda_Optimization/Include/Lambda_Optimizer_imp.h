@@ -269,20 +269,21 @@ void GCV_Exact<InputCarrier, 2>::set_R_(void)
 }
 
 template<typename InputCarrier>
-void GCV_Exact<InputCarrier, 2>::set_R_(lambda::type<2> lambda)
+void GCV_Exact<InputCarrier, 1>::set_R_(Real lambdaT)
 {
         /* Debugging purpose timer [part I]
          timer Time_partial_n;
          Time_partial_n.start();
          Rprintf("WARNING: start taking time to build R inverse matrix \n");
         */
-        const UInt ret = AuxiliaryOptimizer::universal_R_setter<InputCarrier>(this->R_, this->the_carrier, this->adt, lambda);
+        const UInt ret = AuxiliaryOptimizer::universal_R_setter<InputCarrier>(this->R_, this->the_carrier, this->adt, lambdaT);
         
         /* Debugging purpose timer [part II]
          Rprintf("WARNING: partial time after the building R inverse matrix\n");
          timespec T_n = Time_partial_n.stop();
         */
 }
+
 //! Method to set the value of member T_
 /*!
  \remark T = D + \lambda * R where D is the top-left block of the matrix DMat
@@ -291,24 +292,26 @@ void GCV_Exact<InputCarrier, 2>::set_R_(lambda::type<2> lambda)
  \param lambda the value for which to perform the optimization
 */
 template<typename InputCarrier>
-void GCV_Exact<InputCarrier, 1>::set_T_(lambda::type<1> lambda)
+void GCV_Exact<InputCarrier, 1>::set_T_(lambda::type<1> lambdaS)
 {
-        this->T_ = lambda*this->R_;
-        const UInt ret = AuxiliaryOptimizer::universal_T_setter<InputCarrier>(this->T_, this->the_carrier);
+        if (this->the_carrier.get_flagParabolic())
+        {
+                this->T_ = MatrixXr::Zero(this->R_.rows(), this->R_.cols());
+                const UInt ret = AuxiliaryOptimizer::universal_T_setter<InputCarrier>(this->T_, this->the_carrier);
+                this->T_ -= lambdaS*this->R_;
+        }
+        else
+        {
+                this->T_ = lambdaS*this->R_;
+                const UInt ret = AuxiliaryOptimizer::universal_T_setter<InputCarrier>(this->T_, this->the_carrier);
+        }
 }
 
 template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 2>::set_T_(lambda::type<2> lambda)
 { 
-        if (!this->the_carrier.get_flagParabolic())
-                this->T_ = lambda(1)*(*this->the_carrier.get_Ptkp());
-        else
-                this->T_ = MatrixXr::Zero(this->R_.rows(), this->R_.cols());
-
+        this->T_ = lambda(1)*(*this->the_carrier.get_Ptkp());
         const UInt ret = AuxiliaryOptimizer::universal_T_setter<InputCarrier>(this->T_, this->the_carrier);
-
-        Rprintf("Facciamo -lambdaS*R\n");
-
         this->T_ -= lambda(0)*this->R_;
 }
 
@@ -625,6 +628,7 @@ void GCV_Exact<InputCarrier, 2>::update_dor(lambda::type<2> lambda)
 template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 1>::update_matrices(lambda::type<1> lambda)
 {
+        Rprintf("una altra call\n");
         // this order must be kept
         Rprintf("R(0,0): %f, R(1,0): %f, R(0,1): %f, R(1,1): %f\n", 
                 this->R_.coeff(0, 0), this->R_.coeff(1, 0), this->R_.coeff(0, 1), this->R_.coeff(1, 1));
@@ -642,8 +646,6 @@ template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 2>::update_matrices(lambda::type<2> lambda)
 {
         // this order must be kept
-        if (this->the_carrier.get_flagParabolic())
-                this->set_R_(lambda);
         Rprintf("R(0,0): %f, R(1,0): %f, R(0,1): %f, R(1,1): %f\n", 
                 this->R_.coeff(0, 0), this->R_.coeff(1, 0), this->R_.coeff(0, 1), this->R_.coeff(1, 1));
 
@@ -727,6 +729,7 @@ void GCV_Exact<InputCarrier, 2>::second_updater(lambda::type<2> lambda)
 template<typename InputCarrier>
 Real GCV_Exact<InputCarrier, 1>::compute_f(lambda::type<1> lambda)
 {
+        Rprintf("comp f\n");
         // call external updater to update [if needed] the parameters for gcv calculus
         this->gu.call_to(0, lambda, this);
 

@@ -59,11 +59,11 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
 // Parabolic case overload
 template<typename InputCarrier>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>,t_type>::value, UInt>::type
-        AuxiliaryOptimizer::universal_R_setter(MatrixXr & R, const InputCarrier & carrier, AuxiliaryData<InputCarrier> & adt, lambda::type<2> lambda)
+        AuxiliaryOptimizer::universal_R_setter(MatrixXr & R, const InputCarrier & carrier, AuxiliaryData<InputCarrier> & adt, Real lambdaT)
         {
                 SpMat  R1p_= *carrier.get_R1p();         // Get the value of matrix R1
                 SpMat  LR0kp_= *carrier.get_LR0kp();     // Get the value of matrix LR0k
-                R1p_ += lambda(1) * LR0kp_;  ///***************************????**********
+                R1p_ += lambdaT * LR0kp_;
                 const std::vector<UInt> * bc_indices = carrier.get_bc_indicesp();
                 AuxiliaryOptimizer::bc_utility(R1p_, bc_indices);
 
@@ -77,11 +77,11 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
 // Parabolic case overload
 template<typename InputCarrier>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>,f_type>::value, UInt>::type
-        AuxiliaryOptimizer::universal_R_setter(MatrixXr & R, const InputCarrier & carrier, AuxiliaryData<InputCarrier> & adt, lambda::type<2> lambda)
+        AuxiliaryOptimizer::universal_R_setter(MatrixXr & R, const InputCarrier & carrier, AuxiliaryData<InputCarrier> & adt, Real lambdaT)
         {
                 SpMat  R1p_= *carrier.get_R1p();         // Get the value of matrix R1
                 SpMat  LR0kp_= *carrier.get_LR0kp();     // Get the value of matrix LR0k
-                R1p_ += lambda(1) * LR0kp_;  ///***************************????**********
+                R1p_ += lambdaT * LR0kp_;
                 const std::vector<UInt> * bc_indices = carrier.get_bc_indicesp();
                 AuxiliaryOptimizer::bc_utility(R1p_, bc_indices);
 

@@ -15,9 +15,10 @@
 template<typename CarrierType>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, f_type>::value,
 	std::pair<MatrixXr, output_Data<1>> >::type optimizer_method_selection(CarrierType & carrier);
-template<typename EvaluationType, typename CarrierType>
-typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, f_type>::value,
-	std::pair<MatrixXr, output_Data<1>> >::type optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier);
+
+template<typename EvaluationType, typename CarrierType, UInt size>
+typename std::enable_if<size==1, std::pair<MatrixXr, output_Data<1>>>::type 
+	optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier);
 
 template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
 SEXP regression_skeleton(InputHandler & regressionData, OptimizationData & optimizationData, SEXP Rmesh)
@@ -84,13 +85,13 @@ std::pair<MatrixXr, output_Data<1>> >::type optimizer_method_selection(CarrierTy
 	{
 		//Rprintf("GCV exact\n");
 		GCV_Exact<CarrierType, 1> optim(carrier);
-		return optimizer_strategy_selection<GCV_Exact<CarrierType, 1>, CarrierType>(optim, carrier);
+		return optimizer_strategy_selection<GCV_Exact<CarrierType, 1>, CarrierType, 1>(optim, carrier);
 	}
 	else if(optr->get_loss_function() == "GCV" && (optr->get_DOF_evaluation() == "stochastic" || optr->get_DOF_evaluation() == "not_required"))
 	{
 		//Rprintf("GCV stochastic\n");
 		GCV_Stochastic<CarrierType, 1> optim(carrier, true);
-		return optimizer_strategy_selection<GCV_Stochastic<CarrierType, 1>, CarrierType>(optim, carrier);
+		return optimizer_strategy_selection<GCV_Stochastic<CarrierType, 1>, CarrierType, 1>(optim, carrier);
 	}
 	else // if(optr->get_loss_function() == "unused" && optr->get_DOF_evaluation() == "not_required")
 	{
@@ -146,14 +147,16 @@ std::pair<MatrixXr, output_Data<1>> >::type optimizer_method_selection(CarrierTy
  \param carrier the Carrier used for the methods
  \return the solution to pass to the Solution_Builders
 */
-template<typename EvaluationType, typename CarrierType>
-typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, f_type>::value,
-std::pair<MatrixXr, output_Data<1>> >::type optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
+
+template<typename EvaluationType, typename CarrierType, UInt size>
+typename std::enable_if<size==1, std::pair<MatrixXr, output_Data<1>>>::type 
+	optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 {
 	// Build wrapper and newton method
 	Function_Wrapper<Real, Real, Real, Real, EvaluationType> Fun(optim);
 	typedef Function_Wrapper<Real, Real, Real, Real, EvaluationType> FunWr;
 
+	Rprintf("optimizer_strategy_selection 1\n");
 	const OptimizationData * optr = carrier.get_opt_data();
 	if(optr->get_criterion() == "grid")
 	{
@@ -174,10 +177,10 @@ std::pair<MatrixXr, output_Data<1>> >::type optimizer_strategy_selection(Evaluat
 
 		output.time_partial = T.tv_sec + 1e-9*T.tv_nsec;
 
-                //postponed after apply in order to have betas computed
-                output.betas = carrier.get_model()->getBeta();
+        //postponed after apply in order to have betas computed
+        output.betas = carrier.get_model()->getBeta();
 
-                return {solution, output};
+        return {solution, output};
 
 	}
 	else // 'not_required' optimization can't enter here!! [checked in R code]

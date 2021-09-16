@@ -89,7 +89,7 @@ struct AuxiliaryOptimizer
         // Parabolic case
         template<typename InputCarrier>
         static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>,t_type>::value, UInt>::type
-                universal_R_setter(MatrixXr & R, const InputCarrier & carrier, AuxiliaryData<InputCarrier> & adt, lambda::type<2> lambda);
+                universal_R_setter(MatrixXr & R, const InputCarrier & carrier, AuxiliaryData<InputCarrier> & adt, Real lambdaT);
 
         //! SFINAE based method to compute matrix R in case of non-Forced problem
         /*!
@@ -105,7 +105,7 @@ struct AuxiliaryOptimizer
         // Parabolic case
         template<typename InputCarrier>
         static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>,f_type>::value, UInt>::type
-                universal_R_setter(MatrixXr & R, const InputCarrier & carrier, AuxiliaryData<InputCarrier> & adt, lambda::type<2> lambda);
+                universal_R_setter(MatrixXr & R, const InputCarrier & carrier, AuxiliaryData<InputCarrier> & adt, Real lambda);
         /* -------------------------------------------------------------------*/
 
         //! SFINAE based method to compute matrix T in case of Areal problem

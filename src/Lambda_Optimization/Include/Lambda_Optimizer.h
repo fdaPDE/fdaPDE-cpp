@@ -186,6 +186,7 @@ class GCV_Exact<InputCarrier, 1>: public GCV_Family<InputCarrier, 1>
 
                 // SETTERS
                 void set_R_(void);
+                void set_R_(Real lambdaT);
                 void set_T_(lambda::type<1> lambda);
                 void set_V_(void);
                 void set_S_and_trS_(void);
@@ -210,8 +211,22 @@ class GCV_Exact<InputCarrier, 1>: public GCV_Family<InputCarrier, 1>
                         {
                                 this->set_R_(); // this matrix is unchanged during the whole procedure, thus it's set once and for all
                         }
+                //! Constructor of the class given the InputCarrier and lambdaT (for Temporal and parabolic case)
+                /*!
+                \param the_carrier the structure from which to take all the data for the derived classes
+                \param lambdaT parameter of the PDE
+                 \sa set_R_()
+                 \sa set_lambdaT()
+                */
+                GCV_Exact<InputCarrier, 1>(InputCarrier & the_carrier_, Real lambdaT_):
+                        GCV_Family<InputCarrier, 1>(the_carrier_)
+                        {
+                                this->set_R_(lambdaT_);
+                        }
 
                 // PUBLIC UPDATERS
+                //inline void set_lambdaT(Real lambdaT_){this->set_R_(lambdaT_);} // parabolic case
+
                 void update_parameters(lambda::type<1> lambda) override;
 
                 void first_updater(lambda::type<1> lambda);
@@ -259,8 +274,7 @@ class GCV_Exact<InputCarrier, 2>: public GCV_Family<InputCarrier, 2>
                 void update_dor(lambda::type<2> lambda)     override;
 
                 // SETTERS
-                void set_R_(void);                      // parabolic case
-                void set_R_(lambda::type<2> lambda);    // separable case
+                void set_R_(void);                      // separable case
                 void set_T_(lambda::type<2> lambda);
                 void set_V_(void);
                 void set_S_and_trS_(void);
