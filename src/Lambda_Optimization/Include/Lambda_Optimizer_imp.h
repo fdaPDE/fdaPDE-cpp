@@ -253,6 +253,22 @@ void GCV_Exact<InputCarrier, 1>::set_R_(void)
 }
 
 template<typename InputCarrier>
+void GCV_Exact<InputCarrier, 2>::set_R_(void)
+{
+        /* Debugging purpose timer [part I]
+         timer Time_partial_n;
+         Time_partial_n.start();
+         Rprintf("WARNING: start taking time to build R inverse matrix \n");
+        */
+        const UInt ret = AuxiliaryOptimizer::universal_R_setter<InputCarrier>(this->R_, this->the_carrier, this->adt);
+
+        /* Debugging purpose timer [part II]
+         Rprintf("WARNING: partial time after the building R inverse matrix\n");
+         timespec T_n = Time_partial_n.stop();
+        */
+}
+
+template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 2>::set_R_(lambda::type<2> lambda)
 {
         /* Debugging purpose timer [part I]
@@ -260,11 +276,8 @@ void GCV_Exact<InputCarrier, 2>::set_R_(lambda::type<2> lambda)
          Time_partial_n.start();
          Rprintf("WARNING: start taking time to build R inverse matrix \n");
         */
-        if (this->the_carrier.get_flagParabolic())
-                const UInt ret = AuxiliaryOptimizer::universal_R_setter<InputCarrier>(this->R_, this->the_carrier, this->adt, lambda);
-        else
-                const UInt ret = AuxiliaryOptimizer::universal_R_setter<InputCarrier>(this->R_, this->the_carrier, this->adt);
-
+        const UInt ret = AuxiliaryOptimizer::universal_R_setter<InputCarrier>(this->R_, this->the_carrier, this->adt, lambda);
+        
         /* Debugging purpose timer [part II]
          Rprintf("WARNING: partial time after the building R inverse matrix\n");
          timespec T_n = Time_partial_n.stop();
@@ -294,8 +307,9 @@ void GCV_Exact<InputCarrier, 2>::set_T_(lambda::type<2> lambda)
 
         const UInt ret = AuxiliaryOptimizer::universal_T_setter<InputCarrier>(this->T_, this->the_carrier);
 
-        this->T_ -= lambda(0)*this->R_;
+        Rprintf("Facciamo -lambdaS*R\n");
 
+        this->T_ -= lambda(0)*this->R_;
 }
 
 
@@ -436,7 +450,7 @@ void GCV_Exact<InputCarrier, 1>::LeftMultiplybyPsiAndTrace(Real & trace, MatrixX
 template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 2>::LeftMultiplybyPsiAndTrace(Real & trace, MatrixXr & ret, const MatrixXr & mat)
 {
-        if (this->the_carrier.loc_are_nodes())
+       /* if (this->the_carrier.loc_are_nodes())
         {
                 // Psi is permutation
 
@@ -470,11 +484,13 @@ void GCV_Exact<InputCarrier, 2>::LeftMultiplybyPsiAndTrace(Real & trace, MatrixX
         }
         else
         {
+                */
                 // Psi is full, compute matrix and trace directly
+        Rprintf("Qui abbiamo tolto l'if(leftmultiplybypsi....)\n");
                 ret = (*this->the_carrier.get_psip())*mat;
                 for (int i = 0; i < this->s; ++i)
                         trace += ret.coeff(i, i);
-        }
+        //}
 }
 
 // -- Computers and dof --
@@ -610,9 +626,15 @@ template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 1>::update_matrices(lambda::type<1> lambda)
 {
         // this order must be kept
+        Rprintf("R(0,0): %f, R(1,0): %f, R(0,1): %f, R(1,1): %f\n", 
+                this->R_.coeff(0, 0), this->R_.coeff(1, 0), this->R_.coeff(0, 1), this->R_.coeff(1, 1));
         this->set_T_(lambda);
+        Rprintf("T(0,0): %f, T(1,0): %f, T(0,1): %f, T(1,1): %f\n", 
+                this->T_.coeff(0, 0), this->T_.coeff(1, 0), this->T_.coeff(0, 1), this->T_.coeff(1, 1));
         this->set_V_();
         this->set_S_and_trS_();
+        Rprintf("S(0,0): %f, S(1,0): %f, S(0,1): %f, S(1,1): %f\n", 
+                this->S_.coeff(0, 0), this->S_.coeff(1, 0), this->S_.coeff(0, 1), this->S_.coeff(1, 1));
         this->compute_z_hat(lambda);
 }
 
@@ -622,9 +644,18 @@ void GCV_Exact<InputCarrier, 2>::update_matrices(lambda::type<2> lambda)
         // this order must be kept
         if (this->the_carrier.get_flagParabolic())
                 this->set_R_(lambda);
+        Rprintf("R(0,0): %f, R(1,0): %f, R(0,1): %f, R(1,1): %f\n", 
+                this->R_.coeff(0, 0), this->R_.coeff(1, 0), this->R_.coeff(0, 1), this->R_.coeff(1, 1));
+
         this->set_T_(lambda);
+        Rprintf("T(0,0): %f, T(1,0): %f, T(0,1): %f, T(1,1): %f\n", 
+                this->T_.coeff(0, 0), this->T_.coeff(1, 0), this->T_.coeff(0, 1), this->T_.coeff(1, 1));
         this->set_V_();
+
         this->set_S_and_trS_();   // ************nell'iterativo forse non serve***************************
+        Rprintf("S(0,0): %f, S(1,0): %f, S(0,1): %f, S(1,1): %f\n", 
+                this->S_.coeff(0, 0), this->S_.coeff(1, 0), this->S_.coeff(0, 1), this->S_.coeff(1, 1));
+
         this->compute_z_hat(lambda);
 }
 
@@ -784,10 +815,10 @@ Real GCV_Exact<InputCarrier, 1>::compute_fs(lambda::type<1> lambda)
 }
 
 template<typename InputCarrier>
-Real GCV_Exact<InputCarrier, 2>::compute_fs(lambda::type<2> lambda)
+MatrixXr GCV_Exact<InputCarrier, 2>::compute_fs(lambda::type<2> lambda)
 {
         Rprintf("Return type di compute_fs da modificare a MatrixXr\n");
-        return -1;
+        return MatrixXr::Zero(2, 2);
 }
 
 //----------------------------------------------------------------------------//

@@ -182,7 +182,7 @@ class Carrier: public Extensions...
                 inline const std::vector<Real> * get_bc_valuesp(void) const {return this->bc_valuesp;}          //!< Getter of bc_valuesp \return bc_valuesp
                 inline const std::vector<UInt> * get_bc_indicesp(void) const {return this->bc_indicesp;}        //!< Getter of bc_indicesp \return bc_indicesp
                 inline const MixedFERegressionBase<InputHandler> * get_model(void) const {return this->model;}  //!< Getter of model \return model
-                inline const bool * get_flagParabolic(void) const {return this->flag_parabolic;}                //!< Getter of flag_parabolic \return flag_parabolic
+                inline const bool get_flagParabolic(void) const {return this->flag_parabolic;}                  //!< Getter of flag_parabolic \return flag_parabolic
 
                 // SETTERS
                 inline void set_model(MixedFERegressionBase<InputHandler> * md) {this->model = md;};                                    //!< Setter of model \param md new model
@@ -207,7 +207,7 @@ class Carrier: public Extensions...
                 inline void set_rhsp(const VectorXr * rhsp_) {this->rhsp = rhsp_;}                                                      //!< Setter of rhsp \param rhsp_ new rhsp
                 inline void set_bc_valuesp(const std::vector<Real> * bc_valuesp_) {this->bc_valuesp = bc_valuesp_;}                     //!< Setter of bc_valuesp \param bc_valuesp_ new bc_valuesp
                 inline void set_bc_indicesp(const std::vector<UInt> * bc_indicesp_) {this->bc_indicesp = bc_indicesp_;}                 //!< Setter of bc_indicesp \param bc_indicesp_new bc_indicesp
-                inline const bool * set_flagParabolic(const bool flag_parabolic_) const {this->flag_parabolic = flag_parabolic_;}       //!< Setter of flag_parabolic \param flag_parabolic new flag_parabolic
+                inline void set_flagParabolic(const bool flag_parabolic_) {this->flag_parabolic = flag_parabolic_;}                     //!< Setter of flag_parabolic \param flag_parabolic new flag_parabolic
                 // APPLY FUNCTIONS
                 //! Method to solve the system given a lambda and a right hand side of the system
                 /*!
@@ -416,7 +416,7 @@ class CarrierBuilder
                         car.set_all(&mc, &optimizationData, data.isLocationsByNodes(), bool(data.getCovariates()->rows()>0 && data.getCovariates()->cols()>0),
                                 data.getNumberofObservations(), data.getNumberofSpaceObservations(), mc.getnnodes_(), data.getObservationsIndices(),
                                 data.getObservations(), data.getCovariates(), mc.getH_(), mc.getQ_(), mc.getDMat_(), mc.getR1_(),
-                                mc.getR0_(), mc.getLR0k_(), mc.getpsi_(), mc.getpsi_t_(), mc.getrhs_(), data.getDirichletValues(), data.getDirichletIndices(), data.getFlagParabolic());
+                                mc.getR0_(), mc.getLR0k_(), mc.getPtk_(), mc.getpsi_(), mc.getpsi_t_(), mc.getrhs_(), data.getDirichletValues(), data.getDirichletIndices(), data.getFlagParabolic());
                 }
 
                 //! Method to fill the eventual Areal part of an areal carrier

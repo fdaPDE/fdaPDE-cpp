@@ -34,7 +34,7 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
                 const std::vector<UInt> * bc_indices = carrier.get_bc_indicesp();
                 AuxiliaryOptimizer::bc_utility(R1p_, bc_indices);
 
-                Eigen::SparseLU<SpMat> factorized_R0p(*(carrier.get_R0p()));
+                Eigen::SparseLU<SpMat> factorized_R0p(-*(carrier.get_R0p()));
                 R = (R1p_).transpose()*factorized_R0p.solve(R1p_);     // R == _R1^t*R0^{-1}*R1
                 adt.f_ = ((R1p_).transpose())*factorized_R0p.solve((*carrier.get_up()));
 
@@ -49,7 +49,9 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
                 const std::vector<UInt> * bc_indices = carrier.get_bc_indicesp();
                 AuxiliaryOptimizer::bc_utility(R1p_, bc_indices);
 
-                Eigen::SparseLU<SpMat>factorized_R0p(*(carrier.get_R0p()));
+                Rprintf("Lavoriamo con segno meno\n");
+
+                Eigen::SparseLU<SpMat>factorized_R0p(-*(carrier.get_R0p()));
                 R = (R1p_).transpose()*factorized_R0p.solve(R1p_);     // R == _R1^t*R0^{-1}*R1
 
                 return 0;
@@ -65,7 +67,7 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
                 const std::vector<UInt> * bc_indices = carrier.get_bc_indicesp();
                 AuxiliaryOptimizer::bc_utility(R1p_, bc_indices);
 
-                Eigen::SparseLU<SpMat> factorized_R0p(*(carrier.get_R0p()));
+                Eigen::SparseLU<SpMat> factorized_R0p(-*(carrier.get_R0p()));
                 R = (R1p_).transpose()*factorized_R0p.solve(R1p_);     // R == _R1^t*R0^{-1}*R1
                 adt.f_ = ((R1p_).transpose())*factorized_R0p.solve((*carrier.get_up()));
 
@@ -83,7 +85,7 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
                 const std::vector<UInt> * bc_indices = carrier.get_bc_indicesp();
                 AuxiliaryOptimizer::bc_utility(R1p_, bc_indices);
 
-                Eigen::SparseLU<SpMat>factorized_R0p(*(carrier.get_R0p()));
+                Eigen::SparseLU<SpMat>factorized_R0p(-*(carrier.get_R0p()));
                 R = (R1p_).transpose()*factorized_R0p.solve(R1p_);     // R == _R1^t*R0^{-1}*R1
 
                 return 0;
@@ -241,6 +243,38 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
 template<typename InputCarrier>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>,f_type>::value, UInt>::type
         AuxiliaryOptimizer::universal_z_hat_setter(VectorXr & z_hat, InputCarrier & carrier, const MatrixXr & S, AuxiliaryData<InputCarrier> & adt, const Real lambda)
+        {
+                common_z_hat_part(z_hat, carrier, S);
+
+                return 0;
+        }
+
+template<typename InputCarrier>
+typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>,t_type>::value, UInt>::type
+        AuxiliaryOptimizer::universal_z_hat_setter(VectorXr & z_hat, InputCarrier & carrier, const MatrixXr & S, AuxiliaryData<InputCarrier> & adt, const lambda::type<2> lambda)
+        {
+                common_z_hat_part(z_hat, carrier, S);
+
+                adt.left_multiply_by_psi(carrier, adt.r_, adt.g_);
+
+                if (carrier.has_W())
+                {
+                        adt.r_ = lambda(0)*carrier.lmbQ(adt.r_);
+
+                }
+                else
+                {
+                        adt.r_ = lambda(0) * adt.r_;
+                }
+
+                z_hat += adt.r_;
+
+                return 0;
+        }
+
+template<typename InputCarrier>
+typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>,f_type>::value, UInt>::type
+        AuxiliaryOptimizer::universal_z_hat_setter(VectorXr & z_hat, InputCarrier & carrier, const MatrixXr & S, AuxiliaryData<InputCarrier> & adt, const lambda::type<2> lambda)
         {
                 common_z_hat_part(z_hat, carrier, S);
 

@@ -198,6 +198,10 @@ struct AuxiliaryOptimizer
         static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>, t_type>::value, UInt>::type
                 universal_z_hat_setter(VectorXr & z_hat, InputCarrier & carrier, const MatrixXr & S, AuxiliaryData<InputCarrier> & adt, const Real lambda);
 
+        template<typename InputCarrier>
+        static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>, t_type>::value, UInt>::type
+                universal_z_hat_setter(VectorXr & z_hat, InputCarrier & carrier, const MatrixXr & S, AuxiliaryData<InputCarrier> & adt, const lambda::type<2> lambda);
+
         //! SFINAE based method to compute predictions in locations in case of non-Forced problem
         /*!
          \param z_hat a reference to the VectorXr to be computed
@@ -210,6 +214,10 @@ struct AuxiliaryOptimizer
         template<typename InputCarrier>
         static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>, f_type>::value, UInt>::type
                 universal_z_hat_setter(VectorXr & z_hat, InputCarrier & carrier, const MatrixXr & S, AuxiliaryData<InputCarrier> & adt, const Real lambda);
+
+        template<typename InputCarrier>
+        static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>, f_type>::value, UInt>::type
+                universal_z_hat_setter(VectorXr & z_hat, InputCarrier & carrier, const MatrixXr & S, AuxiliaryData<InputCarrier> & adt, const lambda::type<2> lambda);
 
         //! Utility to compute the common part of universal_z_hat_setter among Forced and non-Forced problems
         /*!

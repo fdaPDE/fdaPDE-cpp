@@ -90,14 +90,14 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
 {
 	// Build the optimizer
 	const OptimizationData * optr = carrier.get_opt_data();
-	/*
+	
 	if(optr->get_loss_function() == "GCV" && optr->get_DOF_evaluation() == "exact")
 	{
-		//Rprintf("GCV exact\n");
+		Rprintf("GCV exact\n");
 		GCV_Exact<CarrierType, 2> optim(carrier);
 		return optimizer_strategy_selection<GCV_Exact<CarrierType, 2>, CarrierType>(optim, carrier);
 	}
-	else*/ if(optr->get_loss_function() == "GCV" && (optr->get_DOF_evaluation() == "stochastic" || optr->get_DOF_evaluation() == "not_required"))
+	else if(optr->get_loss_function() == "GCV" && (optr->get_DOF_evaluation() == "stochastic" || optr->get_DOF_evaluation() == "not_required"))
 	{
 		//Rprintf("GCV stochastic\n");
 		GCV_Stochastic<CarrierType, 2> optim(carrier, true);
@@ -131,6 +131,7 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
 				Real lambdaS = carrier.get_opt_data()->get_lambda_S()[i];
 				Real lambdaT = carrier.get_opt_data()->get_lambda_T()[j];
 				lambda::type<2> lambda = lambda::make_pair(lambdaS, lambdaT);
+				Rprintf("LAMBDA: lambda(0) %f, lambda(1) %f\n", lambda(0), lambda(1));
 				output.lambda_vec.push_back(lambda);
 				UInt couple_index = j*carrier.get_opt_data()->get_size_S()+i;
 				if(i==0 && j==0)

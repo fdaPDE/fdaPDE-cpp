@@ -237,7 +237,7 @@ class GCV_Exact<InputCarrier, 2>: public GCV_Family<InputCarrier, 2>
 {
         private:
                 //! An external updater whose purpose is keeping the internal values coherent with the computations to be made from time to time
-                GOF_updater<GCV_Exact<InputCarrier, 2>, Real> gu;
+                GOF_updater<GCV_Exact<InputCarrier, 2>, lambda::type<2>> gu;
 
                 // INTERNAL DATA STRUCTURES
                 MatrixXr  R_;           //!< stores the value of R1^t*R0^{-1}*R1 [size nnodes x nnodes]
@@ -259,7 +259,8 @@ class GCV_Exact<InputCarrier, 2>: public GCV_Family<InputCarrier, 2>
                 void update_dor(lambda::type<2> lambda)     override;
 
                 // SETTERS
-                void set_R_(lambda::type<2> lambda);
+                void set_R_(void);                      // parabolic case
+                void set_R_(lambda::type<2> lambda);    // separable case
                 void set_T_(lambda::type<2> lambda);
                 void set_V_(void);
                 void set_S_and_trS_(void);
@@ -295,7 +296,7 @@ class GCV_Exact<InputCarrier, 2>: public GCV_Family<InputCarrier, 2>
                 // GCV-COMPUTATION
                 Real compute_f(lambda::type<2> lambda) override;
                 lambda::type<2> compute_fp(lambda::type<2> lambda);
-                Real compute_fs(lambda::type<2> lambda);
+                MatrixXr compute_fs(lambda::type<2> lambda);
                 //! Virtual Destuctor
         virtual ~GCV_Exact(){};
 };
