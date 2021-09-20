@@ -94,6 +94,22 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
 	
 	if(optr->get_loss_function() == "GCV" && optr->get_DOF_evaluation() == "exact")
 	{
+	
+	
+	
+	
+	
+		Rprintf("SONO GCV ESATTO\n");
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 		//Rprintf("GCV exact\n");
 		if(carrier.get_flagParabolic())
 		{
@@ -154,24 +170,117 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
 			GCV_Exact<CarrierType, 2> optim(carrier);
 			return optimizer_strategy_selection<GCV_Exact<CarrierType, 2>, CarrierType, 2>(optim, carrier);
 		}
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
 	}
 	else if(optr->get_loss_function() == "GCV" && (optr->get_DOF_evaluation() == "stochastic" || optr->get_DOF_evaluation() == "not_required"))
 	{
-		/*
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		Rprintf("SONO GCV STOCH\n");
+		
+		
+		
+		
+		
 		//Rprintf("GCV stochastic\n");
 		if(carrier.get_flagParabolic())
 		{
-			GCV_Stochastic<CarrierType, 1> optim(carrier, true);
-			optimizer_strategy_selection<GCV_Stochastic<CarrierType, 1>, CarrierType, 1>(optim, carrier);
-			output_Data<2> a;
-			return std::make_pair(MatrixXr::Zero(2, 2),a);
+			timer Time_partial;
+			Time_partial.start();
+			
+			std::pair<MatrixXr, output_Data<1>> opt_res;
+			std::pair<MatrixXr, output_Data<2>> res;
+			
+			std::vector<Real> lambdaS = optr->get_lambda_S();
+			std::vector<Real> lambdaT = optr->get_lambda_T();
+			res.second.size_S = optr->get_size_S();
+			res.second.size_T = optr->get_size_T();
+			res.second.lambda_vec.reserve(res.second.size_S*res.second.size_T);
+			res.second.GCV_evals.reserve(res.second.size_S*res.second.size_T);
+			res.second.lambda_vec.clear();
+			res.second.GCV_evals.clear();
+						
+			for(UInt j=0; j<optr->get_size_T(); j++)
+			{			
+				Rprintf("Sto ottimizzando stoch con lambdaT %f\n", lambdaT[j]);	
+				GCV_Stochastic<CarrierType, 1> optim(carrier, lambdaT[j]);
+				std::pair<MatrixXr, output_Data<1>> par_res = 
+					optimizer_strategy_selection<GCV_Stochastic<CarrierType, 1>, CarrierType, 1>(optim, carrier);
+
+				for(UInt i=0; i<optr->get_size_S(); i++) //to improve *************************************************
+					res.second.lambda_vec.push_back(
+						lambda::make_pair(lambdaS[i], lambdaT[j]));
+				
+				if(par_res.second.GCV_opt < opt_res.second.GCV_opt || j == 0)
+				{
+					opt_res = par_res;
+					res.second.lambda_sol =
+						lambda::make_pair(par_res.second.lambda_sol, lambdaT[j]);
+					res.second.lambda_pos = j*optr->get_size_S()+par_res.second.lambda_pos;
+					res.second.termination = par_res.second.termination;
+				}
+				
+				res.second.rmse.insert(res.second.rmse.end(), par_res.second.rmse.begin(), par_res.second.rmse.end());
+				res.second.dof.insert(res.second.dof.end(), par_res.second.dof.begin(), par_res.second.dof.end());
+				res.second.GCV_evals.insert(res.second.GCV_evals.end(), par_res.second.GCV_evals.begin(), par_res.second.GCV_evals.end());
+				
+				res.second.n_it += par_res.second.n_it;
+			}
+			
+			Rprintf("FINE FOR\n");
+
+			res.first = opt_res.first;
+			res.second.content = opt_res.second.content;
+			timespec T = Time_partial.stop();
+			res.second.time_partial = T.tv_sec + 1e-9*T.tv_nsec;
+			res.second.z_hat = opt_res.second.z_hat;
+			res.second.sigma_hat_sq = opt_res.second.sigma_hat_sq;
+			res.second.betas = opt_res.second.betas;
+			res.second.GCV_opt = opt_res.second.GCV_opt;
+			
+			return res;
 		}
 		else
 		{
-			*/
 			GCV_Stochastic<CarrierType, 2> optim(carrier, true);
 			return optimizer_strategy_selection<GCV_Stochastic<CarrierType, 2>, CarrierType, 2>(optim, carrier);
-		//}
+		}
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
 	}
 	else // if(optr->get_loss_function() == "unused" && optr->get_DOF_evaluation() == "not_required")
 	{

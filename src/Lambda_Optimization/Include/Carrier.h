@@ -255,8 +255,17 @@ class Carrier: public Extensions...
                 */
                 inline MatrixXr apply(lambda::type<1> lambda)
                 {
+                	Rprintf("unidimensional carrier apply");
                         this->opt_data->set_current_lambdaS(lambda); // set the lambda value
-                        return (this->model->apply())(0,0);
+                        if(this->model->isIter())
+                        {
+                        	/*Iterative implies parabolic. We don't need to set lambdaT
+                        	as we are iterating through the vector of lambdaT in Regression_skeleton_time ********************************************************************************************
+                        	The right lambdaT was already set as current in computing the values of GCV*/
+                        	return (this->model->apply_iterative())(0,0);
+                        }
+                        else
+                        	return (this->model->apply())(0,0);
                 }
 
                 //! Method to solve the system given lambdaS and lambdaT [right hand side is the usual of the problem]
@@ -268,12 +277,15 @@ class Carrier: public Extensions...
                 */
                 inline MatrixXr apply(lambda::type<2> lambda)
                 {
-                        this->opt_data->set_current_lambdaS(lambda(0)); // set the lambdaS value
-                        this->opt_data->set_current_lambdaT(lambda(1)); // set the lambdaT value
-                        if(this->model->isIter())
-                        	return (this->model->apply_iterative())(0,0);
-                        else
-                        	return (this->model->apply())(0,0);
+			this->opt_data->set_current_lambdaS(lambda(0)); // set the lambdaS value
+			this->opt_data->set_current_lambdaT(lambda(1)); // set the lambdaT value
+			if(this->model->isIter())
+				/*Iterative implies parabolic. We don't need to set lambdaT
+				as we are iterating through the vector of lambdaT in Regression_skeleton_time ********************************************************************************************
+				The right lambdaT was already set as current in computing the values of GCV*/
+				return (this->model->apply_iterative())(0,0);
+			else
+				return (this->model->apply())(0,0);
                 }
 
 

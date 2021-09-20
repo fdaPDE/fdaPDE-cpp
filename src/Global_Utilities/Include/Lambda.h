@@ -9,6 +9,7 @@ namespace lambda
 	using type = typename std::conditional<size==1, Real, VectorXr>::type;
 	
 	type<2> make_pair(Real lambdaS, Real lambdaT);
+	type<2> make_pair(lambda::type<2> lambda, Real lambdaT); //degenerate case useful in parabolic case
 }
 
 #endif

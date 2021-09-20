@@ -628,17 +628,17 @@ void GCV_Exact<InputCarrier, 2>::update_dor(lambda::type<2> lambda)
 template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 1>::update_matrices(lambda::type<1> lambda)
 {
-        Rprintf("una altra call\n");
+        Rprintf("GCV_Exact<InputCarrier, 1>::update_matrices\n");
         // this order must be kept
-        Rprintf("R(0,0): %f, R(1,0): %f, R(0,1): %f, R(1,1): %f\n", 
-                this->R_.coeff(0, 0), this->R_.coeff(1, 0), this->R_.coeff(0, 1), this->R_.coeff(1, 1));
+        //Rprintf("R(0,0): %f, R(1,0): %f, R(0,1): %f, R(1,1): %f\n", 
+                //this->R_.coeff(0, 0), this->R_.coeff(1, 0), this->R_.coeff(0, 1), this->R_.coeff(1, 1));
         this->set_T_(lambda);
-        Rprintf("T(0,0): %f, T(1,0): %f, T(0,1): %f, T(1,1): %f\n", 
-                this->T_.coeff(0, 0), this->T_.coeff(1, 0), this->T_.coeff(0, 1), this->T_.coeff(1, 1));
+        //Rprintf("T(0,0): %f, T(1,0): %f, T(0,1): %f, T(1,1): %f\n", 
+                //this->T_.coeff(0, 0), this->T_.coeff(1, 0), this->T_.coeff(0, 1), this->T_.coeff(1, 1));
         this->set_V_();
         this->set_S_and_trS_();
-        Rprintf("S(0,0): %f, S(1,0): %f, S(0,1): %f, S(1,1): %f\n", 
-                this->S_.coeff(0, 0), this->S_.coeff(1, 0), this->S_.coeff(0, 1), this->S_.coeff(1, 1));
+        //Rprintf("S(0,0): %f, S(1,0): %f, S(0,1): %f, S(1,1): %f\n", 
+                //this->S_.coeff(0, 0), this->S_.coeff(1, 0), this->S_.coeff(0, 1), this->S_.coeff(1, 1));
         this->compute_z_hat(lambda);
 }
 
@@ -646,17 +646,17 @@ template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 2>::update_matrices(lambda::type<2> lambda)
 {
         // this order must be kept
-        Rprintf("R(0,0): %f, R(1,0): %f, R(0,1): %f, R(1,1): %f\n", 
-                this->R_.coeff(0, 0), this->R_.coeff(1, 0), this->R_.coeff(0, 1), this->R_.coeff(1, 1));
+        //Rprintf("R(0,0): %f, R(1,0): %f, R(0,1): %f, R(1,1): %f\n", 
+                //this->R_.coeff(0, 0), this->R_.coeff(1, 0), this->R_.coeff(0, 1), this->R_.coeff(1, 1));
 
         this->set_T_(lambda);
-        Rprintf("T(0,0): %f, T(1,0): %f, T(0,1): %f, T(1,1): %f\n", 
-                this->T_.coeff(0, 0), this->T_.coeff(1, 0), this->T_.coeff(0, 1), this->T_.coeff(1, 1));
+        //Rprintf("T(0,0): %f, T(1,0): %f, T(0,1): %f, T(1,1): %f\n", 
+                //this->T_.coeff(0, 0), this->T_.coeff(1, 0), this->T_.coeff(0, 1), this->T_.coeff(1, 1));
         this->set_V_();
 
         this->set_S_and_trS_();   // ************nell'iterativo forse non serve***************************
-        Rprintf("S(0,0): %f, S(1,0): %f, S(0,1): %f, S(1,1): %f\n", 
-                this->S_.coeff(0, 0), this->S_.coeff(1, 0), this->S_.coeff(0, 1), this->S_.coeff(1, 1));
+        //Rprintf("S(0,0): %f, S(1,0): %f, S(0,1): %f, S(1,1): %f\n", 
+                //this->S_.coeff(0, 0), this->S_.coeff(1, 0), this->S_.coeff(0, 1), this->S_.coeff(1, 1));
 
         this->compute_z_hat(lambda);
 }
@@ -729,7 +729,7 @@ void GCV_Exact<InputCarrier, 2>::second_updater(lambda::type<2> lambda)
 template<typename InputCarrier>
 Real GCV_Exact<InputCarrier, 1>::compute_f(lambda::type<1> lambda)
 {
-        Rprintf("comp f\n");
+        Rprintf("GCV_Exact<InputCarrier, 1>::compute_f\n");
         // call external updater to update [if needed] the parameters for gcv calculus
         this->gu.call_to(0, lambda, this);
 
@@ -911,7 +911,11 @@ void GCV_Stochastic<InputCarrier, size>::update_dof(lambda::type<size> lambda)
         		this->b = MatrixXr::Zero(2*nnodes, this->US_.cols());
         		UInt ret = AuxiliaryOptimizer::universal_b_setter(this->b, this->the_carrier, this->US_, nnodes);
         		
-            		MatrixXr x = this->the_carrier.apply_to_b(b, lambda);
+        		MatrixXr x;
+        		if (this->the_carrier.get_flagParabolic())
+        			x = this->the_carrier.apply_to_b(b, lambda::make_pair(lambda, this->lambdaT));
+        		else
+            			x = this->the_carrier.apply_to_b(b, lambda);
 
 			VectorXr edf_vect(nr);
 			
@@ -955,12 +959,13 @@ void GCV_Stochastic<InputCarrier, size>::update_dof(lambda::type<size> lambda)
 				//Rprintf("b(0)=%f, b(1)=%f, b(2*N_-2)=%f, b(2*N_-1)=%f\n",
 					//this->b(0), this->b(1), this->b(2*N_-2), this->b(2*N_-1));
 				
-			        // Resolution of the system
+			        //Resolution of the system
 			        MatrixXr x;
+			        //In the iterative case we are sure we are working with size==1 and parabolic problem
 			        if (! this->the_carrier.has_W())
-					x = this->the_carrier.apply_to_b(b, lambda);
+					x = this->the_carrier.apply_to_b(b, lambda::make_pair(lambda, this->lambdaT));
 			        else
-            				x = this->the_carrier.apply_to_b_iter(b, lambda, k);
+            				x = this->the_carrier.apply_to_b_iter(b, lambda::make_pair(lambda, this->lambdaT), k);
             				
             			//Rprintf("x(0,0)=%f,x(0,1)=%f,x(1,0)=%f,x(1,1)=%f\n",
 					//x.coeff(0,0),x.coeff(0,1),x.coeff(1,0),x.coeff(1,1));
@@ -1021,6 +1026,7 @@ void GCV_Stochastic<InputCarrier, size>::update_dor(lambda::type<size> lambda)
 template<typename InputCarrier, UInt size>
 void GCV_Stochastic<InputCarrier, size>::compute_z_hat(lambda::type<size> lambda)
 {
+	Rprintf("GCV_Stochastic<InputCarrier, size>::compute_z_hat\n");
         /* Debugging purpose timer [part I]
          timer Time_partial;
          Time_partial.start();
@@ -1029,7 +1035,11 @@ void GCV_Stochastic<InputCarrier, size>::compute_z_hat(lambda::type<size> lambda
 
         // Solve the system to find the predicted values of the spline coefficients
         const UInt nnodes    = this->the_carrier.get_n_nodes();
-        const VectorXr f_hat = VectorXr(this->the_carrier.apply(lambda)).head(nnodes);
+        VectorXr f_hat;
+        if(this->the_carrier.get_flagParabolic())
+        	f_hat = VectorXr(this->the_carrier.apply(lambda::make_pair(lambda, this->lambdaT))).head(nnodes);
+        else
+        	f_hat = VectorXr(this->the_carrier.apply(lambda)).head(nnodes);
 
         // Compute the predicted values in the locations from the f_hat
         this->compute_z_hat_from_f_hat(f_hat);
@@ -1049,6 +1059,7 @@ void GCV_Stochastic<InputCarrier, size>::compute_z_hat(lambda::type<size> lambda
 template<typename InputCarrier, UInt size>
 void GCV_Stochastic<InputCarrier, size>::update_parameters(lambda::type<size> lambda)
 {
+	Rprintf("GCV_Stochastic<InputCarrier, size>::update_parameters\n");
         this->compute_z_hat(lambda);
         this->update_errors(lambda);
 }
@@ -1067,6 +1078,8 @@ void GCV_Stochastic<InputCarrier, size>::update_parameters(lambda::type<size> la
 template<typename InputCarrier, UInt size>
 Real GCV_Stochastic<InputCarrier, size>::compute_f(lambda::type<size> lambda)
 {
+	Rprintf("GCV_Stochastic<InputCarrier, size>::compute_f\n");
+	
         // call external updater to update [if needed] the parameters for gcv calculus
         this->gu.call_to(0, lambda, this);
 

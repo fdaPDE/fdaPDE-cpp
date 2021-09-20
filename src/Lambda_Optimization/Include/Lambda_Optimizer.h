@@ -347,6 +347,8 @@ class GCV_Stochastic: public GCV_Family<InputCarrier, size>
 
                 // SETTERS
                 void set_US_(void);
+                
+                Real lambdaT;
 
         public:
                 // CONSTRUCTORS
@@ -363,6 +365,13 @@ class GCV_Stochastic: public GCV_Family<InputCarrier, size>
                                 {
                                         this->set_US_(); // this matrix is unchanged during the whole procedure, thus it's set once and for all
                                 }
+                        }
+                        
+                 //template<typename std::enable_if<size==2, bool>::type = true>
+                 GCV_Stochastic(InputCarrier & the_carrier_, Real lambdaT_): //parabolic case
+                        GCV_Stochastic(the_carrier_, true)
+                        {
+                        	this->lambdaT = lambdaT_;
                         }
 
                 // PUBLIC UPDATERS

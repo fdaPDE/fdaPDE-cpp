@@ -171,9 +171,13 @@ typename std::enable_if<size==1, std::pair<MatrixXr, output_Data<1>>>::type
 
 		// Rprintf("WARNING: partial time after the optimization method\n");
 		timespec T = Time_partial.stop();
+		
+		Rprintf("Sono arrivato qui prima di carrier.apply()\n");
 
 		// Get the solution
 		MatrixXr solution = carrier.apply(output.lambda_sol);
+		
+		Rprintf("Post apply\n");
 
 		output.time_partial = T.tv_sec + 1e-9*T.tv_nsec;
 
