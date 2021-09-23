@@ -149,6 +149,35 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
         }
 
 template<typename InputCarrier>
+typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>,t_type>::value, UInt>::type
+        AuxiliaryOptimizer::universal_V_setter(MatrixXr & V, const MatrixXr & T, const MatrixXr & R, const InputCarrier & carrier,
+                AuxiliaryData<InputCarrier> & adt, AuxiliaryData<InputCarrier> & time_adt)
+        {
+                // Based on the type of problem at hand select at compile time the most useful Factorizer
+                typedef typename std::conditional<std::is_base_of<Areal, InputCarrier>::value, Eigen::PartialPivLU<MatrixXr>, Eigen::LDLT<MatrixXr>>::type Factorizer;
+                Factorizer factorized_T(T);      // define a factorization of the defined type
+
+                if(!carrier.is_areal() && !carrier.has_W())
+                {
+                        // Q == I
+                        const SpMat * psi_tp = carrier.get_psi_tp();
+                        V = factorized_T.solve(MatrixXr(*psi_tp));      // find the value of V = T^{-1}*Psi^t
+                }
+                else
+                {
+                        MatrixXr E_;    // Declare an empty auxiliary matrix
+                        const UInt ret =  AuxiliaryOptimizer::universal_E_setter<InputCarrier>(E_, carrier);
+                        V = factorized_T.solve(E_);     // find the value of V = T^{-1}*E
+                }
+                adt.K_ = factorized_T.solve(R);                          // K = T^{-1}*R
+                time_adt.K_ = factorized_T.solve(*carrier.get_Ptkp());   // J = T^{-1}*P
+
+                adt.g_ = factorized_T.solve(adt.f_);
+
+                return 0;
+        }
+
+template<typename InputCarrier>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>,f_type>::value, UInt>::type
         AuxiliaryOptimizer::universal_V_setter(MatrixXr & V, const MatrixXr & T, const MatrixXr & R, const InputCarrier & carrier, AuxiliaryData<InputCarrier> & adt)
         {
@@ -169,6 +198,33 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
                         V = factorized_T.solve(E_);          // find the value of V = T^{-1}*E
                 }
                 adt.K_ = factorized_T.solve(R);              // K = T^{-1}*R
+
+                return 0;
+        }
+
+template<typename InputCarrier>
+typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>,f_type>::value, UInt>::type
+        AuxiliaryOptimizer::universal_V_setter(MatrixXr & V, const MatrixXr & T, const MatrixXr & R, const InputCarrier & carrier, 
+                AuxiliaryData<InputCarrier> & adt, AuxiliaryData<InputCarrier> & time_adt)
+        {
+                // Based on the type of problem at hand select at compile time the most useful Factorizer
+                typedef typename std::conditional<std::is_base_of<Areal, InputCarrier>::value, Eigen::PartialPivLU<MatrixXr>, Eigen::LDLT<MatrixXr>>::type Factorizer;
+                Factorizer factorized_T(T);             // define a factorization of the defined type
+
+                if(!carrier.is_areal() && !carrier.has_W())
+                {
+                        // Q == I
+                        const SpMat * psi_tp = carrier.get_psi_tp();
+                        V = factorized_T.solve(MatrixXr(*psi_tp));      // find the value of V = T^{-1}*Psi^t
+                }
+                else
+                {
+                        MatrixXr E_;                // Declare an empty auxiliary matrix
+                        const UInt ret =  AuxiliaryOptimizer::universal_E_setter<InputCarrier>(E_, carrier);
+                        V = factorized_T.solve(E_);          // find the value of V = T^{-1}*E
+                }
+                adt.K_ = factorized_T.solve(R);                         // K = T^{-1}*R
+                time_adt.K_ = factorized_T.solve(*carrier.get_Ptkp());  // J = T^{-1}*P
 
                 return 0;
         }
@@ -396,10 +452,9 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
                 const VectorXr * zp = carrier.get_zp();
                 adt.t_ = dS*(*zp);
                 MatrixXr temp = lambda*adt.K_;
-                for (UInt i=0; i<temp.cols(); i++)
-                {
-                        temp.coeffRef(i,i) -= 1;
-                }
+                if(!adt.flag_time)
+                        for (UInt i=0; i<temp.cols(); i++)
+                                temp.coeffRef(i,i) -= 1;                
                 adt.h_ = temp*adt.g_;
                 adt.left_multiply_by_psi(carrier, adt.p_, adt.h_);
                 adt.p_ -= adt.t_;
@@ -421,7 +476,7 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
 
 template<typename InputCarrier>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>,t_type>::value, UInt>::type
-        AuxiliaryOptimizer::universal_second_updater(AuxiliaryData<InputCarrier> & adt, InputCarrier & carrier, const MatrixXr & ddS, const VectorXr & eps, const Real lambda)
+        AuxiliaryOptimizer::universal_second_updater(AuxiliaryData<InputCarrier> & adt, InputCarrier & carrier, const MatrixXr & ddS, const VectorXr & eps)
         {
                 const VectorXr * zp = carrier.get_zp();
                 if (carrier.has_W())
@@ -439,7 +494,7 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
 
 template<typename InputCarrier>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>,f_type>::value, UInt>::type
-        AuxiliaryOptimizer::universal_second_updater(AuxiliaryData<InputCarrier> & adt, InputCarrier & carrier, const MatrixXr & ddS, const VectorXr & eps, const Real lambda)
+        AuxiliaryOptimizer::universal_second_updater(AuxiliaryData<InputCarrier> & adt, InputCarrier & carrier, const MatrixXr & ddS, const VectorXr & eps)
         {
                 const VectorXr * zp = carrier.get_zp();
                 if (carrier.has_W())
@@ -451,6 +506,40 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
                 return 0;
         }
 
+template<typename InputCarrier>
+typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>,t_type>::value, UInt>::type
+        AuxiliaryOptimizer::universal_second_updater_mxd(AuxiliaryData<InputCarrier> & adt, AuxiliaryData<InputCarrier> & time_adt, InputCarrier & carrier, const MatrixXr & ddS_mxd, const VectorXr & eps)
+        {
+                const VectorXr * zp = carrier.get_zp();
+                if (carrier.has_W())
+                        time_adt.mxd_b_ = adt.p_.transpose()*VectorXr(carrier.lmbQ(time_adt.p_));
+                else
+                        time_adt.mxd_b_ = adt.p_.transpose()*time_adt.p_;
+
+                VectorXr aux, time_aux;
+                adt.left_multiply_by_psi(carrier, aux, -2*adt.K_*adt.h_);
+                time_adt.left_multiply_by_psi(carrier, time_aux, -2*time_adt.K_*time_adt.h_);
+
+                time_adt.mxd_c_ = eps.transpose()*(-ddS_mxd*(*zp) + aux + time_aux);
+
+                return 0;
+        }
+
+template<typename InputCarrier>
+typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>,f_type>::value, UInt>::type
+        AuxiliaryOptimizer::universal_second_updater_mxd(AuxiliaryData<InputCarrier> & adt, AuxiliaryData<InputCarrier> & time_adt, InputCarrier & carrier, const MatrixXr & ddS_mxd, const VectorXr & eps)
+        {
+                const VectorXr * zp = carrier.get_zp();
+                if (carrier.has_W())
+                        time_adt.mxd_b_ = adt.t_.transpose()*VectorXr(carrier.lmbQ(time_adt.t_));
+                else
+                        time_adt.mxd_b_ = adt.t_.transpose()*time_adt.t_;
+
+                time_adt.mxd_c_ = eps.transpose()*(-ddS_mxd*(*zp));
+
+                return 0;
+        }
+       
 template<typename InputCarrier>
 typename std::enable_if<std::is_same<t_type,t_type>::value, Real>::type
         AuxiliaryOptimizer::universal_GCV(const Real s, const Real sigma_hat_sq, const Real dor)
@@ -470,6 +559,14 @@ typename std::enable_if<std::is_same<t_type,t_type>::value, Real>::type
         AuxiliaryOptimizer::universal_GCV_dd(const AuxiliaryData<InputCarrier> & adt, const Real s, const Real sigma_hat_sq, const Real dor, const Real trdS, const Real trddS)
         {
                 return 2*s*(trdS*(3*sigma_hat_sq*trdS+4*adt.a_)/dor + sigma_hat_sq*trddS + adt.b_ + adt.c_)/Real(dor*dor);
+        }
+
+template<typename InputCarrier>
+typename std::enable_if<std::is_same<t_type,t_type>::value, Real>::type
+        AuxiliaryOptimizer::universal_GCV_dd_mxd(const AuxiliaryData<InputCarrier> & adt, const AuxiliaryData<InputCarrier> & time_adt, const Real s, const Real sigma_hat_sq, 
+                const Real dor, const Real trdS, const Real time_trdS, const Real mxd_trddS)
+        {
+                return 2*s*(trdS*(3*sigma_hat_sq*trdS*time_trdS+2*time_trdS*adt.a_+2*trdS*time_adt.a_)/dor + sigma_hat_sq*mxd_trddS + time_adt.mxd_b_ + time_adt.mxd_c_)/Real(dor*dor);
         }
 
 #endif

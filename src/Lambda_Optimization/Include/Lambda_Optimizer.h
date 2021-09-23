@@ -261,12 +261,19 @@ class GCV_Exact<InputCarrier, 2>: public GCV_Family<InputCarrier, 2>
                 MatrixXr  S_;           //!< stores the value of Psi*V [as in Stu-Hunter Sangalli] [size s x s]
                 Real      trS_ = 0.0;   //!< stores the value of the trace of S
                 MatrixXr  dS_;          //!< stores the derivative of S w.r.t. lambda [size s x s]
-                Real      trdS_ = 0.0 ;  //!< stores the value of the trace of dS
-                MatrixXr  ddS_;         //!< stores the second derivative of S w.r.t. lambda [size s x s]
+                Real      trdS_ = 0.0 ; //!< stores the value of the trace of dS
+                MatrixXr  ddS_;         //!< stores the second derivative of S w.r.t. lambdaS [size s x s]
                 Real      trddS_ = 0.0; //!< stores the value of the trace of ddS
+                MatrixXr  time_dS_;           //!< stores the derivative of S w.r.t. lambdaT [size s x s]
+                Real      time_trdS_ = 0.0 ;  //!< stores the value of the trace of time_dS
+                MatrixXr  time_ddS_;          //!< stores the second derivative of S w.r.t. lambdaT [size s x s]
+                Real      time_trddS_ = 0.0;  //!< stores the value of the trace of time_ddS
+                MatrixXr  time_ddS_mxd_ ;          //!< stores the second derivative of S w.r.t. lambdaS and w.r.t lambdaT [size s x s]
+                Real      time_trddS_mxd_ = 0.0;   //!< stores the value of the trace of time_ddS_mxd
 
                 //! Additional utility matrices [just the ones for the specific carrier that is proper of the problem]
                 AuxiliaryData<InputCarrier> adt;
+                AuxiliaryData<InputCarrier> time_adt;
 
                 // COMPUTERS and DOF methods
                 void compute_z_hat (lambda::type<2> lambda) override;
@@ -280,7 +287,8 @@ class GCV_Exact<InputCarrier, 2>: public GCV_Family<InputCarrier, 2>
                 void set_S_and_trS_(void);
                 void set_dS_and_trdS_(void);
                 void set_ddS_and_trddS_(void);
-
+                void set_ddS_and_trddS_mxd_(void);
+                
                 // UTILITIES
                 void LeftMultiplybyPsiAndTrace(Real & trace, MatrixXr & ret, const MatrixXr & mat);
 
@@ -297,8 +305,8 @@ class GCV_Exact<InputCarrier, 2>: public GCV_Family<InputCarrier, 2>
                 GCV_Exact<InputCarrier, 2>(InputCarrier & the_carrier_):
                         GCV_Family<InputCarrier, 2>(the_carrier_)
                         {
-                                if (!this->the_carrier.get_flagParabolic())
-                                        this->set_R_(); // this matrix is unchanged during the whole procedure, thus it's set once and for all
+                                this->set_R_();         // this matrix is unchanged during the whole procedure, thus it's set once and for all
+                                time_adt.flag_time = true;      // GCV_Exact<InputCarrier, 2> is used only in separable case
                         }
 
                 // PUBLIC UPDATERS

@@ -376,7 +376,16 @@ void GCV_Exact<InputCarrier, 1>::set_dS_and_trdS_(void)
 
 template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 2>::set_dS_and_trdS_(void)
-{}
+{
+        // dS_ ******do commento**********************************+
+        this->adt.F_= this->adt.K_*this->V_;            // F = K*V
+        this->trdS_ = 0.0;
+        this->time_adt.F_= this->time_adt.K_*this->V_;  // E = J*V
+        this->time_trdS_ = 0.0;
+
+        this->LeftMultiplybyPsiAndTrace(this->trdS_, this->dS_, -this->adt.F_);
+        this->LeftMultiplybyPsiAndTrace(this->time_trdS_, this->time_dS_, -this->time_adt.F_);
+}
 
 //! Method to set the value of member ddS_ and its trace trddS_
 /*!
@@ -396,7 +405,22 @@ void GCV_Exact<InputCarrier, 1>::set_ddS_and_trddS_(void)
 
 template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 2>::set_ddS_and_trddS_(void)
-{}
+{
+        MatrixXr G_ = 2*this->adt.K_*this->adt.F_; // G = 2*K^2*V
+        this->trddS_ = 0.0;
+        MatrixXr time_G_ = 2*this->time_adt.K_*this->time_adt.F_;
+        this->time_trddS_ = 0.0;
+
+        this->LeftMultiplybyPsiAndTrace(this->trddS_, this->ddS_, G_);
+        this->LeftMultiplybyPsiAndTrace(this->time_trddS_, this->time_ddS_, time_G_);
+}
+
+template<typename InputCarrier>
+void GCV_Exact<InputCarrier, 2>::set_ddS_and_trddS_mxd_(void)
+{
+        this->time_ddS_mxd_ = (this->ddS_ + this->time_ddS_)/2;
+        this->time_trddS_mxd_ = (this->trddS_ + this->time_trddS_)/2;
+}
 
 // -- Utilities --
 //! Utility to left multiply a matrix by Psi_ and compute the trace of the new matrix
@@ -697,7 +721,12 @@ void GCV_Exact<InputCarrier, 1>::first_updater(lambda::type<1> lambda)
 
 template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 2>::first_updater(lambda::type<2> lambda)
-{}
+{
+        this->set_dS_and_trdS_();       // set first derivative of S and its trace
+        UInt ret = AuxiliaryOptimizer::universal_first_updater<InputCarrier>(this->adt, this->the_carrier, this->dS_, this->eps_hat, lambda(0));
+        UInt time_ret = AuxiliaryOptimizer::universal_first_updater<InputCarrier>(this->time_adt, this->the_carrier, this->time_dS_, this->eps_hat, lambda(0));
+        //// *********lambda(0) o lambda(1) nel calcolo di j ???????***********************************
+}
 
 //! Update all parameters needed to compute the gcv second derivative, depending on lambda
 /*!
@@ -708,12 +737,19 @@ template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 1>::second_updater(lambda::type<1> lambda)
 {
         this->set_ddS_and_trddS_();     // set second derivative of S and its trace
-        UInt ret = AuxiliaryOptimizer::universal_second_updater<InputCarrier>(this->adt, this->the_carrier, this->ddS_, this->eps_hat, lambda);
+        UInt ret = AuxiliaryOptimizer::universal_second_updater<InputCarrier>(this->adt, this->the_carrier, this->ddS_, this->eps_hat);
 }
 
 template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 2>::second_updater(lambda::type<2> lambda)
-{}
+{
+        this->set_ddS_and_trddS_();             // set second derivative of S and its trace
+        this->set_ddS_and_trddS_mxd_();         // set mixed second derivative of S and its trace
+
+        UInt ret = AuxiliaryOptimizer::universal_second_updater<InputCarrier>(this->adt, this->the_carrier, this->ddS_, this->eps_hat);
+        UInt time_ret = AuxiliaryOptimizer::universal_second_updater<InputCarrier>(this->time_adt, this->the_carrier, this->time_ddS_, this->eps_hat);
+        UInt time_ret_mxd = AuxiliaryOptimizer::universal_second_updater_mxd<InputCarrier>(this->adt, this->time_adt, this->the_carrier, this->time_ddS_mxd_, this->eps_hat);
+}
 
 // -- GCV and derivatives --
 // GCV function and derivatives
@@ -792,7 +828,20 @@ Real GCV_Exact<InputCarrier, 1>::compute_fp(lambda::type<1> lambda)
 template<typename InputCarrier>
 lambda::type<2> GCV_Exact<InputCarrier, 2>::compute_fp(lambda::type<2> lambda)
 {
-        return lambda::make_pair(-1, -1);
+        // call external updater to update [if needed] the parameters for gcv first derivative
+        this->gu.call_to(1, lambda, this);
+
+        // compute the value of gcv first derivative
+        Real GCV_der_val =
+                AuxiliaryOptimizer::universal_GCV_d<InputCarrier>(this->adt, this->s, this->sigma_hat_sq, this->dor, this->trdS_);
+
+        Real time_GCV_der_val =
+                AuxiliaryOptimizer::universal_GCV_d<InputCarrier>(this->time_adt, this->s, this->sigma_hat_sq, this->dor, this->time_trdS_);
+
+        // Debugging purpose print
+        //Rprintf("GCV_derivative = %f\n", GCV_der_val);
+
+        return lambda::make_pair(GCV_der_val, time_GCV_der_val); 
 }
 
 //! Computes the gcv second derivative in an exact fashion, depending on lambda
@@ -820,8 +869,18 @@ Real GCV_Exact<InputCarrier, 1>::compute_fs(lambda::type<1> lambda)
 template<typename InputCarrier>
 MatrixXr GCV_Exact<InputCarrier, 2>::compute_fs(lambda::type<2> lambda)
 {
-        Rprintf("Return type di compute_fs da modificare a MatrixXr\n");
-        return MatrixXr::Zero(2, 2);
+        this->gu.call_to(2, lambda, this);
+   
+        Real GCV_sec_der_val =
+                AuxiliaryOptimizer::universal_GCV_dd<InputCarrier>(this->adt, this->s, this->sigma_hat_sq, this->dor, this->trdS_, this->trddS_);
+        Real time_GCV_sec_der_val =
+                AuxiliaryOptimizer::universal_GCV_dd<InputCarrier>(this->time_adt, this->s, this->sigma_hat_sq, this->dor, this->time_trdS_, this->time_trddS_);
+        Real mxd_GCV_sec_der_val =
+                AuxiliaryOptimizer::universal_GCV_dd_mxd<InputCarrier>(this->adt, this->s, this->sigma_hat_sq, this->dor, this->trdS_, this->time_trdS_, this->mxd_trddS_);
+               
+        //controllare l'ordine in cui la matrice è riempita, se è giusto
+        //https://eigen.tuxfamily.org/dox/group__QuickRefPage.html
+        return (MatrixXr(2,2) << GCV_sec_der_val, mxd_GCV_sec_der_val, time_GCV_sec_der_val, mxd_GCV_sec_der_val).finished();
 }
 
 //----------------------------------------------------------------------------//
