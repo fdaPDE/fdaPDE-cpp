@@ -192,6 +192,7 @@ class GCV_Exact<InputCarrier, 1>: public GCV_Family<InputCarrier, 1>
                 void set_S_and_trS_(void);
                 void set_dS_and_trdS_(void);
                 void set_ddS_and_trddS_(void);
+                void set_iter_trS_(void);
 
                 // UTILITIES
                 void LeftMultiplybyPsiAndTrace(Real & trace, MatrixXr & ret, const MatrixXr & mat);
@@ -222,6 +223,8 @@ class GCV_Exact<InputCarrier, 1>: public GCV_Family<InputCarrier, 1>
                         GCV_Family<InputCarrier, 1>(the_carrier_)
                         {
                                 this->set_R_(lambdaT_);
+                                // controllare che questo costruttore sia compatibile con l'iterativo
+                                //************************************************
                         }
 
                 // PUBLIC UPDATERS

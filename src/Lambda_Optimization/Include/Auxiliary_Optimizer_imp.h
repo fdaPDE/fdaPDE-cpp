@@ -372,58 +372,32 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, Inpu
         AuxiliaryOptimizer::universal_b_setter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & US, const UInt nnodes)
         {
                 if (carrier.has_W())
-                {
                         b.topRows(nnodes) = (*carrier.get_psi_tp())*carrier.lmbQ(US);
-                }
                 else
-                {
                         b.topRows(nnodes) = (*carrier.get_psi_tp())*US;
-                }
                 return 0;
         }
 
 template<typename InputCarrier>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>,t_type>::value, UInt>::type
-        AuxiliaryOptimizer::universal_b_setter_iter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & US, const UInt nlocations, const UInt N_, const UInt k)
+        AuxiliaryOptimizer::universal_b_setter_iter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & Qu, const UInt N_, const UInt k)
         {
-                if (carrier.has_W())
-                {
-			SpMat psi_mini = (*carrier.get_psip()).block(k * nlocations, k* N_, nlocations, N_); //volendo la si passa da fuori e non si passa k
-													//a quel punto anche Qu da fuori e non k, direttamente il blocco
-										//forse a quel punto basta universal_b senza iter, valutare a.segment cosa fa
-			MatrixXr Qu = carrier.lmbQ(US); //si può portare fuori, calcolare una volta sola e passare address. Serve solo se ci sono cov
-				//lmbq nel caso senza covariate fa comunque il prodotto per dei pesi gam, quindi nel caso gam forse andrebbe usato per moltiplicare Q
-				//(che è l'identità). COmunque per analogia al caso solo spazio va bene così qui
-			//così toglo anche l'if, quando ci sono le covariate fuori moltiplico, altrimenti no
-			//nel caso non iter c'è l'if, ma dato che il lmbq è sempre quello converrebbe moltiplicare fuori
-//volendo si puà pensare di togliere l'if così anche nel caso non iter
-			VectorXr miniA_  = (*carrier.get_Ap()).segment(0, carrier.get_n_regions());
-			b.topRows(N_) =  psi_mini.transpose()*(miniA_.asDiagonal() * Qu.block(k*nlocations,0,nlocations,US.cols()));
-                }
-                else
-                {
-			SpMat psi_mini = (*carrier.get_psip()).block(k * nlocations, k* N_, nlocations, N_);
-			VectorXr miniA_  = (*carrier.get_Ap()).segment(0, carrier.get_n_regions());
-			b.topRows(N_) =  psi_mini.transpose()*(miniA_.asDiagonal() * US.block(k*nlocations,0,nlocations,US.cols()));
-                }
+                UInt dim = carrier.get_n_regions();
+                SpMat psi_mini = (*carrier.get_psip()).block(k * dim, k* N_, dim, N_);
+                VectorXr miniA_  = (*carrier.get_Ap()).segment(0, dim);		
+		b.topRows(N_) =  psi_mini.transpose()*(miniA_.asDiagonal() * Qu.block(k*dim,0,dim,US.cols()));
                 return 0;
         }
 
 template<typename InputCarrier>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>,f_type>::value, UInt>::type
-        AuxiliaryOptimizer::universal_b_setter_iter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & US, const UInt nlocations, const UInt N_, const UInt k)
+        AuxiliaryOptimizer::universal_b_setter_iter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & Qu, const UInt N_, const UInt k)
         {
-                if (carrier.has_W())
-                {
-			SpMat psi_mini = (*carrier.get_psip()).block(k * nlocations, k* N_, nlocations, N_);
-			MatrixXr Qu = carrier.lmbQ(US); //si può portare fuori, calcolare una volta sola e passare address. Serve solo se ci sono cov
-			b.topRows(N_) = psi_mini.transpose()* Qu.block(k*nlocations,0,nlocations,US.cols());
-                }
-                else
-                {
-			SpMat psi_mini = (*carrier.get_psip()).block(k * nlocations, k* N_, nlocations, N_);
-			b.topRows(N_) = psi_mini.transpose()* US.block(k*nlocations,0,nlocations,US.cols());
-                }
+                UInt dim = carrier.get_n_space_obs();
+ 
+		SpMat psi_mini = (*carrier.get_psip()).block(k * dim, k* N_, dim, N_);
+		b.topRows(N_) = psi_mini.transpose()* Qu.block(k*dim,0,dim,US.cols());
+
                 return 0;
         }
         
