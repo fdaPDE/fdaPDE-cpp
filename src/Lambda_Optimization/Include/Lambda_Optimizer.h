@@ -192,7 +192,7 @@ class GCV_Exact<InputCarrier, 1>: public GCV_Family<InputCarrier, 1>
                 void set_S_and_trS_(void);
                 void set_dS_and_trdS_(void);
                 void set_ddS_and_trddS_(void);
-                void set_iter_trS_(void);
+                void set_iter_trS_(Real lambdaS);
 
                 // UTILITIES
                 void LeftMultiplybyPsiAndTrace(Real & trace, MatrixXr & ret, const MatrixXr & mat);

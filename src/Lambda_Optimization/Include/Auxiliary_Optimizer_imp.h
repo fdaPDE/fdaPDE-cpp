@@ -385,7 +385,7 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, Inpu
                 UInt dim = carrier.get_n_regions();
                 SpMat psi_mini = (*carrier.get_psip()).block(k * dim, k* N_, dim, N_);
                 VectorXr miniA_  = (*carrier.get_Ap()).segment(0, dim);		
-		b.topRows(N_) =  psi_mini.transpose()*(miniA_.asDiagonal() * Qu.block(k*dim,0,dim,US.cols()));
+		b.topRows(N_) =  psi_mini.transpose()*(miniA_.asDiagonal() * Qu.block(k*dim,0,dim,Qu.cols()));
                 return 0;
         }
 
@@ -396,7 +396,7 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, Inpu
                 UInt dim = carrier.get_n_space_obs();
  
 		SpMat psi_mini = (*carrier.get_psip()).block(k * dim, k* N_, dim, N_);
-		b.topRows(N_) = psi_mini.transpose()* Qu.block(k*dim,0,dim,US.cols());
+		b.topRows(N_) = psi_mini.transpose()* Qu.block(k*dim,0,dim,Qu.cols());
 
                 return 0;
         }

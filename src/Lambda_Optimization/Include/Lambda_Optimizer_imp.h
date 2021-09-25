@@ -362,7 +362,7 @@ void GCV_Exact<InputCarrier, 2>::set_S_and_trS_(void)
  \sa set_V_(void)
 */
 template<typename InputCarrier>
-void GCV_Exact<InputCarrier, 1>::set_iter_trS_(void)
+void GCV_Exact<InputCarrier, 1>::set_iter_trS_(Real lambdaS)
 {
         this->trS_ = 0.0;
         UInt nlocations = this->the_carrier.get_n_space_obs();
@@ -381,7 +381,7 @@ void GCV_Exact<InputCarrier, 1>::set_iter_trS_(void)
                 }
 */
 
-        MatrixXr* psi_ = this->the_carrier.get_psip();
+        const SpMat * psi_ = this->the_carrier.get_psip();
         UInt M_ = this->the_carrier.get_model()->getM_();
         UInt N_ = this->the_carrier.get_model()->getN_();
         MatrixXr QPsi_big = this->the_carrier.lmbQ(*psi_);
@@ -400,10 +400,9 @@ void GCV_Exact<InputCarrier, 1>::set_iter_trS_(void)
 
                 //impose dirichlet boundary conditions if needed
 
-                if (regressionData_.getDirichletIndices()->size() != 0)
+                const std::vector<UInt> * bc_indices = this->the_carrier.get_bc_indicesp();
+                if (bc_indices->size() != 0)
                 {
-                        const std::vector<UInt> * bc_indices = regressionData_.getDirichletIndices();
-
                         UInt nbc_indices = bc_indices->size();
                         Real pen=10e20;
                         for (UInt i = 0; i < (nbc_indices/M_); i++) 
@@ -731,7 +730,7 @@ void GCV_Exact<InputCarrier, 1>::update_matrices(lambda::type<1> lambda)
                 this->set_S_and_trS_();
         }
         else
-                this->set_iter_trS_();
+                this->set_iter_trS_(lambda);
 
         this->compute_z_hat(lambda);
 }
@@ -1084,7 +1083,7 @@ void GCV_Stochastic<InputCarrier, size>::update_dof(lambda::type<size> lambda)
 					//psi_mini.coeff(0,0),psi_mini.coeff(0,1),psi_mini.coeff(1,0),psi_mini.coeff(1,1));
 				// Define the first right hand side : | I  0 |^T * psi^T * A * Q * u
 				this->b = MatrixXr::Zero(2*N_, this->US_.cols());
-				UInt ret = AuxiliaryOptimizer::universal_b_setter_iter(this->b, this->the_carrier, QU_big_, nlocations, N_, k);
+				UInt ret = AuxiliaryOptimizer::universal_b_setter_iter(this->b, this->the_carrier, QU_big_, N_, k);
 				
 				//Rprintf("b(0)=%f, b(1)=%f, b(2*N_-2)=%f, b(2*N_-1)=%f\n",
 					//this->b(0), this->b(1), this->b(2*N_-2), this->b(2*N_-1));
