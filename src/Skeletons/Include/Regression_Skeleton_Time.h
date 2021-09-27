@@ -299,12 +299,8 @@ optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 	}
 	else // 'not_required' optimization can't enter here!! [checked in R code]
 	{
-		/*
 		std::unique_ptr<Opt_methods<lambda::type<2>,MatrixXr,EvaluationType>> optim_p =
-			Opt_method_factory<lambda::type<2>,MatrixXr,EvaluationType>::create_Opt_method(optr->get_criterion(), Fun);
-		*/
-		std::unique_ptr<Opt_methods<lambda::type<2>,MatrixXr,EvaluationType>> optim_p =
-			make_unique<Newton_fd<lambda::type<2>,MatrixXr, EvaluationType>>(Fun);
+			Opt_method_factory<lambda::type<2>,MatrixXr,EvaluationType>::create_Opt_method(optr->get_criterion(), Fun);			
 
         // Compute optimal lambda
 		Checker ch;
