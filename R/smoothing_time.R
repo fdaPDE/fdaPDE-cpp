@@ -174,11 +174,7 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
   }else
   {
     stop("'lambda.selection.criterion' must belong to the following list: 'none', 'grid', 'newton', 'newton_fd'.")
-  }  
-  
-  if(lambda.selection.criterion == 'newton')
-    stop("'lambda.selection.criterion' = 'newton' is not implemented for spatio-temporal problems")
-  
+  }
   
   if(is.null(DOF.evaluation))
   {

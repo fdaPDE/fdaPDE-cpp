@@ -727,13 +727,13 @@ void MixedFERegressionBase<InputHandler>::computeDegreesOfFreedom(UInt output_in
 	switch (GCVmethod == "exact") {
 		case 1:
 		  if(regressionData_.getFlagIterative() & !isGAMData)
-              computeDOFExact_iterative(output_indexS, output_indexT, lambdaS, lambdaT);
+             	Rprintf("Function computeDOFExact_iterative moved to Lambda_optimizer\n");
 			else
               computeDegreesOfFreedomExact(output_indexS, output_indexT, lambdaS, lambdaT);
 			break;
 		case 0:
 			if(regressionData_.getFlagIterative() & !isGAMData)
-                computeDOFStochastic_iterative(output_indexS, output_indexT, lambdaS, lambdaT);
+                Rprintf("Function computeDOFStochastic_iterative moved to Lambda_optimizer\n");
 			else
                 computeDegreesOfFreedomStochastic(output_indexS, output_indexT, lambdaS, lambdaT);
 			break;
@@ -880,6 +880,7 @@ void MixedFERegressionBase<InputHandler>::computeDegreesOfFreedomExact(UInt outp
     _dof(output_indexS,output_indexT) = degrees;
 }
 
+/*
 template<typename InputHandler>
 void MixedFERegressionBase<InputHandler>::computeDOFExact_iterative(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT) {
     Real degrees = (regressionData_.getCovariates()->rows() != 0) ? regressionData_.getCovariates()->cols() : 0;
@@ -982,7 +983,7 @@ void MixedFERegressionBase<InputHandler>::computeDOFExact_iterative(UInt output_
 			    psiQ_k=psi_mini.transpose()*psi_mini;
 		}
 		*/
-
+/*
 		// Solve the system TX = B
         MatrixXr X;
         X = Dsolver.solve(psiQ_k);
@@ -993,6 +994,7 @@ void MixedFERegressionBase<InputHandler>::computeDOFExact_iterative(UInt output_
     }
       _dof(output_indexS, output_indexT) = degrees;
 }
+*/
 
 
 template<typename InputHandler>
@@ -1050,7 +1052,7 @@ void MixedFERegressionBase<InputHandler>::computeDegreesOfFreedomStochastic(UInt
 }
 
 
-
+/*
 template<typename InputHandler>
 void MixedFERegressionBase<InputHandler>::computeDOFStochastic_iterative(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT)
 {
@@ -1123,6 +1125,7 @@ void MixedFERegressionBase<InputHandler>::computeDOFStochastic_iterative(UInt ou
       }
 	_dof(output_indexS,output_indexT) = mean + q;
 }
+*/
 
 
 template<typename InputHandler>

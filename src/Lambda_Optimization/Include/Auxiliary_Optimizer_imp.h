@@ -48,9 +48,7 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
                 SpMat  R1p_= *carrier.get_R1p();         // Get the value of matrix R1
                 const std::vector<UInt> * bc_indices = carrier.get_bc_indicesp();
                 AuxiliaryOptimizer::bc_utility(R1p_, bc_indices);
-
-                Rprintf("Lavoriamo con segno meno\n");
-
+                
                 Eigen::SparseLU<SpMat>factorized_R0p(-*(carrier.get_R0p()));
                 R = (R1p_).transpose()*factorized_R0p.solve(R1p_);     // R == _R1^t*R0^{-1}*R1
 
