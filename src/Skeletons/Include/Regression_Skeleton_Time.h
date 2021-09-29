@@ -183,6 +183,7 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
 template<class GCV_type, typename CarrierType>
 std::pair<MatrixXr, output_Data<2>> parabolic_routine(CarrierType & carrier)
 {
+	Rprintf("Sono in parabolic_routine\n");
 	timer Time_partial;
 	Time_partial.start();
 
@@ -260,6 +261,7 @@ optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 	const OptimizationData * optr = carrier.get_opt_data();
 	if(optr->get_criterion() == "grid")
 	{
+		Rprintf("Sto facendo griglia\n");
 		timer Time_partial; // Of the sole optimization
 		Time_partial.start();
 		// Rprintf("WARNING: start taking time\n");
@@ -299,6 +301,8 @@ optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 	}
 	else // 'not_required' optimization can't enter here!! [checked in R code]
 	{
+		Rprintf("Sto facendo Newton\n");
+
 		std::unique_ptr<Opt_methods<lambda::type<2>,MatrixXr,EvaluationType>> optim_p =
 			Opt_method_factory<lambda::type<2>,MatrixXr,EvaluationType>::create_Opt_method(optr->get_criterion(), Fun);			
 
@@ -318,7 +322,7 @@ optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 		Time_partial.start();
 		// Rprintf("WARNING: start taking time\n");
 
-		std::pair<lambda::type<2>, UInt> lambda_couple = optim_p->compute(lambda, optr->get_stopping_criterion_tol(), 40, ch, GCV_v_, lambda_v_);
+		std::pair<lambda::type<2>, UInt> lambda_couple = optim_p->compute(lambda, optr->get_stopping_criterion_tol(), 40, ch, GCV_v_, lambda_v_, false);
 
 		//Rprintf("WARNING: partial time after the optimization method\n");
 		timespec T = Time_partial.stop();

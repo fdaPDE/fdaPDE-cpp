@@ -722,7 +722,7 @@ void GCV_Exact<InputCarrier, 2>::update_dor(lambda::type<2> lambda)
 template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 1>::update_matrices(lambda::type<1> lambda)
 {
-        Rprintf("GCV_Exact<InputCarrier, 1>::update_matrices\n");
+        //Rprintf("GCV_Exact<InputCarrier, 1>::update_matrices\n");
         if(this->the_carrier.get_flagParabolic() && !this->the_carrier.get_model()->isIter())
         {
                 this->set_T_(lambda); 
@@ -834,7 +834,7 @@ void GCV_Exact<InputCarrier, 2>::second_updater(lambda::type<2> lambda)
 template<typename InputCarrier>
 Real GCV_Exact<InputCarrier, 1>::compute_f(lambda::type<1> lambda)
 {
-        Rprintf("GCV_Exact<InputCarrier, 1>::compute_f\n");
+        //Rprintf("GCV_Exact<InputCarrier, 1>::compute_f\n");
         // call external updater to update [if needed] the parameters for gcv calculus
         this->gu.call_to(0, lambda, this);
 
@@ -944,8 +944,8 @@ MatrixXr GCV_Exact<InputCarrier, 2>::compute_fs(lambda::type<2> lambda)
                 AuxiliaryOptimizer::universal_GCV_dd<InputCarrier>(this->adt, this->s, this->sigma_hat_sq, this->dor, this->trdS_, this->trddS_);
         Real time_GCV_sec_der_val =
                 AuxiliaryOptimizer::universal_GCV_dd<InputCarrier>(this->time_adt, this->s, this->sigma_hat_sq, this->dor, this->time_trdS_, this->time_trddS_);
-        Real mxd_GCV_sec_der_val =
-                AuxiliaryOptimizer::universal_GCV_dd_mxd<InputCarrier>(this->adt, this->s, this->sigma_hat_sq, this->dor, this->trdS_, this->time_trdS_, this->mxd_trddS_);
+        Real mxd_GCV_sec_der_val = 
+                AuxiliaryOptimizer::universal_GCV_dd_mxd<InputCarrier>(this->adt, this->time_adt, this->s, this->sigma_hat_sq, this->dor, this->trdS_, this->time_trdS_, this->time_trddS_mxd_);
                
         //controllare l'ordine in cui la matrice è riempita, se è giusto
         //https://eigen.tuxfamily.org/dox/group__QuickRefPage.html
@@ -1155,7 +1155,7 @@ void GCV_Stochastic<InputCarrier, size>::update_dor(lambda::type<size> lambda)
 template<typename InputCarrier, UInt size>
 void GCV_Stochastic<InputCarrier, size>::compute_z_hat(lambda::type<size> lambda)
 {
-	Rprintf("GCV_Stochastic<InputCarrier, size>::compute_z_hat\n");
+	//Rprintf("GCV_Stochastic<InputCarrier, size>::compute_z_hat\n");
         /* Debugging purpose timer [part I]
          timer Time_partial;
          Time_partial.start();
@@ -1188,7 +1188,7 @@ void GCV_Stochastic<InputCarrier, size>::compute_z_hat(lambda::type<size> lambda
 template<typename InputCarrier, UInt size>
 void GCV_Stochastic<InputCarrier, size>::update_parameters(lambda::type<size> lambda)
 {
-	Rprintf("GCV_Stochastic<InputCarrier, size>::update_parameters\n");
+	//Rprintf("GCV_Stochastic<InputCarrier, size>::update_parameters\n");
         this->compute_z_hat(lambda);
         this->update_errors(lambda);
 }
@@ -1207,7 +1207,7 @@ void GCV_Stochastic<InputCarrier, size>::update_parameters(lambda::type<size> la
 template<typename InputCarrier, UInt size>
 Real GCV_Stochastic<InputCarrier, size>::compute_f(lambda::type<size> lambda)
 {
-	Rprintf("GCV_Stochastic<InputCarrier, size>::compute_f\n");
+	//Rprintf("GCV_Stochastic<InputCarrier, size>::compute_f\n");
 	
         // call external updater to update [if needed] the parameters for gcv calculus
         this->gu.call_to(0, lambda, this);

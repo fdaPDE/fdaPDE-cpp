@@ -67,7 +67,7 @@ class Opt_methods
         public:
 
                 //! Function to apply the optimization method and obtain as a result the couple (optimal lambda, optimal value of the function)
-                virtual std::pair<Tuple, UInt> compute (const Tuple & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<Tuple> & lambda_v) = 0;
+                virtual std::pair<Tuple, UInt> compute (const Tuple & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<Tuple> & lambda_v, bool pre_opt) = 0;
 
                 //! Virtual Destuctor
                 virtual ~Opt_methods(){};
@@ -89,6 +89,7 @@ struct Auxiliary<lambda::type<1>>
                 static inline bool isNull(Real n)                       {return (n == 0);}      //!< Check if the input value is zero \param n number to be checked
                 static inline void divide(Real a, Real b, Real & x)     {x = b/a;}              //!< Apply a division \param a denominator \param b numerator \param x reference to result
                 static inline Real residual(Real a)                     {return std::abs(a);}   //!< Compute the norm of the residual \param a take the absolute value of this number \return the absolute value of a
+                static inline bool isPositive(Real x)                   {return x>0;}           //!< Check if the input is positive
 };
 
 //! Auxiliary class to perform elementary mathematical operations and checks: specialization for n dimensional case
@@ -128,6 +129,17 @@ struct Auxiliary<lambda::type<2>>
                 {
                         return a.norm();
                 }
+
+                //! Check if the input is positive
+                /*!
+                 \param x vector of which to check positivity
+                 \return positivity of x
+                */
+                static inline bool isPositive(lambda::type<2> x)
+                {
+                        return x(0)>0 && x(1)>0;
+                }
+
 };
 
 
@@ -154,7 +166,7 @@ struct Auxiliary<lambda::type<2>>
                  };
 
                  //! Apply Newton's method
-                 std::pair<Tuple, UInt> compute(const Tuple & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<Tuple> & lambda_v) override;
+                 std::pair<Tuple, UInt> compute(const Tuple & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<Tuple> & lambda_v, bool pre_opt) override;
 
                  //! Virtual Destuctor
                  virtual ~Newton_ex(){};
@@ -187,7 +199,7 @@ class Newton_fd<lambda::type<1>, Real, Extensions...>: public Opt_methods<lambda
                 Newton_fd(Function_Wrapper<lambda::type<1>, Real, lambda::type<1>, Real, Extensions...> & F_): Opt_methods<lambda::type<1>, Real, Extensions...>(F_) {};
 
                 //! Apply Newton fd method
-                std::pair<Real, UInt> compute(const lambda::type<1> & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<lambda::type<1>> & lambda_v) override;
+                std::pair<Real, UInt> compute(const lambda::type<1> & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<lambda::type<1>> & lambda_v, bool pre_opt) override;
 
 
                 //! Virtual Destuctor
@@ -209,7 +221,7 @@ class Newton_fd<lambda::type<2>, MatrixXr, Extensions...>: public Opt_methods<la
                 Newton_fd(Function_Wrapper<lambda::type<2>, Real, lambda::type<2>, MatrixXr, Extensions...> & F_): Opt_methods<lambda::type<2>, MatrixXr, Extensions...>(F_) {};
 
                 //! Apply Newton fd method
-                std::pair<lambda::type<2>, UInt> compute(const lambda::type<2> & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<lambda::type<2>> & lambda_v) override;
+                std::pair<lambda::type<2>, UInt> compute(const lambda::type<2> & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<lambda::type<2>> & lambda_v, bool pre_opt) override;
 
 
                 //! Virtual Destuctor

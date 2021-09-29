@@ -236,8 +236,16 @@ static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr
     SEXP result = NILSXP;
     result = PROTECT(Rf_allocVector(VECSXP, 5+5+2+11));
     SET_VECTOR_ELT(result, 0, Rf_allocMatrix(REALSXP, solution.rows(), solution.cols()));
-    SET_VECTOR_ELT(result, 1, Rf_allocMatrix(REALSXP, output.size_S, output.size_T));
-    SET_VECTOR_ELT(result, 2, Rf_allocMatrix(REALSXP, output.size_S, output.size_T));
+    if(code_string == 0) //Newton
+    {
+        SET_VECTOR_ELT(result, 1, Rf_allocVector(REALSXP, dof.size()));
+        SET_VECTOR_ELT(result, 2, Rf_allocVector(REALSXP, GCV.size()));
+    }
+    else //grid or prediction
+    {
+        SET_VECTOR_ELT(result, 1, Rf_allocMatrix(REALSXP, output.size_S, output.size_T));
+        SET_VECTOR_ELT(result, 2, Rf_allocMatrix(REALSXP, output.size_S, output.size_T));
+    }
     SET_VECTOR_ELT(result, 3, Rf_allocVector(INTSXP, 2)); //best lambdas
     SET_VECTOR_ELT(result, 4, Rf_allocMatrix(REALSXP, beta(0,0).size(), beta.rows()));
 

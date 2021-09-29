@@ -160,6 +160,8 @@ typename std::enable_if<size==1, std::pair<MatrixXr, output_Data<1>>>::type
 	const OptimizationData * optr = carrier.get_opt_data();
 	if(optr->get_criterion() == "grid")
 	{
+		Rprintf("Sto facendo griglia\n");
+
 		timer Time_partial; // Of the sole optimization
 		Time_partial.start();
 		// Rprintf("WARNING: start taking time\n");
@@ -189,6 +191,8 @@ typename std::enable_if<size==1, std::pair<MatrixXr, output_Data<1>>>::type
 	}
 	else // 'not_required' optimization can't enter here!! [checked in R code]
 	{
+        Rprintf("Sto facendo Newton\n");
+
 		std::unique_ptr<Opt_methods<Real,Real,EvaluationType>> optim_p =
 			Opt_method_factory<Real, Real, EvaluationType>::create_Opt_method(optr->get_criterion(), Fun);
 
@@ -207,7 +211,7 @@ typename std::enable_if<size==1, std::pair<MatrixXr, output_Data<1>>>::type
 		Time_partial.start();
 		// Rprintf("WARNING: start taking time\n");
 
-		std::pair<Real, UInt> lambda_couple = optim_p->compute(lambda, optr->get_stopping_criterion_tol(), 40, ch, GCV_v_, lambda_v_);
+		std::pair<Real, UInt> lambda_couple = optim_p->compute(lambda, optr->get_stopping_criterion_tol(), 40, ch, GCV_v_, lambda_v_, true);
 
 		//Rprintf("WARNING: partial time after the optimization method\n");
 		timespec T = Time_partial.stop();

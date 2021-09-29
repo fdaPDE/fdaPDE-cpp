@@ -428,7 +428,7 @@ struct AuxiliaryOptimizer
                 universal_GCV_dd(const AuxiliaryData<InputCarrier> & adt, const Real s, const Real sigma_hat_sq, const Real dor, const Real trdS, const Real trddS);
 
         template<typename InputCarrier>
-        static typename std::enable_if<std::is_same<t_type, t_type>::value, Real>::type
+        static typename std::enable_if<std::is_same<t_type,t_type>::value, Real>::type
                 universal_GCV_dd_mxd(const AuxiliaryData<InputCarrier> & adt, const AuxiliaryData<InputCarrier> & time_adt, const Real s, const Real sigma_hat_sq, 
                 const Real dor, const Real trdS, const Real time_trdS, const Real mxd_trddS);
 //**********************************AGGIUNGEREE COMMENTI MXD******************************

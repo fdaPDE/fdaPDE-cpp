@@ -10,6 +10,14 @@ namespace lambda
 	
 	type<2> make_pair(Real lambdaS, Real lambdaT);
 	type<2> make_pair(lambda::type<2> lambda, Real lambdaT); //degenerate case useful in parabolic case
+
+	template<UInt size>
+	typename std::enable_if<size==1, type<1>>::type
+	init(Real value) {return value;}
+
+	template<UInt size>
+	typename std::enable_if<size==2, type<2>>::type
+	init(Real value) {return make_pair(value, value);}
 }
 
 #endif

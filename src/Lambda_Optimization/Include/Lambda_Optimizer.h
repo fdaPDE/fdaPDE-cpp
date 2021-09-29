@@ -392,8 +392,9 @@ class GCV_Stochastic: public GCV_Family<InputCarrier, size>
 
                 // GCV-COMPUTATION
                 Real compute_f( lambda::type<size> lambda) override;
-                Real compute_fp(lambda::type<size> lambda) {return 0; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
-                Real compute_fs(lambda::type<size> lambda) {return 0; /*Dummy*/} //!< Dummy function needed for consistency of the external updater
+                lambda::type<size> compute_fp(lambda::type<size> lambda) {return lambda::init<size>(-1); /*Dummy*/} //!< Dummy function needed for consistency of the external updater
+                typename std::conditional<size==1, Real, MatrixXr>::type compute_fs(lambda::type<size> lambda)
+                        {return lambda::init<size>(-1); /*Dummy*/} //!< Dummy function needed for consistency of the external updater
                 //! Virtual Destuctor
         virtual ~GCV_Stochastic(){};
 };
