@@ -194,8 +194,11 @@ std::pair<MatrixXr, output_Data<2>> parabolic_routine(CarrierType & carrier)
 
 	std::vector<Real> lambdaS = optr->get_lambda_S();
 	std::vector<Real> lambdaT = optr->get_lambda_T();
-	res.second.size_S = optr->get_size_S();
-	res.second.size_T = optr->get_size_T();
+	if(optr->get_criterion() != "grid"){	// set initial data for Newton
+		Rprintf("modifica output per Newton\n");
+		lambdaS[0] = optr->get_initial_lambda_S();
+		lambdaT[0] = optr->get_initial_lambda_T();
+	}
 	res.second.lambda_vec.reserve(res.second.size_S*res.second.size_T);
 	res.second.GCV_evals.reserve(res.second.size_S*res.second.size_T);
 	res.second.lambda_vec.clear();
@@ -208,9 +211,11 @@ std::pair<MatrixXr, output_Data<2>> parabolic_routine(CarrierType & carrier)
 		std::pair<MatrixXr, output_Data<1>> par_res = 
 			optimizer_strategy_selection<GCV_type, CarrierType, 1>(optim, carrier);
 
-		for(UInt i=0; i<optr->get_size_S(); i++) //to improve *************************************************
+		UInt dim = par_res.second.lambda_vec.size();
+
+		for(UInt i=0; i<dim; i++) //to improve *************************************************
 			res.second.lambda_vec.push_back(
-				lambda::make_pair(lambdaS[i], lambdaT[j]));
+				lambda::make_pair(par_res.second.lambda_vec[i], lambdaT[j]));
 		
 		if(par_res.second.GCV_opt < opt_res.second.GCV_opt || j == 0)
 		{
@@ -227,6 +232,12 @@ std::pair<MatrixXr, output_Data<2>> parabolic_routine(CarrierType & carrier)
 		
 		res.second.n_it += par_res.second.n_it;
 	}
+
+	if(optr->get_criterion() == "grid")
+		res.second.size_S = optr->get_size_S();
+	else
+		res.second.size_S = res.second.lambda_vec.size();  // size_S is the number of lamdaS visited by Newton method
+	res.second.size_T = optr->get_size_T();
 
 	Rprintf("FINE FOR\n");
 
