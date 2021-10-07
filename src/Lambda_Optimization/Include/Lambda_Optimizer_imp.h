@@ -294,25 +294,15 @@ void GCV_Exact<InputCarrier, 1>::set_R_(Real lambdaT)
 template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 1>::set_T_(lambda::type<1> lambdaS)
 {
-        if (this->the_carrier.get_flagParabolic())
-        {
-                this->T_ = MatrixXr::Zero(this->R_.rows(), this->R_.cols());
-                const UInt ret = AuxiliaryOptimizer::universal_T_setter<InputCarrier>(this->T_, this->the_carrier);
-                this->T_ -= lambdaS*this->R_;
-        }
-        else
-        {
-                this->T_ = lambdaS*this->R_;
-                const UInt ret = AuxiliaryOptimizer::universal_T_setter<InputCarrier>(this->T_, this->the_carrier);
-        }
+        this->T_ = lambdaS*this->R_;
+        const UInt ret = AuxiliaryOptimizer::universal_T_setter<InputCarrier>(this->T_, this->the_carrier);
 }
 
 template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 2>::set_T_(lambda::type<2> lambda)
 { 
-        this->T_ = lambda(1)*(*this->the_carrier.get_Ptkp());
+        this->T_ = lambda(1)*(*this->the_carrier.get_Ptkp()) + lambda(0)*this->R_;
         const UInt ret = AuxiliaryOptimizer::universal_T_setter<InputCarrier>(this->T_, this->the_carrier);
-        this->T_ -= lambda(0)*this->R_;
 }
 
 

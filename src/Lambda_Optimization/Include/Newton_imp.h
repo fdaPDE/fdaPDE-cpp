@@ -139,14 +139,14 @@ std::pair<lambda::type<1>, UInt> Newton_fd<lambda::type<1>, Real, Extensions...>
         Real x      = x0;
         UInt n_iter = 0;
         Real error  = std::numeric_limits<Real>::infinity();
-        Real h      = 4e-6;
+        Real h      = 4e-8; //passo modificato
 
         if(pre_opt){
                 Rprintf("Sto facendo pre_opt\n");
                 // Debugging purpose
                 // Rprintf("\n Starting Initializing lambda phase"); /*! Start from 6 lambda and find the minimum value of GCV to start from it the newton's method*/
                 Real valmin, valcur, lambda_min;
-                std::vector<Real> vals = {1.442700e-04};
+                std::vector<Real> vals = {1.442700e-04, 3.465724e+01};
                 UInt Nm = vals.size();
                 //{5.000000e-05, 1.442700e-03, 4.162766e-02, 1.201124e+00, 3.465724e+01, 1.000000e+03};
                 lambda_min = 5e-5;
@@ -173,7 +173,7 @@ std::pair<lambda::type<1>, UInt> Newton_fd<lambda::type<1>, Real, Extensions...>
                         x = lambda_min/8;
                 }
         }
-        Rprintf("\n Starting Newton's iterations: starting point lambda=%f\n",x);
+        Rprintf("\n Starting Newton's iterations: starting point lambda=%e\n",x);
 
         // Only the first time applied here
         // Rprintf("Forward: \n");
@@ -188,6 +188,9 @@ std::pair<lambda::type<1>, UInt> Newton_fd<lambda::type<1>, Real, Extensions...>
 
         Real fsx = (fxph+fxmh-(2*fx))/(h*h);
         // Rprintf("fs(x): %f\n", fsx);
+        
+        Rprintf("x=%f,fx:%f,fpx:%f,fsx:%f\n\tex_fpx:%f,ex_fsx:%f",x,
+        	fx, fpx, fsx, this->F.evaluate_first_derivative(x), this->F.evaluate_second_derivative(x));
 
         while(n_iter < max_iter)
         {
@@ -240,6 +243,9 @@ std::pair<lambda::type<1>, UInt> Newton_fd<lambda::type<1>, Real, Extensions...>
                 fx  = this->F.evaluate_f(x);
 
                 fsx = (fxph+fxmh-(2*fx))/(h*h);
+                
+                Rprintf("x=%f,fx:%f,fpx:%f,fsx:%f\n\tex_fpx:%f,ex_fsx:%f",x,
+        	fx, fpx, fsx, this->F.evaluate_first_derivative(x), this->F.evaluate_second_derivative(x));
 
                 // Rprintf("fp(x): %f\n", fpx);
                 // Rprintf("fs(x): %f\n", fsx);
@@ -318,7 +324,15 @@ std::pair<lambda::type<2>, UInt> Newton_fd<lambda::type<2>, MatrixXr, Extensions
         fsx(0,0) = space_fsx; fsx(0,1) = mixed_fsx;
         fsx(1,0) = mixed_fsx; fsx(1,1) = time_fsx;
         // Rprintf("fs(x): %f\n", fsx);
-
+        
+        
+        Rprintf("x=(%f,%f)\nfx=%f\ndfx=(%f,%f)\nddfx(%f,%f,%f)\n",
+        	x(0), x(1), fx, space_fpx, time_fpx, space_fsx, time_fsx, mixed_fsx);
+        lambda::type<2> prima = this->F.evaluate_first_derivative(x);
+        MatrixXr seconda = this->F.evaluate_second_derivative(x);
+	Rprintf("exact\tdfx=(%f,%f)\nddfx(%f,%f,%f)\n\n\n",
+        	prima(0), prima(1), seconda.coeff(0,0), seconda.coeff(1,1), seconda.coeff(0,1));
+        	
         while(n_iter < max_iter)
         {
                 Rprintf("\nNewton iteration %d \n", n_iter);
@@ -391,6 +405,13 @@ std::pair<lambda::type<2>, UInt> Newton_fd<lambda::type<2>, MatrixXr, Extensions
 
                 // Rprintf("fp(x): %f\n", fpx);
                 // Rprintf("fs(x): %f\n", fsx);
+                
+                Rprintf("x=(%f,%f)\nfx=%f\ndfx=(%f,%f)\nddfx(%f,%f,%f)\n",
+        	x(0), x(1), fx, space_fpx, time_fpx, space_fsx, time_fsx, mixed_fsx);
+		lambda::type<2> prima = this->F.evaluate_first_derivative(x);
+		MatrixXr seconda = this->F.evaluate_second_derivative(x);
+		Rprintf("exact\tdfx=(%f,%f)\nddfx(%f,%f,%f)\n\n\n",
+        	prima(0), prima(1), seconda.coeff(0,0), seconda.coeff(1,1), seconda.coeff(0,1));
         }
         fx  = this->F.evaluate_f(x);
         ch.set_max_iter();
