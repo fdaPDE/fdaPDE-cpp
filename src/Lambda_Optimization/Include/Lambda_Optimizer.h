@@ -222,8 +222,7 @@ class GCV_Exact<InputCarrier, 1>: public GCV_Family<InputCarrier, 1>
                 GCV_Exact<InputCarrier, 1>(InputCarrier & the_carrier_, Real lambdaT_):
                         GCV_Family<InputCarrier, 1>(the_carrier_)
                         {
-                                //this->set_R_(lambdaT_);
-                                this->set_R_();
+                                this->set_R_(lambdaT_);
                         }
 
                 // PUBLIC UPDATERS
