@@ -321,7 +321,7 @@ void GCV_Exact<InputCarrier, 1>::set_V_(void)
 template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 2>::set_V_(void)
 {
-        const UInt ret = AuxiliaryOptimizer::universal_V_setter<InputCarrier>(this->V_, this->T_, this->R_, this->the_carrier, this->adt);
+        const UInt ret = AuxiliaryOptimizer::universal_V_setter<InputCarrier>(this->V_, this->T_, this->R_, this->the_carrier, this->adt, this->time_adt);
 }
 
 
