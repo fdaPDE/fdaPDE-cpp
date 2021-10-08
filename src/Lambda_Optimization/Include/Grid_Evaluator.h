@@ -62,6 +62,7 @@ class Vec_evaluation
 
                         for (UInt i=0; i<dim; i++)
                         {
+                                Rprintf("Grid: evaluating %d/%d\n", i+1, dim);
                                 this->F.set_index(i);
                                 evaluations[i] = this->F.evaluate_f(this->lambda_vec[i]); //only scalar functions;
 
