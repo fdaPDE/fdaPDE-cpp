@@ -490,11 +490,10 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
                 else
                         time_adt.mxd_b_ = adt.p_.transpose()*time_adt.p_;
 
-                VectorXr aux, time_aux;
-                adt.left_multiply_by_psi(carrier, aux, -2*adt.K_*adt.h_);
-                time_adt.left_multiply_by_psi(carrier, time_aux, -2*time_adt.K_*time_adt.h_);
+                VectorXr aux;
+                adt.left_multiply_by_psi(carrier, aux, -(time_adt.K_*adt.h_+adt.K_*time_adt.h_));
 
-                time_adt.mxd_c_ = eps.transpose()*(-ddS_mxd*(*zp) + aux + time_aux);
+                time_adt.mxd_c_ = eps.transpose()*(-ddS_mxd*(*zp) + aux);
 
                 return 0;
         }
@@ -525,8 +524,6 @@ template<typename InputCarrier>
 typename std::enable_if<std::is_same<t_type,t_type>::value, Real>::type
         AuxiliaryOptimizer::universal_GCV_d(const AuxiliaryData<InputCarrier> & adt, const Real s, const Real sigma_hat_sq, const Real dor, const Real trdS)
         {
-        	Rprintf("\ns=%f,sigma_hat_sq=%f,trdS=%f,adt.a_=%f,Real(dor*dor)=%f\n",
-        		s, sigma_hat_sq, trdS, adt.a_, Real(dor*dor));
                 return 2*s*(sigma_hat_sq*trdS + adt.a_)/Real(dor*dor);
         }
 
@@ -542,7 +539,7 @@ typename std::enable_if<std::is_same<t_type,t_type>::value, Real>::type
         AuxiliaryOptimizer::universal_GCV_dd_mxd(const AuxiliaryData<InputCarrier> & adt, const AuxiliaryData<InputCarrier> & time_adt, const Real s, const Real sigma_hat_sq, 
                 const Real dor, const Real trdS, const Real time_trdS, const Real mxd_trddS)
         {
-                return 2*s*(trdS*(3*sigma_hat_sq*trdS*time_trdS+2*time_trdS*adt.a_+2*trdS*time_adt.a_)/dor + sigma_hat_sq*mxd_trddS + time_adt.mxd_b_ + time_adt.mxd_c_)/Real(dor*dor);
+        	return 2*s*((3*sigma_hat_sq*trdS*time_trdS+2*time_trdS*adt.a_+2*trdS*time_adt.a_)/dor + sigma_hat_sq*mxd_trddS + time_adt.mxd_b_ + time_adt.mxd_c_)/Real(dor*dor);
         }
 
 #endif

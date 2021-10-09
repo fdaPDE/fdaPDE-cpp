@@ -265,6 +265,17 @@ std::pair<lambda::type<2>, UInt> Newton_fd<lambda::type<2>, MatrixXr, Extensions
         UInt n_iter = 0;
         Real error  = std::numeric_limits<Real>::infinity();
         Real h      = 4e-8;
+        
+        Real zero1 = this->F.evaluate_f(x);
+        Rprintf("exact\tf=(%f)\n",
+        	zero1);
+        lambda::type<2> prima1 = this->F.evaluate_first_derivative(x);
+        Rprintf("exact\tdfx=(%f,%f)\n",
+        	prima1(0), prima1(1));
+        MatrixXr seconda1 = this->F.evaluate_second_derivative(x);
+	Rprintf("exact\tddfx(%f,%f,%f)\n",
+		seconda1.coeff(0,0), seconda1.coeff(1,1), seconda1.coeff(0,1));
+        	
 
         if(pre_opt){
 
@@ -296,7 +307,7 @@ std::pair<lambda::type<2>, UInt> Newton_fd<lambda::type<2>, MatrixXr, Extensions
                 if (x(1)>lambda_min(1)/4 || x(1)<=0)
                         x(1) = lambda_min(1)/8;
         }
-        Rprintf("\n Starting Newton's iterations: starting point lambda=%f\n",x);
+        Rprintf("\n Starting Newton's iterations: starting point lambda=(%e,%e)\n",x(0),x(1));
 
         // Only the first time applied here
         // Rprintf("Forward: \n");
@@ -332,8 +343,7 @@ std::pair<lambda::type<2>, UInt> Newton_fd<lambda::type<2>, MatrixXr, Extensions
         Rprintf("exact\tdfx=(%f,%f)\n\n\n",
         	prima(0), prima(1));
         MatrixXr seconda = this->F.evaluate_second_derivative(x);
-	Rprintf("exact\tdfx=(%f,%f)\nddfx(%f,%f,%f)\n\n\n",
-        	prima(0), prima(1), seconda.coeff(0,0), seconda.coeff(1,1), seconda.coeff(0,1));
+	Rprintf("exact\tddfx(%f,%f,%f)\n\n\n", seconda.coeff(0,0), seconda.coeff(1,1), seconda.coeff(0,1));
         	
         while(n_iter < max_iter)
         {

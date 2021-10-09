@@ -478,8 +478,9 @@ void GCV_Exact<InputCarrier, 2>::set_ddS_and_trddS_(void)
 template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 2>::set_ddS_and_trddS_mxd_(void)
 {
-        this->time_ddS_mxd_ = (this->ddS_ + this->time_ddS_)/2;
-        this->time_trddS_mxd_ = (this->trddS_ + this->time_trddS_)/2;
+	MatrixXr G_ = this->time_adt.K_*this->adt.F_ + this->adt.K_*this->time_adt.F_;
+	this->time_trddS_mxd_ = 0.0;
+	this->LeftMultiplybyPsiAndTrace(this->time_trddS_mxd_, this->time_ddS_mxd_, G_);
 }
 
 // -- Utilities --
@@ -573,7 +574,6 @@ void GCV_Exact<InputCarrier, 2>::LeftMultiplybyPsiAndTrace(Real & trace, MatrixX
         {
                 */
                 // Psi is full, compute matrix and trace directly
-        Rprintf("Qui abbiamo tolto l'if(leftmultiplybypsi....)\n");
                 ret = (*this->the_carrier.get_psip())*mat;
                 for (int i = 0; i < this->s; ++i)
                         trace += ret.coeff(i, i);
@@ -936,10 +936,9 @@ MatrixXr GCV_Exact<InputCarrier, 2>::compute_fs(lambda::type<2> lambda)
                 AuxiliaryOptimizer::universal_GCV_dd<InputCarrier>(this->time_adt, this->s, this->sigma_hat_sq, this->dor, this->time_trdS_, this->time_trddS_);
         Real mxd_GCV_sec_der_val = 
                 AuxiliaryOptimizer::universal_GCV_dd_mxd<InputCarrier>(this->adt, this->time_adt, this->s, this->sigma_hat_sq, this->dor, this->trdS_, this->time_trdS_, this->time_trddS_mxd_);
-               
-        //controllare l'ordine in cui la matrice è riempita, se è giusto
+                
         //https://eigen.tuxfamily.org/dox/group__QuickRefPage.html
-        return (MatrixXr(2,2) << GCV_sec_der_val, mxd_GCV_sec_der_val, time_GCV_sec_der_val, mxd_GCV_sec_der_val).finished();
+        return (MatrixXr(2,2) << GCV_sec_der_val, mxd_GCV_sec_der_val, mxd_GCV_sec_der_val, time_GCV_sec_der_val).finished();
 }
 
 //----------------------------------------------------------------------------//

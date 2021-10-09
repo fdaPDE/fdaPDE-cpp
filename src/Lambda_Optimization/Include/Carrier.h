@@ -255,7 +255,6 @@ class Carrier: public Extensions...
                 */
                 inline MatrixXr apply(lambda::type<1> lambda)
                 {
-                	Rprintf("unidimensional carrier apply");
                         this->opt_data->set_current_lambdaS(lambda); // set the lambda value
                         if(this->model->isIter())
                         {
