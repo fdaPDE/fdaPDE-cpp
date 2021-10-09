@@ -264,7 +264,7 @@ std::pair<lambda::type<2>, UInt> Newton_fd<lambda::type<2>, MatrixXr, Extensions
         lambda::type<2> x = x0;
         UInt n_iter = 0;
         Real error  = std::numeric_limits<Real>::infinity();
-        Real h      = 4e-6;
+        Real h      = 4e-8;
 
         if(pre_opt){
 
@@ -329,6 +329,8 @@ std::pair<lambda::type<2>, UInt> Newton_fd<lambda::type<2>, MatrixXr, Extensions
         Rprintf("x=(%f,%f)\nfx=%f\ndfx=(%f,%f)\nddfx(%f,%f,%f)\n",
         	x(0), x(1), fx, space_fpx, time_fpx, space_fsx, time_fsx, mixed_fsx);
         lambda::type<2> prima = this->F.evaluate_first_derivative(x);
+        Rprintf("exact\tdfx=(%f,%f)\n\n\n",
+        	prima(0), prima(1));
         MatrixXr seconda = this->F.evaluate_second_derivative(x);
 	Rprintf("exact\tdfx=(%f,%f)\nddfx(%f,%f,%f)\n\n\n",
         	prima(0), prima(1), seconda.coeff(0,0), seconda.coeff(1,1), seconda.coeff(0,1));
@@ -407,8 +409,10 @@ std::pair<lambda::type<2>, UInt> Newton_fd<lambda::type<2>, MatrixXr, Extensions
                 // Rprintf("fs(x): %f\n", fsx);
                 
                 Rprintf("x=(%f,%f)\nfx=%f\ndfx=(%f,%f)\nddfx(%f,%f,%f)\n",
-        	x(0), x(1), fx, space_fpx, time_fpx, space_fsx, time_fsx, mixed_fsx);
+        		x(0), x(1), fx, space_fpx, time_fpx, space_fsx, time_fsx, mixed_fsx);
 		lambda::type<2> prima = this->F.evaluate_first_derivative(x);
+		Rprintf("exact\tdfx=(%f,%f)\n\n\n",
+			prima(0), prima(1));
 		MatrixXr seconda = this->F.evaluate_second_derivative(x);
 		Rprintf("exact\tdfx=(%f,%f)\nddfx(%f,%f,%f)\n\n\n",
         	prima(0), prima(1), seconda.coeff(0,0), seconda.coeff(1,1), seconda.coeff(0,1));

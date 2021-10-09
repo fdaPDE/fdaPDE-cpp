@@ -168,7 +168,8 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
                         V = factorized_T.solve(E_);     // find the value of V = T^{-1}*E
                 }
                 adt.K_ = factorized_T.solve(R);                          // K = T^{-1}*R
-                time_adt.K_ = factorized_T.solve(*carrier.get_Ptkp());   // J = T^{-1}*P
+                MatrixXr P = *carrier.get_Ptkp();
+                time_adt.K_ = factorized_T.solve(P);   // J = T^{-1}*P
 
                 adt.g_ = factorized_T.solve(adt.f_);
 
@@ -222,7 +223,8 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
                         V = factorized_T.solve(E_);          // find the value of V = T^{-1}*E
                 }
                 adt.K_ = factorized_T.solve(R);                         // K = T^{-1}*R
-                time_adt.K_ = factorized_T.solve(*carrier.get_Ptkp());  // J = T^{-1}*P
+                MatrixXr P = *carrier.get_Ptkp();
+                time_adt.K_ = factorized_T.solve(P);  // J = T^{-1}*P
 
                 return 0;
         }
