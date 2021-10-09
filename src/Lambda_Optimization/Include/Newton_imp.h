@@ -266,17 +266,6 @@ std::pair<lambda::type<2>, UInt> Newton_fd<lambda::type<2>, MatrixXr, Extensions
         Real error  = std::numeric_limits<Real>::infinity();
         Real h      = 4e-8;
         
-        Real zero1 = this->F.evaluate_f(x);
-        Rprintf("exact\tf=(%f)\n",
-        	zero1);
-        lambda::type<2> prima1 = this->F.evaluate_first_derivative(x);
-        Rprintf("exact\tdfx=(%f,%f)\n",
-        	prima1(0), prima1(1));
-        MatrixXr seconda1 = this->F.evaluate_second_derivative(x);
-	Rprintf("exact\tddfx(%f,%f,%f)\n",
-		seconda1.coeff(0,0), seconda1.coeff(1,1), seconda1.coeff(0,1));
-        	
-
         if(pre_opt){
 
                 Rprintf("Sto facendo pre_opt\n");
@@ -309,27 +298,29 @@ std::pair<lambda::type<2>, UInt> Newton_fd<lambda::type<2>, MatrixXr, Extensions
         }
         Rprintf("\n Starting Newton's iterations: starting point lambda=(%e,%e)\n",x(0),x(1));
 
+
         // Only the first time applied here
         // Rprintf("Forward: \n");
-        Real space_fxph = this->F.evaluate_f(lambda::make_pair(x(0)+h, x(1)));
-        Real time_fxph = this->F.evaluate_f(lambda::make_pair(x(0), x(1)+h));
+        Real space_fxph = 21;//this->F.evaluate_f(lambda::make_pair(x(0)+h, x(1)));
+        Real time_fxph = 21;//this->F.evaluate_f(lambda::make_pair(x(0), x(1)+h));
         //Rprintf("Backward: \n");
-        Real space_fxmh = this->F.evaluate_f(lambda::make_pair(x(0)-h, x(1)));
-        Real time_fxmh = this->F.evaluate_f(lambda::make_pair(x(0), x(1)-h));
+        Real space_fxmh = 21;//this->F.evaluate_f(lambda::make_pair(x(0)-h, x(1)));
+        Real time_fxmh = 21;//this->F.evaluate_f(lambda::make_pair(x(0), x(1)-h));
         // Rprintf("Center: \n");
-        Real fx  = this->F.evaluate_f(x); //space_fx = time_fx (no h movements)
+        Real fx  = 21;//this->F.evaluate_f(x); //space_fx = time_fx (no h movements)
 
-        Real space_fpx = (space_fxph-space_fxmh)/(2*h);
-        Real time_fpx = (time_fxph-time_fxmh)/(2*h);
+        Real space_fpx = 21;//(space_fxph-space_fxmh)/(2*h);
+        Real time_fpx = 21;//(time_fxph-time_fxmh)/(2*h);
        	lambda::type<2> fpx = lambda::make_pair(space_fpx, time_fpx);
         // Rprintf("fp(x): %f\n", fpx);
 
-        Real space_fsx = (space_fxph+space_fxmh-(2*fx))/(h*h);
-        Real time_fsx = (time_fxph+time_fxmh-(2*fx))/(h*h);
+        Real space_fsx = 21;//(space_fxph+space_fxmh-(2*fx))/(h*h);
+        Real time_fsx = 21;//(time_fxph+time_fxmh-(2*fx))/(h*h);
         //https://scicomp.stackexchange.com/questions/11294/2nd-order-centered-finite-difference-approximation-of-u-xy
+        Rprintf("Inizio a calcolare la derivata mista fd\n");
         Real mixed_fsx = (this->F.evaluate_f(lambda::make_pair(x(0)+h, x(1)+h))-
         		this->F.evaluate_f(lambda::make_pair(x(0)+h, x(1)-h))-
-        		this->F.evaluate_f(lambda::make_pair(x(0)-h, x(1)+h))-
+        		this->F.evaluate_f(lambda::make_pair(x(0)-h, x(1)+h))+
         		this->F.evaluate_f(lambda::make_pair(x(0)-h, x(1)-h)))/(4*h*h);
         MatrixXr fsx(2,2);
         fsx(0,0) = space_fsx; fsx(0,1) = mixed_fsx;
@@ -339,9 +330,8 @@ std::pair<lambda::type<2>, UInt> Newton_fd<lambda::type<2>, MatrixXr, Extensions
         
         Rprintf("x=(%f,%f)\nfx=%f\ndfx=(%f,%f)\nddfx(%f,%f,%f)\n",
         	x(0), x(1), fx, space_fpx, time_fpx, space_fsx, time_fsx, mixed_fsx);
-        lambda::type<2> prima = this->F.evaluate_first_derivative(x);
-        Rprintf("exact\tdfx=(%f,%f)\n\n\n",
-        	prima(0), prima(1));
+        //lambda::type<2> prima = this->F.evaluate_first_derivative(x);
+        //Rprintf("exact\tdfx=(%f,%f)\n\n\n", prima(0), prima(1));
         MatrixXr seconda = this->F.evaluate_second_derivative(x);
 	Rprintf("exact\tddfx(%f,%f,%f)\n\n\n", seconda.coeff(0,0), seconda.coeff(1,1), seconda.coeff(0,1));
         	
