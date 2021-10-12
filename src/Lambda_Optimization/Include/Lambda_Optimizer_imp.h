@@ -371,6 +371,10 @@ void GCV_Exact<InputCarrier, 1>::set_iter_trS_(Real lambdaS)
                 }
 */
 
+	Rprintf("R(0,0)=%f, R(0,1)=%f\nR(1,0)=%f, R(1,1)=%f\n",
+		this->R_.coeff(0,0), this->R_.coeff(0,1),
+		this->R_.coeff(1,0), this->R_.coeff(1,1));
+
         const SpMat * psi_ = this->the_carrier.get_psip();
         UInt M_ = this->the_carrier.get_model()->getM_();
         UInt N_ = this->the_carrier.get_model()->getN_();
@@ -382,11 +386,19 @@ void GCV_Exact<InputCarrier, 1>::set_iter_trS_(Real lambdaS)
                 X1 = QPsi_big.block(k*nlocations,k*nlocations,nlocations,nlocations);
 
                 UInt ret = AuxiliaryOptimizer::universal_b_setter_iter(X1, this->the_carrier, QPsi_big, N_, k);
-
+		
                 MatrixXr X3 = X1;
+                Rprintf("X3(0,0)=%f, X3(0,1)=%f\nX3(1,0)=%f, X3(1,1)=%f\n",
+		X3.coeff(0,0), X3.coeff(0,1),
+		X3.coeff(1,0), X3.coeff(1,1));
                 //define the penalization matrix:
                 //  P = lambdaS * (psi_mini*R_*psi_mini.transpose());
-                MatrixXr P = lambdaS * this->R_;
+                
+                //qui è stato messo un meno che nella versione precednte/originale non c'era
+                MatrixXr P = -lambdaS * this->R_;
+                Rprintf("P(0,0)=%f, P(0,1)=%f\nP(1,0)=%f, P(1,1)=%f\n",
+		P.coeff(0,0), P.coeff(0,1),
+		P.coeff(1,0), P.coeff(1,1));
 
                 //impose dirichlet boundary conditions if needed
 
@@ -403,11 +415,19 @@ void GCV_Exact<InputCarrier, 1>::set_iter_trS_(Real lambdaS)
                 }
 
                 X3 -= P;
+                
+                Rprintf("X3_post(0,0)=%f, X3_post(0,1)=%f\nX3_post(1,0)=%f, X3_post(1,1)=%f\n",
+		X3.coeff(0,0), X3.coeff(0,1),
+		X3.coeff(1,0), X3.coeff(1,1));
 
                 Eigen::PartialPivLU <MatrixXr> Dsolver(X3);
 
                 // Solve the system TX = B
                 MatrixXr X = Dsolver.solve(X1);
+                
+                Rprintf("X(0,0)=%f, X(0,1)=%f\nX(1,0)=%f, X(1,1)=%f\n",
+		X.coeff(0,0), X.coeff(0,1),
+		X.coeff(1,0), X.coeff(1,1));
 
                 // Compute trace(X(k,:))
                 for (UInt i = 0; i < N_; ++i)

@@ -385,8 +385,6 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
       search = search, bary.locations = bary.locations,
       optim = optim, lambdaS = lambdaS, lambdaT = lambdaT, DOF.stochastic.realizations = DOF.stochastic.realizations, DOF.stochastic.seed = DOF.stochastic.seed, DOF.matrix = DOF.matrix, GCV.inflation.factor = GCV.inflation.factor, lambda.optimization.tolerance = lambda.optimization.tolerance)
   }
-  cat("Guardiamo bigsol")
-  View(bigsol)
   cat("Qui ci arrivo A")
   # ---------- Solution -----------
   N = nrow(FEMbasis$mesh$nodes)
