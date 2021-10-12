@@ -222,7 +222,15 @@ class GCV_Exact<InputCarrier, 1>: public GCV_Family<InputCarrier, 1>
                 GCV_Exact<InputCarrier, 1>(InputCarrier & the_carrier_, Real lambdaT_):
                         GCV_Family<InputCarrier, 1>(the_carrier_)
                         {
-                                this->set_R_(lambdaT_);
+                        	/*
+					This is the constructor for the parabolic spatio-temporal case.
+					In the iterative case, the R setter is the same as for the space-only
+					problem. In the monolithic solution, we have an ad-hoc setter
+				*/
+				if(the_carrier_.get_model()->isIter())
+					this->set_R_();
+				else
+					this->set_R_(lambdaT_);
                         }
 
                 // PUBLIC UPDATERS

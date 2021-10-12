@@ -54,7 +54,7 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
 
                 return 0;
         }
-// Parabolic case overload
+// Parabolic and monolithic case overload
 template<typename InputCarrier>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>,t_type>::value, UInt>::type
         AuxiliaryOptimizer::universal_R_setter(MatrixXr & R, const InputCarrier & carrier, AuxiliaryData<InputCarrier> & adt, Real lambdaT)
@@ -72,7 +72,7 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
                 return 0;
         }
 
-// Parabolic case overload
+// Parabolic and monolithic case overload
 template<typename InputCarrier>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>,f_type>::value, UInt>::type
         AuxiliaryOptimizer::universal_R_setter(MatrixXr & R, const InputCarrier & carrier, AuxiliaryData<InputCarrier> & adt, Real lambdaT)
