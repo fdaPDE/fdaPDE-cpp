@@ -361,8 +361,7 @@ void GCV_Exact<InputCarrier, 1>::set_iter_trS_(Real lambdaS)
         UInt M_ = this->the_carrier.get_model()->getM_();
         UInt N_ = this->the_carrier.get_model()->getN_();
         MatrixXr QPsi_big = this->the_carrier.lmbQ(*psi_);
-        MatrixXr X1;
-
+        MatrixXr X1 = MatrixXr::Zero(N_, N_);
         for(UInt k=0; k<M_; k++)
         {
                 UInt ret = AuxiliaryOptimizer::universal_b_setter_iter(X1, this->the_carrier, QPsi_big, N_, k, false);

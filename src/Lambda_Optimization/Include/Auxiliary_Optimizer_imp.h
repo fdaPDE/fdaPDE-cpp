@@ -383,8 +383,8 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, Inpu
         AuxiliaryOptimizer::universal_b_setter_iter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & Qu, const UInt N_, const UInt k, bool flag_stochastic)
         {
                 UInt dim = carrier.get_n_regions();
-                if(!flag_stochastic)
-                        b = MatrixXr(dim, N_);
+                //if(!flag_stochastic)
+                //        b = MatrixXr(dim, N_);
                 SpMat psi_mini = (*carrier.get_psip()).block(k * dim, k* N_, dim, N_);
                 VectorXr miniA_  = (*carrier.get_Ap()).segment(0, dim);	 //// start from k?????? (k*dim, dim)	
 		b.topRows(N_) =  psi_mini.transpose()*(miniA_.asDiagonal() * 
@@ -399,8 +399,8 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, Inpu
                 Rprintf("univ_b_A");
                 UInt dim = carrier.get_n_space_obs();
                 Rprintf("univ_b_B");
-                if(!flag_stochastic)
-                        b = MatrixXr(dim, N_);  //exact
+                //if(!flag_stochastic)
+                 //       b = MatrixXr(dim, N_);  //exact
                 Rprintf("univ_b_C");
  
 		SpMat psi_mini = (*carrier.get_psip()).block(k * dim, k* N_, dim, N_);
