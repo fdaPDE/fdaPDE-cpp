@@ -357,24 +357,6 @@ void GCV_Exact<InputCarrier, 1>::set_iter_trS_(Real lambdaS)
         this->trS_ = 0.0;
         UInt nlocations = this->the_carrier.get_n_space_obs();
 
-/*
-    if (isRcomputed_ == false)
-                {
-                        isRcomputed_ = true;
-                        SpMat R0;
-                        //take R0 from the final matrix since it has already applied the dirichlet boundary conditions
-                        R0 = matrixNoCov_.bottomRightCorner(N_, N_) / lambdaS;
-                        Eigen::SparseLU<SpMat> R0dec_;
-                        R0dec_.compute(R0);
-                        MatrixXr X2 = R0dec_.solve(R1_);
-                        R_ = R1_.transpose() * X2;
-                }
-*/
-
-	Rprintf("R(0,0)=%f, R(0,1)=%f\nR(1,0)=%f, R(1,1)=%f\n",
-		this->R_.coeff(0,0), this->R_.coeff(0,1),
-		this->R_.coeff(1,0), this->R_.coeff(1,1));
-
         const SpMat * psi_ = this->the_carrier.get_psip();
         UInt M_ = this->the_carrier.get_model()->getM_();
         UInt N_ = this->the_carrier.get_model()->getN_();
@@ -383,9 +365,7 @@ void GCV_Exact<InputCarrier, 1>::set_iter_trS_(Real lambdaS)
 
         for(UInt k=0; k<M_; k++)
         {
-                X1 = QPsi_big.block(k*nlocations,k*nlocations,nlocations,nlocations);
-
-                UInt ret = AuxiliaryOptimizer::universal_b_setter_iter(X1, this->the_carrier, QPsi_big, N_, k);
+                UInt ret = AuxiliaryOptimizer::universal_b_setter_iter(X1, this->the_carrier, QPsi_big, N_, k, false);
 		
                 MatrixXr X3 = X1;
                 Rprintf("X3(0,0)=%f, X3(0,1)=%f\nX3(1,0)=%f, X3(1,1)=%f\n",
@@ -430,9 +410,12 @@ void GCV_Exact<InputCarrier, 1>::set_iter_trS_(Real lambdaS)
 		X.coeff(1,0), X.coeff(1,1));
 
                 // Compute trace(X(k,:))
+                Rprintf("x.cols = %d, N = %d \n", X.cols(), N_);
                 for (UInt i = 0; i < N_; ++i)
                         this->trS_ += X(i, i);
+                Rprintf("set_iter partial trs=%f\n", this->trS_);
         }
+        Rprintf("set_iter trs=%f\n", this->trS_);
 }
 
 //! Method to set the value of member dS_ and its trace trdS_, also computes utility matrix K_
@@ -609,12 +592,21 @@ template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 1>::compute_z_hat(lambda::type<1> lambda)
 {
         UInt ret;
-        if (this->the_carrier.get_bc_indicesp()->size()==0)
+        if (this->the_carrier.get_bc_indicesp()->size()==0 && !this->the_carrier.get_flagParabolic())
+        {
+                Rprintf("compute_z_hat entra nell'if  A ****\n");
                 ret = AuxiliaryOptimizer::universal_z_hat_setter<InputCarrier>(this->z_hat, this->the_carrier, this->S_, this->adt, lambda);
+        }
         else {
+                Rprintf("compute_z_hat entra nell'if  B ****\n");
 
                 const UInt nnodes    = this->the_carrier.get_n_nodes();
-                const VectorXr f_hat = VectorXr(this->the_carrier.apply(lambda)).head(nnodes);
+
+                VectorXr f_hat;
+                if(this->the_carrier.get_flagParabolic())
+                        f_hat = VectorXr(this->the_carrier.apply(lambda::make_pair(lambda, this->lambdaT))).head(nnodes);
+                else
+                        f_hat = VectorXr(this->the_carrier.apply(lambda)).head(nnodes);
 
                 // Compute the predicted values in the locations from the f_hat
                 this->compute_z_hat_from_f_hat(f_hat);
@@ -662,6 +654,7 @@ void GCV_Exact<InputCarrier, 1>::update_dof(lambda::type<1> lambda)
 {
         // dof = tr(S) + #covariates
 	this->dof = this->trS_;
+        Rprintf("update_dofs: dof=%f\n", this->dof);
 
         if(this->the_carrier.has_W()) // add number of covariates, if present
                 this->dof += (*this->the_carrier.get_Wp()).cols();
@@ -733,7 +726,8 @@ template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 1>::update_matrices(lambda::type<1> lambda)
 {
         //Rprintf("GCV_Exact<InputCarrier, 1>::update_matrices\n");
-        if(this->the_carrier.get_flagParabolic() && !this->the_carrier.get_model()->isIter())
+        if(!this->the_carrier.get_flagParabolic() || 
+                (this->the_carrier.get_flagParabolic() && !this->the_carrier.get_model()->isIter()))
         {
                 this->set_T_(lambda); 
                 this->set_V_();
@@ -848,7 +842,9 @@ Real GCV_Exact<InputCarrier, 1>::compute_f(lambda::type<1> lambda)
         // call external updater to update [if needed] the parameters for gcv calculus
         this->gu.call_to(0, lambda, this);
 
-        // compute the value of the gcv
+        Rprintf("compute_f: sigma_hat_sq = %f, s = %d, dor = %f", this->sigma_hat_sq, this->s, this->dor);
+
+        // compute the value of the GCV
         Real GCV_val =
                 AuxiliaryOptimizer::universal_GCV<InputCarrier>(this->s, this->sigma_hat_sq, this->dor);
 
@@ -1092,7 +1088,7 @@ void GCV_Stochastic<InputCarrier, size>::update_dof(lambda::type<size> lambda)
 					//psi_mini.coeff(0,0),psi_mini.coeff(0,1),psi_mini.coeff(1,0),psi_mini.coeff(1,1));
 				// Define the first right hand side : | I  0 |^T * psi^T * A * Q * u
 				this->b = MatrixXr::Zero(2*N_, this->US_.cols());
-				UInt ret = AuxiliaryOptimizer::universal_b_setter_iter(this->b, this->the_carrier, QU_big_, N_, k);
+				UInt ret = AuxiliaryOptimizer::universal_b_setter_iter(this->b, this->the_carrier, QU_big_, N_, k, true);
 				
 				//Rprintf("b(0)=%f, b(1)=%f, b(2*N_-2)=%f, b(2*N_-1)=%f\n",
 					//this->b(0), this->b(1), this->b(2*N_-2), this->b(2*N_-1));

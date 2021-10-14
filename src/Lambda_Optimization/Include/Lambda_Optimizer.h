@@ -175,6 +175,7 @@ class GCV_Exact<InputCarrier, 1>: public GCV_Family<InputCarrier, 1>
                 Real      trdS_ = 0.0;  //!< stores the value of the trace of dS
                 MatrixXr  ddS_;         //!< stores the second derivative of S w.r.t. lambda [size s x s]
                 Real      trddS_ = 0.0; //!< stores the value of the trace of ddS
+                Real      lambdaT = -1; //!< stores the lambdaT for parabolic case
 
                 //! Additional utility matrices [just the ones for the specific carrier that is proper of the problem]
                 AuxiliaryData<InputCarrier> adt;
@@ -231,6 +232,7 @@ class GCV_Exact<InputCarrier, 1>: public GCV_Family<InputCarrier, 1>
 					this->set_R_();
 				else
 					this->set_R_(lambdaT_);
+                                this->lambdaT = lambdaT_;
                         }
 
                 // PUBLIC UPDATERS

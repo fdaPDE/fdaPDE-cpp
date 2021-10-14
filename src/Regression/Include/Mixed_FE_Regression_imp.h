@@ -1423,6 +1423,7 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply(void)
 //Iterative method for Space-Time problems
 template<typename InputHandler>
 MatrixXv  MixedFERegressionBase<InputHandler>::apply_iterative(void) {
+	Rprintf("Entra nell'apply_iter\n");
     UInt nnodes = N_ * M_; // Define number of space-times nodes
     Real delta = mesh_time_[1] - mesh_time_[0]; // Time interval
     const VectorXr *obsp = regressionData_.getObservations(); // Get observations
@@ -1473,6 +1474,7 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply_iterative(void) {
                 lambdaS = (optimizationData_.get_lambda_S())[s];
                 lambdaT = (optimizationData_.get_lambda_T())[t];
             }
+            Rprintf("lambdas = %e, lambdat = %e\n", lambdaS, lambdaT);
 
             _rightHandSide = rhs;
             for (UInt i = 0; i < regressionData_.getInitialValues()->rows(); i++)  // p

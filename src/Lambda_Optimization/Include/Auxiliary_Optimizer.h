@@ -282,27 +282,29 @@ struct AuxiliaryOptimizer
         /*!
          \param b a reference to the MatrixXr to be computed
          \param carrier the Carrier-type object containing the data
-         \param Qu Q times: -psi (in exact case) -a stochastic matrix US used for purpose of computing stochastic dofs (in stochastic case)         \param nlocations number of space observations
+         \param Qu Q times: -psi (in exact case) -a stochastic matrix US used for purpose of computing stochastic dofs (in stochastic case)
          \param N_ number of spatial basis functions
          \param k time index
+         \param flag_stochastic bool to distinguish between exact and stochastic
          \return an integer signaling the correct ending of the process
         */
         template<typename InputCarrier>
         static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>, t_type>::value, UInt>::type
-                universal_b_setter_iter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & Qu, const UInt N_, const UInt k);
+                universal_b_setter_iter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & Qu, const UInt N_, const UInt k, const bool flag_stochastic);
 
         //! SFINAE based method to compute right hand term for stochastic (iterative) dof evaluation, pointwise type
         /*!
          \param b a reference to the MatrixXr to be computed
          \param carrier the Carrier-type object containing the data
-         \param Qu Q times: -psi (in exact case) -a stochastic matrix US used for purpose of computing stochastic dofs (in stochastic case)         \param nlocations number of space observations
+         \param Qu Q times: -psi (in exact case) -a stochastic matrix US used for purpose of computing stochastic dofs (in stochastic case)
          \param N_ number of spatial basis functions
          \param k time index
+         \param flag_stochastic bool to distinguish between exact and stochastic
          \return an integer signaling the correct ending of the process
         */
         template<typename InputCarrier>
         static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>, f_type>::value, UInt>::type
-                universal_b_setter_iter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & Qu, const UInt N_, const UInt k);
+                universal_b_setter_iter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & Qu, const UInt N_, const UInt k, const bool flag_stochastic);
                 
 	template<typename InputCarrier>
 	static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>,t_type>::value, UInt>::type

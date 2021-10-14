@@ -380,23 +380,36 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, Inpu
 
 template<typename InputCarrier>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>,t_type>::value, UInt>::type
-        AuxiliaryOptimizer::universal_b_setter_iter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & Qu, const UInt N_, const UInt k)
+        AuxiliaryOptimizer::universal_b_setter_iter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & Qu, const UInt N_, const UInt k, bool flag_stochastic)
         {
                 UInt dim = carrier.get_n_regions();
+                if(!flag_stochastic)
+                        b = MatrixXr(dim, N_);
                 SpMat psi_mini = (*carrier.get_psip()).block(k * dim, k* N_, dim, N_);
-                VectorXr miniA_  = (*carrier.get_Ap()).segment(0, dim);		
-		b.topRows(N_) =  psi_mini.transpose()*(miniA_.asDiagonal() * Qu.block(k*dim,0,dim,Qu.cols()));
+                VectorXr miniA_  = (*carrier.get_Ap()).segment(0, dim);	 //// start from k?????? (k*dim, dim)	
+		b.topRows(N_) =  psi_mini.transpose()*(miniA_.asDiagonal() * 
+                        (flag_stochastic ? Qu.block(k*dim,0,dim,Qu.cols()) : Qu.block(k*dim,k*N_,dim,N_)));
                 return 0;
         }
 
 template<typename InputCarrier>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>,f_type>::value, UInt>::type
-        AuxiliaryOptimizer::universal_b_setter_iter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & Qu, const UInt N_, const UInt k)
+        AuxiliaryOptimizer::universal_b_setter_iter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & Qu, const UInt N_, const UInt k, bool flag_stochastic)
         {
+                Rprintf("univ_b_A");
                 UInt dim = carrier.get_n_space_obs();
+                Rprintf("univ_b_B");
+                if(!flag_stochastic)
+                        b = MatrixXr(dim, N_);  //exact
+                Rprintf("univ_b_C");
  
 		SpMat psi_mini = (*carrier.get_psip()).block(k * dim, k* N_, dim, N_);
-		b.topRows(N_) = psi_mini.transpose()* Qu.block(k*dim,0,dim,Qu.cols());
+                Rprintf("univ_b_D");
+
+		b.topRows(N_) = psi_mini.transpose()* 
+                        (flag_stochastic ? Qu.block(k*dim,0,dim,Qu.cols()) : Qu.block(k*dim,k*N_,dim,N_));
+                Rprintf("univ_b_fine");
+
 
                 return 0;
         }
