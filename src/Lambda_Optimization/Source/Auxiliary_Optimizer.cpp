@@ -16,7 +16,7 @@ void AuxiliaryOptimizer::bc_utility(MatrixXr & mat, const std::vector<UInt> * bc
         	(length of time mesh) times the number of spaces. We apply only the
         	first (number of spaces) boundary conditions to the reduced matrix.
 	*/
-        UInt nbc_indices = (bc_idxp->size() == 0) ? 0 : mat.rows();
+        UInt nbc_indices = (bc_idxp->size() < mat.rows()) ? bc_idxp->size() : mat.rows();
         if(nbc_indices!=0) // Add boundary conditions
         {
                 Real pen = 10e20;
@@ -38,7 +38,7 @@ void AuxiliaryOptimizer::bc_utility(MatrixXr & mat, const std::vector<UInt> * bc
 void AuxiliaryOptimizer::bc_utility(SpMat & mat, const std::vector<UInt> * bc_idxp)
 {
 	//see comment on the function overload above
-        UInt nbc_indices = (bc_idxp->size() == 0) ? 0 : mat.rows();
+        UInt nbc_indices = (bc_idxp->size() < mat.rows()) ? bc_idxp->size() : mat.rows();
         if(nbc_indices!=0) // Add boundary conditions
         {
                 Real pen = 10e20;
