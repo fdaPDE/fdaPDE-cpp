@@ -96,7 +96,7 @@ CPP_smooth.manifold.FEM.time<-function(locations, time_locations, observations, 
   storage.mode(FLAG_MASS) <-"integer"
   FLAG_PARABOLIC <- as.integer(FLAG_PARABOLIC)
   storage.mode(FLAG_PARABOLIC) <-"integer"
-  FLAG_PARABOLIC <- as.integer(FLAG_ITERATIVE)
+  FLAG_ITERATIVE <- as.integer(FLAG_ITERATIVE)
   storage.mode(FLAG_ITERATIVE) <-"integer"
   storage.mode(max.steps) <- "integer"
   storage.mode(threshold) <- "double"
