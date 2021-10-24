@@ -84,8 +84,8 @@ struct AuxiliaryData<InputCarrier, typename std::enable_if<std::is_same<multi_bo
 */
 struct AuxiliaryOptimizer
 {
-        static void bc_utility(MatrixXr & mat, const std::vector<UInt> * bc_idxp);
-        static void bc_utility(SpMat & mat, const std::vector<UInt> * bc_idxp);
+        static void bc_utility(MatrixXr & mat, const std::vector<UInt> * bc_idxp, bool flag_iterative, UInt M);
+        static void bc_utility(SpMat & mat, const std::vector<UInt> * bc_idxp, bool flag_iterative, UInt M);
         /* -------------------------------------------------------------------*/
 
         //! SFINAE based method to compute matrix R in case of Forced problem

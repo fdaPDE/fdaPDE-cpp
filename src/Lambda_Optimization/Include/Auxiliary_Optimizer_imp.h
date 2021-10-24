@@ -32,11 +32,14 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
         {
                 SpMat  R1p_= *carrier.get_R1p();         // Get the value of matrix R1
                 const std::vector<UInt> * bc_indices = carrier.get_bc_indicesp();
-                AuxiliaryOptimizer::bc_utility(R1p_, bc_indices);
+                AuxiliaryOptimizer::bc_utility(R1p_, bc_indices, carrier.get_model()->isIter(), carrier.get_model()->getM_());
 
                 Eigen::SparseLU<SpMat> factorized_R0p(*(carrier.get_R0p()));
                 R = (R1p_).transpose()*factorized_R0p.solve(R1p_);     // R == _R1^t*R0^{-1}*R1
-                adt.f_ = ((R1p_).transpose())*factorized_R0p.solve((*carrier.get_up()));
+                if(carrier.get_model()->isIter())
+                	adt.f_ = ((R1p_).transpose())*factorized_R0p.solve((*carrier.get_up()).block(0,0,R1p_.rows(),1));
+                else
+                	adt.f_ = ((R1p_).transpose())*factorized_R0p.solve((*carrier.get_up()));
 
                 return 0;
         }
@@ -47,7 +50,7 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
         {
                 SpMat  R1p_= *carrier.get_R1p();         // Get the value of matrix R1
                 const std::vector<UInt> * bc_indices = carrier.get_bc_indicesp();
-                AuxiliaryOptimizer::bc_utility(R1p_, bc_indices);
+                AuxiliaryOptimizer::bc_utility(R1p_, bc_indices, carrier.get_model()->isIter(), carrier.get_model()->getM_());
                 
                 Eigen::SparseLU<SpMat>factorized_R0p(*(carrier.get_R0p()));
                 R = (R1p_).transpose()*factorized_R0p.solve(R1p_);     // R == _R1^t*R0^{-1}*R1
@@ -63,11 +66,14 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
                 SpMat  LR0kp_= *carrier.get_LR0kp();     // Get the value of matrix LR0k
                 R1p_ += lambdaT * LR0kp_;
                 const std::vector<UInt> * bc_indices = carrier.get_bc_indicesp();
-                AuxiliaryOptimizer::bc_utility(R1p_, bc_indices);
+                AuxiliaryOptimizer::bc_utility(R1p_, bc_indices, carrier.get_model()->isIter(), carrier.get_model()->getM_());
 
                 Eigen::SparseLU<SpMat> factorized_R0p(*(carrier.get_R0p()));
                 R = (R1p_).transpose()*factorized_R0p.solve(R1p_);     // R == _R1^t*R0^{-1}*R1
-                adt.f_ = ((R1p_).transpose())*factorized_R0p.solve((*carrier.get_up()));
+                if(carrier.get_model()->isIter())
+                	adt.f_ = ((R1p_).transpose())*factorized_R0p.solve((*carrier.get_up()).block(0,0,R1p_.rows(),1));
+                else
+                	adt.f_ = ((R1p_).transpose())*factorized_R0p.solve((*carrier.get_up()));
 
                 return 0;
         }
@@ -81,7 +87,7 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
                 SpMat  LR0kp_= *carrier.get_LR0kp();     // Get the value of matrix LR0k
                 R1p_ += lambdaT * LR0kp_;
                 const std::vector<UInt> * bc_indices = carrier.get_bc_indicesp();
-                AuxiliaryOptimizer::bc_utility(R1p_, bc_indices);
+                AuxiliaryOptimizer::bc_utility(R1p_, bc_indices, carrier.get_model()->isIter(), carrier.get_model()->getM_());
 
                 Eigen::SparseLU<SpMat>factorized_R0p(*(carrier.get_R0p()));
                 R = (R1p_).transpose()*factorized_R0p.solve(R1p_);     // R == _R1^t*R0^{-1}*R1
@@ -99,7 +105,7 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, Inpu
                 const std::vector<UInt> * bc_idxp = carrier.get_bc_indicesp();
 
                 MatrixXr aux = (*psi_tp)*(*Ap).asDiagonal()*carrier.lmbQ(*psip);
-                AuxiliaryOptimizer::bc_utility(aux, bc_idxp);
+                AuxiliaryOptimizer::bc_utility(aux, bc_idxp, carrier.get_model()->isIter(), carrier.get_model()->getM_());
                 T += aux; // Add correction
 
                 return 0;
@@ -114,7 +120,7 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, Inpu
                 const std::vector<UInt> * bc_idxp = carrier.get_bc_indicesp();
 
                 MatrixXr aux = (*psi_tp)*carrier.lmbQ(*psip);
-                AuxiliaryOptimizer::bc_utility(aux, bc_idxp);
+                AuxiliaryOptimizer::bc_utility(aux, bc_idxp, carrier.get_model()->isIter(), carrier.get_model()->getM_());
                 T += aux; // Add correction
 
                 return 0;
