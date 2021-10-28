@@ -26,11 +26,10 @@ std::pair<Tuple, UInt> Newton_ex<Tuple, Hessian, Extensions...>::compute (const 
        // Debugging purpose
        // Rprintf("\n Starting Initializing lambda phase\n");
 
-       
+       /*
        if(pre_opt){
                 Rprintf("Sto facendo pre_opt\n");
-                /* Start from 6 lambda and find the minimum value of GCV to start from it the newton's method*/
-                /*
+                // Start from 6 lambda and find the minimum value of GCV to start from it the newton's method
                 Real valmin, valcur, lambda_min;
                 UInt Nm = 6;
                 std::vector<Real> vals={5.000000e-05, 1.442700e-03, 4.162766e-02, 1.201124e+00, 3.465724e+01, 1.000000e+03};
@@ -50,8 +49,9 @@ std::pair<Tuple, UInt> Newton_ex<Tuple, Hessian, Extensions...>::compute (const 
                 {
                        x = lambda_min/8;
                 }
-                */
+                
         }
+        */
 
 
        Rprintf("\n Starting Newton's iterations: starting point lambda=%f\n",x);
@@ -141,10 +141,11 @@ std::pair<lambda::type<1>, UInt> Newton_fd<lambda::type<1>, Real, Extensions...>
         Real error  = std::numeric_limits<Real>::infinity();
         Real h      = 4e-8; //passo modificato
 
+        /*
         if(pre_opt){
                 Rprintf("Sto facendo pre_opt\n");
                 // Debugging purpose
-                // Rprintf("\n Starting Initializing lambda phase"); /*! Start from 6 lambda and find the minimum value of GCV to start from it the newton's method*/
+                // Rprintf("\n Starting Initializing lambda phase"); //! Start from 6 lambda and find the minimum value of GCV to start from it the newton's method
                 Real valmin, valcur, lambda_min;
                 std::vector<Real> vals = {1.442700e-04, 3.465724e+01};
                 UInt Nm = vals.size();
@@ -173,6 +174,7 @@ std::pair<lambda::type<1>, UInt> Newton_fd<lambda::type<1>, Real, Extensions...>
                         x = lambda_min/8;
                 }
         }
+        */
         Rprintf("\n Starting Newton's iterations: starting point lambda=%e\n",x);
 
         // Only the first time applied here

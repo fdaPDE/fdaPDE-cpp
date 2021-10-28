@@ -196,22 +196,36 @@ typename std::enable_if<size==1, std::pair<MatrixXr, output_Data<1>>>::type
 		std::unique_ptr<Opt_methods<Real,Real,EvaluationType>> optim_p =
 			Opt_method_factory<Real, Real, EvaluationType>::create_Opt_method(optr->get_criterion(), Fun);
 
-                // Compute optimal lambda
+        // Choose initial lambdaS with grid
+		Real lambdaS_init = optr->get_initial_lambda_S();   // first value of lambdaS sequence
+
+		/* // unuseful
+		if(lambdaS_init<=0)
+			lambdaS_init = -1.0;
+		*/
+
+		std::vector<Real> lambdaS_grid = {5.000000e-05, 1.442700e-03, 4.162766e-02, 1.201124e+00, 3.465724e+01, 1.000000e+03};
+			// Start from 6 lambda and find the minimum value of GCV to start from it the newton's method
+
+		//std::vector<Real> lambdaS_grid = {1.442700e-03, 1.201124e+00};
+
+		Eval_GCV<Real, Real, EvaluationType> eval(Fun, lambdaS_grid);
+		output_Data<1> out = eval.Get_optimization_vectorial();
+
+		if (lambdaS_init>out.lambda_sol/4 || lambdaS_init<=0)
+			lambdaS_init = out.lambda_sol/8;
+
 		Checker ch;
 		std::vector<Real> lambda_v_;
 		std::vector<Real> GCV_v_;
-		Real lambda = optr->get_initial_lambda_S();
-
-		if(lambda<=0)
-		{
-			lambda = -1.0;
-		}
+		
 
 		timer Time_partial; // Of the sole optimization
 		Time_partial.start();
 		// Rprintf("WARNING: start taking time\n");
 
-		std::pair<Real, UInt> lambda_couple = optim_p->compute(lambda, optr->get_stopping_criterion_tol(), 40, ch, GCV_v_, lambda_v_, true);
+		// Compute optimal lambda
+		std::pair<Real, UInt> lambda_couple = optim_p->compute(lambdaS_init, optr->get_stopping_criterion_tol(), 40, ch, GCV_v_, lambda_v_, false);
 
 		//Rprintf("WARNING: partial time after the optimization method\n");
 		timespec T = Time_partial.stop();
