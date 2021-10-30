@@ -339,14 +339,27 @@ optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 				lambda::type<2> lambda = lambda::make_pair(vals[i], vals[j]);
 				lambda_vec.push_back(lambda);
 			}
-		
-		Eval_GCV<lambda::type<2>, MatrixXr, EvaluationType> eval(Fun, lambda_vec);
-		output_Data<2> out = eval.Get_optimization_vectorial();
 
-        if (lambda_init(0)>out.lambda_sol(0)/4 || lambda_init(0)<=0)
-            lambda_init(0) = out.lambda_sol(0)/8;
-        if (lambda_init(1)>out.lambda_sol(1)/4 || lambda_init(1)<=0)
-            lambda_init(1) = out.lambda_sol(1)/8;
+		UInt dim = lambda_vec.size();
+        lambda::type<2> lambda_min;
+        Real GCV_min = -1.0;
+
+        for (UInt i=0; i<dim; i++)
+        {
+                Rprintf("Grid: evaluating %d/%d\n", i+1, dim);
+                Real evaluation = Fun.evaluate_f(lambda_vec[i]); //only scalar functions;
+
+                if (evaluation<GCV_min || i==0)
+                {
+              		GCV_min = evaluation;
+              		lambda_min = lambda_vec[i];
+                }
+        }
+
+        if (lambda_init(0)>lambda_min(0)/4 || lambda_init(0)<=0)
+            lambda_init(0) = lambda_min(0)/8;
+        if (lambda_init(1)>lambda_min(1)/4 || lambda_init(1)<=0)
+            lambda_init(1) = lambda_min(1)/8;
 
 
 		// Compute optimal lambda
@@ -358,7 +371,7 @@ optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 		Time_partial.start();
 		// Rprintf("WARNING: start taking time\n");
 
-		std::pair<lambda::type<2>, UInt> lambda_couple = optim_p->compute(lambda_init, optr->get_stopping_criterion_tol(), 40, ch, GCV_v_, lambda_v_, false);
+		std::pair<lambda::type<2>, UInt> lambda_couple = optim_p->compute(lambda_init, optr->get_stopping_criterion_tol(), 40, ch, GCV_v_, lambda_v_);
 
 		//Rprintf("WARNING: partial time after the optimization method\n");
 		timespec T = Time_partial.stop();

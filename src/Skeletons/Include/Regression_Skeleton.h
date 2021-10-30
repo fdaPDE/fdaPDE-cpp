@@ -199,21 +199,31 @@ typename std::enable_if<size==1, std::pair<MatrixXr, output_Data<1>>>::type
         // Choose initial lambdaS with grid
 		Real lambdaS_init = optr->get_initial_lambda_S();   // first value of lambdaS sequence
 
-		/* // unuseful
-		if(lambdaS_init<=0)
-			lambdaS_init = -1.0;
-		*/
-
 		std::vector<Real> lambdaS_grid = {5.000000e-05, 1.442700e-03, 4.162766e-02, 1.201124e+00, 3.465724e+01, 1.000000e+03};
 			// Start from 6 lambda and find the minimum value of GCV to start from it the newton's method
-
-		//std::vector<Real> lambdaS_grid = {1.442700e-03, 1.201124e+00};
 
 		Eval_GCV<Real, Real, EvaluationType> eval(Fun, lambdaS_grid);
 		output_Data<1> out = eval.Get_optimization_vectorial();
 
-		if (lambdaS_init>out.lambda_sol/4 || lambdaS_init<=0)
-			lambdaS_init = out.lambda_sol/8;
+		UInt dim = lambdaS_grid.size();
+        Real lambdaS_min;
+        Real GCV_min = -1.0;
+
+        for (UInt i=0; i<dim; i++)
+        {
+                Rprintf("Grid: evaluating %d/%d\n", i+1, dim);
+                Real evaluation = Fun.evaluate_f(lambdaS_grid[i]); //only scalar functions;
+
+                if (evaluation<GCV_min || i==0)
+                {
+              		GCV_min = evaluation;
+              		lambdaS_min = lambdaS_grid[i];
+                }
+        }
+
+		// If lambdaS_init <= 0, use the one from grid
+		if (lambdaS_init>lambdaS_min/4 || lambdaS_init<=0)
+			lambdaS_init = lambdaS_min/8;
 
 		Checker ch;
 		std::vector<Real> lambda_v_;
@@ -225,7 +235,7 @@ typename std::enable_if<size==1, std::pair<MatrixXr, output_Data<1>>>::type
 		// Rprintf("WARNING: start taking time\n");
 
 		// Compute optimal lambda
-		std::pair<Real, UInt> lambda_couple = optim_p->compute(lambdaS_init, optr->get_stopping_criterion_tol(), 40, ch, GCV_v_, lambda_v_, false);
+		std::pair<Real, UInt> lambda_couple = optim_p->compute(lambdaS_init, optr->get_stopping_criterion_tol(), 40, ch, GCV_v_, lambda_v_);
 
 		//Rprintf("WARNING: partial time after the optimization method\n");
 		timespec T = Time_partial.stop();

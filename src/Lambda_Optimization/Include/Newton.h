@@ -67,7 +67,7 @@ class Opt_methods
         public:
 
                 //! Function to apply the optimization method and obtain as a result the couple (optimal lambda, optimal value of the function)
-                virtual std::pair<Tuple, UInt> compute (const Tuple & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<Tuple> & lambda_v, bool pre_opt) = 0;
+                virtual std::pair<Tuple, UInt> compute (const Tuple & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<Tuple> & lambda_v) = 0;
 
                 //! Virtual Destuctor
                 virtual ~Opt_methods(){};
@@ -166,7 +166,7 @@ struct Auxiliary<lambda::type<2>>
                  };
 
                  //! Apply Newton's method
-                 std::pair<Tuple, UInt> compute(const Tuple & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<Tuple> & lambda_v, bool pre_opt) override;
+                 std::pair<Tuple, UInt> compute(const Tuple & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<Tuple> & lambda_v) override;
 
                  //! Virtual Destuctor
                  virtual ~Newton_ex(){};
@@ -199,7 +199,7 @@ class Newton_fd<lambda::type<1>, Real, Extensions...>: public Opt_methods<lambda
                 Newton_fd(Function_Wrapper<lambda::type<1>, Real, lambda::type<1>, Real, Extensions...> & F_): Opt_methods<lambda::type<1>, Real, Extensions...>(F_) {};
 
                 //! Apply Newton fd method
-                std::pair<Real, UInt> compute(const lambda::type<1> & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<lambda::type<1>> & lambda_v, bool pre_opt) override;
+                std::pair<Real, UInt> compute(const lambda::type<1> & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<lambda::type<1>> & lambda_v) override;
 
 
                 //! Virtual Destuctor
@@ -221,7 +221,7 @@ class Newton_fd<lambda::type<2>, MatrixXr, Extensions...>: public Opt_methods<la
                 Newton_fd(Function_Wrapper<lambda::type<2>, Real, lambda::type<2>, MatrixXr, Extensions...> & F_): Opt_methods<lambda::type<2>, MatrixXr, Extensions...>(F_) {};
 
                 //! Apply Newton fd method
-                std::pair<lambda::type<2>, UInt> compute(const lambda::type<2> & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<lambda::type<2>> & lambda_v, bool pre_opt) override;
+                std::pair<lambda::type<2>, UInt> compute(const lambda::type<2> & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<lambda::type<2>> & lambda_v) override;
 
 
                 //! Virtual Destuctor
