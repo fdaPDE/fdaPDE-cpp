@@ -1,6 +1,7 @@
 #ifndef __AUXILIARY_OPTIMIZER_IMP_H__
 #define __AUXILIARY_OPTIMIZER_IMP_H__
 
+
 //! Utility used for efficient multiplication of a vector for matrix Psi
 /*!
  \param carrier the Carrier-type object containing the data
@@ -536,6 +537,7 @@ template<typename InputCarrier>
 typename std::enable_if<std::is_same<t_type,t_type>::value, Real>::type
         AuxiliaryOptimizer::universal_GCV(const Real s, const Real sigma_hat_sq, const Real dor)
         {
+                //return (dor-2)*(log(sigma_hat_sq)+1)+2*(-dor+s+1);  // AIC
                 return s*sigma_hat_sq/Real(dor);
         }
 
