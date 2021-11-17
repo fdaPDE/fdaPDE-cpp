@@ -327,7 +327,7 @@ optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 		*/
 		
 		lambda::type<2> lambda_init = lambda::make_pair(lambdaS, lambdaT);
-
+/*
 		std::vector<Real> vals = {1.442700e-03, 1.201124e+00};  // prova
 		//std::vector<Real> vals = {5.000000e-05, 1.442700e-03, 4.162766e-02, 1.201124e+00, 3.465724e+01, 1.000000e+03};
 		UInt lambdas_count = vals.size()*vals.size();
@@ -361,7 +361,7 @@ optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
         if (lambda_init(1)>lambda_min(1)/4 || lambda_init(1)<=0)
             lambda_init(1) = lambda_min(1)/8;
 
-
+*/
 		// Compute optimal lambda
 		Checker ch;
 		std::vector<lambda::type<2>> lambda_v_;
