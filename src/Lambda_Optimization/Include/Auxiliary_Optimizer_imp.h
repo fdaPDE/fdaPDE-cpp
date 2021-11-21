@@ -545,6 +545,7 @@ template<typename InputCarrier>
 typename std::enable_if<std::is_same<t_type,t_type>::value, Real>::type
         AuxiliaryOptimizer::universal_GCV_d(const AuxiliaryData<InputCarrier> & adt, const Real s, const Real sigma_hat_sq, const Real dor, const Real trdS)
         {
+        	//return trdS*(1-log(sigma_hat_sq))+(dor-2)/(sigma_hat_sq*dor)*(2*adt.a_ + sigma_hat_sq*trdS); //AIC
                 return 2*s*(sigma_hat_sq*trdS + adt.a_)/Real(dor*dor);
         }
 
