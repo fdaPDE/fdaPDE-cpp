@@ -203,7 +203,7 @@ std::pair<lambda::type<2>, UInt> Newton_fd<lambda::type<2>, MatrixXr, Extensions
         lambda::type<2> x = x0;
         UInt n_iter = 0;
         Real error  = std::numeric_limits<Real>::infinity();
-        Real h      = 4e-8;
+        Real h      = 4e-6;
         
         Rprintf("\n Starting Newton's iterations: starting point lambda=(%e,%e)\n",x(0),x(1));
 
@@ -296,7 +296,7 @@ std::pair<lambda::type<2>, UInt> Newton_fd<lambda::type<2>, MatrixXr, Extensions
 
 		Real space_fpx = (space_fxph-space_fxmh)/(2*h);
 		Real time_fpx = (time_fxph-time_fxmh)/(2*h);
-	       	lambda::type<2> fpx = lambda::make_pair(space_fpx, time_fpx);
+	       	fpx = lambda::make_pair(space_fpx, time_fpx);
 		// Rprintf("fp(x): %f\n", fpx);
 
                 error = Auxiliary<lambda::type<2>>::residual(fpx);
@@ -320,7 +320,7 @@ std::pair<lambda::type<2>, UInt> Newton_fd<lambda::type<2>, MatrixXr, Extensions
 				this->F.evaluate_f(lambda::make_pair(x(0)+h, x(1)-h))-
 				this->F.evaluate_f(lambda::make_pair(x(0)-h, x(1)+h))+
 				this->F.evaluate_f(lambda::make_pair(x(0)-h, x(1)-h)))/(4*h*h);
-		MatrixXr fsx(2,2);
+		
 		fsx(0,0) = space_fsx; fsx(0,1) = mixed_fsx;
 		fsx(1,0) = mixed_fsx; fsx(1,1) = time_fsx;
 		//Rprintf("fs(x): %f\n", fsx);
