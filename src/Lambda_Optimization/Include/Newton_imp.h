@@ -128,8 +128,8 @@ std::pair<lambda::type<1>, UInt> Newton_fd<lambda::type<1>, Real, Extensions...>
         Real fsx = (fxph+fxmh-(2*fx))/(h*h);
         // Rprintf("fs(x): %f\n", fsx);
         
-        Rprintf("x=%f,fx:%f,fpx:%f,fsx:%f\n\tex_fpx:%f,ex_fsx:%f",x,
-        	fx, fpx, fsx, this->F.evaluate_first_derivative(x), this->F.evaluate_second_derivative(x));
+        //Rprintf("x=%f,fx:%f,fpx:%f,fsx:%f\n\tex_fpx:%f,ex_fsx:%f",x,
+        //	fx, fpx, fsx, this->F.evaluate_first_derivative(x), this->F.evaluate_second_derivative(x));
 
         while(n_iter < max_iter)
         {
@@ -183,8 +183,8 @@ std::pair<lambda::type<1>, UInt> Newton_fd<lambda::type<1>, Real, Extensions...>
 
                 fsx = (fxph+fxmh-(2*fx))/(h*h);
                 
-        	Rprintf("x=%f,fx:%f,fpx:%f,fsx:%f\n\tex_fpx:%f,ex_fsx:%f",x,
-        	fx, fpx, fsx, this->F.evaluate_first_derivative(x), this->F.evaluate_second_derivative(x));
+        	//Rprintf("x=%f,fx:%f,fpx:%f,fsx:%f\n\tex_fpx:%f,ex_fsx:%f",x,
+        	//fx, fpx, fsx, this->F.evaluate_first_derivative(x), this->F.evaluate_second_derivative(x));
 
                 // Rprintf("fp(x): %f\n", fpx);
                 // Rprintf("fs(x): %f\n", fsx);
@@ -246,14 +246,16 @@ std::pair<lambda::type<2>, UInt> Newton_fd<lambda::type<2>, MatrixXr, Extensions
         
         
         Rprintf("x=(%f,%f)\nfx=%f\ndfx=(%f,%f)\nddfx(%f,%f,%f)\n",
-        	x(0), x(1), fx, space_fpx, time_fpx, space_fsx, time_fsx, mixed_fsx);
+        	exp(x(0)), exp(x(1)), fx, space_fpx, time_fpx, space_fsx, time_fsx, mixed_fsx);
 	Rprintf("I");
+        /*
         lambda::type<2> prima = this->F.evaluate_first_derivative(lambda::make_pair(exp(x(0)), exp(x(1))));
         Rprintf("J");
         Rprintf("exact\tdfx=(%f,%f)\n\n\n", prima(0), prima(1));
         MatrixXr seconda = this->F.evaluate_second_derivative(lambda::make_pair(exp(x(0)), exp(x(1))));
 	Rprintf("exact\tddfx(%f,%f,%f)\n\n\n", seconda.coeff(0,0), seconda.coeff(1,1), seconda.coeff(0,1));
 	Rprintf("K");
+        */
         	
         while(n_iter < max_iter)
         {
@@ -329,13 +331,15 @@ std::pair<lambda::type<2>, UInt> Newton_fd<lambda::type<2>, MatrixXr, Extensions
                 //Rprintf("fs(x): %f\n", fsx);
                 
                 Rprintf("x=(%f,%f)\nfx=%f\ndfx=(%f,%f)\nddfx(%f,%f,%f)\n",
-        		x(0), x(1), fx, space_fpx, time_fpx, space_fsx, time_fsx, mixed_fsx);
+        		exp(x(0)), exp(x(1)), fx, space_fpx, time_fpx, space_fsx, time_fsx, mixed_fsx);
+                /*
 		prima = this->F.evaluate_first_derivative(lambda::make_pair(exp(x(0)), exp(x(1))));
 		Rprintf("exact\tdfx=(%f,%f)\n\n\n",
 			prima(0), prima(1));
 		seconda = this->F.evaluate_second_derivative(lambda::make_pair(exp(x(0)), exp(x(1))));
 		Rprintf("exact\tdfx=(%f,%f)\nddfx(%f,%f,%f)\n\n\n",
         		prima(0), prima(1), seconda.coeff(0,0), seconda.coeff(1,1), seconda.coeff(0,1));
+                */
         }
         fx  = this->F.evaluate_f(lambda::make_pair(exp(x(0)), exp(x(1))));
         ch.set_max_iter();
