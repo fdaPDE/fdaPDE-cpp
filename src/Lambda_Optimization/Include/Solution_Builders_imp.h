@@ -339,8 +339,13 @@ static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr
     }
     
     SET_VECTOR_ELT(result, 12, Rf_allocMatrix(REALSXP, output.z_hat.rows(), output.z_hat.cols())); //z_hat
+    
     UInt size_rmse = output.rmse.size();
-    SET_VECTOR_ELT(result, 13, Rf_allocVector(REALSXP, size_rmse)); //rmse
+    if(code_string == 0) //Newton
+    	SET_VECTOR_ELT(result, 13, Rf_allocVector(REALSXP, size_rmse));
+    else //grid or prediction
+        SET_VECTOR_ELT(result, 13, Rf_allocMatrix(REALSXP, output.size_S, output.size_T));
+    
     SET_VECTOR_ELT(result, 14, Rf_allocVector(REALSXP, 1)); //sigma_hat_sq
     SET_VECTOR_ELT(result, 15, Rf_allocVector(REALSXP, 2)); //best lambda values
     SET_VECTOR_ELT(result, 16, Rf_allocVector(REALSXP, 1)); //GCV opt
