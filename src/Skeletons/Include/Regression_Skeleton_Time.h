@@ -317,7 +317,7 @@ optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 		std::unique_ptr<Opt_methods<lambda::type<2>,MatrixXr,EvaluationType>> optim_p =
 			Opt_method_factory<lambda::type<2>,MatrixXr,EvaluationType>::create_Opt_method(optr->get_criterion(), Fun);			
 
-		// Choose initial lambdaS with grid
+		// Choose initial lambdaS, lambdaT with grid
 		Real lambdaS = optr->get_initial_lambda_S();
 		Real lambdaT = optr->get_initial_lambda_T();
 
@@ -327,41 +327,35 @@ optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 		*/
 		
 		lambda::type<2> lambda_init = lambda::make_pair(lambdaS, lambdaT);
-/*
-		std::vector<Real> vals = {1.442700e-03, 1.201124e+00};  // prova
-		//std::vector<Real> vals = {5.000000e-05, 1.442700e-03, 4.162766e-02, 1.201124e+00, 3.465724e+01, 1.000000e+03};
-		UInt lambdas_count = vals.size()*vals.size();
 		std::vector<lambda::type<2>> lambda_vec;
-		lambda_vec.reserve(lambdas_count);
-		for(UInt j=0; j<vals.size(); j++)
-			for(UInt i=0; i<vals.size(); i++)
-			{
-				lambda::type<2> lambda = lambda::make_pair(vals[i], vals[j]);
-				lambda_vec.push_back(lambda);
-			}
+		if(lambda_init(0)>=0 && lambda_init(1)>=0){
+			lambda_vec.reserve(5);
+			lambda_vec.push_back(lambda_init);
+		}
+		else
+			lambda_vec.reserve(4);
+		lambda_vec.push_back(lambda::make_pair(exp(-3), exp(-9)));
+		lambda_vec.push_back(lambda::make_pair(exp(-5), exp(-7)));
+		lambda_vec.push_back(lambda::make_pair(exp(-7), exp(-5)));
+		lambda_vec.push_back(lambda::make_pair(exp(-9), exp(-3)));
 
+		
 		UInt dim = lambda_vec.size();
-        lambda::type<2> lambda_min;
-        Real GCV_min = -1.0;
+		lambda::type<2> lambda_min;
+		Real GCV_min = -1.0;
 
-        for (UInt i=0; i<dim; i++)
-        {
-                Rprintf("Grid: evaluating %d/%d\n", i+1, dim);
-                Real evaluation = Fun.evaluate_f(lambda_vec[i]); //only scalar functions;
+		for (UInt i=0; i<dim; i++)
+		{
+		        Rprintf("Grid: evaluating %d/%d\n", i+1, dim);
+		        Real evaluation = Fun.evaluate_f(lambda_vec[i]); //only scalar functions;
 
-                if (evaluation<GCV_min || i==0)
-                {
-              		GCV_min = evaluation;
-              		lambda_min = lambda_vec[i];
-                }
-        }
+		        if (evaluation<GCV_min || i==0)
+		        {
+		      		GCV_min = evaluation;
+		      		lambda_min = lambda_vec[i];
+		        }
+		}
 
-        if (lambda_init(0)>lambda_min(0)/4 || lambda_init(0)<=0)
-            lambda_init(0) = lambda_min(0)/8;
-        if (lambda_init(1)>lambda_min(1)/4 || lambda_init(1)<=0)
-            lambda_init(1) = lambda_min(1)/8;
-
-*/
 		// Compute optimal lambda
 		Checker ch;
 		std::vector<lambda::type<2>> lambda_v_;
@@ -371,7 +365,7 @@ optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 		Time_partial.start();
 		// Rprintf("WARNING: start taking time\n");
 
-		std::pair<lambda::type<2>, UInt> lambda_couple = optim_p->compute(lambda_init, optr->get_stopping_criterion_tol(), 40, ch, GCV_v_, lambda_v_);
+		std::pair<lambda::type<2>, UInt> lambda_couple = optim_p->compute(lambda_min, optr->get_stopping_criterion_tol(), 40, ch, GCV_v_, lambda_v_);
 
 		//Rprintf("WARNING: partial time after the optimization method\n");
 		timespec T = Time_partial.stop();
