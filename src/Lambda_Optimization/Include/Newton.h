@@ -149,27 +149,53 @@ struct Auxiliary<lambda::type<2>>
  * \tparam Hessian image type of the Hessian of the function: if the dimension of the image is >1 (and domain >1), problems to store the hessian, it's a tensor
  * \tparam Extensions input class if the computations need members already stored in a class
 */
- template <typename Tuple, typename Hessian, typename ...Extensions>
- class Newton_ex: public Opt_methods<Tuple, Hessian, Extensions...>
- {
-         public:
+template <typename Tuple, typename Hessian, typename ...Extensions>
+class Newton_ex: public Opt_methods<Tuple, Hessian, Extensions...>
+{
 
-                 // Constructor
-                 /*!
-                  \param F_ the function wrapper F to be optimized
-                  \note F cannot be const, it must be modified
-                 */
-                 Newton_ex(Function_Wrapper<Tuple, Real, Tuple, Hessian, Extensions...> & F_): Opt_methods<Tuple, Hessian, Extensions...>(F_)
-                 {
-                         // Debugging purpose
-                         // Rprintf("Newton method built\n");
-                 };
+};
 
-                 //! Apply Newton's method
-                 std::pair<Tuple, UInt> compute(const Tuple & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<Tuple> & lambda_v) override;
+template <typename ...Extensions>
+class Newton_ex<lambda::type<1>, Real, Extensions...>: public Opt_methods<lambda::type<1>, Real, Extensions...>
+{
+        public:
 
-                 //! Virtual Destuctor
-                 virtual ~Newton_ex(){};
+                // Constructor
+                /*!
+                 \param F_ the function wrapper F to be optimized
+                 \note F cannot be const, it must be modified
+                */
+                Newton_ex(Function_Wrapper<lambda::type<1>, Real, lambda::type<1>, Real, Extensions...> & F_): Opt_methods<lambda::type<1>, Real, Extensions...>(F_) {};
+
+                //! Apply Newton fd method
+                std::pair<Real, UInt> compute(const lambda::type<1> & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<lambda::type<1>> & lambda_v) override;
+
+
+                //! Virtual Destuctor
+                virtual ~Newton_ex(){};
+
+
+};
+
+template <typename ...Extensions>
+class Newton_ex<lambda::type<2>, MatrixXr, Extensions...>: public Opt_methods<lambda::type<2>, MatrixXr, Extensions...>
+{
+        public:
+
+                // Constructor
+                /*!
+                 \param F_ the function wrapper F to be optimized
+                 \note F cannot be const, it must be modified
+                */
+                Newton_ex(Function_Wrapper<lambda::type<2>, Real, lambda::type<2>, MatrixXr, Extensions...> & F_): Opt_methods<lambda::type<2>, MatrixXr, Extensions...>(F_) {};
+
+                //! Apply Newton fd method
+                std::pair<lambda::type<2>, UInt> compute(const lambda::type<2> & x0, const Real tolerance, const UInt max_iter, Checker & ch, std::vector<Real> & GCV_v, std::vector<lambda::type<2>> & lambda_v) override;
+
+
+                //! Virtual Destuctor
+                virtual ~Newton_ex(){};
+
 
 };
 
