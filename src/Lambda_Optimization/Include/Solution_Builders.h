@@ -11,7 +11,7 @@
 #include "../../Global_Utilities/Include/Lambda.h"
 
 //! Output struct to be used to return values in R
-template<UInt size>
+template<UInt num_params>
 struct output_Data
 {
         std::string             content{"Empty"};          //!< Suggests what the output is containing and how it should be used
@@ -19,12 +19,12 @@ struct output_Data
         std::vector<Real>       rmse;                      //!< Model root mean squared error
         Real                    sigma_hat_sq    = -1.0;    //!< Model estimated variance of errors
         std::vector<Real>       dof             = {};      //!< tr(S) + q, degrees of freedom of the model
-	lambda::type<size>	lambda_sol = lambda::init<size>(0.0); //!< Lambda obtained in the solution
+	lambda::type<num_params>	lambda_sol = lambda::init<num_params>(0.0); //!< Lambda obtained in the solution
         UInt                    lambda_pos      = 0;       //!< Position of optimal lambda, only for grid evaluation, in R numebring starting from 1 (0 means no grid used)
         UInt                    n_it            = 0;       //!< Number of iterations for the method
         Real                    time_partial    = 0.0;     //!< Time, from beginning to end of the optimization method
         std::vector<Real>       GCV_evals       = {-1};    //!< GCV evaluations vector of explored lambda, with the optimization iterative method or grid
-        std::vector<lambda::type<size>> lambda_vec = {lambda::init<size>(-1)}; //!< Vector of explored lambda with with the optimization iterative method or grid
+        std::vector<lambda::type<num_params>> lambda_vec = {lambda::init<num_params>(-1)}; //!< Vector of explored lambda with with the optimization iterative method or grid
         Real                    GCV_opt         = -1;      //!< GCV optimal comptued in the vector of lambdas
         int                     termination     = -2;      //!< Reason of termination of the iterative optimization method (reached tolerance or max number of iterations)
         MatrixXv                betas;                     //!< Regression coefficients of the optimal solution
