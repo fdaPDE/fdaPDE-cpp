@@ -33,7 +33,6 @@ struct AuxiliaryData
         Real     c_;                            //!< Stores <eps_hat, ddS*z>
         Real     mxd_b_;                        //!<
         Real     mxd_c_;                        //!<
-//COMMENTI PRECEDENTI*****************************************************
 
         bool flag_time = false;                 //!< adt storing derivatives w.r.t. lambdaT
 };
@@ -61,13 +60,13 @@ struct AuxiliaryData<InputCarrier, typename std::enable_if<std::is_same<multi_bo
         Real     c_;                            //!< Stores <eps_hat, ddS*z>
         Real     mxd_b_;                        //!<
         Real     mxd_c_;                        //!<
-//COMMENTI PRECEDENTI*****************************************************
 
         VectorXr f_;                            //!< Stores R1^T*R0^{-1}*u
         VectorXr g_;                            //!< Stores T^{-1}*f
         VectorXr h_;                            //!< Stores (lambda*K-I)*g
         VectorXr p_;                            //!< Stores Psi*h-t
         VectorXr r_;                            //!< Stores Q*s
+
         bool flag_time = false;                 //!< adt storing derivatives w.r.t. lambdaT
 
         void left_multiply_by_psi(const InputCarrier & carrier, VectorXr & ret, const VectorXr & vec);

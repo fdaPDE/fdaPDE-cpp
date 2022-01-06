@@ -46,7 +46,7 @@ class Carrier: public Extensions...
 
                 // General data for any problem
                 UInt n_obs;                                   //!< number of locations
-                UInt n_space_obs;			    //!< number of spatial observations
+                UInt n_space_obs;			      //!< number of spatial observations
                 UInt n_nodes;                                 //!< number of nodes
                 const std::vector<UInt> * obs_indicesp;       //!< indices of the locations for efficient search and storage
 
@@ -234,7 +234,7 @@ class Carrier: public Extensions...
                         return this->model->apply_to_b(b);
                 }
                 
-                inline MatrixXr apply_to_b_iter(const MatrixXr & b, lambda::type<1> lambda, UInt time_index)  ///in realtà l'iter è solo nel caso time (e parab) quindi questa specializzazione non servirebbe
+                inline MatrixXr apply_to_b_iter(const MatrixXr & b, lambda::type<1> lambda, UInt time_index)
                 {
                         this->opt_data->set_current_lambdaS(lambda); // set the lambda value
                         return this->model->apply_to_b_iter(b, time_index);
@@ -257,12 +257,7 @@ class Carrier: public Extensions...
                 {
                         this->opt_data->set_current_lambdaS(lambda); // set the lambda value
                         if(this->model->isIter())
-                        {
-                        	/*Iterative implies parabolic. We don't need to set lambdaT
-                        	as we are iterating through the vector of lambdaT in Regression_skeleton_time ********************************************************************************************
-                        	The right lambdaT was already set as current in computing the values of GCV*/
                         	return (this->model->apply_iterative())(0,0);
-                        }
                         else
                         	return (this->model->apply())(0,0);
                 }
@@ -279,9 +274,6 @@ class Carrier: public Extensions...
 			this->opt_data->set_current_lambdaS(lambda(0)); // set the lambdaS value
 			this->opt_data->set_current_lambdaT(lambda(1)); // set the lambdaT value
 			if(this->model->isIter())
-				/*Iterative implies parabolic. We don't need to set lambdaT
-				as we are iterating through the vector of lambdaT in Regression_skeleton_time ********************************************************************************************
-				The right lambdaT was already set as current in computing the values of GCV*/
 				return (this->model->apply_iterative())(0,0);
 			else
 				return (this->model->apply())(0,0);
@@ -470,7 +462,7 @@ class CarrierBuilder
                 template<typename... Extensions>
                 static void set_temporal_data(Carrier<DataHandler, Extensions...> & car, const DataHandler & data, MixedFERegressionBase<DataHandler> & mc, OptimizationData & optimizationData)
                 {
-                        //car.set_all_temporal();??
+                        //car.set_all_temporal();
                 }
 
         public:

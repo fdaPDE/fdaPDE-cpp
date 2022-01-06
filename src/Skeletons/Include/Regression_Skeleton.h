@@ -199,7 +199,7 @@ typename std::enable_if<size==1, std::pair<MatrixXr, output_Data<1>>>::type
 
 	        for (UInt i=0; i<dim; i++)
 	        {
-	                Rprintf("Grid: evaluating %d/%d\n", i+1, dim);
+	                Rprintf("Pre-Newton grid: evaluating %d/%d\n", i+1, dim);
 	                Real evaluation = Fun.evaluate_f(lambdaS_grid[i]); //only scalar functions;
 
 	                if (evaluation<GCV_min || i==0)

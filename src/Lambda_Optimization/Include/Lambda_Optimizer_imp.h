@@ -367,17 +367,11 @@ void GCV_Exact<InputCarrier, 1>::set_iter_trS_(Real lambdaS)
                 UInt ret = AuxiliaryOptimizer::universal_b_setter_iter(X1, this->the_carrier, QPsi_big, N_, k, false);
 		
                 MatrixXr X3 = X1;
-                Rprintf("X3(0,0)=%f, X3(0,1)=%f\nX3(1,0)=%f, X3(1,1)=%f\n",
-		X3.coeff(0,0), X3.coeff(0,1),
-		X3.coeff(1,0), X3.coeff(1,1));
                 //define the penalization matrix:
                 //  P = lambdaS * (psi_mini*R_*psi_mini.transpose());
                 
                 //qui è stato messo un meno che nella versione precednte/originale non c'era
                 MatrixXr P = -lambdaS * this->R_;
-                Rprintf("P(0,0)=%f, P(0,1)=%f\nP(1,0)=%f, P(1,1)=%f\n",
-		P.coeff(0,0), P.coeff(0,1),
-		P.coeff(1,0), P.coeff(1,1));
 
                 //impose dirichlet boundary conditions if needed
 
@@ -394,27 +388,16 @@ void GCV_Exact<InputCarrier, 1>::set_iter_trS_(Real lambdaS)
                 }
 
                 X3 -= P;
-                
-                Rprintf("X3_post(0,0)=%f, X3_post(0,1)=%f\nX3_post(1,0)=%f, X3_post(1,1)=%f\n",
-		X3.coeff(0,0), X3.coeff(0,1),
-		X3.coeff(1,0), X3.coeff(1,1));
 
                 Eigen::PartialPivLU <MatrixXr> Dsolver(X3);
 
                 // Solve the system TX = B
                 MatrixXr X = Dsolver.solve(X1);
-                
-                Rprintf("X(0,0)=%f, X(0,1)=%f\nX(1,0)=%f, X(1,1)=%f\n",
-		X.coeff(0,0), X.coeff(0,1),
-		X.coeff(1,0), X.coeff(1,1));
 
                 // Compute trace(X(k,:))
-                Rprintf("x.cols = %d, N = %d \n", X.cols(), N_);
                 for (UInt i = 0; i < N_; ++i)
                         this->trS_ += X(i, i);
-                Rprintf("set_iter partial trs=%f\n", this->trS_);
         }
-        Rprintf("set_iter trs=%f\n", this->trS_);
 }
 
 //! Method to set the value of member dS_ and its trace trdS_, also computes utility matrix K_
@@ -593,12 +576,9 @@ void GCV_Exact<InputCarrier, 1>::compute_z_hat(lambda::type<1> lambda)
         UInt ret;
         if (this->the_carrier.get_bc_indicesp()->size()==0 && !this->the_carrier.get_flagParabolic())
         {
-                Rprintf("compute_z_hat entra nell'if  A ****\n");
                 ret = AuxiliaryOptimizer::universal_z_hat_setter<InputCarrier>(this->z_hat, this->the_carrier, this->S_, this->adt, lambda);
         }
         else {
-                Rprintf("compute_z_hat entra nell'if  B ****\n");
-
                 const UInt nnodes    = this->the_carrier.get_n_nodes();
 
                 VectorXr f_hat;
@@ -653,7 +633,6 @@ void GCV_Exact<InputCarrier, 1>::update_dof(lambda::type<1> lambda)
 {
         // dof = tr(S) + #covariates
 	this->dof = this->trS_;
-        Rprintf("update_dofs: dof=%f\n", this->dof);
 
         if(this->the_carrier.has_W()) // add number of covariates, if present
                 this->dof += (*this->the_carrier.get_Wp()).cols();
@@ -741,19 +720,9 @@ void GCV_Exact<InputCarrier, 1>::update_matrices(lambda::type<1> lambda)
 template<typename InputCarrier>
 void GCV_Exact<InputCarrier, 2>::update_matrices(lambda::type<2> lambda)
 {
-        // this order must be kept
-        //Rprintf("R(0,0): %f, R(1,0): %f, R(0,1): %f, R(1,1): %f\n", 
-                //this->R_.coeff(0, 0), this->R_.coeff(1, 0), this->R_.coeff(0, 1), this->R_.coeff(1, 1));
-
         this->set_T_(lambda);
-        //Rprintf("T(0,0): %f, T(1,0): %f, T(0,1): %f, T(1,1): %f\n", 
-                //this->T_.coeff(0, 0), this->T_.coeff(1, 0), this->T_.coeff(0, 1), this->T_.coeff(1, 1));
         this->set_V_();
-
-        this->set_S_and_trS_();   // ************nell'iterativo forse non serve***************************
-        //Rprintf("S(0,0): %f, S(1,0): %f, S(0,1): %f, S(1,1): %f\n", 
-                //this->S_.coeff(0, 0), this->S_.coeff(1, 0), this->S_.coeff(0, 1), this->S_.coeff(1, 1));
-
+        this->set_S_and_trS_();
         this->compute_z_hat(lambda);
 }
 
@@ -797,7 +766,6 @@ void GCV_Exact<InputCarrier, 2>::first_updater(lambda::type<2> lambda)
         this->set_dS_and_trdS_();       // set first derivative of S and its trace
         UInt ret = AuxiliaryOptimizer::universal_first_updater<InputCarrier>(this->adt, this->the_carrier, this->dS_, this->eps_hat, lambda(0));
         UInt time_ret = AuxiliaryOptimizer::universal_first_updater<InputCarrier>(this->time_adt, this->the_carrier, this->time_dS_, this->eps_hat, lambda(0));
-        //// *********lambda(0) o lambda(1) nel calcolo di j ???????***********************************
 }
 
 //! Update all parameters needed to compute the gcv second derivative, depending on lambda
@@ -840,8 +808,6 @@ Real GCV_Exact<InputCarrier, 1>::compute_f(lambda::type<1> lambda)
         //Rprintf("GCV_Exact<InputCarrier, 1>::compute_f\n");
         // call external updater to update [if needed] the parameters for gcv calculus
         this->gu.call_to(0, lambda, this);
-
-        Rprintf("compute_f: sigma_hat_sq = %f, s = %d, dor = %f", this->sigma_hat_sq, this->s, this->dor);
 
         // compute the value of the GCV
         Real GCV_val =
@@ -1068,29 +1034,19 @@ void GCV_Stochastic<InputCarrier, size>::update_dof(lambda::type<size> lambda)
 		}
 		else //iterative
     		{
-    			//Rprintf("\n\nCalcolo iterativo GCV stoch\n");
-    			
 			UInt N_ = this->the_carrier.get_model()->getN_();
 			UInt M_ = this->the_carrier.get_model()->getM_();
 			UInt nlocations = this->the_carrier.get_n_space_obs();
-			
-			//Rprintf("nlocations: %d, N_: %d, M_: %d\n", nlocations, N_, M_);
 			
 			this->dof = 0;
                         MatrixXr QU_big_ = this->the_carrier.lmbQ(this->US_);
 			for(UInt k=0; k<M_; ++k)
 			{
 				//Rprintf("Numero iterazione: %d\n", k);
-				SpMat psi_mini = (*this->the_carrier.get_psip()).block(k * nlocations, k* N_, nlocations, N_); //forse è importante aggiornare anche quella del mixed_fe
-							//perchè magari serve li per alcuni conti. Non sembra comunque che sia così peche ogni volta se la riprende partendo da psi (tutte le volte che appare nel mixed fe)
-				//Rprintf("psi_mini(0,0)=%f,psi_mini(0,1)=%f,psi_mini(1,0)=%f,psi_mini(1,1)=%f\n",
-					//psi_mini.coeff(0,0),psi_mini.coeff(0,1),psi_mini.coeff(1,0),psi_mini.coeff(1,1));
+				SpMat psi_mini = (*this->the_carrier.get_psip()).block(k * nlocations, k* N_, nlocations, N_);
 				// Define the first right hand side : | I  0 |^T * psi^T * A * Q * u
 				this->b = MatrixXr::Zero(2*N_, this->US_.cols());
 				UInt ret = AuxiliaryOptimizer::universal_b_setter_iter(this->b, this->the_carrier, QU_big_, N_, k, true);
-				
-				//Rprintf("b(0)=%f, b(1)=%f, b(2*N_-2)=%f, b(2*N_-1)=%f\n",
-					//this->b(0), this->b(1), this->b(2*N_-2), this->b(2*N_-1));
 				
 			        //Resolution of the system
 			        MatrixXr x;
@@ -1099,9 +1055,6 @@ void GCV_Stochastic<InputCarrier, size>::update_dof(lambda::type<size> lambda)
 					x = this->the_carrier.apply_to_b(b, lambda::make_pair(lambda, this->lambdaT));
 			        else
             				x = this->the_carrier.apply_to_b_iter(b, lambda::make_pair(lambda, this->lambdaT), k);
-            				
-            			//Rprintf("x(0,0)=%f,x(0,1)=%f,x(1,0)=%f,x(1,1)=%f\n",
-					//x.coeff(0,0),x.coeff(0,1),x.coeff(1,0),x.coeff(1,1));
 
         			MatrixXr uTpsi;
 				MatrixXr ut = this->US_.transpose();
@@ -1192,7 +1145,6 @@ void GCV_Stochastic<InputCarrier, size>::compute_z_hat(lambda::type<size> lambda
 template<typename InputCarrier, UInt size>
 void GCV_Stochastic<InputCarrier, size>::update_parameters(lambda::type<size> lambda)
 {
-	//Rprintf("GCV_Stochastic<InputCarrier, size>::update_parameters\n");
         this->compute_z_hat(lambda);
         this->update_errors(lambda);
 }
@@ -1211,8 +1163,6 @@ void GCV_Stochastic<InputCarrier, size>::update_parameters(lambda::type<size> la
 template<typename InputCarrier, UInt size>
 Real GCV_Stochastic<InputCarrier, size>::compute_f(lambda::type<size> lambda)
 {
-	//Rprintf("GCV_Stochastic<InputCarrier, size>::compute_f\n");
-	
         // call external updater to update [if needed] the parameters for gcv calculus
         this->gu.call_to(0, lambda, this);
 

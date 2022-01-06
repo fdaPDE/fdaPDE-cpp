@@ -180,7 +180,6 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
 template<class GCV_type, typename CarrierType>
 std::pair<MatrixXr, output_Data<2>> parabolic_routine(CarrierType & carrier)
 {
-	Rprintf("Sono in parabolic_routine\n");
 	timer Time_partial;
 	Time_partial.start();
 
@@ -192,7 +191,6 @@ std::pair<MatrixXr, output_Data<2>> parabolic_routine(CarrierType & carrier)
 	std::vector<Real> lambdaS = optr->get_lambda_S();
 	std::vector<Real> lambdaT = optr->get_lambda_T();
 	if(optr->get_criterion() != "grid"){	// set initial data for Newton
-		Rprintf("modifica output per Newton\n");
 		lambdaS[0] = optr->get_initial_lambda_S();
 		lambdaT[0] = optr->get_initial_lambda_T();
 	}
@@ -203,14 +201,13 @@ std::pair<MatrixXr, output_Data<2>> parabolic_routine(CarrierType & carrier)
 				
 	for(UInt j=0; j<optr->get_size_T(); j++)
 	{			
-		Rprintf("Sto ottimizzando stoch con lambdaT %f\n", lambdaT[j]);	
 		GCV_type optim(carrier, lambdaT[j]);
 		std::pair<MatrixXr, output_Data<1>> par_res = 
 			optimizer_strategy_selection<GCV_type, CarrierType, 1>(optim, carrier);
 
 		UInt dim = par_res.second.lambda_vec.size();
 
-		for(UInt i=0; i<dim; i++) //to improve *************************************************
+		for(UInt i=0; i<dim; i++)
 			res.second.lambda_vec.push_back(
 				lambda::make_pair(par_res.second.lambda_vec[i], lambdaT[j]));
 		
@@ -235,9 +232,6 @@ std::pair<MatrixXr, output_Data<2>> parabolic_routine(CarrierType & carrier)
 	else
 		res.second.size_S = res.second.lambda_vec.size();  // size_S is the number of lamdaS visited by Newton method
 	res.second.size_T = optr->get_size_T();
-
-	Rprintf("FINE FOR\n");
-
 	res.first = opt_res.first;
 	res.second.content = opt_res.second.content;
 	timespec T = Time_partial.stop();
@@ -308,8 +302,6 @@ optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 	}
 	else // 'not_required' optimization can't enter here!! [checked in R code]
 	{
-		Rprintf("Sto facendo Newton\n");
-
 		std::unique_ptr<Opt_methods<lambda::type<2>,MatrixXr,EvaluationType>> optim_p =
 			Opt_method_factory<lambda::type<2>,MatrixXr,EvaluationType>::create_Opt_method(optr->get_criterion(), Fun);			
 
@@ -317,11 +309,6 @@ optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 		Real lambdaS = optr->get_initial_lambda_S();
 		Real lambdaT = optr->get_initial_lambda_T();
 
-		/*  // Unuseful
-		if(lambdaS<=0) lambdaS = -1.0;
-		if(lambdaT<=0) lambdaT = -1.0;
-		*/
-		
 		lambda::type<2> lambda_init = lambda::make_pair(lambdaS, lambdaT);
 		std::vector<lambda::type<2>> lambda_vec;
 		if(lambda_init(0)>=0 && lambda_init(1)>=0){
@@ -342,7 +329,7 @@ optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 
 		for (UInt i=0; i<dim; i++)
 		{
-		        Rprintf("Grid: evaluating %d/%d\n", i+1, dim);
+		        Rprintf("Pre-Newton grid: evaluating %d/%d\n", i+1, dim);
 		        Real evaluation = Fun.evaluate_f(lambda_vec[i]); //only scalar functions;
 
 		        if (evaluation<GCV_min || i==0)

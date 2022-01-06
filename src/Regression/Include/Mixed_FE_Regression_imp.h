@@ -881,6 +881,7 @@ void MixedFERegressionBase<InputHandler>::computeDegreesOfFreedomExact(UInt outp
 }
 
 /*
+// Moved to Lambda_Optimizer.h
 template<typename InputHandler>
 void MixedFERegressionBase<InputHandler>::computeDOFExact_iterative(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT) {
     Real degrees = (regressionData_.getCovariates()->rows() != 0) ? regressionData_.getCovariates()->cols() : 0;
@@ -916,7 +917,6 @@ void MixedFERegressionBase<InputHandler>::computeDOFExact_iterative(UInt output_
 			X1 = Q_k;
 		else //areal data
 		{
-			// forse dovremmo prendere il segmento relativo al tempo k???????*********************
 			// VectorXr miniA_  = A_.segment(k * regressionData_.getNumberOfRegions(), regressionData_.getNumberOfRegions());
 
 			VectorXr miniA_  = A_.segment(0, regressionData_.getNumberOfRegions());
@@ -1053,6 +1053,7 @@ void MixedFERegressionBase<InputHandler>::computeDegreesOfFreedomStochastic(UInt
 
 
 /*
+// Moved to Lambda_Optimizer.h
 template<typename InputHandler>
 void MixedFERegressionBase<InputHandler>::computeDOFStochastic_iterative(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT)
 {
@@ -1425,7 +1426,6 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply(void)
 //Iterative method for Space-Time problems
 template<typename InputHandler>
 MatrixXv  MixedFERegressionBase<InputHandler>::apply_iterative(void) {
-	Rprintf("Entra nell'apply_iter\n");
     UInt nnodes = N_ * M_; // Define number of space-times nodes
     Real delta = mesh_time_[1] - mesh_time_[0]; // Time interval
     const VectorXr *obsp = regressionData_.getObservations(); // Get observations
@@ -1476,7 +1476,6 @@ MatrixXv  MixedFERegressionBase<InputHandler>::apply_iterative(void) {
                 lambdaS = (optimizationData_.get_lambda_S())[s];
                 lambdaT = (optimizationData_.get_lambda_T())[t];
             }
-            Rprintf("lambdas = %e, lambdat = %e\n", lambdaS, lambdaT);
 
             _rightHandSide = rhs;
             for (UInt i = 0; i < regressionData_.getInitialValues()->rows(); i++)  // p

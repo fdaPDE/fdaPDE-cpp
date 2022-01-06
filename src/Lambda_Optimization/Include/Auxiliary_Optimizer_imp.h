@@ -390,10 +390,8 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, Inpu
         AuxiliaryOptimizer::universal_b_setter_iter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & Qu, const UInt N_, const UInt k, bool flag_stochastic)
         {
                 UInt dim = carrier.get_n_regions();
-                //if(!flag_stochastic)
-                //        b = MatrixXr(dim, N_);
                 SpMat psi_mini = (*carrier.get_psip()).block(k * dim, k* N_, dim, N_);
-                VectorXr miniA_  = (*carrier.get_Ap()).segment(0, dim);	 //// start from k?????? (k*dim, dim)	
+                VectorXr miniA_  = (*carrier.get_Ap()).segment(0, dim);
 		b.topRows(N_) =  psi_mini.transpose()*(miniA_.asDiagonal() * 
                         (flag_stochastic ? Qu.block(k*dim,0,dim,Qu.cols()) : Qu.block(k*dim,k*N_,dim,N_)));
                 return 0;
@@ -403,21 +401,10 @@ template<typename InputCarrier>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>,f_type>::value, UInt>::type
         AuxiliaryOptimizer::universal_b_setter_iter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & Qu, const UInt N_, const UInt k, bool flag_stochastic)
         {
-                Rprintf("univ_b_A");
                 UInt dim = carrier.get_n_space_obs();
-                Rprintf("univ_b_B");
-                //if(!flag_stochastic)
-                 //       b = MatrixXr(dim, N_);  //exact
-                Rprintf("univ_b_C");
- 
 		SpMat psi_mini = (*carrier.get_psip()).block(k * dim, k* N_, dim, N_);
-                Rprintf("univ_b_D");
-
 		b.topRows(N_) = psi_mini.transpose()* 
                         (flag_stochastic ? Qu.block(k*dim,0,dim,Qu.cols()) : Qu.block(k*dim,k*N_,dim,N_));
-                Rprintf("univ_b_fine");
-
-
                 return 0;
         }
         
@@ -425,7 +412,7 @@ template<typename InputCarrier>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>,t_type>::value, UInt>::type
         AuxiliaryOptimizer::universal_uTpsi_setter(InputCarrier & carrier, UInt nr, const MatrixXr & ut, MatrixXr & uTpsi, const UInt nlocations, const UInt N_, const UInt k)
         {
-        	SpMat psi_mini = (*carrier.get_psip()).block(k * nlocations, k* N_, nlocations, N_); //potrei passarli da fuori
+        	SpMat psi_mini = (*carrier.get_psip()).block(k * nlocations, k* N_, nlocations, N_);
 		uTpsi = (ut.block(0,k*carrier.get_n_regions(), nr, carrier.get_n_regions()))*psi_mini;
 		return 0;
         }
@@ -434,7 +421,7 @@ template<typename InputCarrier>
 typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>,f_type>::value, UInt>::type
         AuxiliaryOptimizer::universal_uTpsi_setter(InputCarrier & carrier, UInt nr, const MatrixXr & ut, MatrixXr & uTpsi, const UInt nlocations, const UInt N_, const UInt k)
         {
-        	SpMat psi_mini = (*carrier.get_psip()).block(k * nlocations, k* N_, nlocations, N_); //potrei passarli da fuori
+        	SpMat psi_mini = (*carrier.get_psip()).block(k * nlocations, k* N_, nlocations, N_);
 		uTpsi = (ut.block(0,k*nlocations, nr, nlocations))*psi_mini;
 		return 0;
         }
@@ -452,7 +439,7 @@ typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, Inp
                 adt.h_ = temp*adt.g_;
                 adt.left_multiply_by_psi(carrier, adt.p_, adt.h_);
                 adt.p_ -= adt.t_;
-                adt.a_ = eps.transpose()*adt.p_;  // note different from previous case!!
+                adt.a_ = eps.transpose()*adt.p_;  // note: different from previous case!!
 
                 return 0;
         }
@@ -537,7 +524,7 @@ template<typename InputCarrier>
 typename std::enable_if<std::is_same<t_type,t_type>::value, Real>::type
         AuxiliaryOptimizer::universal_GCV(const Real s, const Real sigma_hat_sq, const Real dor)
         {
-                //return (dor-2)*(log(sigma_hat_sq)+1)+2*(-dor+s+1);  // AIC
+                //return (dor-2)*(log(sigma_hat_sq)+1)+2*(-dor+s+1);  // to implement AIC
                 return s*sigma_hat_sq/Real(dor);
         }
 
@@ -545,7 +532,7 @@ template<typename InputCarrier>
 typename std::enable_if<std::is_same<t_type,t_type>::value, Real>::type
         AuxiliaryOptimizer::universal_GCV_d(const AuxiliaryData<InputCarrier> & adt, const Real s, const Real sigma_hat_sq, const Real dor, const Real trdS)
         {
-        	//return trdS*(1-log(sigma_hat_sq))+(dor-2)/(sigma_hat_sq*dor)*(2*adt.a_ + sigma_hat_sq*trdS); //AIC
+        	//return trdS*(1-log(sigma_hat_sq))+(dor-2)/(sigma_hat_sq*dor)*(2*adt.a_ + sigma_hat_sq*trdS); // to implement AIC
                 return 2*s*(sigma_hat_sq*trdS + adt.a_)/Real(dor*dor);
         }
 
