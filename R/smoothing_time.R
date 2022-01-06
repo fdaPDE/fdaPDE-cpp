@@ -385,7 +385,6 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
       search = search, bary.locations = bary.locations,
       optim = optim, lambdaS = lambdaS, lambdaT = lambdaT, DOF.stochastic.realizations = DOF.stochastic.realizations, DOF.stochastic.seed = DOF.stochastic.seed, DOF.matrix = DOF.matrix, GCV.inflation.factor = GCV.inflation.factor, lambda.optimization.tolerance = lambda.optimization.tolerance)
   }
-  cat("Qui ci arrivo A")
   # ---------- Solution -----------
   N = nrow(FEMbasis$mesh$nodes)
   M = ifelse(FLAG_PARABOLIC,length(time_mesh)-1,length(time_mesh) + 2);
@@ -500,14 +499,11 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
 
   class(FEMbasis$mesh) = mesh.class
 
-  cat("Qui ci arrivo B1")
-
   # Save information of Barycenter
   if (is.null(bary.locations)) {
       bary.locations = list(locations=locations, element_ids = bigsol[[11]], barycenters = bigsol[[12]])
   }
   class(bary.locations) = "bary.locations"
-  cat("Qui ci arrivo B2")
   # Make FEM.time objects
   fit.FEM.time  = FEM.time(f, time_mesh, FEMbasis, FLAG_PARABOLIC)
   PDEmisfit.FEM.time = FEM.time(g, time_mesh, FEMbasis, FLAG_PARABOLIC)

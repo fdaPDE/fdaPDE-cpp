@@ -210,14 +210,6 @@ static SEXP Solution_Builders::build_solution_temporal_regression(const MatrixXr
     UInt bestLambdaS = divresult.rem;
     UInt bestLambdaT = divresult.quot; //+1 is added in R
     
-    Rprintf("DOF:\n");
-    for(Real d:dof)
-    	Rprintf("%f, ", d);
-	
-	Rprintf("\nGCV:\n");
-    for(Real d:GCV)
-    	Rprintf("%f, ", d);
-    
     MatrixXv beta;
     if(regressionData.getCovariates()->rows()==0)
     {

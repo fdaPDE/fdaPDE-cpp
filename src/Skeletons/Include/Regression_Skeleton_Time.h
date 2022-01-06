@@ -97,7 +97,6 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
 	
 	if(optr->get_loss_function() == "GCV" && optr->get_DOF_evaluation() == "exact")
 	{
-		Rprintf("SONO GCV ESATTO\n");
 		//Rprintf("GCV exact\n");
 		if(carrier.get_flagParabolic())	
 			return parabolic_routine<GCV_Exact<CarrierType, 1>>(carrier);
@@ -109,9 +108,7 @@ std::pair<MatrixXr, output_Data<2>> >::type optimizer_method_selection(CarrierTy
 
 	}
 	else if(optr->get_loss_function() == "GCV" && (optr->get_DOF_evaluation() == "stochastic" || optr->get_DOF_evaluation() == "not_required"))
-	{
-		Rprintf("SONO GCV STOCH\n");
-		
+	{		
 		//Rprintf("GCV stochastic\n");
 		if(carrier.get_flagParabolic())
 			return parabolic_routine<GCV_Stochastic<CarrierType, 1>>(carrier);
@@ -272,7 +269,6 @@ optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 	const OptimizationData * optr = carrier.get_opt_data();
 	if(optr->get_criterion() == "grid")
 	{
-		Rprintf("Sto facendo griglia\n");
 		timer Time_partial; // Of the sole optimization
 		Time_partial.start();
 		// Rprintf("WARNING: start taking time\n");

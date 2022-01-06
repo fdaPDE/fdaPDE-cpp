@@ -155,13 +155,9 @@ typename std::enable_if<size==1, std::pair<MatrixXr, output_Data<1>>>::type
 	// Build wrapper and newton method
 	Function_Wrapper<Real, Real, Real, Real, EvaluationType> Fun(optim);
 	typedef Function_Wrapper<Real, Real, Real, Real, EvaluationType> FunWr;
-
-	Rprintf("optimizer_strategy_selection 1\n");
 	const OptimizationData * optr = carrier.get_opt_data();
 	if(optr->get_criterion() == "grid")
 	{
-		Rprintf("Sto facendo griglia\n");
-
 		timer Time_partial; // Of the sole optimization
 		Time_partial.start();
 		// Rprintf("WARNING: start taking time\n");
@@ -173,13 +169,9 @@ typename std::enable_if<size==1, std::pair<MatrixXr, output_Data<1>>>::type
 
 		// Rprintf("WARNING: partial time after the optimization method\n");
 		timespec T = Time_partial.stop();
-		
-		Rprintf("Sono arrivato qui prima di carrier.apply()\n");
 
 		// Get the solution
 		MatrixXr solution = carrier.apply(output.lambda_sol);
-		
-		Rprintf("Post apply\n");
 
 		output.time_partial = T.tv_sec + 1e-9*T.tv_nsec;
 
@@ -191,8 +183,6 @@ typename std::enable_if<size==1, std::pair<MatrixXr, output_Data<1>>>::type
 	}
 	else // 'not_required' optimization can't enter here!! [checked in R code]
 	{
-        Rprintf("Sto facendo Newton\n");
-
 		std::unique_ptr<Opt_methods<Real,Real,EvaluationType>> optim_p =
 			Opt_method_factory<Real, Real, EvaluationType>::create_Opt_method(optr->get_criterion(), Fun);
 
