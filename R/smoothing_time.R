@@ -510,7 +510,7 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
 
   # Prepare return list
   reslist = list(fit.FEM.time = fit.FEM.time, PDEmisfit.FEM.time = PDEmisfit.FEM.time, solution = solution,
-                optimization  = optimization, beta = beta, GCV = GCV_,time = time, ICestimated=ICestimated, bary.locations = bary.locations)
+                optimization  = optimization, beta = beta, time = time, ICestimated=ICestimated, bary.locations = bary.locations)
 
   return(reslist)
 }
