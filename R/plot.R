@@ -35,14 +35,14 @@
 #' ## Plot the FEM function
 #' plot(FEMfunction)
 
-plot.FEM = function(x, num_refinements = NULL, ...)
+plot.FEM = function(x, colormap = "heat.colors", num_refinements = NULL, ...)
 {
 if(class(x$FEMbasis$mesh)=="mesh.2D"){
   if(x$FEMbasis$order == 1)
   {
-    R_plot.ORD1.FEM(x, ...)
+    R_plot.ORD1.FEM(x, colormap, ...)
   }else{
-    R_plot.ORDN.FEM(x, num_refinements, ...)
+    R_plot.ORDN.FEM(x, colormap, num_refinements, ...)
   }
 }else if(class(x$FEMbasis$mesh)=="mesh.2.5D"){
 	R_plot_manifold(x,...)
@@ -404,7 +404,7 @@ plot.mesh.3D<-function(x,...){
 }
 
 
- R_plot.ORD1.FEM = function(FEM, ...)
+ R_plot.ORD1.FEM = function(FEM, colormap, ...)
  {
    # PLOT  Plots a FEM object FDOBJ over a rectangular grid defined by
    # vectors X and Y;
@@ -412,8 +412,9 @@ plot.mesh.3D<-function(x,...){
 
    nodes <- FEM$FEMbasis$mesh$nodes
    triangles <- as.vector(t(FEM$FEMbasis$mesh$triangles))
-
-   heat <- heat.colors(100)
+   
+   colormap <- match.fun(colormap)
+   heat <- colormap(100)
    # How many plots are needed?
    nplots <- ncol(FEM$coeff)
 
@@ -434,7 +435,7 @@ plot.mesh.3D<-function(x,...){
    }
  }
 
- R_plot.ORDN.FEM = function(FEM, num_refinements, ...)
+ R_plot.ORDN.FEM = function(FEM, colormap, num_refinements, ...)
  {
    # num_refinements sets the number od division on each triangle edge to be applied for rifenment
    coeff = FEM$coeff
@@ -442,8 +443,9 @@ plot.mesh.3D<-function(x,...){
    FEMbasis = FEM$FEMbasis
 
    mesh = FEMbasis$mesh
-
-   heat = heat.colors(100)
+   
+   colormap <- match.fun(colormap)
+   heat <- colormap(100)
 
    coeff = FEM$coeff
    
@@ -484,8 +486,6 @@ plot.mesh.3D<-function(x,...){
      triangles[((i-1)*nrow(meshi$triangles)+1):(i*nrow(meshi$triangles)),] = meshi$triangles+tot
      tot = tot + nrow(meshi$nodes)
    }
-
-   heat = heat.colors(100)
 
    nsurf = dim(coeff)[[2]]
    for (isurf in 1:nsurf)
