@@ -27,8 +27,8 @@ class MixedFERegressionBase
 	protected:
 
 		const std::vector<Real> mesh_time_;
-		const UInt N_; 			//!< Number of spatial basis functions.
-		const UInt M_;
+		const UInt N_; 			//!< Number of spatial basis functions
+		const UInt M_;			//!< Number of temporal nodes
 
 		const InputHandler & regressionData_;
         OptimizationData & optimizationData_; //!<COnst reference to OptimizationData class
@@ -131,13 +131,11 @@ class MixedFERegressionBase
 		//! A method computing dofs in case of exact GCV, it is called by computeDegreesOfFreedom
 		void computeDegreesOfFreedomExact(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT);
         //! Exact GCV: iterative method
-		void computeDOFExact_iterative(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT);
-
-
+		//void computeDOFExact_iterative(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT);
 		//! A method computing dofs in case of stochastic GCV, it is called by computeDegreesOfFreedom
 		void computeDegreesOfFreedomStochastic(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT);
 		//! Stochastic GCV: iterative method
-        void computeDOFStochastic_iterative(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT);
+        //void computeDOFStochastic_iterative(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT);
 		//! A method computing GCV from the dofs
 		void computeGeneralizedCrossValidation(UInt output_indexS, UInt output_indexT, Real lambdaS, Real lambdaT);
 
@@ -236,9 +234,15 @@ class MixedFERegressionBase
 		const VectorXr *	getrhs_(void) const {return &this->_rightHandSide;}
 		//! A method returning the forcing term
 		const VectorXr *	getu_(void) const {return &this->rhs_ft_correction_;}
-		//! A method returning the number of nodes of the mesh
+		//! A method returning Ptk_
+		const SpMat *  getPtk_(void) const {return &this->Ptk_;}
+		//! A method returning LR0k_
+		const SpMat *  getLR0k_(void) const {return &this->LR0k_;}
 
-		UInt getnnodes_(void) const {return this->N_;}
+		//! A method returning the number of nodes of the mesh
+		UInt getnnodes_(void) const {return this->N_ * this->M_;}
+		UInt getN_(void) const {return this->N_;}
+		UInt getM_(void) const {return this->M_;}
 		bool isSV(void) const {return this->isSpaceVarying;}
 		bool isIter(void) const {return this->isIterative;}
 
@@ -256,8 +260,9 @@ class MixedFERegressionBase
 		void preapply(EOExpr<A> oper, const ForcingTerm & u, const MeshHandler<ORDER, mydim, ndim> & mesh_ );
 
 		MatrixXv apply(void);
-        MatrixXv apply_iterative(void);
+        	MatrixXv apply_iterative(void);
 		MatrixXr apply_to_b(const MatrixXr & b);
+		MatrixXr apply_to_b_iter(const MatrixXr & b, UInt time_index);
 };
 
 //----------------------------------------------------------------------------//

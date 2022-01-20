@@ -13,9 +13,12 @@
 #include "../../Regression/Include/Mixed_FE_Regression.h"
 
 template<typename CarrierType>
-std::pair<MatrixXr, output_Data> optimizer_method_selection(CarrierType & carrier);
-template<typename EvaluationType, typename CarrierType>
-std::pair<MatrixXr, output_Data> optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier);
+typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, f_type>::value,
+	std::pair<MatrixXr, output_Data<1>> >::type optimizer_method_selection(CarrierType & carrier);
+
+template<typename EvaluationType, typename CarrierType, UInt size>
+typename std::enable_if<size==1, std::pair<MatrixXr, output_Data<1>>>::type 
+	optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier);
 
 template<typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
 SEXP regression_skeleton(InputHandler & regressionData, OptimizationData & optimizationData, SEXP Rmesh)
@@ -25,7 +28,7 @@ SEXP regression_skeleton(InputHandler & regressionData, OptimizationData & optim
 
 	regression.preapply(mesh); // preliminary apply (preapply) to store all problem matrices
 
-    std::pair<MatrixXr, output_Data> solution_bricks;	// Prepare solution to be filled
+    std::pair<MatrixXr, output_Data<1>> solution_bricks;	// Prepare solution to be filled
 
 	// Build the Carrier according to problem type
 	if(regression.isSV())
@@ -73,7 +76,8 @@ SEXP regression_skeleton(InputHandler & regressionData, OptimizationData & optim
  \return the solution to pass to the Solution_Builders
 */
 template<typename CarrierType>
-std::pair<MatrixXr, output_Data> optimizer_method_selection(CarrierType & carrier)
+typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Temporal, CarrierType>::value>, f_type>::value,
+std::pair<MatrixXr, output_Data<1>> >::type optimizer_method_selection(CarrierType & carrier)
 {
 	// Build the optimizer
 	const OptimizationData * optr = carrier.get_opt_data();
@@ -81,13 +85,13 @@ std::pair<MatrixXr, output_Data> optimizer_method_selection(CarrierType & carrie
 	{
 		//Rprintf("GCV exact\n");
 		GCV_Exact<CarrierType, 1> optim(carrier);
-		return optimizer_strategy_selection<GCV_Exact<CarrierType, 1>, CarrierType>(optim, carrier);
+		return optimizer_strategy_selection<GCV_Exact<CarrierType, 1>, CarrierType, 1>(optim, carrier);
 	}
 	else if(optr->get_loss_function() == "GCV" && (optr->get_DOF_evaluation() == "stochastic" || optr->get_DOF_evaluation() == "not_required"))
 	{
 		//Rprintf("GCV stochastic\n");
 		GCV_Stochastic<CarrierType, 1> optim(carrier, true);
-		return optimizer_strategy_selection<GCV_Stochastic<CarrierType, 1>, CarrierType>(optim, carrier);
+		return optimizer_strategy_selection<GCV_Stochastic<CarrierType, 1>, CarrierType, 1>(optim, carrier);
 	}
 	else // if(optr->get_loss_function() == "unused" && optr->get_DOF_evaluation() == "not_required")
 	{
@@ -99,7 +103,7 @@ std::pair<MatrixXr, output_Data> optimizer_method_selection(CarrierType & carrie
 		// Rprintf("WARNING: start taking time\n");
 
 		// Get the solution
-		output_Data output;
+		output_Data<1> output;
 		output.z_hat.resize(carrier.get_psip()->rows(),carrier.get_opt_data()->get_size_S());
 		output.lambda_vec = carrier.get_opt_data()->get_lambda_S();
 		MatrixXr solution;
@@ -143,13 +147,14 @@ std::pair<MatrixXr, output_Data> optimizer_method_selection(CarrierType & carrie
  \param carrier the Carrier used for the methods
  \return the solution to pass to the Solution_Builders
 */
-template<typename EvaluationType, typename CarrierType>
-std::pair<MatrixXr, output_Data> optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
+
+template<typename EvaluationType, typename CarrierType, UInt size>
+typename std::enable_if<size==1, std::pair<MatrixXr, output_Data<1>>>::type 
+	optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 {
 	// Build wrapper and newton method
 	Function_Wrapper<Real, Real, Real, Real, EvaluationType> Fun(optim);
 	typedef Function_Wrapper<Real, Real, Real, Real, EvaluationType> FunWr;
-
 	const OptimizationData * optr = carrier.get_opt_data();
 	if(optr->get_criterion() == "grid")
 	{
@@ -159,8 +164,8 @@ std::pair<MatrixXr, output_Data> optimizer_strategy_selection(EvaluationType & o
 
 		// this will be used when grid will be correctly implemented, also for return elements
 
-		Eval_GCV<EvaluationType> eval(Fun, optr->get_lambda_S());
-		output_Data output = eval.Get_optimization_vectorial();
+		Eval_GCV<Real, Real, EvaluationType> eval(Fun, optr->get_lambda_S());
+		output_Data<1> output = eval.Get_optimization_vectorial();
 
 		// Rprintf("WARNING: partial time after the optimization method\n");
 		timespec T = Time_partial.stop();
@@ -170,10 +175,10 @@ std::pair<MatrixXr, output_Data> optimizer_strategy_selection(EvaluationType & o
 
 		output.time_partial = T.tv_sec + 1e-9*T.tv_nsec;
 
-                //postponed after apply in order to have betas computed
-                output.betas = carrier.get_model()->getBeta();
+        //postponed after apply in order to have betas computed
+        output.betas = carrier.get_model()->getBeta();
 
-                return {solution, output};
+        return {solution, output};
 
 	}
 	else // 'not_required' optimization can't enter here!! [checked in R code]
@@ -181,22 +186,44 @@ std::pair<MatrixXr, output_Data> optimizer_strategy_selection(EvaluationType & o
 		std::unique_ptr<Opt_methods<Real,Real,EvaluationType>> optim_p =
 			Opt_method_factory<Real, Real, EvaluationType>::create_Opt_method(optr->get_criterion(), Fun);
 
-                // Compute optimal lambda
+        // Choose initial lambdaS with grid
+		Real lambdaS_init = optr->get_initial_lambda_S();   // first value of lambdaS sequence
+
+		std::vector<Real> lambdaS_grid = {5.000000e-05, 1.442700e-03, 4.162766e-02, 1.201124e+00, 3.465724e+01, 1.000000e+03};
+			// Start from 6 lambda and find the minimum value of GCV to start from it the newton's method
+
+
+		UInt dim = lambdaS_grid.size();
+	        Real lambdaS_min;
+	        Real GCV_min = -1.0;
+
+	        for (UInt i=0; i<dim; i++)
+	        {
+	                Rprintf("Pre-Newton grid: evaluating %d/%d\n", i+1, dim);
+	                Real evaluation = Fun.evaluate_f(lambdaS_grid[i]); //only scalar functions;
+
+	                if (evaluation<GCV_min || i==0)
+	                {
+	              		GCV_min = evaluation;
+	              		lambdaS_min = lambdaS_grid[i];
+	                }
+	        }
+
+		// If lambdaS_init <= 0, use the one from grid
+		if (lambdaS_init>lambdaS_min/4 || lambdaS_init<=0)
+			lambdaS_init = lambdaS_min/8;
+
 		Checker ch;
 		std::vector<Real> lambda_v_;
 		std::vector<Real> GCV_v_;
-		Real lambda = optr->get_initial_lambda_S();
-
-		if(lambda<=0)
-		{
-			lambda = -1.0;
-		}
+		
 
 		timer Time_partial; // Of the sole optimization
 		Time_partial.start();
 		// Rprintf("WARNING: start taking time\n");
 
-		std::pair<Real, UInt> lambda_couple = optim_p->compute(lambda, optr->get_stopping_criterion_tol(), 40, ch, GCV_v_, lambda_v_);
+		// Compute optimal lambda
+		std::pair<Real, UInt> lambda_couple = optim_p->compute(lambdaS_init, optr->get_stopping_criterion_tol(), 40, ch, GCV_v_, lambda_v_);
 
 		//Rprintf("WARNING: partial time after the optimization method\n");
 		timespec T = Time_partial.stop();
@@ -207,7 +234,7 @@ std::pair<MatrixXr, output_Data> optimizer_strategy_selection(EvaluationType & o
 
 		// postponed after apply in order to have betas computed
 		// now the last values in GCV_exact are the correct ones, related to the last iteration
-		output_Data  output = Fun.get_output(lambda_couple, T, GCV_v_, lambda_v_, ch.which());
+		output_Data<1> output = Fun.get_output(lambda_couple, T, GCV_v_, lambda_v_, ch.which());
 		// the copy is necessary for the bulders outside
 
 		return {solution, output};

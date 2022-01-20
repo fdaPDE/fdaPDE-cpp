@@ -24,11 +24,17 @@ template<typename InputCarrier, typename Enable = void>
 struct AuxiliaryData
 {
         MatrixXr K_;                            //!< Stores T^{-1}*R                            [nnodes x nnodes]
-        MatrixXr F_;                            //!< Stores K*v                                 [nnodes x nnodes]
+                                                //!< Separable case: K_ is J = T^{-1}*P
+        MatrixXr F_;                            //!< Stores K*V                                 [nnodes x nnodes]
+                                                //!< Separable case: F_ is E = J*V
         VectorXr t_;                            //!< Stores dS*z;
         Real     a_;                            //!< Stores <eps_hat, dS*z>
         Real     b_;                            //!< Stores <t, Q*t>
         Real     c_;                            //!< Stores <eps_hat, ddS*z>
+        Real     mxd_b_;                        //!<
+        Real     mxd_c_;                        //!<
+
+        bool flag_time = false;                 //!< adt storing derivatives w.r.t. lambdaT
 };
 
 //! Template class for data storing and efficient management in forcing term based problems
@@ -45,16 +51,23 @@ template<typename InputCarrier>
 struct AuxiliaryData<InputCarrier, typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>, t_type>::value>::type>
 {
         MatrixXr K_;                            //!< Stores T^{-1}*R                            [nnodes x nnodes]
-        MatrixXr F_;                            //!< Stores K*v                                 [nnodes x nnodes]
+                                                //!< Separable case: K_ is J = T^{-1}*P
+        MatrixXr F_;                            //!< Stores K*V                                 [nnodes x nnodes]
+                                                //!< Separable case: F_ is E = J*V
         VectorXr t_;                            //!< Stores dS*z;
         Real     a_;                            //!< Stores the value of <eps_hat, dS*z>
         Real     b_;                            //!< Stores <t, Q*t>
         Real     c_;                            //!< Stores <eps_hat, ddS*z>
+        Real     mxd_b_;                        //!<
+        Real     mxd_c_;                        //!<
+
         VectorXr f_;                            //!< Stores R1^T*R0^{-1}*u
         VectorXr g_;                            //!< Stores T^{-1}*f
         VectorXr h_;                            //!< Stores (lambda*K-I)*g
         VectorXr p_;                            //!< Stores Psi*h-t
         VectorXr r_;                            //!< Stores Q*s
+
+        bool flag_time = false;                 //!< adt storing derivatives w.r.t. lambdaT
 
         void left_multiply_by_psi(const InputCarrier & carrier, VectorXr & ret, const VectorXr & vec);
 };
@@ -70,8 +83,8 @@ struct AuxiliaryData<InputCarrier, typename std::enable_if<std::is_same<multi_bo
 */
 struct AuxiliaryOptimizer
 {
-        static void bc_utility(MatrixXr & mat, const std::vector<UInt> * bc_idxp);
-        static void bc_utility(SpMat & mat, const std::vector<UInt> * bc_idxp);
+        static void bc_utility(MatrixXr & mat, const std::vector<UInt> * bc_idxp, bool flag_iterative, UInt M);
+        static void bc_utility(SpMat & mat, const std::vector<UInt> * bc_idxp, bool flag_iterative, UInt M);
         /* -------------------------------------------------------------------*/
 
         //! SFINAE based method to compute matrix R in case of Forced problem
@@ -86,6 +99,11 @@ struct AuxiliaryOptimizer
         static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>, t_type>::value, UInt>::type
                 universal_R_setter(MatrixXr & R, const InputCarrier & carrier, AuxiliaryData<InputCarrier> & adt);
 
+        // Parabolic case
+        template<typename InputCarrier>
+        static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>,t_type>::value, UInt>::type
+                universal_R_setter(MatrixXr & R, const InputCarrier & carrier, AuxiliaryData<InputCarrier> & adt, Real lambdaT);
+
         //! SFINAE based method to compute matrix R in case of non-Forced problem
         /*!
          \param R a reference to the matrix to be computed
@@ -96,6 +114,11 @@ struct AuxiliaryOptimizer
         template<typename InputCarrier>
         static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>, f_type>::value, UInt>::type
                 universal_R_setter(MatrixXr & R, const InputCarrier & carrier, AuxiliaryData<InputCarrier> & adt);
+        
+        // Parabolic case
+        template<typename InputCarrier>
+        static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>,f_type>::value, UInt>::type
+                universal_R_setter(MatrixXr & R, const InputCarrier & carrier, AuxiliaryData<InputCarrier> & adt, Real lambda);
         /* -------------------------------------------------------------------*/
 
         //! SFINAE based method to compute matrix T in case of Areal problem
@@ -133,6 +156,11 @@ struct AuxiliaryOptimizer
         static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>, t_type>::value, UInt>::type
                 universal_V_setter(MatrixXr & V, const MatrixXr & T, const MatrixXr & R, const InputCarrier & carrier, AuxiliaryData<InputCarrier> & adt);
 
+        // Separable case
+        template<typename InputCarrier>
+        static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>, t_type>::value, UInt>::type
+                universal_V_setter(MatrixXr & V, const MatrixXr & T, const MatrixXr & R, const InputCarrier & carrier, 
+                        AuxiliaryData<InputCarrier> & adt, AuxiliaryData<InputCarrier> & time_adt);
         //! SFINAE based method to compute matrix V in case of non-Forced problem
         /*!
          \param V a reference to the matrix to be computed
@@ -146,6 +174,12 @@ struct AuxiliaryOptimizer
         template<typename InputCarrier>
         static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>, f_type>::value, UInt>::type
                 universal_V_setter(MatrixXr & V, const MatrixXr & T, const MatrixXr & R, const InputCarrier & carrier, AuxiliaryData<InputCarrier> & adt);
+
+        // Separable case
+        template<typename InputCarrier>
+        static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>, f_type>::value, UInt>::type
+                universal_V_setter(MatrixXr & V, const MatrixXr & T, const MatrixXr & R, const InputCarrier & carrier,
+                AuxiliaryData<InputCarrier> & adt, AuxiliaryData<InputCarrier> & time_adt);
         /* -------------------------------------------------------------------*/
 
         //! SFINAE based method to compute matrix E in case of Areal problem
@@ -188,6 +222,10 @@ struct AuxiliaryOptimizer
         static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>, t_type>::value, UInt>::type
                 universal_z_hat_setter(VectorXr & z_hat, InputCarrier & carrier, const MatrixXr & S, AuxiliaryData<InputCarrier> & adt, const Real lambda);
 
+        template<typename InputCarrier>
+        static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>, t_type>::value, UInt>::type
+                universal_z_hat_setter(VectorXr & z_hat, InputCarrier & carrier, const MatrixXr & S, AuxiliaryData<InputCarrier> & adt, const lambda::type<2> lambda);
+
         //! SFINAE based method to compute predictions in locations in case of non-Forced problem
         /*!
          \param z_hat a reference to the VectorXr to be computed
@@ -200,6 +238,10 @@ struct AuxiliaryOptimizer
         template<typename InputCarrier>
         static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>, f_type>::value, UInt>::type
                 universal_z_hat_setter(VectorXr & z_hat, InputCarrier & carrier, const MatrixXr & S, AuxiliaryData<InputCarrier> & adt, const Real lambda);
+
+        template<typename InputCarrier>
+        static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>, f_type>::value, UInt>::type
+                universal_z_hat_setter(VectorXr & z_hat, InputCarrier & carrier, const MatrixXr & S, AuxiliaryData<InputCarrier> & adt, const lambda::type<2> lambda);
 
         //! Utility to compute the common part of universal_z_hat_setter among Forced and non-Forced problems
         /*!
@@ -234,6 +276,42 @@ struct AuxiliaryOptimizer
         template<typename InputCarrier>
         static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>, f_type>::value, UInt>::type
                 universal_b_setter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & US, const UInt nnodes);
+                
+        //! SFINAE based method to compute right hand term for stochastic (iterative) dof evaluation, areal type
+        /*!
+         \param b a reference to the MatrixXr to be computed
+         \param carrier the Carrier-type object containing the data
+         \param Qu Q times: -psi (in exact case) -a stochastic matrix US used for purpose of computing stochastic dofs (in stochastic case)
+         \param N_ number of spatial basis functions
+         \param k time index
+         \param flag_stochastic bool to distinguish between exact and stochastic
+         \return an integer signaling the correct ending of the process
+        */
+        template<typename InputCarrier>
+        static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>, t_type>::value, UInt>::type
+                universal_b_setter_iter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & Qu, const UInt N_, const UInt k, const bool flag_stochastic);
+
+        //! SFINAE based method to compute right hand term for stochastic (iterative) dof evaluation, pointwise type
+        /*!
+         \param b a reference to the MatrixXr to be computed
+         \param carrier the Carrier-type object containing the data
+         \param Qu Q times: -psi (in exact case) -a stochastic matrix US used for purpose of computing stochastic dofs (in stochastic case)
+         \param N_ number of spatial basis functions
+         \param k time index
+         \param flag_stochastic bool to distinguish between exact and stochastic
+         \return an integer signaling the correct ending of the process
+        */
+        template<typename InputCarrier>
+        static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>, f_type>::value, UInt>::type
+                universal_b_setter_iter(MatrixXr & b, InputCarrier & carrier, const MatrixXr & Qu, const UInt N_, const UInt k, const bool flag_stochastic);
+                
+	template<typename InputCarrier>
+	static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>,t_type>::value, UInt>::type
+        	universal_uTpsi_setter(InputCarrier & carrier, UInt nr, const MatrixXr & ut, MatrixXr & uTpsi, const UInt nlocations, const UInt N_, const UInt k);
+        
+        template<typename InputCarrier>
+	static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Areal, InputCarrier>::value>,f_type>::value, UInt>::type
+		universal_uTpsi_setter(InputCarrier & carrier, UInt nr, const MatrixXr & ut, MatrixXr & uTpsi, const UInt nlocations, const UInt N_, const UInt k);
         /* -------------------------------------------------------------------*/
 
         //! SFINAE based method: general updater of first derivative for forcing term data
@@ -277,8 +355,12 @@ struct AuxiliaryOptimizer
         */
         template<typename InputCarrier>
         static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>, t_type>::value, UInt>::type
-                universal_second_updater(AuxiliaryData<InputCarrier> & adt, InputCarrier & carrier, const MatrixXr & ddS, const VectorXr & eps, const Real lambda);
+                universal_second_updater(AuxiliaryData<InputCarrier> & adt, InputCarrier & carrier, const MatrixXr & ddS, const VectorXr & eps);
 
+        template<typename InputCarrier>
+        static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>, t_type>::value, UInt>::type
+                universal_second_updater_mxd(AuxiliaryData<InputCarrier> & adt, AuxiliaryData<InputCarrier> & time_adt, InputCarrier & carrier, const MatrixXr & ddS_mxd, const VectorXr & eps);
+//**********************FARE I COMMENTI DEL MXD***********************
         //! SFINAE based method: general updater of second derivative for non-Forced data
         /*!
          \param adt the AuxiliaryData type to store useful terms
@@ -291,7 +373,12 @@ struct AuxiliaryOptimizer
         */
         template<typename InputCarrier>
         static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>, f_type>::value, UInt>::type
-                universal_second_updater(AuxiliaryData<InputCarrier> & adt, InputCarrier & carrier, const MatrixXr & ddS, const VectorXr & eps, const Real lambda);
+                universal_second_updater(AuxiliaryData<InputCarrier> & adt, InputCarrier & carrier, const MatrixXr & ddS, const VectorXr & eps);
+
+        template<typename InputCarrier>
+        static typename std::enable_if<std::is_same<multi_bool_type<std::is_base_of<Forced, InputCarrier>::value>, f_type>::value, UInt>::type
+                universal_second_updater_mxd(AuxiliaryData<InputCarrier> & adt, AuxiliaryData<InputCarrier> & time_adt, InputCarrier & carrier, const MatrixXr & ddS_mxd, const VectorXr & eps);
+//**********************FARE I COMMENTI DEL MXD***********************
         /* -------------------------------------------------------------------*/
 
         //! SFINAE based method for purpose of gcv coputation (NOW FAKE SFINAE)
@@ -340,6 +427,12 @@ struct AuxiliaryOptimizer
         template<typename InputCarrier>
         static typename std::enable_if<std::is_same<t_type, t_type>::value, Real>::type
                 universal_GCV_dd(const AuxiliaryData<InputCarrier> & adt, const Real s, const Real sigma_hat_sq, const Real dor, const Real trdS, const Real trddS);
+
+        template<typename InputCarrier>
+        static typename std::enable_if<std::is_same<t_type,t_type>::value, Real>::type
+                universal_GCV_dd_mxd(const AuxiliaryData<InputCarrier> & adt, const AuxiliaryData<InputCarrier> & time_adt, const Real s, const Real sigma_hat_sq, 
+                const Real dor, const Real trdS, const Real time_trdS, const Real mxd_trddS);
+//**********************************AGGIUNGEREE COMMENTI MXD******************************
 };
 
 #include "Auxiliary_Optimizer_imp.h"

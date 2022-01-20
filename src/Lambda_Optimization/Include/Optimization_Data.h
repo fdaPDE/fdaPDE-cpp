@@ -38,6 +38,7 @@ class  OptimizationData
                 Real last_lS_used = std::numeric_limits<Real>::infinity();      //!< last lambda_S used in optimization
                 Real last_lT_used = std::numeric_limits<Real>::infinity();      //!< last lambda_T used in optimization
                 Real current_lambdaS = -1.;                                     //!< Value of the lambda_S for which we are currently performing the computation
+                Real current_lambdaT = -1.;                                     //!< Value of the lambda_T for which we are currently performing the computation
 
                 // If already present
                 MatrixXr DOF_matrix;                            //!< Matrix of dof (if passed by the user no need to compute dofs, we can use this)
@@ -81,7 +82,8 @@ class  OptimizationData
                 inline void set_DOF_matrix(const MatrixXr & DOF_matrix_) {DOF_matrix = DOF_matrix_;}                            //!< Setter of DOF_matrix \param DOF_matrix_ new DOF_matrix
                 inline void set_stopping_criterion_tol(Real stc_) {stopping_criterion_tol = stc_;}                              //!< Setter of stopping_criterion_tol \param stc_ new stopping_criterion_tol
                 inline void set_tuning(const Real tuning_) {tuning = tuning_;}                                                  //!< Setter of tuning \param tuning_ new tuning
-                inline void set_current_lambdaS(const Real new_lambdaS) {current_lambdaS = new_lambdaS;}                        //!< Utility for GAM problems, that always need a vector \param new_lambdaS, new current_lambdaS
+                inline void set_current_lambdaS(const Real new_lambdaS) {current_lambdaS = new_lambdaS;}
+                inline void set_current_lambdaT(const Real new_lambdaT) {current_lambdaT = new_lambdaT;}                        //!< Utility for GAM problems, that always need a vector \param new_lambdaS, new current_lambdaS
                 inline void setCurrentLambda(UInt lambda_index) {lambda_S = std::vector<Real>(1,lambdaS_backup[lambda_index]);} //!< Setter of a backup of lambda_S manpualted in setCurrentLambda
                 inline void set_lambdaS_backup(void) {lambdaS_backup = lambda_S;}
 
@@ -106,6 +108,7 @@ class  OptimizationData
                 inline Real get_tuning(void) const {return tuning;}                                     //!< Getter of tuning \return tuning
                 inline Real get_stopping_criterion_tol(void) const {return stopping_criterion_tol;}     //!< Getter of stopping_criterion_tol \return stopping_criterion_tol
                 inline Real get_current_lambdaS(void) const {return current_lambdaS;}                   //!< Getter of current_lambdaS \return current_lambdaS
+                inline Real get_current_lambdaT(void) const {return current_lambdaT;}                   //!< Getter of current_lambdaT \return current_lambdaT
                 inline const std::vector<Real> * get_LambdaS_vector() const {return &lambdaS_backup;}   //!< Getter of backup lamnda_S vector for GAM problems \return &lambdaS_backup
 
                 // Debugging

@@ -8,6 +8,7 @@
 #include "../../Regression/Include/Mixed_FE_Regression.h"
 #include "../../Regression/Include/Regression_Data.h"
 #include "Optimization_Data.h"
+#include "../../Global_Utilities/Include/Lambda.h"
 
 // Declaration of classes that will be used as Extensions for Carrier
 class Areal;
@@ -41,9 +42,11 @@ class Carrier: public Extensions...
                 bool boundary_conditions = false;             //!< boundary conditions present boolean [depends on inheritance]
                 bool forced_data = false;                     //!< presence of forcing term boolean [depends on inheritance]
                 bool temporal_data = false;                   //!< presence of temporal data  [depends on inheritance]
+                bool flag_parabolic = false;                  //!< parabolic or separable problem
 
                 // General data for any problem
                 UInt n_obs;                                   //!< number of locations
+                UInt n_space_obs;			      //!< number of spatial observations
                 UInt n_nodes;                                 //!< number of nodes
                 const std::vector<UInt> * obs_indicesp;       //!< indices of the locations for efficient search and storage
 
@@ -55,6 +58,8 @@ class Carrier: public Extensions...
                 const SpMat * DMatp;                          //!< pointer to the north-west block of system matrix [size n_nodes x n_nodes]
                 const SpMat * R1p;                            //!< pointer to R1 matrix [size n_nodes x n_nodes]
                 const SpMat * R0p;                            //!< pointer to R0 matrix [size n_nodes x n_nodes]
+                const SpMat * LR0kp;                          //!< pointer to kron(L,R0) matrix (parabolic version)
+                const SpMat * Ptkp;                           //!< pointer to Ptk matrix (separable version)
                 const SpMat * psip;                           //!< pointer to location-to-nodes matrix [size n_obs x n_nodes]
                 const SpMat * psi_tp;                         //!< pointer to the transpose of the location-to-nodes matrix [size n_nodes x n_obs]
 
@@ -83,6 +88,7 @@ class Carrier: public Extensions...
                  \param locations_are_nodes_ boolean to check if locations are nodes [for simplified computations]
                  \param has_covariates_ boolean to check if the problem has regressors [for simplified computations]
                  \param n_obs_ number of locations and hence of observations
+                 \param n_space_obs_ number of spatial observations
                  \param n_noes_number of nodes of the mesh
                  \param obs_indicesp_ pointer collectig the indices of the getObservations
                  \param zp_ pointer to the observations in the locations
@@ -92,17 +98,20 @@ class Carrier: public Extensions...
                  \param DMatp_ pointer to the north-west blockk of the system matrix
                  \param R1p_ pointer to R1 matrix
                  \param R0p_ pointer to R0 matrix
+                 \param LR0kp_ pointer to LR0k matrix
+                 \param Ptkp_ pointer to Ptk matrix
                  \param psip_ pointer to Psi matrix
                  \param psi_tp_ pointer to Psi^T matrix
                  \param rhsp_ pointer to the right hand side of system matrix
                  \param bc_values_ pointer to the values of boundary conditions
                  \param bc_indicesp_ pointer to the indices of the boundary conditions
+                 \param flag_parabolic flag to indicate if the problem is separable (false) or parabolic (true)
                 */
                 inline void set_all(MixedFERegressionBase<InputHandler> * model_, OptimizationData * opt_data_,
-                        bool locations_are_nodes_, bool has_covariates_, UInt n_obs_, UInt n_nodes_, const std::vector<UInt> * obs_indicesp_,
+                        bool locations_are_nodes_, bool has_covariates_, UInt n_obs_, UInt n_space_obs_, UInt n_nodes_, const std::vector<UInt> * obs_indicesp_,
                         const VectorXr * zp_, const MatrixXr * Wp_, const MatrixXr * Hp_, const MatrixXr * Qp_,
-                        const SpMat * DMatp_, const SpMat * R1p_, const SpMat * R0p_, const SpMat * psip_, const SpMat * psi_tp_,
-                        const VectorXr * rhsp_, const std::vector<Real> * bc_valuesp_, const std::vector<UInt> * bc_indicesp_)
+                        const SpMat * DMatp_, const SpMat * R1p_, const SpMat * R0p_, const SpMat * LR0kp_, const SpMat * Ptkp_, const SpMat * psip_, const SpMat * psi_tp_,
+                        const VectorXr * rhsp_, const std::vector<Real> * bc_valuesp_, const std::vector<UInt> * bc_indicesp_, bool flag_parabolic_)
                 {
                         // Set all the data through the private setters
                         set_model(model_);
@@ -110,6 +119,7 @@ class Carrier: public Extensions...
                         set_loc_are_nodes(locations_are_nodes_);
                         set_has_W(has_covariates_);
                         set_n_obs(n_obs_);
+                        set_n_space_obs(n_space_obs_);
                         set_n_nodes(n_nodes_);
                         set_obs_indicesp(obs_indicesp_);
                         set_zp(zp_);
@@ -119,11 +129,14 @@ class Carrier: public Extensions...
                         set_DMatp(DMatp_);
                         set_R1p(R1p_);
                         set_R0p(R0p_);
+                        set_LR0kp(LR0kp_);
+                        set_Ptkp(Ptkp_);
                         set_psip(psip_);
                         set_psi_tp(psi_tp_);
                         set_rhsp(rhsp_);
                         set_bc_valuesp(bc_valuesp_);
                         set_bc_indicesp(bc_indicesp_);
+                        set_flagParabolic(flag_parabolic_);
 
                         // Update the booleans [note some consistency constraints]
                         if (bc_indicesp_->size() > 0)
@@ -151,6 +164,7 @@ class Carrier: public Extensions...
                 inline bool is_areal(void) const {return this->areal_data;}                                     //!< Getter of areal_data \return areal_data
                 inline bool is_temporal(void) const {return this->temporal_data;}                               //!< Getter of temporal_data \return temporal_data
                 inline UInt get_n_obs(void) const {return this->n_obs;}                                         //!< Getter of n_obs [# locations] \return n_obs
+                inline UInt get_n_space_obs(void) const {return this->n_space_obs;}                             //!< Getter of n_space_obs \return n_space_obs
                 inline UInt get_n_nodes(void) const {return this->n_nodes;}                                     //!< Getter of n_nodes [# nodes] \return n_nodes
                 inline const std::vector<UInt> * get_obs_indicesp(void) const {return this->obs_indicesp;}      //!< Getter of obs_indicesp \return obs_indicesp
                 inline const VectorXr * get_zp(void) const {return this->zp;}                                   //!< Getter of zp \return zp
@@ -160,12 +174,15 @@ class Carrier: public Extensions...
                 inline const SpMat * get_DMatp(void) const {return this->DMatp;}                                //!< Getter of DMatp \return DMatp
                 inline const SpMat * get_R1p(void) const {return this->R1p;}                                    //!< Getter of R1p \return R1p
                 inline const SpMat * get_R0p(void) const {return this->R0p;}                                    //!< Getter of R0p \return R0p
+                inline const SpMat * get_LR0kp(void) const {return this->LR0kp;}                                //!< Getter of LR0kp \return LR0kp
+                inline const SpMat * get_Ptkp(void) const {return this->Ptkp;}                                  //!< Getter of Ptkp \return Ptkp
                 inline const SpMat * get_psip(void) const {return this->psip;}                                  //!< Getter of psip \return psip
                 inline const SpMat * get_psi_tp(void) const {return this->psi_tp;}                              //!< Getter of psi_tp \return pst_tp
                 inline const VectorXr * get_rhsp(void) const {return this->rhsp;}                               //!< Getter of rhsp \return rhsp
                 inline const std::vector<Real> * get_bc_valuesp(void) const {return this->bc_valuesp;}          //!< Getter of bc_valuesp \return bc_valuesp
                 inline const std::vector<UInt> * get_bc_indicesp(void) const {return this->bc_indicesp;}        //!< Getter of bc_indicesp \return bc_indicesp
                 inline const MixedFERegressionBase<InputHandler> * get_model(void) const {return this->model;}  //!< Getter of model \return model
+                inline const bool get_flagParabolic(void) const {return this->flag_parabolic;}                  //!< Getter of flag_parabolic \return flag_parabolic
 
                 // SETTERS
                 inline void set_model(MixedFERegressionBase<InputHandler> * md) {this->model = md;};                                    //!< Setter of model \param md new model
@@ -173,6 +190,7 @@ class Carrier: public Extensions...
                 inline void set_loc_are_nodes(const bool locations_are_nodes_) {this->locations_are_nodes = locations_are_nodes_;}      //!< Setter of locations_are_nodes \param locations_are_nodes_ new loc_are_nodes
                 inline void set_has_W(const bool has_covariates_) {this->has_covariates = has_covariates_;}                             //!< Setter of has_covariates \param has_covariates_ new has_covariates
                 inline void set_n_obs(const UInt n_obs_) {this->n_obs = n_obs_;}                                                        //!< Setter of n_obs \param n_obs_ new n_obs
+                inline void set_n_space_obs(const UInt n_space_obs_) {this->n_space_obs = n_space_obs_;}				    //!< Setter of n_space_obs \param n_space_obs_ new n_space_obs
                 inline void set_n_nodes(const UInt n_nodes_) {this->n_nodes = n_nodes_;}                                                //!< Setter of n_nodes \param n_nodes_ new n_nodes
                 inline void set_obs_indicesp(const std::vector<UInt> * obs_indicesp_) {this->obs_indicesp = obs_indicesp_;}             //!< Setter of obs_indicesp \param obs_indicesp_ new obs_indicesp
                 inline void set_zp(const VectorXr * zp_) {this->zp = zp_;}                                                              //!< Setter of zp \param zp_ new zp
@@ -181,38 +199,87 @@ class Carrier: public Extensions...
                 inline void set_Qp(const MatrixXr * Qp_) {this->Qp = Qp_;}                                                              //!< Setter of Qp \param Qp_ new Qp
                 inline void set_DMatp(const SpMat * DMatp_) {this->DMatp = DMatp_;}                                                     //!< Setter of DMatp \param DMatp_ new DMatp
                 inline void set_R1p(const SpMat * R1p_) {this->R1p = R1p_;}                                                             //!< Setter of R1p \param R1p_ new R1p
-                inline void set_R0p(const SpMat * R0p_) {this->R0p = R0p_;}                                                             //!< Setter of R0p \param R0p_ new R0p
+                inline void set_R0p(const SpMat * R0p_) {this->R0p = R0p_;}  
+                inline void set_LR0kp(const SpMat * LR0kp_) {this->LR0kp = LR0kp_;}
+                inline void set_Ptkp(const SpMat * Ptkp_) {this->Ptkp = Ptkp_;}                                                         //!< Setter of R0p \param R0p_ new R0p
                 inline void set_psip(const SpMat * psip_) {this->psip = psip_;}                                                         //!< Setter of psip \param psip_ new psip
                 inline void set_psi_tp(const SpMat * psi_tp_) {this->psi_tp = psi_tp_;}                                                 //!< Setter of psi_tp \param psi_tp_ new psip
                 inline void set_rhsp(const VectorXr * rhsp_) {this->rhsp = rhsp_;}                                                      //!< Setter of rhsp \param rhsp_ new rhsp
                 inline void set_bc_valuesp(const std::vector<Real> * bc_valuesp_) {this->bc_valuesp = bc_valuesp_;}                     //!< Setter of bc_valuesp \param bc_valuesp_ new bc_valuesp
                 inline void set_bc_indicesp(const std::vector<UInt> * bc_indicesp_) {this->bc_indicesp = bc_indicesp_;}                 //!< Setter of bc_indicesp \param bc_indicesp_new bc_indicesp
-
+                inline void set_flagParabolic(const bool flag_parabolic_) {this->flag_parabolic = flag_parabolic_;}                     //!< Setter of flag_parabolic \param flag_parabolic new flag_parabolic
                 // APPLY FUNCTIONS
-                //! Method to the system given a lambda and a right hand side of the system
+                //! Method to solve the system given a lambda and a right hand side of the system
                 /*!
                  \param b the right hand side of the system to be solved via system matrix
                  \param lambda the optimization parameter with which to build the system matrix
                  \return the solution of the system
-                 \note specific for spatial case
                 */
-                inline MatrixXr apply_to_b(const MatrixXr & b, Real lambda)
+                inline MatrixXr apply_to_b(const MatrixXr & b, lambda::type<1> lambda)
                 {
                         this->opt_data->set_current_lambdaS(lambda); // set the lambda value
                         return this->model->apply_to_b(b);
                 }
+                
+                //! Method to solve the system given a lambdaS and a lambdaT and a right hand side of the system
+                /*!
+                 \param b the right hand side of the system to be solved via system matrix
+                 \param lambda the optimization parameter with which to build the system matrix
+                 \return the solution of the system
+                */
+                inline MatrixXr apply_to_b(const MatrixXr & b, lambda::type<2> lambda)
+                {
+                        this->opt_data->set_current_lambdaS(lambda(0)); // set the lambdaS value
+                        this->opt_data->set_current_lambdaT(lambda(1)); // set the lambdaT value
+                        return this->model->apply_to_b(b);
+                }
+                
+                inline MatrixXr apply_to_b_iter(const MatrixXr & b, lambda::type<1> lambda, UInt time_index)
+                {
+                        this->opt_data->set_current_lambdaS(lambda); // set the lambda value
+                        return this->model->apply_to_b_iter(b, time_index);
+                }
+                
+                inline MatrixXr apply_to_b_iter(const MatrixXr & b, lambda::type<2> lambda, UInt time_index)
+                {
+                        this->opt_data->set_current_lambdaS(lambda(0)); // set the lambdaS value
+                        this->opt_data->set_current_lambdaT(lambda(1)); // set the lambdaT value
+                        return this->model->apply_to_b_iter(b, time_index);
+                }
 
-                //! Method to the system given a lambda [right hand side is the usual of the problem]
+                //! Method to solve the system given a lambda [right hand side is the usual of the problem]
                 /*!
                  \param lambda the optimization parameter with which to build the system matrix
                  \return the solution of the system
                  \note apply is called here in order not to make the non const pointer public
                 */
-                inline MatrixXr apply(Real lambda)
+                inline MatrixXr apply(lambda::type<1> lambda)
                 {
                         this->opt_data->set_current_lambdaS(lambda); // set the lambda value
-                        return (this->model->apply())(0,0);
+                        if(this->model->isIter())
+                        	return (this->model->apply_iterative())(0,0);
+                        else
+                        	return (this->model->apply())(0,0);
                 }
+
+                //! Method to solve the system given lambdaS and lambdaT [right hand side is the usual of the problem]
+                /*!
+                 \param lambdaS the optimization parameter with which to build the system matrix
+                 \param lambdaT the optimization parameter with which to build the system matrix
+                 \return the solution of the system
+                 \note apply is called here in order not to make the non const pointer public
+                */
+                inline MatrixXr apply(lambda::type<2> lambda)
+                {
+			this->opt_data->set_current_lambdaS(lambda(0)); // set the lambdaS value
+			this->opt_data->set_current_lambdaT(lambda(1)); // set the lambdaT value
+			if(this->model->isIter())
+				return (this->model->apply_iterative())(0,0);
+			else
+				return (this->model->apply())(0,0);
+                }
+
+
 
                 //! Method to take advantage of simplified multiplication by Q
                 /*!
@@ -307,6 +374,7 @@ class Forced
 
                 // SETTERS
                 inline void set_up(const VectorXr * up_) {this->up = up_;}      //!< Setter of up \param up_ new up
+        
 };
 
 //! Temporal extension for Carrier
@@ -314,16 +382,16 @@ class Forced
  This class contains all the information needed by optimization methods dealing
  with spatio-temporal data, its structure is parallel to that of the Carrier
  \sa Carrier
- \todo TO BE IMPLEMENTED
 */
 class Temporal
 {
-        // [[ TO BE IMPLEMENTED]]
+    public:
+                Temporal() = default;
+                virtual ~Temporal() = default;
 };
 //----------------------------------------------------------------------------//
 
 // *** CARRIER BUILDER ***
-
 
 //! Utility class used to build the Carrier variadic template
 /*!
@@ -331,6 +399,7 @@ class Temporal
  useful Carrier type construct, so far implemented
  \tparam DataHandler the type of regression problem from which to build the Carrier
 */
+
 template<typename DataHandler>
 class CarrierBuilder
 {
@@ -346,10 +415,11 @@ class CarrierBuilder
                 template<typename... Extensions>
                 static void set_plain_data(Carrier<DataHandler, Extensions...> & car, const DataHandler & data, MixedFERegressionBase<DataHandler> & mc,  OptimizationData & optimizationData)
                 {
+                        //check di NON costruire CarrierBuilder<InputH, Parabolic, Separable>
                         car.set_all(&mc, &optimizationData, data.isLocationsByNodes(), bool(data.getCovariates()->rows()>0 && data.getCovariates()->cols()>0),
-                                data.getNumberofObservations(), mc.getnnodes_(), data.getObservationsIndices(),
+                                data.getNumberofObservations(), data.getNumberofSpaceObservations(), mc.getnnodes_(), data.getObservationsIndices(),
                                 data.getObservations(), data.getCovariates(), mc.getH_(), mc.getQ_(), mc.getDMat_(), mc.getR1_(),
-                                mc.getR0_(), mc.getpsi_(), mc.getpsi_t_(), mc.getrhs_(), data.getDirichletValues(), data.getDirichletIndices());
+                                mc.getR0_(), mc.getLR0k_(), mc.getPtk_(), mc.getpsi_(), mc.getpsi_t_(), mc.getrhs_(), data.getDirichletValues(), data.getDirichletIndices(), data.getFlagParabolic());
                 }
 
                 //! Method to fill the eventual Areal part of an areal carrier
@@ -378,6 +448,21 @@ class CarrierBuilder
                 static void set_forced_data(Carrier<DataHandler, Extensions...> & car, const DataHandler & data, MixedFERegressionBase<DataHandler> & mc, OptimizationData & optimizationData)
                 {
                         car.set_all_forced(mc.getu_());
+                }
+
+                //! Method to fill the eventual Temporal part of a temporal carrier
+                /*!
+                  \tparam Extensions... further information that has to be included into the Carrier
+                  \param car a Carrier type object to undergo the temporal setter
+                  \param data DataHandler from which to build the temporal Carrier
+                  \param mc MixedFERegressionBase<DataHandler> from which to build the temporal Carrier
+                  \param optimizationData optimization data to store in the Carrier
+                */
+                
+                template<typename... Extensions>
+                static void set_temporal_data(Carrier<DataHandler, Extensions...> & car, const DataHandler & data, MixedFERegressionBase<DataHandler> & mc, OptimizationData & optimizationData)
+                {
+                        //car.set_all_temporal();
                 }
 
         public:
@@ -441,6 +526,74 @@ class CarrierBuilder
                         set_plain_data(car, data, mc, optimizationData);
                         set_areal_data(car, data, mc, optimizationData);
                         set_forced_data(car, data, mc, optimizationData);
+
+                        return car;
+                }
+                
+                //! Temporal Plain pointwise Carrier static builder
+                /*!
+                  \param data DataHandler from which to build the Carrier
+                  \param mc MixedFERegressionBase<DataHandler> from which to build the Carrier
+                  \param optimizationData optimization data to store in the Carrier
+                  \return the built Carrier
+                */
+                static Carrier<DataHandler,Temporal> build_temporal_plain_carrier(const DataHandler & data, MixedFERegressionBase<DataHandler> & mc, OptimizationData & optimizationData)
+                {
+                        Carrier<DataHandler,Temporal> car;
+                        set_plain_data(car, data, mc, optimizationData);
+                        set_temporal_data(car, data, mc, optimizationData);
+
+                        return car;
+                }
+
+                //! Temporal Areal Carrier static builder
+                /*!
+                  \param data DataHandler from which to build the Carrier
+                  \param mc MixedFERegressionBase<DataHandler> from which to build the Carrier
+                  \param optimizationData optimization data to store in the Carrier
+                  \return the built Carrier
+                */
+                static Carrier<DataHandler,Temporal,Areal> build_temporal_areal_carrier(const DataHandler & data,  MixedFERegressionBase<DataHandler> & mc, OptimizationData & optimizationData)
+                {
+                        Carrier<DataHandler, Temporal, Areal> car;
+                        set_plain_data(car, data, mc, optimizationData);
+                        set_areal_data(car, data, mc, optimizationData);
+                        set_temporal_data(car, data, mc, optimizationData);
+
+                        return car;
+                }
+
+                //! Temporal Forced pointwise Carrier static builder
+                /*!
+                  \param data DataHandler from which to build the Carrier
+                  \param mc MixedFERegressionBase<DataHandler> from which to build the Carrier
+                  \param optimizationData optimization data to store in the Carrier
+                  \return the built Carrier
+                */
+                static Carrier<DataHandler,Temporal,Forced> build_temporal_forced_carrier(const DataHandler & data, MixedFERegressionBase<DataHandler> & mc, OptimizationData & optimizationData)
+                {
+                        Carrier<DataHandler, Temporal, Forced> car;
+                        set_plain_data(car, data, mc, optimizationData);
+                        set_forced_data(car, data, mc, optimizationData);
+                        set_temporal_data(car, data, mc, optimizationData);
+
+                        return car;
+                }
+
+                //! Temporal Forced Areal Carrier static builder
+                /*!
+                  \param data DataHandler from which to build the Carrier
+                  \param mc MixedFERegressionBase<DataHandler> from which to build the Carrier
+                  \param optimizationData optimization data to store in the Carrier
+                  \return the built Carrier
+                */
+                static Carrier<DataHandler,Temporal,Forced,Areal> build_temporal_forced_areal_carrier(const DataHandler & data, MixedFERegressionBase<DataHandler> & mc,  OptimizationData & optimizationData)
+                {
+                        Carrier<DataHandler, Temporal, Forced, Areal> car;
+                        set_plain_data(car, data, mc, optimizationData);
+                        set_areal_data(car, data, mc, optimizationData);
+                        set_forced_data(car, data, mc, optimizationData);
+                        set_temporal_data(car, data, mc, optimizationData);
 
                         return car;
                 }

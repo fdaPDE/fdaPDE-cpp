@@ -115,7 +115,8 @@ class  RegressionData
 		//! A method returning the number of observations
 		UInt getNumberofObservations(void) const {return observations_.size();}
 		//! A method returning the number of space observations
-		UInt getNumberofSpaceObservations(void) const {return observations_.size()/time_locations_.size();}
+		UInt getNumberofSpaceObservations(void) const
+			{return observations_.size()/(time_locations_.size()==0 ? 1:time_locations_.size() );}
 		//! A method returning the number of time observations
 
 		UInt getNumberofTimeObservations(void) const {return time_locations_.size();}

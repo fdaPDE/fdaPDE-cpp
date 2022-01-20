@@ -8,6 +8,7 @@
 #include "../../FdaPDE.h"
 #include "Function_Variadic.h"
 #include "Solution_Builders.h"
+#include "../../Global_Utilities/Include/Lambda.h"
 
 // CLASSES
 //! Father class for a scalar function evaluation of a given vector of lambda values computing the minimum fuction value
@@ -61,6 +62,7 @@ class Vec_evaluation
 
                         for (UInt i=0; i<dim; i++)
                         {
+                                Rprintf("Grid: evaluating %d/%d\n", i+1, dim);
                                 this->F.set_index(i);
                                 evaluations[i] = this->F.evaluate_f(this->lambda_vec[i]); //only scalar functions;
 
@@ -85,9 +87,11 @@ class Vec_evaluation
  \tparam Hessian image type of the Hessian of the function: if the dimension of the image is >1 (and domain >1), problems to store the hessian, it's a tensor
  \tparam Extensions input class if the computations need members already stored in a class
 */
-template <typename ...Extensions>
-class Eval_GCV: public Vec_evaluation<Real, Real, Extensions...>
+template <typename Tuple, typename Hessian, typename ...Extensions>
+class Eval_GCV: public Vec_evaluation<Tuple, Hessian, Extensions...>
 {
+	using output_type = typename std::conditional<std::is_same<Real,Tuple>::value,output_Data<1>,output_Data<2>>::type;
+	
         protected:
                 //! Computes specific parameters needed for GCV
                 void compute_specific_parameters(void) override
@@ -110,20 +114,20 @@ class Eval_GCV: public Vec_evaluation<Real, Real, Extensions...>
                 \param F_ the function wrapper F performing the evaluation
                 \param lambda_vec_ the lambda_vec, vector of lambdas to be evaluated
                 */
-                Eval_GCV(Function_Wrapper<Real, Real, Real, Real, Extensions...> & F_, const std::vector<Real> & lambda_vec_):
-                        Vec_evaluation<Real, Real, Extensions...>(F_,lambda_vec_) {};
+                Eval_GCV(Function_Wrapper<Tuple, Real, Tuple, Hessian, Extensions...> & F_, const std::vector<Tuple> & lambda_vec_):
+                        Vec_evaluation<Tuple, Hessian, Extensions...>(F_, lambda_vec_) {};
 
                 //! Function to build the output data
                 /*!
                  \return output_Data which contains the almost complete output to be returned to R
                 */
-                output_Data  Get_optimization_vectorial(void)
+                output_type Get_optimization_vectorial(void)
                 {
                         std::pair<std::vector<Real>, UInt> p = this->compute_vector();
-                        output_Data output=this->F.get_output_full();
+                        output_type output=this->F.get_output_full();
                         output.GCV_evals  = p.first;
                         output.lambda_sol = this->lambda_vec.at(p.second);      // Safer use of at instead of []
-                        output.lambda_pos = 1+p.second;                         // In R numbering
+                        output.lambda_pos = p.second;
                         output.lambda_vec = this->lambda_vec;
                         output.GCV_opt    = p.first.at(p.second);
 

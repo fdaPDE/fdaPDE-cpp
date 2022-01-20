@@ -4,6 +4,7 @@
 // HEADERS
 #include <functional>
 #include "../../FdaPDE.h"
+#include "../../Global_Utilities/Include/Lambda.h"
 
 // CLASSES
 //! External updater for Lambda Optimizer
@@ -23,7 +24,7 @@ class GOF_updater
                 //! std::vector of lambdas to keep track of the last lambdas used [position means degree of derivative]
                 std::vector<T> last_lambda_derivatives;
                 //! std::vector storing the updaters to be called [position means degree of derivative]
-                std::vector<std::function<void(Real)>> updaters;
+                std::vector<std::function<void(T)>> updaters;
                 //! pointer collecting the lambda optimizer on which the updates have to be performed
                 LambdaOptim * start_ptr = nullptr;
 
@@ -57,6 +58,14 @@ class GOF_updater
                         this->updaters.push_back(std::bind(&LambdaOptim::first_updater, lopt_ptr, std::placeholders::_1));
                         this->updaters.push_back(std::bind(&LambdaOptim::second_updater, lopt_ptr, std::placeholders::_1));
                 }
+                
+		template<typename S=T>
+		typename std::enable_if<std::is_same<S,lambda::type<1>>::value, lambda::type<1>>::type
+		lambda_init(Real value) {return value;}
+		
+		template<typename S=T>
+		typename std::enable_if<std::is_same<S,lambda::type<2>>::value, lambda::type<2>>::type
+		lambda_init(Real value) {return lambda::make_pair(value, value);}
 
         public:
                 // -- CONSTRUCTORS --
@@ -87,7 +96,7 @@ class GOF_updater
                         {
                                 //Debugging purpose
                                 //Rprintf("--- Set updaters ---\n");
-                                initialize(std::vector<Real>{-1.,-1.,-1.});     // dummy initialize the last lambdas
+                                initialize(std::vector<T>{lambda_init(-1.),lambda_init(-1.),lambda_init(-1.)});     // dummy initialize the last lambdas
                                 updaters_setter(lopt_ptr);                      // set all the updaters from the given pointer
                                 start_ptr = lopt_ptr;                           // keep track of the pointer to avoid this procedure next time
                         }

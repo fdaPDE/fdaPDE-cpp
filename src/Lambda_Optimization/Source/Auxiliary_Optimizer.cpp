@@ -6,9 +6,9 @@
  \param bc_idxp pointer of boundary condition indices
  \note version for sparse matrices
 */
-void AuxiliaryOptimizer::bc_utility(MatrixXr & mat, const std::vector<UInt> * bc_idxp)
+void AuxiliaryOptimizer::bc_utility(MatrixXr & mat, const std::vector<UInt> * bc_idxp, bool flag_iterative, UInt M)
 {
-        UInt nbc_indices = bc_idxp->size();
+        UInt nbc_indices = flag_iterative ? bc_idxp->size()/M : bc_idxp->size();
         if(nbc_indices!=0) // Add boundary conditions
         {
                 Real pen = 10e20;
@@ -27,9 +27,9 @@ void AuxiliaryOptimizer::bc_utility(MatrixXr & mat, const std::vector<UInt> * bc
  \param bc_idxp pointer of boundary condition indices
  \note version for full matrices
 */
-void AuxiliaryOptimizer::bc_utility(SpMat & mat, const std::vector<UInt> * bc_idxp)
+void AuxiliaryOptimizer::bc_utility(SpMat & mat, const std::vector<UInt> * bc_idxp, bool flag_iterative, UInt M)
 {
-        UInt nbc_indices = bc_idxp->size();
+        UInt nbc_indices = flag_iterative ? bc_idxp->size()/M : bc_idxp->size();
         if(nbc_indices!=0) // Add boundary conditions
         {
                 Real pen = 10e20;
