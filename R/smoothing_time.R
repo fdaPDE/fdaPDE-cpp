@@ -229,6 +229,10 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
     warning("An optimized method needs a loss function to perform the evaluation, selecting 'lambda.selection.lossfunction' as 'GCV'")
     optim[3] = 1
   }
+  if(optim[1]>0 & (is.null(lambdaS) || is.null(lambdaT)))
+  {
+    warning("No initial point is given: automatic initialization of Newton method")
+  }
   
     # Search algorithm
   if(search=="naive"){
