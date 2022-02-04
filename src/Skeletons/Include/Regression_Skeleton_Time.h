@@ -311,7 +311,7 @@ optimizer_strategy_selection(EvaluationType & optim, CarrierType & carrier)
 
 		lambda::type<2> lambda_init = lambda::make_pair(lambdaS, lambdaT);
 		std::vector<lambda::type<2>> lambda_vec;
-		if(lambda_init(0)>=0 && lambda_init(1)>=0){
+		if(lambda_init(0)>0 && lambda_init(1)>0){
 			lambda_vec.reserve(5);
 			lambda_vec.push_back(lambda_init);
 		}
