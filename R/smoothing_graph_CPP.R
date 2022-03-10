@@ -103,6 +103,11 @@ CPP_eval.graph.FEM <-function(FEM, locations, incidence_matrix, redundancy, ndim
   # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
   
   FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
+  num_sides = 2*dim(FEMbasis$mesh$edges)[1] 
+  for(i in 1:num_sides){
+    if( dim(FEMbasis$mesh$neighbors[[i]] )[1] > 0)
+      FEMbasis$mesh$neighbors[[i]] = FEMbasis$mesh$neighbors[[i]] - 1
+  }
   
   # Imposing types, this is necessary for correct reading from C++
   ## Set proper type for correct C++ reading
@@ -112,7 +117,8 @@ CPP_eval.graph.FEM <-function(FEM, locations, incidence_matrix, redundancy, ndim
   storage.mode(incidence_matrix) <- "integer"
   storage.mode(FEMbasis$mesh$nodes) <- "double"
   storage.mode(FEMbasis$mesh$edges) <- "integer"
-  
+  for(i in 1:num_sides)
+    storage.mode(FEMbasis$mesh$neighbors[[i]]) <- "integer" 
   storage.mode(FEMbasis$order) <- "integer"
   coeff <- as.matrix(FEM$coeff)
   storage.mode(coeff) <- "double"
