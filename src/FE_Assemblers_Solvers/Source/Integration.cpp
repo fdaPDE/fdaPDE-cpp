@@ -3,6 +3,13 @@
 // Out of class definition is needed because these arrays are odr-used
 // Not needed anymore from C++17
 // Note: NNODES variables are not odr-used so no out of class definition is needed
+
+constexpr std::array<Point<1>, IntegratorEdgeP1::NNODES> IntegratorEdgeP1::NODES;
+
+constexpr std::array<Point<1>, IntegratorEdgeP2::NNODES> IntegratorEdgeP2::NODES;
+
+constexpr std::array<Point<1>, IntegratorEdgeP4::NNODES> IntegratorEdgeP4::NODES;
+
 constexpr std::array<Point<2>,IntegratorTriangleP1::NNODES> IntegratorTriangleP1::NODES;
 
 constexpr std::array<Point<2>,IntegratorTriangleP2::NNODES> IntegratorTriangleP2::NODES;
@@ -22,6 +29,11 @@ constexpr std::array<Real,IntegratorGaussP3::NNODES> IntegratorGaussP3::NODES;
 constexpr std::array<Real,IntegratorGaussP5::NNODES> IntegratorGaussP5::NODES;
 
 
+constexpr std::array<Real, IntegratorEdgeP1::NNODES> IntegratorEdgeP1::WEIGHTS;
+
+constexpr std::array<Real, IntegratorEdgeP2::NNODES> IntegratorEdgeP2::WEIGHTS;
+
+constexpr std::array<Real, IntegratorEdgeP4::NNODES> IntegratorEdgeP4::WEIGHTS;
 
 constexpr std::array<Real,IntegratorTriangleP1::NNODES> IntegratorTriangleP1::WEIGHTS;
 

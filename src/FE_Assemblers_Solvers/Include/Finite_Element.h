@@ -10,7 +10,7 @@
 template <UInt ORDER, UInt mydim, UInt ndim>
 class FiniteElementData{
 	static_assert((ORDER==1 || ORDER==2) &&
-								(mydim==2 || mydim==3) &&
+								(mydim==1 || mydim==2 || mydim==3) &&
 								 mydim <= ndim,
 								 "ERROR! TRYING TO INSTANTIATE FINITE ELEMENT WITH WRONG NUMBER OF NODES AND/OR DIMENSIONS! See finite_element.h");
 public:
