@@ -704,16 +704,22 @@ template<typename InputHandler>
 template<typename Derived>
 MatrixXr MixedFERegressionBase<InputHandler>::system_solve(const Eigen::MatrixBase<Derived> & b)
 {
-	// Resolution of the system matrixNoCov * x1 = b
-	MatrixXr x1 = matrixNoCovdec_.solve(b);
-	if(regressionData_.getCovariates()->rows() != 0 && !this->isIterative)
-	{
-		// Resolution of G * x2 = V * x1
-		MatrixXr x2 = Gdec_.solve(V_*x1);
-		// Resolution of the system matrixNoCov * x3 = U * x2
-		x1 -= matrixNoCovdec_.solve(U_*x2);
-	}
+	if(isMatrixNoCov_factorized()) {
+	 // Resolution of the system matrixNoCov * x1 = b
+	 MatrixXr x1 = matrixNoCovdec_.solve(b);
+	 if(regressionData_.getCovariates()->rows() != 0 && !this->isIterative)
+	 {
+		 // Resolution of G * x2 = V * x1
+		 MatrixXr x2 = Gdec_.solve(V_*x1);
+		 // Resolution of the system matrixNoCov * x3 = U * x2
+		 x1 -= matrixNoCovdec_.solve(U_*x2);
+	 }
 	return x1;
+	}
+	else{
+         // There are numerical issues
+         return VectorXr::Zero(2*N_*M_);
+        }
 }
 
 

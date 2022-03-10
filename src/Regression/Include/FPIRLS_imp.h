@@ -79,6 +79,12 @@ void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::apply( const ForcingTerm& u){
       // update J
       past_J_values[i] = current_J_values[i];
       current_J_values[i] = compute_J(i);
+      
+      if( !regression_.isMatrixNoCov_factorized() ) {
+
+         Rprintf("WARNING: System matrix cannot be factorized for optimization parameter in position %d. Try increasing optimization parameter.\n", i+1) ;
+          break;
+      }
 
       n_iterations[i]++;
 
@@ -89,8 +95,15 @@ void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::apply( const ForcingTerm& u){
     _J_minima.push_back(current_J_values[i][0]+current_J_values[i][1]); // compute the minimum value of the J fuctional
 
     if(this->optimizationData_.get_loss_function()=="GCV"){ // compute GCV if it is required
-      compute_GCV(i);
-    }
+
+        if( !regression_.isMatrixNoCov_factorized() ){
+
+            _GCV[i] = std::numeric_limits<double>::quiet_NaN();
+
+        }else{
+    
+      	   compute_GCV(i);
+        }
 
   }// end for
 
@@ -106,18 +119,21 @@ void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::update_solution(UInt& lambda_
   regression_.recomputeWTW(); // at each iteration of FPIRLS W is updated, so WTW has to be recomputed as well.
   regression_.preapply(this->mesh_);
   regression_.apply();
-  const SpMat * Psi = regression_.getpsi_(); // get Psi matrix. It is used for the computation of fn_hat.
+  
+  // if the system matrix is correctly factorized
+  if( regression_.isMatrixNoCov_factorized() ) { //|| n_iterations[lambda_index]==0
+  	const SpMat * Psi = regression_.getpsi_(); // get Psi matrix. It is used for the computation of fn_hat.
 
-  // get the solutions from the regression object.
-  _solution(lambda_index,0) = regression_.getSolution()(0,0);
-  _dof(lambda_index,0) = regression_.getDOF()(0,0);
+  	// get the solutions from the regression object.
+  	_solution(lambda_index,0) = regression_.getSolution()(0,0);
+	_dof(lambda_index,0) = regression_.getDOF()(0,0);
 
-  if(inputData_.getCovariates()->rows()>0){
-    _beta_hat(lambda_index,0) = regression_.getBeta()(0,0);
+  	if(inputData_.getCovariates()->rows()>0){
+    	_beta_hat(lambda_index,0) = regression_.getBeta()(0,0);
+  	}
+
+  	_fn_hat(lambda_index,0) = (*Psi) *_solution(lambda_index,0).topRows(Psi->cols());
   }
-
-  _fn_hat(lambda_index,0) = (*Psi) *_solution(lambda_index,0).topRows(Psi->cols());
-
 
 }
 
