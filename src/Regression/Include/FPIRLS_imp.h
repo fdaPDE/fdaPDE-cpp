@@ -104,6 +104,7 @@ void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::apply( const ForcingTerm& u){
     
       	   compute_GCV(i);
         }
+  }
 
   }// end for
 
