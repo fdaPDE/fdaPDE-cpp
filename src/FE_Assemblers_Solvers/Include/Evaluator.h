@@ -9,142 +9,54 @@
 #include "Matrix_Assembler.h"
 #include "../../Mesh/Include/Mesh.h"
 
-//!  A class for the evaluation of the solution, given the coefficients of the global basis
+//!Template class for function evaluation on given locations
 /*!
- * This class, given a vector of coordinates evaluates the solution, fist locating the point
- * and secondly evaluating it respect to the coefficients of the basis
- * It depends on a template parameter that specifies the Order of the initializing mesh
+ \tparam ORDER UInt representing order of the element of the mesh
+ \tparam mydim UInt representing the mesh space size, 1 for 1.5D, 2 for 2D and 2.5D, 3 for 3D
+ \tparam ndim UInt representing the space size, 2 for 1.5D and 2D, 3 for 2.5D and 3D
+ \sa Mesh
 */
-
-template <UInt ORDER, UInt mydim, UInt ndim>
+template<UInt ORDER, UInt mydim, UInt ndim>
 class Evaluator
 {
+public:
+    //! A constructor. It initializes the constructor given a mesh object.
+    Evaluator(const MeshHandler<ORDER,mydim,ndim>& mesh): mesh_(mesh){};
+
+    //! A member computing the evaluation of a Point in a mesh, given the bases' coefficients.
+    /*!
+    \param locations a RNumericMatrix containing the coordinates of points to evaluate.
+    \param coef a RNumericMatrix containing the coefficients of the solution, the value in position i
+    is associated to the basis \phi(i).
+    \param redundancy a boolean to enforce verbose search for Walking algorithm. If it is true and the walking algorithm fails a new search is performed based on the naive algorithm
+    \param result a RNumericMatrix to an already protected memory space in which the evaluations
+    will be stored
+    */
+    template<bool isManifold=(ndim!=mydim)>
+    typename std::enable_if<isManifold,void>::type
+    eval(const RNumericMatrix& locations,const RNumericMatrix& coef, bool redundancy,RNumericMatrix& result, std::vector<bool>& isinside);
+
+    template<bool isManifold=(ndim!=mydim)>
+    typename std::enable_if<!isManifold,void>::type
+    eval(const RNumericMatrix& locations,const RNumericMatrix& coef, bool redundancy,RNumericMatrix& result, std::vector<bool>& isinside);
+
+    void evalWithInfo(const RNumericMatrix& locations,const RNumericMatrix& coef, bool redundancy,RNumericMatrix& result, std::vector<bool>& isinside, const RIntegerMatrix& element_id,const RNumericMatrix& barycenters);
+
+    //! A member that computes the integral over regions divided by the measure of the region in a mesh,
+    //!  given the bases' coefficients.
+    /*!
+    \param incidenceMatrix a nRegions*nElements RIntegerMatrix telling which triangle compose each region.
+    \param coef a pointer to the vector of coefficients of the solution, the value in position i
+    is associated to the basis \phi(i).
+    \param result a RNumericMatrix to an already protected memory space, where the evaluations
+    will be stored.
+    */
+    void integrate(const RIntegerMatrix& incidenceMatrix, const RNumericMatrix& coef, RNumericMatrix& result);
+
+private:
+    const MeshHandler<ORDER,mydim,ndim> & mesh_;
 };
 
-
-template <UInt ORDER>
-class Evaluator<ORDER,2,2>
-{
-	public:
-		//! A constructor. It initializes the constructor given a mesh object.
-		Evaluator(const MeshHandler<ORDER,2,2>& mesh): mesh_(mesh){};
-
-		//! A member that computes the evaluation of a Point in a mesh, given the bases' coefficients.
-		/*!
-		\param X a pointer to the x coordinates to evaluate.
-		\param Y a pointer to the y coordinates to evaluate.
-		\param length a unsigned integer containing the number of points to evaluate.
-		\param coef a pointer to the vector of coefficients of the solution, the value in position i
-		is associated to the basis \phi(i)
-		\param fast a boolean that specifies if the algorithm is completely based on the walking
-				algorithm (can miss locations in case of non convex structures)
-		\param result a double pointer to an already allocated memory space, where the evaluations
-		will be stored
-		*/
-		void eval(const Real* X, const Real *Y, UInt length, const Real *coef, bool redundancy, Real* result, std::vector<bool>& isinside);
-		void evalWithInfo(const Real* X, const Real *Y, UInt length, const Real *coef, bool redundancy, Real* result, std::vector<bool>& isinside, const std::vector<UInt> & element_id, Real **barycenters);
-
-		//! A member that computes the integral over regions divided by the measure of the region in a mesh,
-		//  given the bases' coefficients.
-		/*!
-		\param incidenceMatrix a nRegions*nElements array telling which triangle compose each region.
-		\param nRegions an unsigned integer containing the number of regions.
-		\param nElements an unsigned integer containing the number of triangles.
-		\param coef a pointer to the vector of coefficients of the solution, the value in position i
-		is associated to the basis \phi(i).
-		\param result a double pointer to an already allocated memory space, where the evaluations
-		will be stored.
-		*/
-		void integrate(UInt** incidenceMatrix, UInt nRegions, UInt nElements, const Real *coef, Real* result);
-
-	private:
-		const MeshHandler<ORDER,2,2> &mesh_;
-
-};
-
-template <UInt ORDER>
-class Evaluator<ORDER,2,3>
-{
-	public:
-		//! A constructor. It initializes the constructor given a mesh object.
-		Evaluator(const MeshHandler<ORDER,2,3>& mesh): mesh_(mesh){};
-
-		//! A member that computes the evaluation of a Point in a mesh, given the bases' coefficients.
-		/*!
-		\param X a pointer to the x coordinates to evaluate.
-		\param Y a pointer to the y coordinates to evaluate.
-		\param Z a pointer to the x coordinates to evaluate.
-		\param length a unsigned integer containing the number of points to evaluate.
-		\param coef a pointer to the vector of coefficients of the solution, the value in position i
-		is associated to the basis \phi(i)
-		\param fast a boolean that specifies if the algorithm is completely based on the walking
-				algorithm (can miss locations in case of non convex structures)
-		\param result a double pointer to an already allocated memory space, where the evaluations
-		will be stored
-		*/
-		void eval(const Real* X, const Real *Y, const Real *Z, UInt length, const Real *coef, bool redundancy, Real* result, std::vector<bool>& isinside);
-		void evalWithInfo(const Real* X, const Real *Y, const Real *Z, UInt length, const Real *coef, bool redundancy, Real* result, std::vector<bool>& isinside, const std::vector<UInt> & element_id, Real **barycenters);
-
-		//! A member that computes the integral over regions divided by the measure of the region in a mesh,
-		//  given the bases' coefficients.
-		/*!
-		\param incidenceMatrix a nRegions*nElements array telling which triangle compose each region.
-		\param nRegions an unsigned integer containing the number of regions.
-		\param nElements an unsigned integer containing the number of triangles.
-		\param coef a pointer to the vector of coefficients of the solution, the value in position i
-		is associated to the basis \phi(i).
-		\param result a double pointer to an already allocated memory space, where the evaluations
-		will be stored.
-		*/
-		void integrate(UInt** incidenceMatrix, UInt nRegions, UInt nElements, const Real *coef, Real* result);
-
-	private:
-		const MeshHandler<ORDER,2,3> &mesh_;
-
-};
-
-
-//Implementazione evaluator mydim=3 ndim=3
-
-template <UInt ORDER>
-class Evaluator<ORDER,3,3>
-{
-	public:
-		//! A constructor. It initializes the constructor given a mesh object.
-		Evaluator(const MeshHandler<ORDER,3,3>& mesh): mesh_(mesh){};
-
-		//! A member that computes the evaluation of a Point in a mesh, given the bases' coefficients.
-		/*!
-		\param X a pointer to the x coordinates to evaluate.
-		\param Y a pointer to the y coordinates to evaluate.
-		\param Z a pointer to the x coordinates to evaluate.
-		\param length a unsigned integer containing the number of points to evaluate.
-		\param coef a pointer to the vector of coefficients of the solution, the value in position i
-		is associated to the basis \phi(i)
-		\param fast a boolean that specifies if the algorithm is completely based on the walking
-				algorithm (can miss locations in case of non convex structures)
-		\param result a double pointer to an already allocated memory space, where the evaluations
-		will be stored
-		*/
-		void eval(const Real* X, const Real *Y, const Real *Z, UInt length, const Real *coef, bool redundancy, Real* result, std::vector<bool>& isinside);
-		void evalWithInfo(const Real* X, const Real *Y, const Real *Z, UInt length, const Real *coef, bool redundancy, Real* result, std::vector<bool>& isinside, const std::vector<UInt> & element_id, Real **barycenters);
-		//! A member that computes the integral over regions divided by the measure of the region in a mesh,
-		//  given the bases' coefficients.
-		/*!
-		\param incidenceMatrix a nRegions*nElements array telling which tetrahedron compose each region.
-		\param nRegions an unsigned integer containing the number of regions.
-		\param nElements an unsigned integer containing the number of tetrahedrons.
-		\param coef a pointer to the vector of coefficients of the solution, the value in position i
-		is associated to the basis \phi(i).
-		\param result a double pointer to an already allocated memory space, where the evaluations
-		will be stored.
-		*/
-		void integrate(UInt** incidenceMatrix, UInt nRegions, UInt nElements, const Real *coef, Real* result);
-
-	private:
-		const MeshHandler<ORDER,3,3> &mesh_;
-
-};
 
 
 #include "Evaluator_imp.h"
