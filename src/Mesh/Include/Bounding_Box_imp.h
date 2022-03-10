@@ -12,11 +12,29 @@ Box<NDIMP>::Box() {
 
 template<int NDIMP>
 Box<NDIMP>::Box(std::vector<Real> const & coord) {
+	/*
 	if(coord.size()==2*NDIMP){
 	x_.resize(2*NDIMP); //multiply 2 for min, max
 	for(int i = 0; i < 2*NDIMP; ++i)
 		x_[i] = coord[i];
 	}
+	*/
+	if(NDIMP==2 && coord.size()==4){ //Point<2> AND Element<2,1,2> Element<3,1,2>
+	        x_.resize(2*NDIMP);
+            x_[0] = std::min(coord[0],coord[2]);
+            x_[1] = std::min(coord[1],coord[3]);
+            x_[2] = std::max(coord[0],coord[2]);
+            x_[3] = std::max(coord[1],coord[3]);
+    	}
+    	else if(NDIMP==3 && coord.size()==6){ //Point<3>
+            x_.resize(2*NDIMP);
+            x_[0] = std::min(coord[0],coord[3]);
+            x_[1] = std::min(coord[1],coord[4]);
+            x_[2] = std::min(coord[2],coord[5]);
+            x_[3] = std::max(coord[0],coord[3]);
+            x_[4] = std::max(coord[1],coord[4]);
+            x_[5] = std::max(coord[2],coord[5]);
+    	}
 	else if(NDIMP==2 && coord.size()==6) {
 			x_.resize(2*NDIMP); //4
 			x_[0] = std::min(std::min(coord[0], coord[2]), coord[4]); //min x
@@ -79,7 +97,13 @@ Box<NDIMP>::Box(Element<NNODES,NDIME,NDIMPP> const & element) {
 		x_[3] = std::max(std::max(std::max(element[0][0], element[1][0]), element[2][0]), element[3][0]); //max x
 		x_[4] = std::max(std::max(std::max(element[0][1], element[1][1]), element[2][1]), element[3][1]); //max y
 		x_[5] = std::max(std::max(std::max(element[0][2], element[1][2]), element[2][2]), element[3][2]); //max z
-  }
+	} else if( NDIME == 1 && NDIMPP == 2 ){
+        x_.resize(2*NDIMP); //4
+        x_[0] = std::min(element[0][0], element[1][0]);
+        x_[1] = std::min(element[0][1], element[1][1]);
+        x_[2] = std::max(element[0][0], element[1][0]);
+        x_[3] = std::max(element[0][1], element[1][1]);
+        }
 }
 
 

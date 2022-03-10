@@ -92,7 +92,7 @@ protected:
 
 template<UInt ndim>
 class Point : public Identifier{
-  static_assert(ndim==2 || ndim==3,
+  static_assert(ndim==2 || ndim==3 || ndim==1,
 								 "ERROR! TRYING TO INSTANTIATE POINT IN UNIMPLEMENTED DIMENSION! See mesh_objects.h");
   public:
     using pointCoords = std::array<Real,ndim>;

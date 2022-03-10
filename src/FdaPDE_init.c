@@ -36,6 +36,10 @@ extern SEXP CPP_TriangleMeshSplit(SEXP, SEXP);
 extern SEXP CPP_TriangleMeshSplitOrder2(SEXP, SEXP);
 extern SEXP CPP_TetraMeshSplit(SEXP, SEXP);
 extern SEXP CPP_TetraMeshSplitOrder2(SEXP, SEXP);
+extern SEXP refine1D(SEXP, SEXP, SEXP);
+extern SEXP CPP_EdgeMeshHelper(SEXP, SEXP);
+extern SEXP CPP_EdgeMeshOrder2(SEXP, SEXP);
+extern SEXP CPP_EdgeMeshSplit(SEXP, SEXP);
 extern SEXP gam_Laplace(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP gam_PDE(SEXP, SEXP, SEXP, SEXP, SEXP,SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP gam_PDE_space_varying( SEXP, SEXP, SEXP, SEXP, SEXP,SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -70,6 +74,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"CPP_TriangleMeshSplitOrder2",       (DL_FUNC) &CPP_TriangleMeshSplitOrder2,        2},
     {"CPP_TetraMeshSplit",                (DL_FUNC) &CPP_TetraMeshSplit,                 2},
     {"CPP_TetraMeshSplitOrder2",          (DL_FUNC) &CPP_TetraMeshSplitOrder2,           2},
+    {"refine1D",                          (DL_FUNC) &refine1D,                           3},
+    {"CPP_EdgeMeshHelper",          	  (DL_FUNC) &CPP_EdgeMeshHelper,           	 2},
+    {"CPP_EdgeMeshOrder2",          	  (DL_FUNC) &CPP_EdgeMeshOrder2,           	 2},
+    {"CPP_EdgeMeshSplit",                 (DL_FUNC) &CPP_EdgeMeshSplit,                  2},
     {"gam_Laplace",                       (DL_FUNC) &gam_Laplace,                       25},
     {"gam_PDE",                           (DL_FUNC) &gam_PDE,                           28},
     {"gam_PDE_space_varying",             (DL_FUNC) &gam_PDE_space_varying,             29},
