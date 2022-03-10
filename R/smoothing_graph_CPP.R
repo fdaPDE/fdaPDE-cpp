@@ -1,0 +1,145 @@
+
+CPP_smooth.graph.FEM.basis<-function(locations, observations, FEMbasis, covariates = NULL, ndim, mydim, BC = NULL, incidence_matrix = NULL, areal.data.avg = TRUE, search, bary.locations, optim, lambda = NULL, DOF.stochastic.realizations = 100, DOF.stochastic.seed = 0, DOF.matrix = NULL, GCV.inflation.factor = 1, lambda.optimization.tolerance = 0.05)
+{
+  
+  # Indexes in C++ starts from 0, in R from 1
+  FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
+  
+  num_sides = 2*dim(FEMbasis$mesh$edges)[1] 
+  for(i in 1:num_sides){
+    if( dim(FEMbasis$mesh$neighbors[[i]] )[1] > 0)
+      FEMbasis$mesh$neighbors[[i]] = FEMbasis$mesh$neighbors[[i]] - 1
+  }
+  
+  if(is.null(covariates))
+  {
+    covariates<-matrix(nrow = 0, ncol = 1)
+  }
+  
+  if(is.null(DOF.matrix))
+  {
+    DOF.matrix<-matrix(nrow = 0, ncol = 1)
+  }
+  
+  if(is.null(locations))
+  {
+    locations<-matrix(nrow = 0, ncol = ndim)
+  }
+  
+  if(is.null(incidence_matrix))
+  {
+    incidence_matrix<-matrix(nrow = 0, ncol = 1)
+  }
+  
+  if(is.null(BC$BC_indices))
+  {
+    BC$BC_indices<-vector(length=0)
+  }else
+  {
+    BC$BC_indices<-as.vector(BC$BC_indices)-1
+    
+  }
+  
+  if(is.null(BC$BC_values))
+  {
+    BC$BC_values<-vector(length=0)
+  }else
+  {
+    BC$BC_values<-as.vector(BC$BC_values)
+  }
+  
+  if(is.null(lambda))
+  {
+    lambda<-vector(length=0)
+  }else
+  {
+    lambda<-as.vector(lambda)
+  }
+  
+  ## Set propr type for correct C++ reading
+  locations <- as.matrix(locations)
+  storage.mode(locations) <- "double"
+  data <- as.vector(observations)
+  storage.mode(observations) <- "double"
+  storage.mode(FEMbasis$mesh$nodes) <- "double"
+  storage.mode(FEMbasis$mesh$edges) <- "integer"
+  
+  for(i in 1:num_sides)
+    storage.mode(FEMbasis$mesh$neighbors[[i]]) <- "integer" 
+  
+  storage.mode(FEMbasis$mesh$order) <- "integer"
+  covariates <- as.matrix(covariates)
+  storage.mode(covariates) <- "double"
+  storage.mode(ndim) <- "integer"
+  storage.mode(mydim) <- "integer"
+  storage.mode(BC$BC_indices) <- "integer"
+  storage.mode(BC$BC_values) <-"double"
+  incidence_matrix <- as.matrix(incidence_matrix)
+  storage.mode(incidence_matrix) <- "integer"
+  areal.data.avg <- as.integer(areal.data.avg)
+  storage.mode(areal.data.avg) <-"integer"
+  storage.mode(search) <- "integer"
+  storage.mode(optim) <- "integer"  
+  storage.mode(lambda) <- "double"
+  DOF.matrix <- as.matrix(DOF.matrix)
+  storage.mode(DOF.matrix) <- "double"
+  storage.mode(DOF.stochastic.realizations) <- "integer"
+  storage.mode(DOF.stochastic.seed) <- "integer"
+  storage.mode(GCV.inflation.factor) <- "double"
+  storage.mode(lambda.optimization.tolerance) <- "double"
+  
+  ## Call C++ function
+  bigsol <- .Call("regression_Laplace", locations, bary.locations, data, FEMbasis$mesh, FEMbasis$mesh$order, mydim, ndim, covariates,
+                  BC$BC_indices, BC$BC_values, incidence_matrix, areal.data.avg, search, 
+                  optim, lambda, DOF.stochastic.realizations, DOF.stochastic.seed, DOF.matrix, GCV.inflation.factor, lambda.optimization.tolerance, PACKAGE = "fdaPDE")
+  
+  return(bigsol)
+}
+
+
+CPP_eval.graph.FEM <-function(FEM, locations, incidence_matrix, redundancy, ndim, mydim, search, bary.locations){
+  
+  FEMbasis = FEM$FEMbasis
+  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
+  
+  FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
+  
+  # Imposing types, this is necessary for correct reading from C++
+  ## Set proper type for correct C++ reading
+  locations <- as.matrix(locations)
+  storage.mode(locations) <- "double"
+  incidence_matrix <- as.matrix(incidence_matrix)
+  storage.mode(incidence_matrix) <- "integer"
+  storage.mode(FEMbasis$mesh$nodes) <- "double"
+  storage.mode(FEMbasis$mesh$edges) <- "integer"
+  
+  storage.mode(FEMbasis$order) <- "integer"
+  coeff <- as.matrix(FEM$coeff)
+  storage.mode(coeff) <- "double"
+  storage.mode(ndim) <- "integer"
+  storage.mode(mydim) <- "integer"
+  storage.mode(locations) <- "double"
+  storage.mode(redundancy) <- "integer"
+  storage.mode(search) <- "integer"
+  
+  if(!is.null(bary.locations)){
+    storage.mode(bary.locations$element_ids) <- "integer"
+    element_ids <- as.matrix(bary.locations$element_ids)
+    storage.mode(bary.locations$barycenters) <- "double"
+    barycenters <- as.matrix(bary.locations$barycenters)
+  }else{   
+    bary.locations = list(locations=matrix(nrow=0,ncol=ndim), element_ids=matrix(nrow=0,ncol=1), barycenters=matrix(nrow=0,ncol=2))
+    storage.mode(bary.locations$element_ids) <- "integer"
+    storage.mode(bary.locations$barycenters) <- "double"
+  }
+  
+  #Calling the C++ function "eval_FEM_fd" in FEM_Eval.cpp
+  evalmat = matrix(0,max(nrow(locations),nrow(incidence_matrix)),ncol(coeff))
+  for (i in 1:ncol(coeff)){
+    evalmat[,i] <- .Call("eval_FEM_fd", FEMbasis$mesh, locations, incidence_matrix, as.matrix(coeff[,i]),
+                         FEMbasis$order, redundancy, mydim, ndim, search, bary.locations, PACKAGE = "fdaPDE")
+  }
+  
+  #Returning the evaluation matrix
+  return(evalmat)
+}
