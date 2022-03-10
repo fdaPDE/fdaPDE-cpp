@@ -154,6 +154,10 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
   {
     ndim = 3
     mydim = 3
+  }else if(class(FEMbasis$mesh) == "mesh.1.5D")
+  {
+    ndim = 2
+    mydim = 1
   }else
   {
     stop('Unknown mesh class')
@@ -241,7 +245,9 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
     search=2
   }else if(search=="walking" & class(FEMbasis$mesh) == "mesh.2.5D"){
     stop("walking search is not available for mesh class mesh.2.5D.")
-  }else if(search=="walking" & class(FEMbasis$mesh) != "mesh.2.5D"){
+  }else if(search=="walking" & class(FEMbasis$mesh) == "mesh.1.5D"){
+    stop("walking search is not available for mesh class mesh.1.5D.")
+  }else if(search=="walking" & class(FEMbasis$mesh) != "mesh.2.5D" & class(FEMbasis$mesh) != "mesh.1.5D"){
     search=3
   }else{
     stop("'search' must must belong to the following list: 'naive', 'tree' or 'walking'.")
@@ -388,7 +394,17 @@ smooth.FEM.time<-function(locations = NULL, time_locations = NULL, observations,
       FLAG_MASS = FLAG_MASS, FLAG_PARABOLIC = FLAG_PARABOLIC,FLAG_ITERATIVE=FLAG_ITERATIVE, threshold = threshold , max.steps = max.steps, IC = IC,
       search = search, bary.locations = bary.locations,
       optim = optim, lambdaS = lambdaS, lambdaT = lambdaT, DOF.stochastic.realizations = DOF.stochastic.realizations, DOF.stochastic.seed = DOF.stochastic.seed, DOF.matrix = DOF.matrix, GCV.inflation.factor = GCV.inflation.factor, lambda.optimization.tolerance = lambda.optimization.tolerance)
+  }else if(class(FEMbasis$mesh) == 'mesh.1.5D')
+  {
+    bigsol = NULL
+    bigsol = CPP_smooth.graph.FEM.time(locations = locations, time_locations = time_locations, observations = observations, FEMbasis = FEMbasis, time_mesh=time_mesh,
+                                          covariates = covariates, ndim = ndim, mydim = mydim, BC = BC,
+                                          incidence_matrix = incidence_matrix, areal.data.avg = areal.data.avg,
+                                          FLAG_MASS = FLAG_MASS, FLAG_PARABOLIC = FLAG_PARABOLIC,FLAG_ITERATIVE=FLAG_ITERATIVE, threshold = threshold , max.steps = max.steps, IC = IC,
+                                          search = search, bary.locations = bary.locations,
+                                          optim = optim, lambdaS = lambdaS, lambdaT = lambdaT, DOF.stochastic.realizations = DOF.stochastic.realizations, DOF.stochastic.seed = DOF.stochastic.seed, DOF.matrix = DOF.matrix, GCV.inflation.factor = GCV.inflation.factor, lambda.optimization.tolerance = lambda.optimization.tolerance)
   }
+  
   # ---------- Solution -----------
   N = nrow(FEMbasis$mesh$nodes)
   M = ifelse(FLAG_PARABOLIC,length(time_mesh)-1,length(time_mesh) + 2);
