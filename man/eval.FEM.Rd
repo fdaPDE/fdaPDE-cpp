@@ -10,7 +10,7 @@ eval.FEM(FEM, locations = NULL, incidence_matrix = NULL, search = "tree",
 \arguments{
 \item{FEM}{A \code{FEM} object to be evaluated.}
 
-\item{locations}{A 2-columns (in 2D) or 3-columns (in 2.5D and 3D) matrix with the spatial locations where the
+\item{locations}{A 2-columns (in 1.5D or 2D) or 3-columns (in 2.5D and 3D) matrix with the spatial locations where the
 FEM object should be evaluated.}
 
 \item{incidence_matrix}{In case of areal evaluations, the #regions-by-#elements incidence matrix defining the regions

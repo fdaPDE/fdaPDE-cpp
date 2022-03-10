@@ -1,6 +1,7 @@
 #' Plot a \code{FEM} object
 #'
 #' @param x A \code{FEM} object.
+#' @param colormap A colormap exploited in the plot. The default value is the heat colormap. 
 #' @param num_refinements A natural number specifying how many bisections should be applied to each triangular element for
 #' plotting purposes. This functionality is useful where a discretization with 2nd order Finite Element is applied.
 #' This parameter can be specified only when a FEM object defined over a 2D mesh is plotted.

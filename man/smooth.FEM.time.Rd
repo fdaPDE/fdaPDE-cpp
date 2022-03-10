@@ -4,19 +4,16 @@
 \alias{smooth.FEM.time}
 \title{Space-time regression with differential regularization}
 \usage{
-smooth.FEM.time(locations = NULL, time_locations = NULL, observations,
-                 FEMbasis, time_mesh = NULL, covariates = NULL,
-                 PDE_parameters = NULL, BC = NULL, incidence_matrix =
-                 NULL, areal.data.avg = TRUE, FLAG_MASS = FALSE,
-                 FLAG_PARABOLIC = FALSE, FLAG_ITERATIVE = FALSE,
-                 threshold = 10^(-4), max.steps = 50, IC = NULL, search
-                 = "tree", bary.locations = NULL,
-                 lambda.selection.criterion = "grid", DOF.evaluation =
-                 NULL, lambda.selection.lossfunction = NULL, lambdaS =
-                 NULL, lambdaT = NULL, DOF.stochastic.realizations =
-                 100, DOF.stochastic.seed = 0, DOF.matrix = NULL,
-                 GCV.inflation.factor = 1,
-                 lambda.optimization.tolerance = 0.05)
+smooth.FEM.time(locations = NULL, time_locations = NULL, observations, FEMbasis, 
+time_mesh=NULL, covariates = NULL, PDE_parameters = NULL,  BC = NULL,
+incidence_matrix = NULL, areal.data.avg = TRUE,
+FLAG_MASS = FALSE, FLAG_PARABOLIC = FALSE, FLAG_ITERATIVE = FALSE,
+threshold = 10^(-4), max.steps = 50, IC = NULL,
+search = "tree", bary.locations = NULL,
+lambda.selection.criterion = "grid", DOF.evaluation = NULL, 
+lambda.selection.lossfunction = NULL, lambdaS = NULL, lambdaT = NULL, 
+DOF.stochastic.realizations = 100, DOF.stochastic.seed = 0, 
+DOF.matrix = NULL, GCV.inflation.factor = 1, lambda.optimization.tolerance = 0.05)
 }
 \arguments{
 \item{locations}{A matrix where each row specifies the spatial coordinates \code{x} and \code{y} (and \code{z} if ndim=3) of the corresponding observations in the vector \code{observations}.
@@ -63,7 +60,7 @@ This is only for areal data. In case of pointwise data, this parameter is set to
 
 \item{FLAG_PARABOLIC}{Boolean. If \code{TRUE} the parabolic problem problem is selected, if \code{FALSE} the separable one.}
 
-\item{FLAG_ITERATIVE}{Boolean. If \code{TRUE} the iterative method problem is selected, if \code{FALSE} the monolithic one.}
+\item{FLAG_ITERATIVE}{Boolean. If \code{TRUE} the iterative method is selected, if \code{FALSE} the monolithic one.}
 
 \item{threshold}{This parameter is used for arresting algorithm iterations. Algorithm stops when two successive iterations lead to improvement in penalized log-likelihood smaller than threshold.
 Default value \code{threshold = 10^(-4)}.}

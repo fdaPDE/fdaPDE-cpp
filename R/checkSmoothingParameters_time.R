@@ -11,7 +11,7 @@ checkSmoothingParameters_time<-function(locations = NULL, time_locations=NULL, o
   if(class(FEMbasis$mesh)!='mesh.2D' & class(FEMbasis$mesh) != "mesh.2.5D" & class(FEMbasis$mesh) != "mesh.3D" & class(FEMbasis$mesh) != "mesh.1.5D")
     stop('Unknown mesh class')
 
-  if((class(FEMbasis$mesh) == "mesh.2.5D" || class(FEMbasis$mesh) == "mesh.3D" || class(FEMbasis$mesh) == "mesh.1.5D")) & !is.null(PDE_parameters) )
+  if((class(FEMbasis$mesh) == "mesh.2.5D" || class(FEMbasis$mesh) == "mesh.3D" || class(FEMbasis$mesh) == "mesh.1.5D") & !is.null(PDE_parameters) )
     stop('For mesh classes different from mesh.2D, anysotropic regularization is not yet implemented.
          Use Laplacian regularization instead')
 
