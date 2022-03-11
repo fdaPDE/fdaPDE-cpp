@@ -228,6 +228,7 @@ CPP_eval.manifold.FEM.time = function(FEM.time, locations, time_locations, incid
   storage.mode(FEMbasis$mesh$edges) <- "integer"
   storage.mode(FEMbasis$mesh$neighbors) <- "integer"
   storage.mode(FEMbasis$order) <- "integer"
+  storage.mode(FEM.time$mesh_time) <- "double"
   coeff <- as.matrix(FEM.time$coeff)
   storage.mode(coeff) <- "double"
   storage.mode(ndim) <- "integer"
