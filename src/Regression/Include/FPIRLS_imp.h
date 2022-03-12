@@ -332,6 +332,7 @@ void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_variance_est(){
       }
       _variance_estimates[i][j] /= this->mu_[i][j].size();
     }
+   }
   }else{
     _variance_estimates.resize(lenS_, std::vector<Real>(lenT_,-1));
   }

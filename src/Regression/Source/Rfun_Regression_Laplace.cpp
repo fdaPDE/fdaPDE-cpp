@@ -2,6 +2,7 @@
 #include "../../Skeletons/Include/Regression_Skeleton.h"
 #include "../../Skeletons/Include/Regression_Skeleton_Time.h"
 #include "../../Skeletons/Include/GAM_Skeleton.h"
+#include "../../Skeletons/Include/GAM_Skeleton_time.h"
 #include "../Include/Regression_Data.h"
 #include "../../FE_Assemblers_Solvers/Include/Integration.h"
 #include "../../Lambda_Optimization/Include/Optimization_Data.h"
@@ -209,5 +210,42 @@ extern "C"
             		return(GAM_skeleton<GAMDataLaplace, 2, 1, 2>(regressionData, optimizationData, Rmesh, Rmu0, family, RscaleParam));
 
 	return(R_NilValue);
+	}
+	
+	SEXP gam_Laplace_time(SEXP Rlocations, SEXP RbaryLocations, SEXP Rtime_locations, SEXP Robservations, SEXP Rmesh, SEXP Rmesh_time, 
+		SEXP Rorder, SEXP Rmydim, SEXP Rndim, SEXP Rcovariates, SEXP RBCIndices, SEXP RBCValues,  SEXP RincidenceMatrix, 
+		SEXP RarealDataAvg, SEXP Rflag_mass, SEXP Rflag_parabolic,SEXP Rflag_iterative, SEXP Rmax_num_iteration, SEXP Rthreshold, 
+		SEXP Ric, SEXP Rfamily, SEXP Rmax_num_iteration_pirls, SEXP Rthreshold_pirls, SEXP Rmu0, SEXP RscaleParam, SEXP Rsearch,
+		SEXP Roptim, SEXP Rlambda_S, SEXP Rlambda_T, SEXP Rnrealizations, SEXP Rseed, SEXP RDOF_matrix, SEXP Rtune, SEXP Rsct)
+	{
+	    	//Set input data
+		GAMDataLaplace regressionData(Rlocations, RbaryLocations, Rtime_locations, Robservations, Rorder, Rcovariates, RBCIndices, RBCValues,
+            RincidenceMatrix, RarealDataAvg, Rflag_mass, Rflag_parabolic,
+            Rflag_iterative, Rmax_num_iteration, Rthreshold, Ric, Rsearch,
+            Rmax_num_iteration_pirls, Rthreshold_pirls);
+		OptimizationData optimizationData(Roptim, Rlambda_S, Rlambda_T, Rflag_parabolic, Rnrealizations, Rseed, RDOF_matrix, Rtune, Rsct);
+	  	std::string family = CHAR(STRING_ELT(Rfamily,0));
+
+		UInt mydim = INTEGER(Rmydim)[0];
+		UInt ndim = INTEGER(Rndim)[0];
+
+		if(regressionData.getOrder()==1 && mydim==2 && ndim==2)
+			return(GAM_skeleton_time<GAMDataLaplace, 1, 2, 2>(regressionData, optimizationData, Rmesh, Rmesh_time, Rmu0, family, RscaleParam));
+		else if(regressionData.getOrder()==2 && mydim==2 && ndim==2)
+			return(GAM_skeleton_time<GAMDataLaplace, 2, 2, 2>(regressionData, optimizationData, Rmesh, Rmesh_time, Rmu0, family, RscaleParam));
+		else if(regressionData.getOrder()==1 && mydim==2 && ndim==3)
+			return(GAM_skeleton_time<GAMDataLaplace, 1, 2, 3>(regressionData, optimizationData, Rmesh, Rmesh_time, Rmu0, family, RscaleParam));
+		else if(regressionData.getOrder()==2 && mydim==2 && ndim==3)
+			return(GAM_skeleton_time<GAMDataLaplace, 2, 2, 3>(regressionData, optimizationData, Rmesh, Rmesh_time, Rmu0, family, RscaleParam));
+		else if(regressionData.getOrder()==1 && mydim==3 && ndim==3)
+			return(GAM_skeleton_time<GAMDataLaplace, 1, 3, 3>(regressionData, optimizationData, Rmesh, Rmesh_time, Rmu0, family, RscaleParam));
+		else if(regressionData.getOrder()==2 && mydim==3 && ndim==3)
+			return(GAM_skeleton_time<GAMDataLaplace, 2, 3, 3>(regressionData, optimizationData, Rmesh, Rmesh_time, Rmu0, family, RscaleParam));
+		else if(regressionData.getOrder()==1 && mydim==1 && ndim==2)
+			return(GAM_skeleton_time<GAMDataLaplace, 1, 1, 2>(regressionData, optimizationData, Rmesh, Rmesh_time, Rmu0, family, RscaleParam));
+		else if(regressionData.getOrder()==2 && mydim==1 && ndim==2)
+			return(GAM_skeleton_time<GAMDataLaplace, 2, 1, 2>(regressionData, optimizationData, Rmesh, Rmesh_time, Rmu0, family, RscaleParam));	
+
+	    	return(NILSXP);
 	}
 }
