@@ -121,6 +121,7 @@ OptimizationData::OptimizationData(SEXP Roptim, SEXP Rlambda, SEXP Rnrealization
         {
                 fill_lambda(Rlambda, this->lambda_S, this->size_S);
                 set_lambdaS_backup(); // save a backup
+                lambdaT_backup.push_back(0); // I need one element anyway, otherwise GAM sol will be of size 0
         }
         else // Rlambda is an initial value (or null)
         {
@@ -150,6 +151,7 @@ OptimizationData::OptimizationData(SEXP Roptim, SEXP Rlambda_S, SEXP Rlambda_T, 
                 fill_lambda(Rlambda_S, this->lambda_S, this->size_S);
                 fill_lambda(Rlambda_T, this->lambda_T, this->size_T);
                 set_lambdaS_backup(); // save a backup
+                set_lambdaT_backup();
         }
         else // Rlambda is an initial value (or null)
         {
