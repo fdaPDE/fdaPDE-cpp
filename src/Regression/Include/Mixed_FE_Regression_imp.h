@@ -1181,9 +1181,10 @@ void MixedFERegressionBase<InputHandler>::preapply(EOExpr<A> oper, const Forcing
 		Assembler::forcingTerm(mesh_, fe, u, rhs_ft_correction_);
 	}
 
-	if(regressionData_.isSpaceTime() && !this->isIterative)
+	if(regressionData_.isSpaceTime() && !isTimeComputed && !this->isIterative)
 	{
 		this->buildSpaceTimeMatrices();
+		isTimeComputed = true;
 	}
 
 	// Set final transpose of Psi matrix
@@ -1897,6 +1898,10 @@ class MixedFERegression<GAMDataLaplace>: public MixedFERegressionBase<Regression
 	public:
 		MixedFERegression(const RegressionData & regressionData, OptimizationData & optimizationData, UInt nnodes_):
 			MixedFERegressionBase<RegressionData>(regressionData, optimizationData, nnodes_) {};
+		
+		MixedFERegression(const std::vector<Real>& mesh_time, 
+			const RegressionData& regressionData, OptimizationData& optimizationData, UInt nnodes_): 
+				MixedFERegressionBase<RegressionData>(mesh_time, regressionData, optimizationData, nnodes_){};
 
 		template<UInt ORDER, UInt mydim, UInt ndim>
 		void preapply(const MeshHandler<ORDER,mydim,ndim> & mesh)

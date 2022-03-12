@@ -94,6 +94,7 @@ class MixedFERegressionBase
 		bool isR0Computed  = false;
 		bool isR1Computed  = false;
 		bool isUVComputed  = false;
+		bool isTimeComputed = false;
 
 		bool isSpaceVarying = false; //!< used to distinguish whether to use the forcing term u in apply() or not
 		bool isGAMData;
