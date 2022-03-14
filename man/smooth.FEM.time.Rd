@@ -10,6 +10,8 @@ incidence_matrix = NULL, areal.data.avg = TRUE,
 FLAG_MASS = FALSE, FLAG_PARABOLIC = FALSE, FLAG_ITERATIVE = FALSE,
 threshold = 10^(-4), max.steps = 50, IC = NULL,
 search = "tree", bary.locations = NULL,
+family = "gaussian", mu0 = NULL, scale.param = NULL,
+threshold.FPIRLS = 0.0002020, max.steps.FPIRLS = 15,
 lambda.selection.criterion = "grid", DOF.evaluation = NULL, 
 lambda.selection.lossfunction = NULL, lambdaS = NULL, lambdaT = NULL, 
 DOF.stochastic.realizations = 100, DOF.stochastic.seed = 0, 
@@ -78,6 +80,22 @@ also data at the initial time. IC will be estimated from them.}
 \code{locations}, location points which are same as the given locations options. (checks whether both locations are the same);
 \code{element ids}, a vector of element id of the points from the mesh where they are located;
 \code{barycenters}, a vector of barycenter of points from the located element.}
+
+\item{family}{This parameter specify the distibution within exponential family used for GLM model.
+The following distribution are implemented: "binomial", "exponential", "gamma", "poisson", "gaussian", "invgaussian".
+The default link function for binomial is \code{logit} if you want either \code{probit} or \code{clogloc} set \code{family = "probit"}, \code{family = "cloglog"}.}
+
+\item{mu0}{This parameter is a vector that set the starting point for FPIRLS algorithm. It represent an initial guess of the location parameter.
+Default is set to observation for non binary distribution while equal to \code{0.5(observations + 0.5)} for binary data.}
+
+\item{scale.param}{Dispersion parameter of the chosen distribution. This is only required for "gamma", "gaussian", "invgaussian".
+User may specify the parameter as a positive real number. If the parameter is not supplied, it is estimated from data according to Wilhelm Sangalli 2016.}
+
+\item{threshold.FPIRLS}{This parameter is used for arresting algorithm iterations. Algorithm stops when two successive iterations lead to improvement in penalized log-likelihood smaller than threshold.FPIRLS.
+Default value \code{threshold.FPIRLS = 0.0002020}.}
+
+\item{max.steps.FPIRLS}{This parameter is used to limit the maximum number of iteration.
+Default value \code{max.steps.FPIRLS=15}.}
 
 \item{lambda.selection.criterion}{This parameter is used to select the optimization method related to smoothing parameter \code{lambda}.
 The following methods are implemented: 'grid', further optimization methods are yet to come. 
