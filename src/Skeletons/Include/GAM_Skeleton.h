@@ -32,7 +32,7 @@ SEXP GAM_skeleton(InputHandler & GAMData, OptimizationData & optimizationData, S
   	const MatrixXr& dof = fpirls->getDOF();
   	const std::vector<std::vector<Real>>& J_value = fpirls->get_J();
   	const MatrixXv& fn_hat = fpirls->getFunctionEst();
-  	const std::vector<std::vector<Real>> variance_est = fpirls->getVarianceEst();
+  	const std::vector<std::vector<Real>>& variance_est = fpirls->getVarianceEst();
   	const std::vector<std::vector<Real>>& GCV = fpirls->getGCV();
 
   	const UInt bestLambda = optimizationData.get_best_lambda_S();

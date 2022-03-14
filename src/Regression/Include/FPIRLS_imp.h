@@ -137,7 +137,7 @@ void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::apply( const ForcingTerm& u){
 }
 
 template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
-void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::update_solution(UInt& lambdaS_index, UInt& lambdaT_index){
+void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::update_solution(const UInt& lambdaS_index, const UInt& lambdaT_index){
   // performs step (2) of PIRLS. It requires pseudo data after step(1) and mimic regression skeleton behaviour
 
   // Here we have to solve a weighted regression problem.
@@ -163,7 +163,7 @@ void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::update_solution(UInt& lambdaS
 
 
 template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
-void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_pseudoObs(UInt& lambdaS_index, UInt& lambdaT_index){
+void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_pseudoObs(const UInt& lambdaS_index, const UInt& lambdaT_index){
   // compute pseudodata observations
 
   VectorXr first_addendum; // G_ii( z_i - mu_i)
@@ -186,7 +186,7 @@ void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_pseudoObs(UInt& lambd
 
 
 template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
-void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_G(UInt& lambdaS_index, UInt& lambdaT_index){
+void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_G(const UInt& lambdaS_index, const UInt& lambdaT_index){
   // compute the G matrix as G_ii = diag( g'(mu_i))
 
   G_[lambdaS_index][lambdaT_index].resize(mu_[lambdaS_index][lambdaT_index].size());
@@ -199,7 +199,7 @@ void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_G(UInt& lambdaS_index
 
 
 template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
-void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_Weights(UInt& lambdaS_index, UInt& lambdaT_index){
+void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_Weights(const UInt& lambdaS_index, const UInt& lambdaT_index){
   // computed W elementwise (it is a diagonal matrix)
 
   WeightsMatrix_[lambdaS_index][lambdaT_index].resize( mu_[lambdaS_index][lambdaT_index].size());
@@ -212,7 +212,7 @@ void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_Weights(UInt& lambdaS
 
 
 template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
-void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_mu(UInt& lambdaS_index, UInt& lambdaT_index){
+void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_mu(const UInt& lambdaS_index, const UInt& lambdaT_index){
   //compute mu as mu_i = g-1( w_ii*beta + fn_hat)
 
   VectorXr W_beta = VectorXr::Zero(mu_[lambdaS_index][lambdaT_index].size()); // initialize the vector w_ii*beta
@@ -228,7 +228,7 @@ void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_mu(UInt& lambdaS_inde
 
 
 template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
-bool FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::stopping_criterion(UInt& lambdaS_index, UInt& lambdaT_index){
+bool FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::stopping_criterion(const UInt& lambdaS_index, const UInt& lambdaT_index){
   // return true if the f-PIRLS has to perform another iteration, false if it has to be stopped
 
   bool do_stop_by_iteration = false;  // Do I need to stop becouse n_it > n_max?
@@ -248,7 +248,7 @@ bool FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::stopping_criterion(UInt& lamb
 }
 
 template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
-std::array<Real,2> FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_J(UInt& lambdaS_index, UInt& lambdaT_index){
+std::array<Real,2> FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_J(const UInt& lambdaS_index, const UInt& lambdaT_index){
   // compute the functional J: it is divided in parametric and non parametric part
   Real parametric_value = 0;
   Real non_parametric_value = 0;
@@ -284,7 +284,7 @@ std::array<Real,2> FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_J(UInt&
 
 
 template <typename InputHandler, UInt ORDER, UInt mydim, UInt ndim>
-void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_GCV(UInt& lambdaS_index, UInt& lambdaT_index){
+void FPIRLS_Base<InputHandler,ORDER, mydim, ndim>::compute_GCV(const UInt& lambdaS_index, const UInt& lambdaT_index){
 
         if (optimizationData_.get_DOF_evaluation() != "not_required") //in this case surely we have already the dofs
         { // is DOF_matrix to be computed?

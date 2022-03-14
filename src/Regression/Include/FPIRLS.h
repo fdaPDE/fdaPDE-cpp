@@ -54,21 +54,21 @@ class FPIRLS_Base {
    std::vector<std::vector<Real>> _variance_estimates; //!< Stores the variance estimates for each lambda.
 
    //! A method that computes the pseudodata. It perform step (1) of f-PIRLS.
-   void compute_pseudoObs(UInt& lambdaS_index, UInt& lambdaT_index);
+   void compute_pseudoObs(const UInt& lambdaS_index, const UInt& lambdaT_index);
    //! A method that assembles G matrix.
-   void compute_G(UInt& lambdaS_index, UInt& lambdaT_index);
+   void compute_G(const UInt& lambdaS_index, const UInt& lambdaT_index);
    //! A method that assembles the weights matrix ( a diagonal matrix, hence it is stored as vector).
-   void compute_Weights(UInt& lambdaS_index, UInt& lambdaT_index);
+   void compute_Weights(const UInt& lambdaS_index, const UInt& lambdaT_index);
    //! A method that updates the solution. It perform step (2) of F-PIRLS.
-   void update_solution(UInt& lambdaS_index, UInt& lambdaT_index);
+   void update_solution(const UInt& lambdaS_index, const UInt& lambdaT_index);
    //! A method that updates mu vector. It perform step (3) of F-PIRLS.
-   void compute_mu(UInt& lambdaS_index, UInt& lambdaT_index);
+   void compute_mu(const UInt& lambdaS_index, const UInt& lambdaT_index);
    //! A method that stops PIRLS based on difference between functionals J_k J_k+1 or n_iterations > max_num_iterations .
-   bool stopping_criterion(UInt& lambdaS_index, UInt& lambdaT_index);
+   bool stopping_criterion(const UInt& lambdaS_index, const UInt& lambdaT_index);
    //! A method that computes and return the current value of the functional J. It is divided in parametric and non parametric part.
-   std::array<Real,2> compute_J(UInt& lambdaS_index, UInt& lambdaT_index);
+   std::array<Real,2> compute_J(const UInt& lambdaS_index, const UInt& lambdaT_index);
    //! A method that computes the GCV value for a given lambda.
-   void compute_GCV(UInt& lambdaS_index, UInt& lambdaT_index);
+   void compute_GCV(const UInt& lambdaS_index, const UInt& lambdaT_index);
    //! A method that computes the estimates of the variance. It depends on the scale flags: only the Gamma and InvGaussian distributions have the scale parameter.
    void compute_variance_est();
 
@@ -110,7 +110,7 @@ class FPIRLS_Base {
    //! An inline member that returns a VectorXr, returns the final function estimates.
    inline MatrixXv const & getFunctionEst() const{return _fn_hat;}
    //! An inline member that returns the variance estimates.
-   inline std::vector<std::vector<Real>> const getVarianceEst() const{return  _variance_estimates;}
+   inline std::vector<std::vector<Real>> const & getVarianceEst() const{return  _variance_estimates;}
    //! An inline member that returns a the computed (or not) GCV estimates. If GCV is not computed, -1 is returned
    inline std::vector<std::vector<Real>> const & getGCV() const{return _GCV;}
 
