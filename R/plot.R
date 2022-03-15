@@ -50,7 +50,7 @@ if(class(x$FEMbasis$mesh)=="mesh.2D"){
 }else if(class(x$FEMbasis$mesh)=="mesh.3D"){
 	R_plot_volume(x,...)
 }else if(class(x$FEMbasis$mesh)=="mesh.1.5D"){
-   R_plot_graph(x, colormap,...)
+   R_plot_graph(x, ...)
 }
 }
 
