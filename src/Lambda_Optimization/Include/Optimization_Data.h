@@ -48,6 +48,7 @@ class  OptimizationData
 
                 // For GAM
                 std::vector<Real> lambdaS_backup;               //!< Backup vector of lambda_S (as passed by the user), used in GAM methods
+                std::vector<Real> lambdaT_backup;               //!< Backup vector of lambda_T (as passed by the user), used in GAM methods
 
                 // For optimized methods
                 Real stopping_criterion_tol = 0.05;             //!< Contains the user defined tolerance for optimized methods
@@ -85,7 +86,10 @@ class  OptimizationData
                 inline void set_current_lambdaS(const Real new_lambdaS) {current_lambdaS = new_lambdaS;}
                 inline void set_current_lambdaT(const Real new_lambdaT) {current_lambdaT = new_lambdaT;}                        //!< Utility for GAM problems, that always need a vector \param new_lambdaS, new current_lambdaS
                 inline void setCurrentLambda(UInt lambda_index) {lambda_S = std::vector<Real>(1,lambdaS_backup[lambda_index]);} //!< Setter of a backup of lambda_S manpualted in setCurrentLambda
+                inline void setCurrentLambda(UInt lambdaS_index, UInt lambdaT_index) {lambda_S = std::vector<Real>(1,lambdaS_backup[lambdaS_index]);
+                                                                                      lambda_T = std::vector<Real>(1, lambdaT_backup[lambdaT_index]);} //!< Setter of a backup of lambda_S manpualted in setCurrentLambda
                 inline void set_lambdaS_backup(void) {lambdaS_backup = lambda_S;}
+                inline void set_lambdaT_backup(void) {lambdaT_backup = lambda_T;}
 
                 // Getters
                 inline std::string get_criterion(void) const {return criterion;}                        //!< Getter of criterion \return criterion
@@ -110,6 +114,7 @@ class  OptimizationData
                 inline Real get_current_lambdaS(void) const {return current_lambdaS;}                   //!< Getter of current_lambdaS \return current_lambdaS
                 inline Real get_current_lambdaT(void) const {return current_lambdaT;}                   //!< Getter of current_lambdaT \return current_lambdaT
                 inline const std::vector<Real> * get_LambdaS_vector() const {return &lambdaS_backup;}   //!< Getter of backup lamnda_S vector for GAM problems \return &lambdaS_backup
+                inline const std::vector<Real> * get_LambdaT_vector() const {return &lambdaT_backup;}   //!< Getter of backup lamnda_T vector for GAM problems \return &lambdaS_backup
 
                 // Debugging
                 void print_opt_data(void) const;

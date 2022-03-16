@@ -544,13 +544,12 @@ projection.points.2.5D<-function(mesh, locations) {
   if(class(mesh) !="mesh.2.5D")
   stop("Data projection is only available for 2.5D mesh ")
 
-  if (mesh$order == 2)
-    stop("Data projection is only available for order 1 ")
-
   mesh$triangles = mesh$triangles - 1
   mesh$edges = mesh$edges - 1
   mesh$neighbors[mesh$neighbors != -1] = mesh$neighbors[mesh$neighbors != -1] - 1
-
+  
+  mydim=2
+  ndim=3
   # Imposing types, this is necessary for correct reading from C++
   ## Set proper type for correct C++ reading
   locations <- as.matrix(locations)
@@ -560,9 +559,11 @@ projection.points.2.5D<-function(mesh, locations) {
   storage.mode(mesh$edges) <- "integer"
   storage.mode(mesh$neighbors) <- "integer"
   storage.mode(mesh$order) <- "integer"
+  storage.mode(mydim) <- "integer"
+  storage.mode(ndim) <-"integer"
 
   ## Call C++ function
-  evalmat <- .Call("points_projection", mesh, locations, PACKAGE = "fdaPDE")
+  evalmat <- .Call("points_projection", mesh, locations, mydim, ndim, PACKAGE = "fdaPDE")
 
   #Returning the evaluation matrix
   return(evalmat)
@@ -809,5 +810,221 @@ refine.by.splitting.mesh.3D <- function (mesh=NULL){
 
   return(splittedmesh)
 
+}
+
+#' Create a 1.5D linear network mesh
+#'
+#' @param nodes A #nodes-by-2 matrix containing the x and y coordinates of the mesh nodes.
+#' @param nodesattributes A matrix with #nodes rows containing nodes' attributes.
+#' These are passed unchanged to the output. If a node is added during the triangulation process or mesh refinement, its attributes are computed
+#' by linear interpolation using the attributes of neighboring nodes. This functionality is for instance used to compute the value
+#' of a Dirichlet boundary condition at boundary nodes added during the triangulation process.
+#' @param edges A #edges-by-2 (when \code{order} = 1) or #triangles-by-3 (when \code{order} = 2) matrix.
+#' This option is used when a triangulation is already available. It specifies the edges giving the row's indices in \code{nodes} of the edges' vertices and (when \code{nodes} = 2) also if the triangles' edges midpoints. The triangles' vertices and midpoints are ordered as
+#' 1---3---2
+#' In this case the function \code{create.mesh.1.5D} is used to produce a complete mesh.1.5D object.
+#' @param order Either '1' or '2'. It specifies wether each mesh should be represented by 2 nodes (the edges vertices) or by 3 nodes (the edges's vertices and midpoint).
+#' These are
+#' respectively used for linear (order = 1) and quadratic (order = 2) Finite Elements. Default is \code{order} = 1.
+#' @usage create.mesh.1.5D(nodes, edges = NULL, order = 1, nodesattributes = NULL)
+#' @return An object of the class mesh.1.5D with the following output:
+#' \itemize{
+#' \item{\code{nodes}}{A #nodes-by-2 matrix containing the x and y coordinates of the mesh nodes.}
+#' \item{\code{nodesmarkers}}{A vector of length #nodes, with entries either '1' or '0'. An entry '1' indicates that the corresponding node is a boundary node; an entry '0' indicates that the corresponding node is not a boundary node.}
+#' \item{\code{nodesattributes}}{A matrix with #nodes rows containing nodes' attributes.
+#' These are passed unchanged from the input.}
+#' \item{\code{edges}}{A #edges-by-2 matrix containing all the edges of the triangles in the output triangulation. Each row contains the row's indices in \code{nodes}, indicating the nodes where the edge starts from and ends to.}
+#' \item{\code{neighbors}}{A #edges-by-2 matrix of list. Each row contains the indices of the neighbouring edges. An empty entry indicates that one node of the edge is a boundary node.}
+#' \item{\code{order}}{Either '1' or '2'. It specifies wether each mesh triangle should be represented by 3 nodes (the triangle' vertices) or by 6 nodes (the triangle's vertices and midpoints).
+#' These are respectively used for linear (order = 1) and quadratic (order = 2) Finite Elements.}
+#' }
+#' @export
+
+create.mesh.1.5D <- function(nodes, edges = NULL, order = 1, nodesattributes = NULL)
+{
+  nodes <- as.matrix(nodes)
+  if(ncol(nodes) != 2)
+    stop("Matrix of nodes should have 2 columns")
+  if(anyDuplicated(nodes))
+    stop("Duplicated nodes")
+  
+  if(any(is.null(edges)))
+    stop("Missing edges argument is needed!")
+  else
+    edges = as.matrix(edges)
+  
+  # Indexes in C++ starts from 0, in R from 1, needed transformations!
+  edges = edges - 1
+  
+  storage.mode(edges) <- "integer"
+  storage.mode(nodes) <- "double"
+  
+  out <- NULL
+  
+  # length(out) == 11, according to create.mesh.2.5D / create.mesh.3D
+  
+  if(order == 1 && ncol(edges) == 2){
+    outCPP <- .Call("CPP_EdgeMeshHelper", edges, nodes, PACKAGE = "fdaPDE") 
+    
+    #out <- list(nodes = nodes, nodesmarkers=outCPP[[2]], nodesattributes=nodesattributes,
+    #            edges=edges+1,
+    #            order=order, neighbors=outCPP[[4]], num_neighbors=outCPP[[3]]) 
+    out <- list(nodes = nodes, nodesmarkers=outCPP[[2]], nodesattributes=nodesattributes,
+                edges=edges+1)
+    
+    out[[9]]<- outCPP[[4]]
+    names(out)[9] = "neighbors"
+    
+    out[[11]]<- order
+    names(out)[11] <- "order"                        
+    
+  }
+  else if(order==2 && ncol(edges) == 3){
+    
+    edges_adj = matrix(edges[,1:2], nrow=dim(edges)[1],ncol=2)
+    storage.mode(edges_adj) <-"integer"
+    outCPP <- .Call("CPP_EdgeMeshHelper", edges_adj, nodes, PACKAGE = "fdaPDE")
+    
+    #out <- list(nodes=nodes, nodesmarkers=outCPP[[2]], nodesattributes=nodesattributes,
+    #            edges=edges+1,
+    #            order=order,neighbors=outCPP[[4]], num_neighbors=outCPP[[3]])
+    
+    out <- list(nodes = nodes, nodesmarkers=outCPP[[2]], nodesattributes=nodesattributes,
+                edges=edges+1)
+    
+    out[[9]]<- outCPP[[4]]
+    names(out)[9] = "neighbors"
+    
+    out[[11]]<- order
+    names(out)[11] <- "order"                        
+    
+  }
+  else if( order==2 && ncol(edges)==2){
+    print("You set order=2 but passed a matrix of edges with just 2 columns. The midpoints for each edge will be computed.")
+    outCPP <- .Call("CPP_EdgeMeshOrder2", edges, nodes, PACKAGE = "fdaPDE")
+    edges = cbind( edges , outCPP[[6]])
+    nodes=rbind(nodes, outCPP[[5]])
+    out <- list(nodes=nodes, nodesmarkers=outCPP[[2]], nodesattributes=nodesattributes,
+                edges=edges+1)
+    out[[9]]<- outCPP[[4]]
+    names(out)[9] = "neighbors"
+    
+    out[[11]]<- order
+    names(out)[11] <- "order" 
+    }
+  class(out) <- "mesh.1.5D"
+  return(out)
+}  
+
+#' Project 2D points onto 1.5D linear network mesh
+#'
+#' @param mesh A mesh.1.5D object representing the graph mesh, created by \link{create.mesh.1.5D}.
+#' @param locations 2D points to be projected onto 1.5D mesh.
+#' @description This function projects any 2D points onto 1.5D linear network mesh.
+#' @return 2D points projected onto 1.5D linear network mesh.
+#' @export
+#' @examples
+#' library(fdaPDE)
+#'##Create Mesh
+#'
+#'nodes=matrix(c(0.25,0.25,0.5,0.25,0.75,0.5,0.75,0.), nrow = 4, byrow=TRUE)
+#'edges=matrix(c(1,2,2,3,2,4),nrow = 3,byrow = TRUE)
+#'mesh_ = create.mesh.1.5D(nodes,edges,order=1)
+#'
+#' ## Create 2D points to be projected
+#'locations=matrix(nrow=5,ncol=2)
+#'locations[,1] = runif(5,min=0.25,max=0.75)
+#'locations[,2] = runif(5,min=0.25,max=0.5)
+#'
+#' ## Project the points on the mesh
+#' loc = projection.points.1.5D(mesh_, locations)
+
+projection.points.1.5D<-function(mesh, locations) {
+  if(class(mesh) !="mesh.1.5D")
+    stop("Data projection is only available for 1D mesh ")
+  
+  mesh$edges = mesh$edges - 1
+  mydim=1
+  ndim=2
+  # Imposing types, this is necessary for correct reading from C++
+  ## Set proper type for correct C++ reading
+  locations <- as.matrix(locations)
+  storage.mode(locations) <- "double"
+  storage.mode(mesh$nodes) <- "double"
+  storage.mode(mesh$edges) <- "integer"
+  storage.mode(mesh$order) <- "integer"
+  storage.mode(mydim) <- "integer"
+  storage.mode(ndim) <-"integer"
+  ## Call C++ function
+  evalmat <- .Call("points_projection", mesh, locations, mydim, ndim, PACKAGE = "fdaPDE")
+  
+  #Returning the evaluation matrix
+  return(evalmat)
+}
+
+#' Refine 1D mesh
+#'
+#' @param mesh a \code{mesh.1.5D} object to refine
+#' @param delta the maximum allowed length
+#' @return An object of class mesh.1.5D with refined edges
+#' @export
+
+refine.mesh.1.5D <-function(mesh,delta){
+  if(is.null(mesh))
+    stop("No mesh passed as input!")
+  if(class(mesh)!='mesh.1.5D')
+    stop("Wrong mesh class! Should be mesh.1.5D")
+  if( delta <= 0)
+    stop("Wrong delta value! Should be a positive number")
+  
+  # Indexes in C++ starts from 0, in R from 1, needed transformations!
+  mesh$edges = mesh$edges - 1
+  edges <- as.matrix(mesh$edges[,1:2])
+  
+  storage.mode(edges) <- "integer"
+  storage.mode(mesh$nodes) <- "double"
+  
+  # outCPP[2] -> edges
+  # outCPP[1] -> new_nodes
+  nnodes<-max(mesh$edges[,1:2])+1
+
+  outCPP <- .Call("refine1D",mesh$nodes[1:nnodes,],edges,delta)
+  nodes <- rbind( mesh$nodes[1:nnodes,], outCPP[[1]])
+  edges <- outCPP[[2]]
+  ref_mesh <- create.mesh.1.5D(nodes = nodes, edges = edges, order = mesh$order)
+ 
+  return(ref_mesh) 
+}
+
+#' Create a \code{mesh.1.5D} object by splitting each edge of a given mesh into two subedges.
+#'
+#' @param mesh a \code{mesh.1.5D} object to split
+#' @return An object of class mesh.1.5D with splitted edges
+#' @export
+
+refine.by.splitting.mesh.1.5D <- function (mesh=NULL){
+  if(is.null(mesh))
+    stop("No mesh passed as input!")
+  if(class(mesh)!='mesh.1.5D')
+    stop("Wrong mesh class! Should be mesh.1.5D")
+  
+  # Indexes in C++ starts from 0, in R from 1, needed transformations!
+  mesh$edges = mesh$edges - 1
+  
+  storage.mode(mesh$edges) <- "integer"
+  storage.mode(mesh$nodes) <- "double"
+  
+  if(mesh$order==1){
+    outCPP <- .Call("CPP_EdgeMeshSplit", mesh$edges, mesh$nodes)
+    splittedmesh<-create.mesh.1.5D(nodes=rbind(mesh$nodes, outCPP[[2]]), edges=outCPP[[1]])
+  }
+  else if(mesh$order==2){
+    nnodes<-max(mesh$edges[,1:2])+1
+    edges_adj = as.matrix(mesh$edges)
+    storage.mode(edges_adj)<- "integer"
+    outCPP <- .Call("CPP_EdgeMeshSplit", edges_adj, mesh$nodes[1:nnodes,])
+    splittedmesh <- create.mesh.1.5D(nodes= rbind(mesh$nodes[1:nnodes,], outCPP[[2]]), edges = outCPP[[1]], order = 2)
+  }
+  return(splittedmesh)
 }
 

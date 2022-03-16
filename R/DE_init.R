@@ -57,6 +57,9 @@ DE.heat.FEM <- function(data, FEMbasis, lambda=NULL, heatStep=0.1, heatIter=500,
   }else if(class(FEMbasis$mesh) == "mesh.3D"){
     ndim = 3
     mydim = 3
+  }else if(class(FEMbasis$mesh) == "mesh.1.5D"){
+    ndim=2
+    mydim=1
   }else{
     stop('Unknown mesh class')
   }
@@ -80,7 +83,9 @@ DE.heat.FEM <- function(data, FEMbasis, lambda=NULL, heatStep=0.1, heatIter=500,
     search=2
   }else if(search=="walking" & class(FEMbasis$mesh) == "mesh.2.5D"){
   stop("walking search is not available for mesh class mesh.2.5D.")
-  }else if(search=="walking" & class(FEMbasis$mesh) != "mesh.2.5D"){
+  }else if(search=="walking" & class(FEMbasis$mesh) == "mesh.1.5D"){
+    stop("walking search is not available for mesh class mesh.1.5D.")
+  }else if(search=="walking" & class(FEMbasis$mesh) != "mesh.2.5D" & class(FEMbasis$mesh) != "mesh.1.5D"){
     search=3
   }else{
     stop("'search' must must belong to the following list: 'naive', 'tree' or 'walking'.")
@@ -112,6 +117,9 @@ DE.heat.FEM <- function(data, FEMbasis, lambda=NULL, heatStep=0.1, heatIter=500,
     
   } else if(class(FEMbasis$mesh) == 'mesh.3D'){
     bigsol = CPP_FEM.volume.DE_init(data, FEMbasis, lambda, fvec, heatStep, heatIter, ndim, mydim, step_method, direction_method, preprocess_method,
+                               stepProposals, tol1, tol2, print, nfolds, nsimulations, search, init, nFolds)
+  }else if( class(FEMbasis$mesh) == 'mesh.1.5D'){
+    bigsol = CPP_FEM.graph.DE_init(data, FEMbasis, lambda, fvec, heatStep, heatIter, ndim, mydim, step_method, direction_method, preprocess_method,
                                stepProposals, tol1, tol2, print, nfolds, nsimulations, search, init, nFolds)
   }
   

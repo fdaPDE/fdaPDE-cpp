@@ -185,4 +185,72 @@ void simplex_container<mydim>::order2extend(SEXP Routput, UInt index) const {
 }
 
 
+template<UInt mydim>
+std::vector<UInt> simplex_container<mydim>::how_many_neighbors(UInt index) const{
+    static_assert(mydim==1,
+                  "ERROR! how_many_neighbors IS INTENDED FOR POINTS CONTAINERS ONLY! See mesh_input_helper_imp");
+
+    std::vector<UInt> res;
+
+     UInt curr_idx = index;
+     while( curr_idx < simplexes.size() && simplexes[index] == simplexes[curr_idx] )
+     {
+        //res is never empty!
+        res.push_back( curr_idx );
+        ++curr_idx;
+     }
+    return res;
+}
+
+//Specialization is needed.
+template<>
+void simplex_container<1>::compute_neighbors(SEXP Routput, UInt index) const {
+
+    //Matrix storing how many neighbors each element has, according to the side
+    SET_VECTOR_ELT(Routput,index,Rf_allocMatrix(INTSXP,elements.nrows(),2));
+    RIntegerMatrix lengths(VECTOR_ELT(Routput,index));
+
+    for(UInt i : this->distinct_indexes){
+        //vector of all indexes of simplexes sharing  the same node (i.e. simplexes[distinc_indexes[i]].node[0])
+        //nb) currents is never empty.
+        std::vector<UInt> currents = this->how_many_neighbors(i);
+        UInt tot_neighbors =  currents.size() - 1;
+        for( UInt idx : currents ){
+            lengths( simplexes[idx].i() , simplexes[idx].j() ) = tot_neighbors;
+        }
+    }
+
+
+    //
+    //     * - - e1 - - * - - e2 - - *        edges
+    //     0           1  0          1 nodes (local numbering)
+    //    (1)        (0)  (1)       (0) sides (local numbering)
+    //each row of neighbors matrix contains two lists of edges
+    //j = 0 there is the "left" list
+    //j = 1 there is the "right" list
+
+    SET_VECTOR_ELT(Routput,index+1,Rf_allocMatrix(VECSXP,elements.nrows(),2));
+    for(UInt i=0; i<elements.nrows() * 2; ++i){
+        SET_VECTOR_ELT( VECTOR_ELT(Routput,index+1) ,i,Rf_allocMatrix(INTSXP,1,lengths[i]));
+    }
+
+    RIntMatrixMatrix neighbors(VECTOR_ELT(Routput,index+1));
+
+    //Filling neighbors matrix
+    for(UInt i : this->distinct_indexes) {
+        std::vector <UInt> currents = this->how_many_neighbors(i);
+
+        for (UInt j: currents) {
+            UInt pos = 0;
+            for (UInt k: currents) {
+                if (k != j) {
+                    //Indexes in R starts from 1, in C++ from 0, needed transformations!
+                    neighbors(simplexes[j].i(), simplexes[j].j())[pos] = simplexes[k].i() + 1;
+                    ++pos;
+                }
+            }
+        }
+    }
+
+}
 #endif

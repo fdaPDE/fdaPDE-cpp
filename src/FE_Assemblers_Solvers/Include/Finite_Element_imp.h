@@ -59,6 +59,10 @@ void FiniteElementData<ORDER, mydim, ndim>::setElementPhiDer()
 // Templates for auxiliary functions
 // This function evaluates the basis function on the reference element
 // at the quadrature nodes
+template<>
+inline Eigen::Matrix<Real,2,1> reference_eval_point(const Point<1> &node){
+    return makeBaryCoord(node.eigenConstView());
+}
 
 template<>
 inline Eigen::Matrix<Real, 3, 1> reference_eval_point(const Point<2> &node){
@@ -68,6 +72,16 @@ inline Eigen::Matrix<Real, 3, 1> reference_eval_point(const Point<2> &node){
 template<>
 inline Eigen::Matrix<Real, 4, 1> reference_eval_point(const Point<3> &node){
 	return makeBaryCoord(node.eigenConstView());
+}
+
+template<>
+inline Eigen::Matrix<Real,3,1> reference_eval_point<3,1>(const Point<1> &node){
+    Eigen::Matrix<Real, 3, 1> phi;
+    phi<< (1-node[0])*(1-2*node[0]),
+          node[0]*(2*node[0]-1),
+          4*node[0]*(1-node[0]);
+
+    return phi;
 }
 
 template<>
@@ -101,6 +115,14 @@ inline Eigen::Matrix<Real, 10, 1> reference_eval_point<10,3>(const Point<3> &nod
 // This function evaluates the ndim-gradient of basis function on the reference element
 // at the quadrature nodes
 template<>
+inline Eigen::Matrix<Real, 2, 1> reference_eval_der_point(const Point<1> &node){
+    Eigen::Matrix<Real,2,1> B1;
+    B1.row(0).setConstant(-1);
+    B1.row(1).setConstant(1);
+    return B1;
+}
+
+template<>
 inline Eigen::Matrix<Real, 3,2> reference_eval_der_point(const Point<2> &node){
 	Eigen::Matrix<Real,3,2> B1;
 	B1.row(0).setConstant(-1);
@@ -114,6 +136,16 @@ inline Eigen::Matrix<Real, 4,3> reference_eval_der_point(const Point<3> &node){
 	B1.row(0).setConstant(-1);
 	B1.bottomRows(3).setIdentity();
 	return B1;
+}
+
+template<>
+inline Eigen::Matrix<Real,3,1> reference_eval_der_point<3,1>(const Point<1> &node){
+    Eigen::Matrix<Real,3,1> B2;
+    B2<< 1-4*(1-node[0]),
+         4*node[0]-1,
+         4*(1-2*node[0]);
+
+    return B2;
 }
 
 template<>

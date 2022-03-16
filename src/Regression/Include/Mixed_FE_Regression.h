@@ -94,6 +94,7 @@ class MixedFERegressionBase
 		bool isR0Computed  = false;
 		bool isR1Computed  = false;
 		bool isUVComputed  = false;
+		bool isTimeComputed = false;
 
 		bool isSpaceVarying = false; //!< used to distinguish whether to use the forcing term u in apply() or not
 		bool isGAMData;
@@ -245,7 +246,10 @@ class MixedFERegressionBase
 		UInt getM_(void) const {return this->M_;}
 		bool isSV(void) const {return this->isSpaceVarying;}
 		bool isIter(void) const {return this->isIterative;}
-
+		
+		//! A method checking the correct LU factorization of the system matrix
+        	bool isMatrixNoCov_factorized() const{return this->matrixNoCovdec_.info() == Eigen::ComputationInfo::Success;}	
+        	
 		//! A function that given a vector u, performs Q*u efficiently
 		MatrixXr LeftMultiplybyQ(const MatrixXr & u);
 

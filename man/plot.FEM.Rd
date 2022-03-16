@@ -4,10 +4,12 @@
 \alias{plot.FEM}
 \title{Plot a \code{FEM} object}
 \usage{
-\method{plot}{FEM}(x, num_refinements, ...)
+\method{plot}{FEM}(x, colormap = "heat.colors", num_refinements = NULL, ...)
 }
 \arguments{
 \item{x}{A \code{FEM} object.}
+
+\item{colormap}{A colormap exploited in the plot. The default value is the heat colormap.}
 
 \item{num_refinements}{A natural number specifying how many bisections should be applied to each triangular element for
 plotting purposes. This functionality is useful where a discretization with 2nd order Finite Element is applied.
