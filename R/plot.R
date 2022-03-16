@@ -631,7 +631,6 @@ R_plot_graph = function(FEM, ...){
       if (i > 1)
          readline("Press any key for the next plot...")
       open3d()
-      axes3d()
       rgl.pop("lights")
       light3d(specular="black")
       
@@ -640,7 +639,7 @@ R_plot_graph = function(FEM, ...){
       col <- p[col]
       
       rgl.lines(nodes[edges,1], nodes[edges,2],rep(0,dim(nodes)[1]),
-                color = col,lwd=1.75,...)
+                color = col,lwd=2.5,...)
       rgl.viewpoint(0,0,zoom=0.75)  
    }
    
