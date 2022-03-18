@@ -10,7 +10,7 @@ DataProblem<ORDER, mydim, ndim>::DataProblem(SEXP Rdata, SEXP Rorder, SEXP Rfvec
     std::vector<Point<ndim> >& data = deData_.data();
 
     // PROJECTION
-    if(mydim == 2 && ndim == 3){
+    if((mydim == 2 && ndim == 3) || (mydim == 1 && ndim == 2)){
       Rprintf("##### DATA PROJECTION #####\n");
       projection<ORDER, mydim, ndim> projection(mesh_, data);
       data = projection.computeProjection();

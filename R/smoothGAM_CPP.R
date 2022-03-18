@@ -754,3 +754,109 @@ CPP_smooth.volume.GAM.FEM.PDE.sv.basis<-function(locations, observations, FEMbas
   return(bigsol)
 }
 
+CPP_smooth.graph.GAM.FEM.basis<-function(locations, observations, FEMbasis, covariates = NULL, ndim, mydim, BC = NULL, incidence_matrix = NULL, areal.data.avg = FALSE, FAMILY, mu0 = NULL, max.steps.FPIRLS = 15, scale.param = NULL, threshold.FPIRLS = 0.0004, search, bary.locations, optim, lambda = NULL, DOF.stochastic.realizations = 100, DOF.stochastic.seed = 0, DOF.matrix = NULL, GCV.inflation.factor = 1.8, lambda.optimization.tolerance = 0.05)
+{
+  # Indexes in C++ starts from 0, in R from 1, opporGCV.inflation.factor transformation
+  FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
+  num_sides = 2*dim(FEMbasis$mesh$edges)[1] 
+  for(i in 1:num_sides){
+    if( dim(FEMbasis$mesh$neighbors[[i]] )[1] > 0)
+      FEMbasis$mesh$neighbors[[i]] = FEMbasis$mesh$neighbors[[i]] - 1
+  } 
+  
+  max.steps.FPIRLS = max.steps.FPIRLS - 1
+  
+  if(is.null(covariates))
+  {
+    covariates<-matrix(nrow = 0, ncol = 1)
+  }
+  
+  if(is.null(DOF.matrix))
+  {
+    DOF.matrix<-matrix(nrow = 0, ncol = 1)
+  }
+  
+  if(is.null(locations))
+  {
+    locations<-matrix(nrow = 0, ncol = 2)
+  }
+  
+  if(is.null(incidence_matrix))
+  {
+    incidence_matrix<-matrix(nrow = 0, ncol = 1)
+  }
+  
+  if(is.null(BC$BC_indices))
+  {
+    BC$BC_indices<-vector(length=0)
+  }else
+  {
+    BC$BC_indices<-as.vector(BC$BC_indices)-1
+  }
+  
+  if(is.null(BC$BC_values))
+  {
+    BC$BC_values<-vector(length=0)
+  }else
+  {
+    BC$BC_values<-as.vector(BC$BC_values)
+  }
+  
+  if(is.null(mu0))
+  {
+    mu0<-matrix(nrow = 0, ncol = 1)
+  }
+  
+  if(is.null(scale.param))
+  {
+    scale.param<- -1
+  } 
+  
+  if(is.null(lambda))
+  {
+    lambda<-vector(length=0)
+  }
+  
+  ## Set proper type for correct C++ reading
+  locations <- as.matrix(locations)
+  storage.mode(locations) <- "double"
+  storage.mode(FEMbasis$mesh$nodes) <- "double"
+  storage.mode(FEMbasis$mesh$edges) <- "integer"
+  for(i in 1:num_sides)
+    storage.mode(FEMbasis$mesh$neighbors[[i]]) <- "integer" 
+  storage.mode(FEMbasis$order) <- "integer"
+  covariates <- as.matrix(covariates)
+  storage.mode(covariates) <- "double"
+  storage.mode(ndim) <- "integer"
+  storage.mode(mydim) <- "integer"
+  storage.mode(BC$BC_indices) <- "integer"
+  storage.mode(BC$BC_values) <-"double"
+  incidence_matrix <- as.matrix(incidence_matrix)
+  storage.mode(incidence_matrix) <- "integer"
+  areal.data.avg <- as.integer(areal.data.avg)
+  storage.mode(areal.data.avg) <-"integer"
+  storage.mode(FAMILY) <- "character"
+  storage.mode(max.steps.FPIRLS) <- "integer"
+  storage.mode(GCV.inflation.factor) <- "double"
+  storage.mode(mu0) <- "double"
+  storage.mode(scale.param) <- "double"
+  storage.mode(threshold.FPIRLS) <- "double"
+  storage.mode(search) <- "integer"
+  storage.mode(optim) <- "integer"  
+  storage.mode(lambda) <- "double"
+  DOF.matrix <- as.matrix(DOF.matrix)
+  storage.mode(DOF.matrix) <- "double"
+  storage.mode(DOF.stochastic.realizations) <- "integer"
+  storage.mode(DOF.stochastic.seed) <- "integer"
+  storage.mode(GCV.inflation.factor) <- "double"
+  storage.mode(lambda.optimization.tolerance) <- "double"
+  
+  ## Call C++ function
+  bigsol <- .Call("gam_Laplace", locations, bary.locations, observations, FEMbasis$mesh, FEMbasis$order,
+                  mydim, ndim, covariates, BC$BC_indices, BC$BC_values, incidence_matrix, areal.data.avg,
+                  FAMILY, max.steps.FPIRLS, threshold.FPIRLS, mu0, scale.param, search,
+                  optim, lambda, DOF.stochastic.realizations, DOF.stochastic.seed, DOF.matrix, GCV.inflation.factor, lambda.optimization.tolerance, PACKAGE = "fdaPDE")
+  
+  return(bigsol)
+  
+}

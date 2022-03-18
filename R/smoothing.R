@@ -357,6 +357,10 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis,
   {
     ndim = 3
     mydim = 3
+  }else if(class(FEMbasis$mesh) == "mesh.1.5D")
+  {
+    ndim = 2
+    mydim = 1
   }else
   {
     stop('unknown mesh class.')
@@ -452,7 +456,9 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis,
     search=2
   }else if(search=="walking" & class(FEMbasis$mesh) == "mesh.2.5D"){
   	stop("walking search is not available for mesh class mesh.2.5D.")
-  }else if(search=="walking" & class(FEMbasis$mesh) != "mesh.2.5D"){
+  }else if(search=="walking" & class(FEMbasis$mesh) == "mesh.1.5D"){
+    stop("walking search is not available for mesh class mesh.1.5D.")
+  }else if(search=="walking" & class(FEMbasis$mesh) != "mesh.2.5D" & class(FEMbasis$mesh) != "mesh.1.5D"){
     search=3
   }else{
     stop("'search' must must belong to the following list: 'naive', 'tree' or 'walking'.")
@@ -612,7 +618,17 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis,
         optim = optim, lambda = lambda, DOF.stochastic.realizations = DOF.stochastic.realizations, DOF.stochastic.seed = DOF.stochastic.seed,
         DOF.matrix = DOF.matrix, GCV.inflation.factor = GCV.inflation.factor, lambda.optimization.tolerance = lambda.optimization.tolerance)
       numnodes = nrow(FEMbasis$mesh$nodes)
-  	}
+  	} else if(class(FEMbasis$mesh) == 'mesh.1.5D')
+  	{
+  	  bigsol = NULL
+  	  bigsol = CPP_smooth.graph.FEM.basis(locations = locations, observations = observations, FEMbasis = FEMbasis,
+  	                                      covariates = covariates, ndim = ndim, mydim = mydim, BC = BC,
+  	                                      incidence_matrix = incidence_matrix, areal.data.avg = areal.data.avg,
+  	                                      search = search, bary.locations = bary.locations,
+  	                                      optim = optim, lambda = lambda, DOF.stochastic.realizations = DOF.stochastic.realizations, DOF.stochastic.seed = DOF.stochastic.seed,
+  	                                      DOF.matrix = DOF.matrix, GCV.inflation.factor = GCV.inflation.factor, lambda.optimization.tolerance = lambda.optimization.tolerance)
+  	  numnodes = nrow(FEMbasis$mesh$nodes)
+  	} 
   } else
   {
     #----------------------------------------------------#
@@ -698,6 +714,17 @@ smooth.FEM<-function(locations = NULL, observations, FEMbasis,
         search = search, bary.locations = bary.locations,
         optim = optim, lambda = lambda, DOF.stochastic.realizations = DOF.stochastic.realizations, DOF.stochastic.seed = DOF.stochastic.seed,
         DOF.matrix = DOF.matrix, GCV.inflation.factor = GCV.inflation.factor, lambda.optimization.tolerance = lambda.optimization.tolerance)
+      numnodes = nrow(FEMbasis$mesh$nodes)
+    }else if(class(FEMbasis$mesh) == 'mesh.1.5D')
+    {
+      bigsol = NULL
+      bigsol = CPP_smooth.graph.GAM.FEM.basis(locations = locations, observations = observations, FEMbasis = FEMbasis,
+                                              covariates = covariates, ndim = ndim, mydim = mydim, BC = BC,
+                                              incidence_matrix = incidence_matrix, areal.data.avg = areal.data.avg,
+                                              FAMILY = family, mu0 = mu0, max.steps.FPIRLS = max.steps.FPIRLS, scale.param = scale.param, threshold.FPIRLS = threshold.FPIRLS,
+                                              search = search, bary.locations = bary.locations,
+                                              optim = optim, lambda = lambda, DOF.stochastic.realizations = DOF.stochastic.realizations, DOF.stochastic.seed = DOF.stochastic.seed,
+                                              DOF.matrix = DOF.matrix, GCV.inflation.factor = GCV.inflation.factor, lambda.optimization.tolerance = lambda.optimization.tolerance)
       numnodes = nrow(FEMbasis$mesh$nodes)
     }
   }

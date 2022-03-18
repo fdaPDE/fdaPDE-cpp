@@ -32,7 +32,7 @@ template <class ArgType>
 Eigen::CwiseNullaryOp<BaryCoord_functor<ArgType>, typename BaryCoord_helper<ArgType>::VectorType>
 makeBaryCoord(const Eigen::MatrixBase<ArgType>& arg)
 {
-	static_assert(ArgType::SizeAtCompileTime==2 || ArgType::SizeAtCompileTime==3,
+	static_assert(ArgType::SizeAtCompileTime==1 || ArgType::SizeAtCompileTime==2 || ArgType::SizeAtCompileTime==3,
 		"ERROR! WRONG SIZE OF THE INPUT! See mesh_objects_imp.h!");
 
   	using VectorType = typename BaryCoord_helper<ArgType>::VectorType;
@@ -320,6 +320,108 @@ std::ostream& operator<<(std::ostream& os, const Element<nnodes, MYDIM, NDIM>& e
 	for (const auto &p : el)
 		os<<" "<<p.getId();
 	return os<<std::endl;
+}
+
+// Member functions for class Element (Line element specialization)
+template <UInt NNODES>
+void Element<NNODES,1,2>::computeProperties()
+{
+    {
+        // Note: the first point in the element is taken as a reference point
+        // Note: while this is an arbitrary choice other parts of the code rely on it
+        // so any change needs to be considered carefully
+        auto basePointCoord=points_[0].eigenConstView();
+        // The columns of M_J_ are P_i - P_0, i=1,2
+        for (int i=0; i<1; ++i)
+            M_J_.col(i) = points_[i+1].eigenConstView()-basePointCoord;
+    }
+
+    // NOTE: for small (not bigger than 4x4) matrices eigen directly calculates
+    // determinants and inverses, it is very efficient!
+    M_invJ_.noalias() = (M_J_.transpose()*M_J_).inverse() * M_J_.transpose();
+
+    //TO CHECK
+    element_measure = M_J_.norm();
+}
+
+template <UInt NNODES>
+Eigen::Matrix<Real,2,1> Element<NNODES,1,2>::getBaryCoordinates(const Point<2> &point) const
+{
+    return makeBaryCoord(M_invJ_ * (point.eigenConstView()-points_[0].eigenConstView()));
+}
+
+template <UInt NNODES>
+bool Element<NNODES,1,2>::isPointInside(const Point<2>& point) const
+{
+    static constexpr Real eps = std::numeric_limits<Real>::epsilon(),
+            tolerance = 10 * eps;
+    Eigen::Matrix<Real,2,1> lambda = getBaryCoordinates(point);
+
+    //TO CHECK
+    // If the point's projection onto the 2D segment lies outside the segment
+    // (i.e. there is at least one negative barycentric coordinate)
+    // then the point does not belong to the segment
+    // lambda = M_invJ_ * (point - p0 ) => M_J_ "lambda" + p0 - point = "0"
+    return ((lambda.array() > -tolerance).all()) &&
+           (M_J_*lambda.template tail<1>() + points_[0].eigenConstView() - point.eigenConstView()).squaredNorm() < tolerance;
+}
+
+template <UInt NNODES>
+Point<2> Element<NNODES,1,2>::computeProjection(const Point<2>& point) const {
+    // Note: no need for tolerances here because the projection is continuous
+    Eigen::Matrix<Real, 2, 1> lambda = getBaryCoordinates(point);
+    // Convention: (+,+) means that all lambda are positive and so on
+    // For visual reference: (remember that edges are numbered wrt the opposing node)
+    //
+    //  _____1 |_______________\ 2 _____________
+    //   (+,-)      (+,+)          (-,+)
+
+    if (lambda[0] > 0 && lambda[1] < 0)
+        return points_[0];
+    else if (lambda[0] < 0 && lambda[1] > 0)
+        return points_[1];
+
+    // If (+,+) the projection lies inside the element
+    // So just convert back to 2D coords
+    Eigen::Matrix<Real, 2, 1> coord2D;
+    coord2D = lambda[0] * points_[0].eigenConstView()
+            + lambda[1] * points_[1].eigenConstView();
+
+    return Point<2>(coord2D);
+}
+
+// Implementation of function evaluation at a point inside the line element
+template <>
+inline Real Element<2,1,2>::evaluate_point(const Eigen::Matrix<Real,2,1>& lambda, const Eigen::Matrix<Real,2,1>& coefficients) const
+{
+    return coefficients.dot(lambda);
+}
+
+// Full specialization for order 2 in 1.5D
+template <>
+inline Real Element<3,1,2>::evaluate_point(const Eigen::Matrix<Real,2,1>& lambda, const Eigen::Matrix<Real,3,1>& coefficients) const {
+    return coefficients[0] * lambda[0] * (2 * lambda[0] - 1) +
+           coefficients[1] * lambda[1] * (2 * lambda[1] - 1) +
+           coefficients[2] * 4 * lambda[0] * lambda[1];
+}
+
+template <UInt NNODES>
+inline Real Element<NNODES,1,2>::evaluate_point(const Point<2>& point, const Eigen::Matrix<Real,NNODES,1>& coefficients) const
+{
+    return evaluate_point(getBaryCoordinates(point), coefficients);
+}
+
+// Implementation of integration on the line element
+template <UInt NNODES>
+inline Real Element<NNODES,1,2>::integrate(const Eigen::Matrix<Real,NNODES,1>& coefficients) const
+{
+    using Integrator = typename ElementIntegratorHelper::Integrator<NNODES,1>;
+    Real integral=0.;
+    for (UInt i=0; i<Integrator::NNODES; ++i)
+        integral += Integrator::WEIGHTS[i]*evaluate_point(makeBaryCoord(Integrator::NODES[i].eigenView()), coefficients);
+
+    return getMeasure() * integral;
+
 }
 
 #endif

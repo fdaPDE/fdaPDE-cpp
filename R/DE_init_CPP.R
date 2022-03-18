@@ -136,3 +136,53 @@ CPP_FEM.volume.DE_init <- function(data, FEMbasis, lambda, fvec, heatStep, heatI
   
   return(bigsol)
 }
+
+CPP_FEM.graph.DE_init <- function(data, FEMbasis, lambda, fvec, heatStep, heatIter, ndim, mydim, step_method, direction_method, preprocess_method,
+                            stepProposals, tol1, tol2, print, nfolds, nsimulations, search, init, nFolds)
+{
+  # Indexes in C++ starts from 0, in R from 1, opportune transformation
+  
+  FEMbasis$mesh$edges = FEMbasis$mesh$edges - 1
+  num_sides = 2*dim(FEMbasis$mesh$edges)[1] 
+  for(i in 1:num_sides){
+    if( dim(FEMbasis$mesh$neighbors[[i]] )[1] > 0)
+      FEMbasis$mesh$neighbors[[i]] = FEMbasis$mesh$neighbors[[i]] - 1
+  }
+  
+  ## Set proper type for correct C++ reading
+  storage.mode(data) <- "double"                        
+  storage.mode(FEMbasis$mesh$nodes) <- "double"
+  storage.mode(FEMbasis$mesh$edges) <- "integer"
+  
+  for(i in 1:num_sides)
+    storage.mode(FEMbasis$mesh$neighbors[[i]]) <- "integer" 
+  
+  storage.mode(FEMbasis$order) <- "integer"
+  storage.mode(lambda) <- "double"
+  storage.mode(fvec) <- "double"
+  storage.mode(heatStep) <- "double"
+  heatIter <- as.integer(heatIter)
+  storage.mode(heatIter) <- "integer"
+  storage.mode(ndim) <- "integer"
+  storage.mode(mydim) <- "integer"
+  storage.mode(stepProposals) <- "double"
+  storage.mode(tol1) <- "double"
+  storage.mode(tol2) <- "double"
+  storage.mode(print) <- "logical"
+  nfolds <- as.integer(nfolds)
+  storage.mode(nfolds) <- "integer"
+  nsimulations <- as.integer(nsimulations)
+  storage.mode(nsimulations) <- "integer"
+  storage.mode(search) <- "integer"
+  init <- as.character(init)
+  storage.mode(init) <- "character"
+  nFolds <- as.integer(nFolds)
+  storage.mode(nFolds) <- "integer"
+  
+  ## Call C++ function
+  bigsol <- .Call("Density_Initialization", data, FEMbasis$mesh, FEMbasis$order, mydim, ndim, fvec, heatStep, heatIter, lambda,
+                  nfolds, nsimulations, stepProposals, tol1, tol2, print, 
+                  search, init, nFolds, PACKAGE = "fdaPDE")
+  
+  return(bigsol)
+}

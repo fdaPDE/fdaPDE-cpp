@@ -14,7 +14,7 @@
 template <UInt ORDER, UInt mydim, UInt ndim>
 class MeshHandler{
   static_assert((ORDER==1 || ORDER==2) &&
-                (mydim==2 || mydim==3) &&
+                (mydim==1 || mydim==2 || mydim==3) &&
                  mydim <= ndim,
                  "ERROR! TRYING TO INSTANTIATE MESH_HANDLER WITH WRONG NUMBER OF NODES AND/OR DIMENSIONS! See mesh.h");
 public:
@@ -115,6 +115,89 @@ private:
   std::unique_ptr<const ADTree<meshElement> > tree_ptr_;
 
 };
+
+//! Partial specialization template class handling the Linear Network mesh
+/*!
+/tparam ORDER representing the order of the elements of the mesh
+*/
+template <UInt ORDER>
+class MeshHandler<ORDER,1,2>{
+    static_assert((ORDER==1 || ORDER==2),
+    "ERROR! TRYING TO INSTANTIATE LINEAR NETWORK MESH_HANDLER WITH WRONG NUMBER OF NODES! See mesh.h");
+public:
+    using meshElement = Element<how_many_nodes(ORDER,1),1,2>;
+
+    //! A constructor.
+    /*!
+      * This constructor permits the initialization of the mesh from an R object
+      * constructed with the TriLibrary (our R wrapper for the Triangle library)
+      * in 2D (in 1.5D, 2.5D and 3D R functions can produce a compatible object if the
+      * triangulation is already available)
+    */
+
+    MeshHandler(SEXP Rmesh, UInt search=1);
+
+    MeshHandler(const MeshHandler&) = delete;
+    MeshHandler(MeshHandler&&) = delete;
+    MeshHandler& operator=(const MeshHandler&) = delete;
+    MeshHandler& operator=(MeshHandler&&) = delete;
+
+    //! A member returning the number of nodes in the mesh
+    UInt num_nodes() const {return points_.nrows();}
+
+    //! A member returning the number of elements in the mesh
+    UInt num_elements() const {return elements_.nrows();}
+
+    const Real& nodes(const UInt i, const UInt j) const {return points_(i,j);}
+
+    const UInt& elements(const UInt i, const UInt j) const {return elements_(i,j);}
+
+    const RIntegerMatrix& neighbors(const UInt i, const UInt j) const {return neighbors_(i,j);}
+
+    //! A member returning the 2dim-dimensional Point with the specified ID
+    Point<2> getPoint(const UInt id) const;
+
+    //! A member returning an Element with the specified ID
+    meshElement getElement(const UInt id) const;
+
+    //! A member returning the area/volume of a given element of the mesh
+    Real elementMeasure(const UInt id) const {return getElement(id).getMeasure();}
+
+    UInt getSearch() const {return search_;}
+
+    bool hasTree() const {return tree_ptr_.get()!=nullptr;}
+    const ADTree<meshElement>& getTree() const {return *tree_ptr_;}
+    //! A member returning the "number"-th neighbors of element id_element,
+    // i.e. the neighbor opposite the "number"-th vertex of the element id_element
+    // Note: this function returns an empty element if the neighbor lies outside the boundary
+    std::vector<meshElement> getNeighbors(const UInt id_element, const UInt number) const;
+
+    void printPoints(std::ostream &) const;
+    void printElements(std::ostream &) const;
+    void printNeighbors(std::ostream &) const;
+    void printTree(std::ostream &) const;
+
+    meshElement findLocation(const Point<2>&) const;
+
+    //! A normal member returning the element on which a point is located
+    /*!
+     * This method implements a simply research between all the elements of the mesh
+    */
+    meshElement findLocationNaive(const Point<2>&) const;
+
+    meshElement findLocationTree(const Point<2>&) const;
+
+private:
+
+    const RNumericMatrix points_; //! stores the mesh nodes
+    const RIntegerMatrix elements_; //! stores the edges
+    const RIntMatrixMatrix neighbors_;
+    const UInt search_;
+
+    std::unique_ptr<const ADTree<meshElement> > tree_ptr_;
+
+};
+
 
 #include "Mesh_imp.h"
 

@@ -704,16 +704,22 @@ template<typename InputHandler>
 template<typename Derived>
 MatrixXr MixedFERegressionBase<InputHandler>::system_solve(const Eigen::MatrixBase<Derived> & b)
 {
-	// Resolution of the system matrixNoCov * x1 = b
-	MatrixXr x1 = matrixNoCovdec_.solve(b);
-	if(regressionData_.getCovariates()->rows() != 0 && !this->isIterative)
-	{
-		// Resolution of G * x2 = V * x1
-		MatrixXr x2 = Gdec_.solve(V_*x1);
-		// Resolution of the system matrixNoCov * x3 = U * x2
-		x1 -= matrixNoCovdec_.solve(U_*x2);
-	}
+	if(isMatrixNoCov_factorized()) {
+	 // Resolution of the system matrixNoCov * x1 = b
+	 MatrixXr x1 = matrixNoCovdec_.solve(b);
+	 if(regressionData_.getCovariates()->rows() != 0 && !this->isIterative)
+	 {
+		 // Resolution of G * x2 = V * x1
+		 MatrixXr x2 = Gdec_.solve(V_*x1);
+		 // Resolution of the system matrixNoCov * x3 = U * x2
+		 x1 -= matrixNoCovdec_.solve(U_*x2);
+	 }
 	return x1;
+	}
+	else{
+         // There are numerical issues
+         return VectorXr::Zero(2*N_*M_);
+        }
 }
 
 
@@ -1175,9 +1181,10 @@ void MixedFERegressionBase<InputHandler>::preapply(EOExpr<A> oper, const Forcing
 		Assembler::forcingTerm(mesh_, fe, u, rhs_ft_correction_);
 	}
 
-	if(regressionData_.isSpaceTime() && !this->isIterative)
+	if(regressionData_.isSpaceTime() && !isTimeComputed && !this->isIterative)
 	{
 		this->buildSpaceTimeMatrices();
+		isTimeComputed = true;
 	}
 
 	// Set final transpose of Psi matrix
@@ -1891,6 +1898,10 @@ class MixedFERegression<GAMDataLaplace>: public MixedFERegressionBase<Regression
 	public:
 		MixedFERegression(const RegressionData & regressionData, OptimizationData & optimizationData, UInt nnodes_):
 			MixedFERegressionBase<RegressionData>(regressionData, optimizationData, nnodes_) {};
+		
+		MixedFERegression(const std::vector<Real>& mesh_time, 
+			const RegressionData& regressionData, OptimizationData& optimizationData, UInt nnodes_): 
+				MixedFERegressionBase<RegressionData>(mesh_time, regressionData, optimizationData, nnodes_){};
 
 		template<UInt ORDER, UInt mydim, UInt ndim>
 		void preapply(const MeshHandler<ORDER,mydim,ndim> & mesh)

@@ -8,10 +8,10 @@ checkSmoothingParameters_time<-function(locations = NULL, time_locations=NULL, o
   if(class(FEMbasis)!= "FEMbasis")
     stop("'FEMbasis' is not class 'FEMbasis'")
 
-  if(class(FEMbasis$mesh)!='mesh.2D' & class(FEMbasis$mesh) != "mesh.2.5D" & class(FEMbasis$mesh) != "mesh.3D")
+  if(class(FEMbasis$mesh)!='mesh.2D' & class(FEMbasis$mesh) != "mesh.2.5D" & class(FEMbasis$mesh) != "mesh.3D" & class(FEMbasis$mesh) != "mesh.1.5D")
     stop('Unknown mesh class')
 
-  if((class(FEMbasis$mesh) == "mesh.2.5D" || class(FEMbasis$mesh) == "mesh.3D") & !is.null(PDE_parameters) )
+  if((class(FEMbasis$mesh) == "mesh.2.5D" || class(FEMbasis$mesh) == "mesh.3D" || class(FEMbasis$mesh) == "mesh.1.5D") & !is.null(PDE_parameters) )
     stop('For mesh classes different from mesh.2D, anysotropic regularization is not yet implemented.
          Use Laplacian regularization instead')
 
@@ -320,6 +320,8 @@ checkSmoothingParametersSize_time<-function(locations = NULL, time_locations = N
       stop("'incidence_matrix' must be a ntriangles-columns matrix;")
     else if (class(FEMbasis$mesh) == 'mesh.3D' && ncol(incidence_matrix) != nrow(FEMbasis$mesh$tetrahedrons))
       stop("'incidence_matrix' must be a ntetrahedrons-columns matrix;")
+    else if (class(FEMbasis$mesh) == 'mesh.1.5D' && ncol(incidence_matrix) != nrow(FEMbasis$mesh$edges))
+      stop("'incidence_matrix' must be a nedges-columns matrix;")
   }
 
   # BC

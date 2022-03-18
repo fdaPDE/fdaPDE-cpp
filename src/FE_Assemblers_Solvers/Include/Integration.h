@@ -6,6 +6,45 @@
 #include "../../FdaPDE.h"
 #include "../../Mesh/Include/Point.h"
 
+//Trap Rule
+struct IntegratorEdgeP1{
+    static constexpr UInt NNODES = 2;
+    static constexpr std::array<Real,NNODES> WEIGHTS{{0.5, 0.5}};
+    //Point locations (in barycentric coordinates)
+    static constexpr std::array<Point<1>,NNODES> NODES{
+        Point<1>({0.0}),
+        Point<1>({1.0})
+    };
+};
+
+//Cavalieri-Simpson Rule
+struct IntegratorEdgeP2{
+    static constexpr UInt NNODES = 3;
+    static constexpr std::array<Real,NNODES> WEIGHTS{{1./6., 1./6., 2./3.}};
+    //Point locations (in barycentric coordinates)
+    static constexpr std::array<Point<1>,NNODES> NODES{
+        Point<1>({0.0}),
+        Point<1>({1.0}),
+        Point<1>({0.5})
+    };
+};
+
+struct IntegratorEdgeP4{
+    static constexpr UInt NNODES = 5;
+    static constexpr std::array<Real,NNODES> WEIGHTS{{ 7./90.,
+                                                                7./90.,
+                                                                12./90.,
+                                                                32./90.,
+                                                                 32./90.}};
+    static constexpr std::array<Point<1>, NNODES> NODES{
+        Point<1>({0.0}),
+        Point<1>({1.0}),
+        Point<1>({0.5}),
+        Point<1>({0.25}),
+        Point<1>({0.75})
+    };
+};
+
 struct IntegratorTriangleP1{
 	//Number of nodes
 	static constexpr UInt NNODES = 1;
@@ -139,23 +178,26 @@ struct IntegratorTetrahedronP4{
 
 struct ElementIntegratorHelper{
 	template<UInt NNODES, UInt mydim>
-	using Integrator = typename std::conditional<mydim==2,
-												typename std::conditional<NNODES==3, IntegratorTriangleP1, IntegratorTriangleP2>::type,
-												typename std::conditional<NNODES==4, IntegratorTetrahedronP1, IntegratorTetrahedronP2>::type>::type;
+	using Integrator =
+            typename std::conditional<mydim==1, typename std::conditional<NNODES == 2, IntegratorEdgeP1, IntegratorEdgeP2>::type,
+                                                typename std::conditional<mydim==2, typename std::conditional<NNODES==3, IntegratorTriangleP1, IntegratorTriangleP2>::type,
+                                                                                    typename std::conditional<NNODES==4, IntegratorTetrahedronP1, IntegratorTetrahedronP2>::type>::type>::type;
 };
 
 struct SpaceIntegratorHelper{
 	template<UInt ORDER, UInt mydim>
-	using Integrator = typename std::conditional<mydim==2,
-												typename std::conditional<ORDER==1, IntegratorTriangleP2, IntegratorTriangleP4>::type,
-												typename std::conditional<ORDER==1, IntegratorTetrahedronP2, IntegratorTetrahedronP4>::type>::type;
+	using Integrator =
+            typename std::conditional<mydim==1, typename std::conditional<ORDER==1, IntegratorEdgeP2, IntegratorEdgeP4>::type,
+												typename std::conditional<mydim==2, typename std::conditional<ORDER==1, IntegratorTriangleP2, IntegratorTriangleP4>::type,
+                                                                                    typename std::conditional<ORDER==1, IntegratorTetrahedronP2, IntegratorTetrahedronP4>::type>::type>::type;
 };
 
 struct DensityIntegratorHelper{
 	template<UInt mydim>
-	using Integrator = typename std::conditional<mydim==2, IntegratorTriangleP4, IntegratorTetrahedronP4>::type;
+	using Integrator =
+            typename std::conditional<mydim==1, IntegratorEdgeP4,
+                                      typename std::conditional<mydim==2, IntegratorTriangleP4, IntegratorTetrahedronP4>::type >::type;
 };
-
 
 struct IntegratorGaussP3{
 	static constexpr UInt ORDER = 1;

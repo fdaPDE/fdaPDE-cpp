@@ -26,20 +26,20 @@ SEXP GAM_skeleton(InputHandler & GAMData, OptimizationData & optimizationData, S
 	// Factory:
 	std::unique_ptr<FPIRLS<InputHandler, ORDER, mydim, ndim>> fpirls = FPIRLSfactory<InputHandler, ORDER, mydim, ndim>::createFPIRLSsolver(family, mesh, GAMData, optimizationData, mu0, scale_parameter);
 
+	fpirls->apply();
 
-  	fpirls->apply();
-
-
-  	const MatrixXv& solution = fpirls->getSolution();
+	const MatrixXv& solution = fpirls->getSolution();
   	const MatrixXr& dof = fpirls->getDOF();
-  	const std::vector<Real>& J_value = fpirls->get_J();
+  	const std::vector<std::vector<Real>>& J_value = fpirls->get_J();
   	const MatrixXv& fn_hat = fpirls->getFunctionEst();
-  	const std::vector<Real> variance_est = fpirls->getVarianceEst();
-  	const std::vector<Real>& GCV = fpirls->getGCV();
+  	const std::vector<std::vector<Real>>& variance_est = fpirls->getVarianceEst();
+  	const std::vector<std::vector<Real>>& GCV = fpirls->getGCV();
 
   	const UInt bestLambda = optimizationData.get_best_lambda_S();
+  	const UInt lambdaS_len = fpirls->get_size_S();
+  	const UInt lambdaT_len = 1;
 
-  	MatrixXv beta;
+	MatrixXv beta;
   	if(GAMData.getCovariates()->rows()==0)
    	{
 		beta.resize(1,1);
@@ -59,7 +59,7 @@ SEXP GAM_skeleton(InputHandler & GAMData, OptimizationData & optimizationData, S
  	result = PROTECT(Rf_allocVector(VECSXP, 5+3+5+2));
   	SET_VECTOR_ELT(result, 0, Rf_allocMatrix(REALSXP, solution(0).size(), solution.size()));
   	SET_VECTOR_ELT(result, 1, Rf_allocVector(REALSXP, dof.size()));
-  	SET_VECTOR_ELT(result, 2, Rf_allocVector(REALSXP, GCV.size()));
+  	SET_VECTOR_ELT(result, 2, Rf_allocMatrix(REALSXP, lambdaS_len, lambdaT_len));
   	SET_VECTOR_ELT(result, 3, Rf_allocVector(INTSXP, 1));
   	SET_VECTOR_ELT(result, 4, Rf_allocMatrix(REALSXP, beta(0).size(), beta.size()));
 
@@ -80,10 +80,9 @@ SEXP GAM_skeleton(InputHandler & GAMData, OptimizationData & optimizationData, S
 
 	//return GCV values
   	Real *rans2 = REAL(VECTOR_ELT(result, 2));
-	for(UInt i = 0; i < GCV.size(); i++)
-	{
-		rans2[i] = GCV[i];
-	}
+	for(UInt i = 0; i < lambdaS_len; i++)
+		for(UInt j = 0; j < lambdaT_len; j++)
+			rans2[i + lambdaS_len * j] = GCV[i][j];
 
 	// Copy best lambda
 	UInt *rans3 = INTEGER(VECTOR_ELT(result, 3));
@@ -150,31 +149,36 @@ SEXP GAM_skeleton(InputHandler & GAMData, OptimizationData & optimizationData, S
 			rans11[i + barycenters.rows()*j] = barycenters(i,j);
 	}
 
-
 	// GAM PARAMETER ESTIMATIONS
-	SET_VECTOR_ELT(result, 12, Rf_allocMatrix(REALSXP, fn_hat(0).size(), fn_hat.size()));
-	SET_VECTOR_ELT(result, 13, Rf_allocVector(REALSXP, J_value.size()));
-	SET_VECTOR_ELT(result, 14, Rf_allocVector(REALSXP, variance_est.size()));
+	SET_VECTOR_ELT(result, 12, Rf_allocMatrix(REALSXP, fn_hat(0,0).size(), fn_hat.rows()*fn_hat.cols()));
+	SET_VECTOR_ELT(result, 13, Rf_allocMatrix(REALSXP, lambdaS_len, lambdaT_len));
+	SET_VECTOR_ELT(result, 14, Rf_allocMatrix(REALSXP, lambdaS_len, lambdaT_len));
 
 	//return fn hat
 	Real *rans12 = REAL(VECTOR_ELT(result, 12));
-	for(UInt j = 0; j < fn_hat.size(); j++)
-	{
-		for(UInt i = 0; i < fn_hat(0).size(); i++)
-			rans12[i + fn_hat(0).size()*j] = fn_hat(j)(i);
-	}
+	for(UInt i = 0; i < fn_hat.rows(); i++){
+		for(UInt j = 0; j < fn_hat.cols(); j++)
+			for(UInt k = 0; k < fn_hat(0,0).size(); k++)
+				rans12[k + fn_hat(0,0).size()*i + fn_hat(0,0).size()*fn_hat.rows()*j] = fn_hat.coeff(i,j)(k);
+	}	
+	for (UInt j = 0; j < fn_hat.size(); j++) {
+        	for (UInt i = 0; i < fn_hat(0, 0).size(); i++)
+            		rans12[i + fn_hat(0 , 0).size() * j] = fn_hat(j)(i);
+    	}
 
 	//return J_value
   	Real *rans13 = REAL(VECTOR_ELT(result, 13));
-  	for(UInt i = 0; i < J_value.size(); i++)
-	{
-		rans13[i] = J_value[i];
+  	for(UInt i = 0; i < lambdaS_len; i++){
+  		for(UInt j = 0; j < lambdaT_len; j++)
+			rans13[i + lambdaS_len*j] = J_value[i][j];
 	}
 
 	//return scale parameter
 	Real *rans14 = REAL(VECTOR_ELT(result, 14));
-	for(UInt j = 0; j < variance_est.size(); j++){
-		rans14[j] = variance_est[j];
+	for(UInt i = 0; i < lambdaS_len; i++){
+		for(UInt j = 0; j < lambdaT_len; j++){
+			rans14[i + lambdaS_len*j] = variance_est[i][j];
+		}
 	}
 
 	UNPROTECT(1);
