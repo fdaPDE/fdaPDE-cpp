@@ -1,0 +1,44 @@
+site_name: fdaPDE
+edit_uri : ''
+
+theme:
+    name: material
+    icon:
+       repo: fontawesome/brands/github
+    features:
+       - navigation.tabs
+       - navigation.instant
+       - navigation.expand
+       - content.code.annotate
+       
+extra_css:
+   - stylesheets/extra.css
+
+extra_javascript: 
+    - https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML
+
+markdown_extensions:
+    - mdx_math
+    - tables
+    - admonition
+    - pymdownx.highlight:
+        anchor_linenums: true
+    - pymdownx.inlinehilite
+    - pymdownx.snippets
+    - pymdownx.superfences
+
+nav:
+   - Home: 'index.md'
+   - Getting started : 'start.md'
+   - Documentation:
+       - R Interface: 'R.md'
+       - ScalarField: 'ScalarField.md'
+       - DifferentiableScalarField: 'DifferentiableScalarField.md'
+       - TwiceDifferentiableScalarField: 'TwiceDifferentiableScalarField.md'
+       - GridOptimizer: 'GridOptimizer.md'
+       - NewtonOptimizer: 'NewtonOptimizer.md'
+       - ExactNewtonOptimizer: 'ExactNewtonOptimizer.md'
+       
+
+repo_url: https://github.com/fdaPDE/fdaPDE
+repo_name: fdaPDE/fdaPDE
