@@ -7,8 +7,8 @@ theme:
        repo: fontawesome/brands/github
     features:
        - navigation.tabs
-       - navigation.instant
        - navigation.expand
+       - navigation.sections
        - content.code.annotate
        
 extra_css:
@@ -26,19 +26,26 @@ markdown_extensions:
     - pymdownx.inlinehilite
     - pymdownx.snippets
     - pymdownx.superfences
+    - pymdownx.emoji:
+          emoji_index: !!python/name:materialx.emoji.twemoji
+          emoji_generator: !!python/name:materialx.emoji.to_svg
 
 nav:
    - Home: 'index.md'
    - Getting started : 'start.md'
    - Documentation:
-       - R Interface: 'R.md'
-       - ScalarField: 'ScalarField.md'
-       - DifferentiableScalarField: 'DifferentiableScalarField.md'
-       - TwiceDifferentiableScalarField: 'TwiceDifferentiableScalarField.md'
-       - GridOptimizer: 'GridOptimizer.md'
-       - NewtonOptimizer: 'NewtonOptimizer.md'
-       - ExactNewtonOptimizer: 'ExactNewtonOptimizer.md'
-       
+       - Core :
+           - OPT :
+               - Optimizer: 'Optimizer.md'
+               - ScalarField: 'ScalarField.md'
+               - DifferentiableScalarField: 'DifferentiableScalarField.md'
+               - TwiceDifferentiableScalarField: 'TwiceDifferentiableScalarField.md'
+               - GridOptimizer: 'GridOptimizer.md'
+               - NewtonOptimizer: 'NewtonOptimizer.md'
+               - ExactNewtonOptimizer: 'ExactNewtonOptimizer.md'
+               - GradientDescentOptimizer: 'GradientDescentOptimizer.md'
+               - BFGS : 'BFGSOptimizer.md'
+           - R Interface: 'R.md'
 
 repo_url: https://github.com/fdaPDE/fdaPDE
 repo_name: fdaPDE/fdaPDE

@@ -8,7 +8,5 @@
 !*.hpp
 !*.md
 !*.yml
-!/docs/
-!/docs/*
-!/site/
-!/site/*
+!docs/
+!docs/*

@@ -1,5 +1,7 @@
 # NewtonOptimizer
 
+> :fontawesome-solid-file-code: core/OPT/NewtonOptimizer.h &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; :fontawesome-solid-sitemap: Extends: [IterativeOptimizer](Optimizer.md#IterativeOptimizer)
+
 Template class to optimize a given [ScalarField](ScalarField.md) over \( \mathbb{R}^N \) using the Newton's iterative optimization method:
 $$ x_{n+1} = x_{n} - \lambda H_f(x_n)^{-1} \cdot \nabla f(x_n) $$
 where \( H_f(x_n) \in \mathbb{R}^{N \times N} \) denotes the Hessian matrix of the field evaluated at point \( x_n \).
@@ -17,8 +19,9 @@ template <unsigned int N> class NewtonOptimizer{ ... };
 
 ## Methods
 
-```
-NewtonOptimizer(double step_)
+``` c++
+NewtonOptimizer(double step_, const SVector<N>& x0_, unsigned int maxIteration_,
+		        double tolerance_, const ScalarField<N>& objective_)
 ```
 
 !!! quote ""
@@ -27,27 +30,24 @@ NewtonOptimizer(double step_)
     | Args                                                                                          | Description                                                 |
     |------------------------------------------------------------------------------------------|-------------------------------------------------------------|
     | `double step_`             | The term \( \lambda \) in the iterative formulation of the Newton's method. |
-
-
-
-``` c++
-std::pair<SVector<N>, double> 
-findMinimum(const SVector<N>& x0, unsigned int maxIteration, 
-            double tolerance, ScalarField<N>& objective) const
-```
-
-!!! quote ""
-	Applies the optimization method to the objective passed as argument. Returns `std::pair<SVector<N>,double>` where the first element is the point in \( \mathbb{R}^N \) where the minimum is reached while the second one is the actual minimum value reached by the objective.
-
-    | Args      | Description                                                 |
-    |------------------------------------------------------------------------------------------|-------------------------------------------------------------|
     | `const SVector<N>& x0` | The initial point from which the iterative method is started. |
 	| `unsigned int maxIteration` | The maximum number of iterations allowed. |
 	| `double tolerance` | The tolerance on the error of the obtained solution requested from the method. |
     | `ScalarField<N>& objective` | The objective function to optimize. |
+
+
+``` c++
+std::pair<SVector<N>, double> findMinimum() override;
+```
+
+!!! quote ""
+	Applies the optimization method to the objective passed as argument. Returns `std::pair<SVector<N>,double>` where the first element is the point in \( \mathbb{R}^N \) where the minimum is reached while the second one is the actual minimum value reached by the objective.
 	
-	!!! note
-		The method stops either if the \( l^2 \) norm of the gradient of the objective \( \left\lVert \nabla f(x_n) \right\rVert \) reaches the required tolerance or if such tolerance is not reached before a `maxIteration` number of iterations.
+	!!! info
+		Default stopping condition: the method stops either if the \( l^2 \) norm of the gradient of the objective \( \left\lVert \nabla f(x_n) \right\rVert \) reaches the required tolerance or if such tolerance is not reached before a `maxIteration` number of iterations.
+	
+	!!! tip
+	    You can control the optimizer by exploiting the [IterativeOptimizer](Optimizer.md#IterativeOptimizer) interface.
 
 ## Examples
 
@@ -63,18 +63,15 @@ std::function<double(SVector<2>)> g = [](SVector<2> x) -> double {
 ScalarField<2> objective(g);
 
 // perform newton optimization
-  
-// set learning rate
-double lambda = 0.01;
+double lambda = 0.01;                    // learning rate
+unsigned int max_iterations = 1000;      // max number of iterations
+double tolerance = 0.001;                // tolerance
 
 // create optimizer
-NewtonOptimizer<2> optNewton2D(lambda);
+NewtonOptimizer<2> optNewton2D(lambda, SVector<2>(1,1), max_iterations, tolerance, objective);
 
-// find minimum of g
-unsigned int max_iterations = 1000;
-double tolerance = 0.001;
-std::pair<SVector<2>,double> min_g = optNewton2D.findMinimum(SVector<2>(1,1), max_iterations, 
-                                                             tolerance, objective);
+// find minimum of objective
+std::pair<SVector<2>,double> min_g = optNewton2D.findMinimum();
 ```
 
 
