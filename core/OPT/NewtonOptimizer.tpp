@@ -1,7 +1,11 @@
+#include <chrono>
+
 // newton optimization routine
 template <unsigned int N>
 template <typename... Args>
-std::pair<SVector<N>, double> NewtonOptimizer<N>::findMinimum(const ScalarField<N>& objective, const SVector<N>& x0, const Args&... args) { 
+std::pair<SVector<N>, double> NewtonOptimizer<N>::findMinimum(const ScalarField<N>& objective, const SVector<N>& x0, const Args&... args) {
+  std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+
   // can be set true by some extension to cause a foced stop at any point of the execution
   bool customStop = false; 
  
@@ -34,7 +38,9 @@ std::pair<SVector<N>, double> NewtonOptimizer<N>::findMinimum(const ScalarField<
     x_old = x_new;    
     numIteration++;
   }
-
+  std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+  time = std::chrono::duration_cast<std::chrono::microseconds>(end - begin);
+  
   Extension::executeEndOptimization(*this, objective, args...);
   return std::pair<SVector<N>, double>(x_old, objective(x_old));
 }

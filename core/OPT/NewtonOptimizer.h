@@ -2,8 +2,9 @@
 #define __NEWTON_OPTIMIZER_H__
 
 #include <Eigen/Dense>
+#include <chrono>
 #include "ScalarField.h"
-#include "Extension.h"
+#include "extensions/Extension.h"
 #include "Utils.h"
 
 // newton method based on approximate gradient and hessian computation. 
@@ -26,6 +27,9 @@ private:
 
   double gradient_step;             // step to use in gradient approximation via central differences
   double hessian_step;              // step to use in hessian approximazion via central differences
+
+  using timeType = std::chrono::duration<long int, std::micro>;
+  timeType time;
   
 public:
   // constructor
@@ -45,6 +49,7 @@ public:
   SVector<N> getXold()           const { return x_old;        }
   SVector<N> getXnew()           const { return x_new;        }
   SVector<N> getUpdate()         const { return update;       }
+  timeType getTime()             const { return time;         }
   
   // optimization routine
   template <typename... Args>

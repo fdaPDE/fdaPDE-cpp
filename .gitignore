@@ -10,5 +10,7 @@
 !*.yml
 !core/
 !core/*
+!core/OPT/extensions/
+!core/OPT/extensions/*
 !docs/
 !docs/*
