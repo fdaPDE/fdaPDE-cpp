@@ -1,36 +1,42 @@
 // newton optimization routine
 template <unsigned int N>
-std::pair<SVector<N>, double> ExactNewtonOptimizer<N>::findMinimum() const {
-  this->init();                 // execute custom action
+template <typename... Args>
+std::pair<SVector<N>, double> ExactNewtonOptimizer<N>::findMinimum(const TwiceDifferentiableScalarField<N>& objective, // objective to optimize
+								   const SVector<N>& x0,                               // starting point
+								   const Args&... args) {                              // extensions
+  // can be set true by some extension to cause a foced stop at any point of the execution
+  bool customStop = false; 
+  customStop |= Extension::executeInitOptimization(*this, objective, args...);
   
   // algorithm initialization
   x_old = x0;
-  unsigned int numIteration = 0;
-  error = objective.derive()(x_old).norm();
-  
-  while (numIteration < maxIteration && error > tolerance && !this->stopCondition()){
-    this->preStep();            // execute custom action
-    
-    // newton step
+  error = objective.derive()(x0).squaredNorm();
+
+  SVector<N> gradientExact;  // exact value of the gradient at each step
+  SMatrix<N> hessianExact;   // exact value of the hessian at each step
+
+  // start loop
+  while (numIt < maxIt && error > tolerance && !customStop){
+    customStop |= Extension::executeInitIteration(*this, objective, args...);
+
+    // compute hessian and gradient exact by resorting to their analytical expression
     hessianExact  = objective.deriveTwice()(x_old);
     gradientExact = objective.derive()(x_old);
 
     // solve linear system by using an Householder QR decomposition with column-pivoting: A*P = Q*R
     Eigen::ColPivHouseholderQR<SMatrix<N>> QRdecomposition(hessianExact);
-    
-    SVector<N> update = QRdecomposition.solve(gradientExact);
-    x_new = x_old - NewtonOptimizer<N>::step*update;
+    update = QRdecomposition.solve(gradientExact);
 
-    // error update
-    error = objective.derive()(x_new).norm();
+    // update step
+    x_new = x_old - step*update;
+    error = objective.derive()(x_new).squaredNorm();
 
-    this->postStep();           // execute custom action
-    
+    customStop |= Extension::executeEndIteration(*this, objective, args...);
     // prepare next iteration
     x_old = x_new;    
-    numIteration++;
+    numIt++;
   }
-
-  this->finalize();             // execute custom action
-  return std::pair<SVector<N>, double>(x_new, objective(x_new));
+  
+  Extension::executeEndOptimization(*this, objective, args...);
+  return std::pair<SVector<N>, double>(x_old, objective(x_old));
 }

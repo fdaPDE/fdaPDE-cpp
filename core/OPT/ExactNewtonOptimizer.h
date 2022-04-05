@@ -1,83 +1,57 @@
-#ifndef __EXACT_NEWTON_OPTIMIZER__
-#define __EXACT_NEWTON_OPTIMIZER__
+#ifndef __EXACT_NEWTON_OPTIMIZER_H__
+#define __EXACT_NEWTON_OPTIMIZER_H__
 
-#include <Eigen/Core>
 #include <Eigen/Dense>
-#include <utility>
-
 #include "ScalarField.h"
-#include "IterativeOptimizer.h"
+#include "extensions/Extension.h"
+#include "Utils.h"
 
-// newton method based on exact gradient and hessian computation. It requires second differentiabiliy
-// of the scalar field passed as objective
-template <unsigned int N>
-class ExactNewtonOptimizer : public IterativeOptimizer<N> {
+namespace fdaPDE{
+namespace core{
+namespace OPT{  
 
-protected:
-  double step;
+  // newton method based on exact gradient and hessian computation. It requires second differentiabiliy
+  // of the scalar field passed as objective
+  template <unsigned int N>
+  class ExactNewtonOptimizer{
+
+  private:
+    double step;                      // step employed by the optimization scheme.
   
-  // internal status of the optimizer 
-  SVector<N> x_old;                 // value of the optimization point before the update step
-  SVector<N> x_new;                 // value of the optimization point after the update step
-  double error;                     // squared l^2 norm of the gradient after the update step
-  SVector<N> gradientExact;         // exact value of the gradient before the update step
-  SMatrix<N> hessianExact;          // exact value of the hessian before the update step
+    // internal status of the optimizer 
+    SVector<N> x_old;                 // value of the optimization point before the update step
+    SVector<N> x_new;                 // value of the optimization point after the update step
+    SVector<N> update;                // update vector computed at each step
+    double error;                     // squared l^2 norm of the gradient after the update step
+
+    // optimization problem data
+    unsigned int maxIt;               // maximum number of iterations before forced stop
+    double tolerance;                 // tolerance on error
+    unsigned int numIt = 0;           // counter to keep track of the number of iterations executed
   
-  // optimization problem data
-  const SVector<N>& x0;                                // starting point
-  unsigned int maxIteration;                           // maximum number of iterations before forced stop
-  double tolerance;                                    // tolerance on error
-  const TwiceDifferentiableScalarField<N>& objective;  // objective function
+  public:
+    // constructor
+    ExactNewtonOptimizer(unsigned int maxIt_, double tolerance_)
+      : maxIt(maxIt_), tolerance(tolerance_) {};
 
- public:
+    // set step size (use this if you want to employ a fixed step method. For adaptive step, use a proper extension)
+    void setStepSize(double step_) { step = step_; }
+
+    // getters to internal state
+    unsigned int getNumIteration() const { return numIt;  }
+    double getError()              const { return error;  }
+    SVector<N> getXold()           const { return x_old;  }
+    SVector<N> getXnew()           const { return x_new;  }
+    SVector<N> getUpdate()         const { return update; }
   
-  ExactNewtonOptimizer(double step_, const SVector<N>& x0_, unsigned int maxIteration_,
-		       double tolerance_, const ScalarField<N>& objective_)
-    : step(step_), x0(x0_), maxIteration(maxIteration_), tolerance(tolerance_), objective(objective_) {};
+    // optimization routine
+    template <typename... Args>
+    std::pair<SVector<N>, double> findMinimum(const TwiceDifferentiableScalarField<N>& objective, const SVector<N>& x0, const Args&... args);
 
-  // optimization routine
-  template <typename... Extension>
-  std::pair<SVector<N>, double> findMinimum(Extension&&... extensions) const;
-  
-};
+    const std::string description = "Newton method with exact gradient and hessian computation";
+  };
 
+#include "ExactNewtonOptimizer.tpp"
+}}}
 
-// newton optimization routine
-template <unsigned int N>
-template <typename... ExtensionList>
-std::pair<SVector<N>, double> ExactNewtonOptimizer<N>::findMinimum(ExtensionList&&... extensions) const {
-  Extension::initOptimization(extensions...);                 // execute custom action
-  
-  // algorithm initialization
-  x_old = x0;
-  unsigned int numIteration = 0;
-  error = objective.derive()(x_old).norm();
-  
-  while (numIteration < maxIteration && error > tolerance && !this->stopCondition()){
-    this->preStep();            // execute custom action
-    
-    // newton step
-    hessianExact  = objective.deriveTwice()(x_old);
-    gradientExact = objective.derive()(x_old);
-
-    // solve linear system by using an Householder QR decomposition with column-pivoting: A*P = Q*R
-    Eigen::ColPivHouseholderQR<SMatrix<N>> QRdecomposition(hessianExact);
-    
-    SVector<N> update = QRdecomposition.solve(gradientExact);
-    x_new = x_old - ExactNewtonOptimizer<N>::step*update;
-
-    // error update
-    error = objective.derive()(x_new).norm();
-
-    this->postStep();           // execute custom action
-    
-    // prepare next iteration
-    x_old = x_new;    
-    numIteration++;
-  }
-
-  this->finalize();             // execute custom action
-  return std::pair<SVector<N>, double>(x_new, objective(x_new));
-}
-
-#endif // __EXACT_NEWTON_OPTIMIZER__
+#endif // __EXACT_NEWTON_OPTIMIZER_H__
