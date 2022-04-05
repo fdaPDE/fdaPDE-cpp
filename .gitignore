@@ -12,5 +12,7 @@
 !core/*
 !core/OPT/extensions/
 !core/OPT/extensions/*
+!core/OPT/optimizers/
+!core/OPT/optimizers/*
 !docs/
 !docs/*

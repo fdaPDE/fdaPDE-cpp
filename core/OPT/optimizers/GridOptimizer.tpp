@@ -1,5 +1,10 @@
 template <unsigned int N>
-std::pair<SVector<N>, double> GridOptimizer<N>::findMinimum() {
+template <typename... Args>
+std::pair<SVector<N>, double> findMinimum(const ScalarField<N>& objective_,
+					  const Args&... args){
+  // can be set true by some extension to cause a foced stop at any point of the execution
+  bool customStop = false; 
+  customStop |= Extension::executeInitOptimization(*this, objective, args...);
 
   // number of iterations for each dimension
   array<int,N> numberIteration;
@@ -23,7 +28,8 @@ std::pair<SVector<N>, double> GridOptimizer<N>::findMinimum() {
   array<int, N> currentIteration = {};
   
   // search for minimum
-  while(currentIteration[N-1] < numberIteration[N-1]){ // loop until the last dimension has not been scan entirely
+  while(currentIteration[N-1] < numberIteration[N-1] && !customStop){ // loop until the last dimension has not been scan entirely
+    customStop |= Extension::executeInitIteration(*this, objective, args...);
 
     // evaluate function at current point
     gridPoint[0] += steps[0];
@@ -46,6 +52,9 @@ std::pair<SVector<N>, double> GridOptimizer<N>::findMinimum() {
       currentIteration[i+1]++;               // increment counter for next dimension
       gridPoint[i+1] += steps[i+1];
     }
+    customStop |= Extension::executeEndIteration(*this, objective, args...);
   }
+
+  customStop |= Extension::executeEndOptimization(*this, objective, args...);
   return std::pair<SVector<N>,double>(minPoint, minimum);
 }

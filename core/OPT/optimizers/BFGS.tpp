@@ -1,11 +1,15 @@
 // BFGS optimization routine
 template <unsigned int N>
-std::pair<SVector<N>, double> BFGSOptimizer<N>::findMinimum(){
-  CustomizableOptimizer<N>::init();             // execute custom action
+template <typename... Args>
+std::pair<SVector<N>, double> BFGSOptimizer<N>::findMinimum(const DifferentiableScalarField<N>& objective,
+							    const SVector<N>& x0,
+							    const Args&... args){
+  // can be set true by some extension to cause a foced stop at any point of the execution
+  bool customStop = false; 
+  customStop |= Extension::executeInitOptimization(*this, objective, args...);
   
   // algorithm initialization
   x_old = x0;
-  unsigned int numIteration = 0;
 
   // set the hessian approximation at first iteration equal to the identity matrix
   // this will make the first iteration of the algorithm to behave as a gradient descent
@@ -17,21 +21,13 @@ std::pair<SVector<N>, double> BFGSOptimizer<N>::findMinimum(){
     return std::pair<SVector<N>, double>(x_old, objective(x_old));
 
   error = grad_old.squaredNorm();
-  
-  while(numIteration < maxIteration && error > tolerance && !CustomizableOptimizer<N>::stopCondition()){
-    CustomizableOptimizer<N>::beginIteration(); // execute custom action
-    // compute algorithm update direction
-    SVector<N> updateDirection = hessian*grad_old;
 
-    // backtracking based step search
-    double ro = 0.5, alpha = 1/ro, gamma = 0.5;
-    do{
-      // update step
-      alpha *= ro;
-    }while( objective(x_old + step*updateDirection) > objective(x_old) + gamma*alpha*(grad_old.dot(updateDirection)));
+  while(numIt < maxIt && error > tolerance && !customStop){
+    update = hessian*grad_old;
+    customStop |= Extension::executeInitIteration(*this, objective, args...);
     
     // update along descent direction
-    x_new = x_old - alpha*updateDirection;
+    x_new = x_old - step*update;
     // gradient update
     grad_new = objective.derive()(x_new);
     if (grad_new.isApprox(SVector<N>::Zero())){ // gradient is zero, already at stationary point
@@ -50,14 +46,15 @@ std::pair<SVector<N>, double> BFGSOptimizer<N>::findMinimum(){
     
     hessian += U - V; // hessian approximation update
 
-    CustomizableOptimizer<N>::endIteration();   // execute custom action
     // prepare next iteration
     error = grad_new.squaredNorm();
+    customStop |= Extension::executeEndIteration(*this, objective, args...);
+
     x_old = x_new;
     grad_old = grad_new;
-    numIteration++;
+    numIt++;
   }
 
-  CustomizableOptimizer<N>::finalize();         // execute custom action
+  customStop |= Extension::executeEndOptimization(*this, objective, args...);
   return std::pair<SVector<N>, double>(x_old, objective(x_old));
 }

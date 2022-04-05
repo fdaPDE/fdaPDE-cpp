@@ -1,19 +1,17 @@
-#ifndef __EXACT_NEWTON_OPTIMIZER_H__
-#define __EXACT_NEWTON_OPTIMIZER_H__
+#ifndef __NEWTON_H__
+#define __NEWTON_H__
 
 #include <Eigen/Dense>
-#include "ScalarField.h"
-#include "extensions/Extension.h"
-#include "Utils.h"
+#include "../ScalarField.h"
+#include "../extensions/Extension.h"
+#include "../Utils.h"
 
 namespace fdaPDE{
 namespace core{
 namespace OPT{  
-
-  // newton method based on exact gradient and hessian computation. It requires second differentiabiliy
-  // of the scalar field passed as objective
+  // newton method based on approximate gradient and hessian computation. 
   template <unsigned int N>
-  class ExactNewtonOptimizer{
+  class NewtonOptimizer{
 
   private:
     double step;                      // step employed by the optimization scheme.
@@ -28,15 +26,17 @@ namespace OPT{
     unsigned int maxIt;               // maximum number of iterations before forced stop
     double tolerance;                 // tolerance on error
     unsigned int numIt = 0;           // counter to keep track of the number of iterations executed
-  
+
+    double gradient_step;             // step to use in gradient approximation via central differences
+    double hessian_step;              // step to use in hessian approximazion via central differences  
   public:
     // constructor
-    ExactNewtonOptimizer(unsigned int maxIt_, double tolerance_)
-      : maxIt(maxIt_), tolerance(tolerance_) {};
+    NewtonOptimizer(unsigned int maxIt_, double tolerance_, double gradient_step_, double hessian_step_)
+      : maxIt(maxIt_), tolerance(tolerance_), gradient_step(gradient_step_), hessian_step(hessian_step_) {};
 
     // set step size (use this if you want to employ a fixed step method. For adaptive step, use a proper extension)
     void setStepSize(double step_) { step = step_; }
-
+  
     // getters to internal state
     unsigned int getNumIteration() const { return numIt;  }
     double getError()              const { return error;  }
@@ -46,12 +46,12 @@ namespace OPT{
   
     // optimization routine
     template <typename... Args>
-    std::pair<SVector<N>, double> findMinimum(const TwiceDifferentiableScalarField<N>& objective, const SVector<N>& x0, const Args&... args);
+    std::pair<SVector<N>, double> findMinimum(const ScalarField<N>& objective, const SVector<N>& x0, const Args&... args);
 
-    const std::string description = "Newton method with exact gradient and hessian computation";
+    const std::string description = "Newton method with approximate gradient and hessian computation";
   };
 
-#include "ExactNewtonOptimizer.tpp"
+#include "Newton.tpp"
 }}}
-
-#endif // __EXACT_NEWTON_OPTIMIZER_H__
+  
+#endif // __NEWTON_H__
