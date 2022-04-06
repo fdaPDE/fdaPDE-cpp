@@ -15,6 +15,5 @@
 !core/OPT/optimizers/
 !core/OPT/optimizers/*
 !core/MESH/
-!core/MESH/*
 !docs/
 !docs/*
