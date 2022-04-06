@@ -25,7 +25,7 @@ NewtonOptimizer(double step_, const SVector<N>& x0_, unsigned int maxIteration_,
 ```
 
 !!! quote ""
-	Constructor initializing some quantities in the internal representation of the class.
+	Constructor.
 
     | Args                                                                                          | Description                                                 |
     |------------------------------------------------------------------------------------------|-------------------------------------------------------------|

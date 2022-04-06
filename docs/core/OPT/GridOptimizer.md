@@ -1,6 +1,6 @@
 # GridOptimizer
 
-> :fontawesome-solid-file-code: core/OPT/GridOptimizer.h &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; :fontawesome-solid-sitemap: Extends: [Optimizer](Optimizer.md)
+> :fontawesome-solid-file-code: core/OPT/optimizers/Grid.h &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; :fontawesome-solid-sitemap: Extends: -
 
 Template class to optimize a given [ScalarField](ScalarField.md) over an N-dimensional grid of equidistant nodes. 
 

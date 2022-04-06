@@ -49,16 +49,16 @@ std::function<SVector<2>(SVector<2>)> dg = [](SVector<2> x) -> SVector<2> {
 DifferentiableScalarField<2> field(g, dg);
 
 std::cout << "evaluation of field at point" << std::endl;
-std::cout << field.evaluateAtPoint(SVector<2>({4,1})) << std::endl;
+std::cout << field.evaluateAtPoint(SVector<2>(4,1)) << std::endl;
 
 // get approximation of gradient at point
-SVector<2> grad = field.getGradientApprox(SVector<2>({2,1}), 0.001);
+SVector<2> grad = field.getGradientApprox(SVector<2>(2,1), 0.001);
     
 std::cout << "approximation of gradient at point" << std::endl;
 std::cout << grad << std::endl;
 
 // evaluate exact gradient at point
-SVector<2> exactGrad = field.derive()(SVector<2>({2,1}));
+SVector<2> exactGrad = field.derive()(SVector<2>(2,1));
 
 std::cout << "exact gradient at point" << std::endl;
 std::cout << exactGrad << std::endl;

@@ -1,0 +1,133 @@
+# Optimization module
+
+> :fontawesome-solid-file-code: core/OPT/... &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; :fontawesome-solid-sitemap: Namespace: fdaPDE::core::OPT
+
+The optimization module provides a set of general routines for optimizing a generic [ScalarField](ScalarField.md) \( f : \mathbb{R}^N \rightarrow \mathbb{R} \).
+
+## Usage
+
+The following code snippet shows how to optimize the scalar field \( f(x,y) = 3x^3 - 2y^2 + x \) using a [Newton](NewtonOptimizer.md) optimizer without providing any analytical expression for its gradient and hessian function (these quantities are numerically approximated by the method at each step):
+
+``` c++ linenums="1"
+// define the field analytical expression: 3*x^3 - 2*y^2 + x
+std::function<double(SVector<2>)> g = [](SVector<2> x) -> double {
+    return 3*std::pow(x[0],3) - 2*std::pow(x[1],2) + x[0];
+  };
+
+// wrap the analytical expression in a ScalarField object
+ScalarField<2> field(g);
+
+// define a newton optimization over a 2-dimensional space
+unsigned int max_iteration = 10000;
+double tolerance = 0.001;
+
+// set step sizes for numerical approximation of gradient and hessian
+double gradient_step = 0.001;
+double hessian_step  = 0.001;
+
+// define optimizer
+NewtonOptimizer<2> Optim(max_iteration, tolerance, gradient_step, hessian_step);
+// set fixed learning rate
+Optim.setStepSize(0.001);
+
+// compute minimum starting from point (1,1)
+std::pair<SVector<2>,double> min = Optim.findMinimum(field, SVector<2>(1,1))
+```
+
+
+!!! caution "Developer's advice"
+    Due to the highly templatized structure of this module there is no software enforced interface among all optimizers. Future optimizer routines included in this library **must** adopt the design strategy described in this section to be consistent with the optimization API.
+
+A vast family of optimizers should expose their main entry point to the minimization routine using the following signature:
+
+``` c++
+template <typename... Args>
+std::pair<SVector<N>, double> findMinimum(const ScalarField<N>& objective, const SVector<N>& x0,
+										  const Args&... args);
+```
+
+!!! quote ""
+    | Args                                                                                          | Description                                                 |
+    |------------------------------------------------------------------------------------------|-------------------------------------------------------------|
+    | `const ScalarField<N>& objective`             | The objective function to optimize passed as a [ScalarField](ScalarField.md) or one of its derived classes. This last case is adopted in case the optimization scheme requires specific regularity conditions on the objective. |
+    | `const SVector<N>& x0` | The initial point from which the iterative method is started. |
+	| `const Args&... args` | Zero or more [Extensions](Extensions.md) used to control the behaviour of the optimizer at run time. |
+
+	Return type: `std::pair<SVector<N>, double>` where the first element of the pair is the point of minimum, the second element is the actual value reached by the objective at this minimum.
+
+All iterative optimization methods in the OPT module are accessible in this way. In case this is not possible (see for example [GridOptimizer](GridOptimizer.md)) the signature should be kept as similar as possible to the presented one.
+
+!!! caution "Developer's advice"
+	In any case is mandatory to expose a `findMinimum()` method returning a `std::pair<SVector<N>, double>` and accepting a [ScalarField](ScalarField.md) as objective function.
+
+## Extensions
+
+Extensions are a usefull and simple way to modify the behaviour of an optimization routine at run time.
+
+!!! note
+	An optimization method exposing a variadic template `findMinimum()` method as presented before is open to customizations. See the specific method page to check if an optimizer can be extended or not.
+	
+!!! info "Developer's advice"
+	Check the [Extensions](Extensions.md) page to find how your optimizer can take advantage of the extension mechanism and how to write new extensions.
+
+Consider the case of optimizing the objective function \( f(x,y) = x^2 + x + y^2 \) using a [GradientDescent](GradientDescent.md) optimizer. The following code shows an usage example
+
+``` c++ linenums="1"
+// define the field analytical expression: 2*x^2 + x + 2*y^2
+std::function<double(SVector<2>)> g = [](SVector<2> x) -> double {
+    return 2*std::pow(x[0],2) + x[0] + 2*std::pow(x[1],2);
+  };
+
+// define analytical expression of gradient field
+  std::function<SVector<2>(SVector<2>)> dg = [](SVector<2> x) -> SVector<2> {
+    return SVector<2>({4*x[0] + 1, 
+                       4*x[1]});
+  };
+
+// define differentiable scalar field
+DifferentiableScalarField<2> field(g, dg);
+
+// define a gradient descent optimization over a 2-dimensional space
+GradientDescentOptimizer<2> gradOptim(10000, 0.001);
+// set learning rate to 0.001
+gradOptim.setStepSize(0.001);
+
+// compute minimum starting from point (1,1)
+std::pair<SVector<2>,double> min_Grad = gradOptim.findMinimum(ddfun, SVector<2>(1,1))
+```
+
+This code snippet will optimize the function using a fixed learning rate which is the standard behaviour for the gradient descent optimizer. Suppose that the fixed step approach works really bad and you want to go for an adaptive step method based on the same gradient descent iterative scheme. The extension mechanism allows you to inject in the gradient descent algorithm any adaptive step size method. For example, the [BacktrackingAdaptiveStep](BacktrackingAdaptiveStep.md) extension implements the backtracking line search algorithm for step selection.
+
+Enabling it in the gradient descent method is as simple as writing the following:
+
+``` c++ linenums="1"
+// compute minimum starting from point (1,1) using an adaptive backtraking method
+std::pair<SVector<2>,double> min_Grad = gradOptim.findMinimum(ddfun, SVector<2>(1,1), 
+                                                              BacktrackingAdaptiveStep(1, 0.2, 0.3));
+```
+
+The code will call the line search algorithm at the right point in the iterative procedure doing all the job for you.
+
+You can call as many extensions as you want by simply list them in the `findMinimum()` method. For example the following applies a backtracking gradient descent method printing at the end of the optimization a small summary of the result
+
+``` c++ linenums="1"
+std::pair<SVector<2>,double> min_Grad = gradOptim.findMinimum(ddfun, SVector<2>(1,1), 
+                                                              BacktrackingAdaptiveStep(1, 0.2, 0.3),
+															  Summarize());
+>> writes in output
+
+Summary of optimization routine
+   type of optimization:     Gradient descent method
+   number of iterations:     5
+   optimium point found:     [-0.249600, 0.000320]
+   objective optimum value:  -0.124999
+   l2 error:                 0.00010496
+
+```
+
+
+!!! advice
+	Is up to the user to enable extensions which make sense for the optimization scheme considered and do not collide each other (i.e. enabling more than one adaptive step method is not a good idea).
+	
+!!! tip
+	Check the [Extensions](Extensions.md) page to get a list of all available extensions.

@@ -10,6 +10,7 @@ theme:
        - navigation.expand
        - navigation.sections
        - content.code.annotate
+       - navigation.indexes
        
 extra_css:
    - stylesheets/extra.css
@@ -36,15 +37,18 @@ nav:
    - Documentation:
        - Core :
            - OPT :
-               - Optimizer: 'Optimizer.md'
-               - ScalarField: 'ScalarField.md'
-               - DifferentiableScalarField: 'DifferentiableScalarField.md'
-               - TwiceDifferentiableScalarField: 'TwiceDifferentiableScalarField.md'
-               - GridOptimizer: 'GridOptimizer.md'
-               - NewtonOptimizer: 'NewtonOptimizer.md'
-               - ExactNewtonOptimizer: 'ExactNewtonOptimizer.md'
-               - GradientDescentOptimizer: 'GradientDescentOptimizer.md'
-               - BFGS : 'BFGSOptimizer.md'
+               - core/OPT/index.md
+               - ScalarField: 'core/OPT/ScalarField.md'
+               - DifferentiableScalarField: 'core/OPT/DifferentiableScalarField.md'
+               - TwiceDifferentiableScalarField: 'core/OPT/TwiceDifferentiableScalarField.md'
+               - GridOptimizer: 'core/OPT/GridOptimizer.md'
+               - NewtonOptimizer: 'core/OPT/NewtonOptimizer.md'
+               - ExactNewtonOptimizer: 'core/OPT/ExactNewtonOptimizer.md'
+               - GradientDescentOptimizer: 'core/OPT/GradientDescentOptimizer.md'
+               - BFGS : 'core/OPT/BFGSOptimizer.md'
+               - Extensions : 'core/OPT/Extensions.md'
+           - MESH:
+               -core/MESH/index.md
            - R Interface: 'R.md'
 
 repo_url: https://github.com/fdaPDE/fdaPDE

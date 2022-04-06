@@ -19,7 +19,7 @@ ScalarField(std::function<double(SVector<N>)> f_)
 ```
 
 !!! quote ""
-	Just sets the internal representation of the field to the functional `f_` passed as argument.
+	Constructor.
 
     | Args      | Description                                                 |
     |------------------------------------------------------------------------------------------|-------------------------------------------------------------|
