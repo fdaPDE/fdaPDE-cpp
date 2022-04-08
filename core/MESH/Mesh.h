@@ -17,6 +17,10 @@
 #include "../OPT/Utils.h"
 #include "MeshUtils.h"
 
+// at the moment used for barycentric walk
+#include <random>
+
+typedef std::mt19937 RNG;  // the Mersenne Twister with a popular choice of parameters
 
 /* at the moment mesh data from R require the development version of RTriangle, download from
    https://github.com/davidcsterratt/RTriangle
@@ -61,31 +65,27 @@ class Mesh{
   // matrix of triangles in the triangulation. Each row of the matrix contains the row
   // numbers in points_ matrix of the points which form the triangle
   DynamicMatrix<int> triangles_;
+  unsigned int numElements = 0;
   // row i in this matrix contains the indexes as row number in triangles_ matrix of the
   // neighboring triangles to triangle i (all triangles in the triangulation which share an
   // edge with i)
   DynamicMatrix<int> neighbors_;
 
-  // voronoi informations: usefull for internal speed up of the mesh data structure
-  DynamicMatrix<int> voronoi_points_;
-  DynamicMatrix<int> voronoi_edges_;  
-  
+  // used for barycentric random walk
+  uint32_t seed;
+  RNG rng;
+  std::uniform_int_distribution<uint32_t> uniform_int;
  public:
 
   // constructor from .csv files
   Mesh(const std::string& pointsFile,    const std::string& edgesFile,
-       const std::string& trianglesFile, const std::string& neighborsFile,
-       const std::string& voronoiPointsFile, const std::string& voronoiEdgesFile){
+       const std::string& trianglesFile, const std::string& neighborsFile){
     // open and parse CSV files
     CSVReader reader;
     CSVFile<double> points = reader.parseFile<double>(pointsFile);
     CSVFile<int> edges     = reader.parseFile<int>(edgesFile);
     CSVFile<int> triangles = reader.parseFile<int>(trianglesFile);
     CSVFile<int> neighbors = reader.parseFile<int>(neighborsFile);
-
-    // load voronoi tasselation structure
-    CSVFile<int> voronoiPoints = reader.parseFile<int>(voronoiPointsFile);
-    CSVFile<int> voronoiEdges  = reader.parseFile<int>(voronoiEdgesFile);
     
     // set mesh internal representation to eigen matrix
     points_    = points.toEigen();
@@ -97,17 +97,17 @@ class Mesh{
 
     triangles_      = triangles.toEigen();
     triangles_      = (triangles_.array() -1).matrix();
-
+    numElements     = triangles_.maxCoeff();
+    
     // a negative value means no neighbor
     neighbors_      = neighbors.toEigen();
     neighbors_      = (neighbors_.array() - 1).matrix();
 
-    voronoi_points_ = voronoiPoints.toEigen();
-    voronoi_points_ = (voronoi_points_.array() - 1).matrix();
-
-    // a negative value means infinite ray
-    voronoi_edges_  = voronoiEdges.toEigen();
-    voronoi_edges_  = (voronoi_edges_.array() - 1).matrix();
+    seed = time(NULL);  // seed for RNG
+    rng  = RNG(seed);   // define RNG
+  
+    // define uniform distribution over the ID space
+    uniform_int = std::uniform_int_distribution<uint32_t>(0, numElements); 
   }
 
   // get an element object given its ID (its row number in the triangles_ matrix)
@@ -149,6 +149,7 @@ class Mesh{
   // search for an element containg a point (big part here: naive, barycentric walking, ADT, structured meshes)
 
   std::shared_ptr<Element<N,M>> bruteForceSearch(const SVector<N>& x);
+  std::shared_ptr<Element<N,M>> barycentricWalkSearch(const SVector<N>& x);
 };
 
 // implementation for 2D case only...
@@ -169,16 +170,15 @@ std::shared_ptr<Element<N,M>> Mesh<N,M>::requestElementById(unsigned int ID) con
   for(size_t i = 0; i < pointIndexes.size(); ++i){
     SVector<N> vertex(points_.row(pointIndexes[i]));
     coords[i] = vertex;
+
+    // from triangle documentation: The first neighbor of triangle i is opposite the first corner of triangle i, and so on.
+    // by storing neighboring informations as they come from triangle we have that neighbor[0] is the
+    // triangle adjacent to the face opposite to coords[0]
+
+    neighbors[i] = elementNeighbors[i];
   }
-  
-  // edges are logically stored such that the first edge links point 0 and 1 in the coords array
-  // the second element point 1 and 2 and the third one 2 and 0
-  // accordingly neighboring information must preserve this convention. The first element in the
-  // neighbors vector passed to Element constructor must indicate the neighboring element to edge
-  // (0,1) and so on... so that when accessing element 0 of the neighboring vector you have
-  // the guarantee to get the ID of the element which shares the same edge.
-       
-  return std::make_shared<Element<N,M>>(ID, coords);
+         
+  return std::make_shared<Element<N,M>>(ID, coords, neighbors);
 }
 
 // apply a brute force strategy to search for the element containing a given point
@@ -193,5 +193,39 @@ std::shared_ptr<Element<N, M>> Mesh<N, M>::bruteForceSearch(const SVector<N>& po
   // no element in mesh found
   return std::shared_ptr<Element<N,M>>();
 }
+
+// applies a barycentric walk search
+template <unsigned int N, unsigned int M>
+std::shared_ptr<Element<N, M>> Mesh<N, M>::barycentricWalkSearch(const SVector<N>& point) {
+  
+  // initialization takes n^(1/3) elements of the mesh at random and starts from the element nearest to
+  // the searched one
+
+  // start from an element at random
+  std::shared_ptr<Element<N,M>> element = requestElementById(uniform_int(rng)); 
+
+  if(element->contains(point)){
+    return element;
+  }
+
+  while(!element->contains(point)){
+    // compute barycantric coordinates with respect to the element
+    SVector<N+1> baryCoord = element->computeBarycentricCoordinates(point);
+  
+    // Pick the vertices corresponding to the n highest coordinates, and move into the adjacent element that
+    // shares those vertices. This is equivalent to find the minimum baricentric coordinate and move to
+    // the element adjacent to the face opposite to this point
+    unsigned int minBaryCoordIndex;
+    baryCoord.minCoeff(&minBaryCoordIndex);
+
+    // by construction barycentric coordinate at position i is relative to vertex i of the mesh element
+    // we can move to the next element in O(1) exploiting the memory representation of mesh in memory
+    unsigned int nextID = element->getNeighbors()[minBaryCoordIndex];
+    element = requestElementById(nextID);
+  }
+  
+  return element;
+}
+
 
 #endif // __MESH_H__

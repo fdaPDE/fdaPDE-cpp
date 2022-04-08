@@ -14,6 +14,7 @@ class Element{
  private:
   unsigned int ID;
   std::array<SVector<N>, N_VERTICES(N,M)> coords;
+  std::array<unsigned int, N+1> neighbors;
 
   // matrix defining the affine transformation from cartesian to barycentric coordinates
   Eigen::Matrix<double, M, M> baryMatrix;
@@ -22,7 +23,8 @@ class Element{
  public:
   Element() = default;
   
-  Element(int ID_, std::array<SVector<N>, N_VERTICES(N,M)> coords_) : ID(ID_), coords(coords_) {
+  Element(int ID_, std::array<SVector<N>, N_VERTICES(N,M)> coords_, std::array<unsigned int, N+1> neighbors_) :
+    ID(ID_), coords(coords_), neighbors(neighbors_) {
 
     // precompute barycentric coordinate matrix for fast access
     // use first point as reference
@@ -41,6 +43,7 @@ class Element{
   };
 
   std::array<SVector<N>, N_VERTICES(N,M)> getCoords() const { return coords; }
+  std::array<unsigned int, N+1> getNeighbors() const { return neighbors; }
   unsigned int getID() { return ID; }
 
   // computes the baricentric coordinates of the element
@@ -52,9 +55,7 @@ class Element{
 
 template <unsigned int N, unsigned int M>
 SVector<N + 1> Element<N, M>::computeBarycentricCoordinates(const SVector<N>& x) const {
-
-  // solve linear system baryMatrix*z = x - ref by using the precomputed
-  // inverse of bary matrix
+  // solve linear system baryMatrix*z = (x - ref) by using the precomputed inverse of baryMatrix
   SVector<N> z = invBaryMatrix*(x - coords[0]);
   // compute barycentric coordinate of reference element
   double z0 = 1 - z.sum();
@@ -67,13 +68,11 @@ SVector<N + 1> Element<N, M>::computeBarycentricCoordinates(const SVector<N>& x)
 
 template <unsigned int N, unsigned int M>
 bool Element<N, M>::contains(const SVector<N> &x) const {
-  // you can prove that a point is inside the element if all its barycentric coordinates
-  // are positive
+  // you can prove that a point is inside the element if all its barycentric coordinates are positive
   
   // get barycentric coordinates of input point
   SVector<N+1> baryCoord = computeBarycentricCoordinates(x);
 
-  
   // use Eigen visitor to check for positiveness of elements
   return (baryCoord.array() >= 0).all();
 }
