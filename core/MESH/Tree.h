@@ -23,14 +23,13 @@ enum LinkDirection {LEFT, RIGHT};
 // Use N = 2 for binary trees
 template <typename T> class Node {
 private:
-  // the actual stored data
-  T data_;
-  // children_[0] is the left child. children_[1] is the right child
-  std::array<node_ptr<T>, 2> children_;
-  // unique node key
-  unsigned int key_;
   
+  T data_;                               // the actual stored data
+  std::array<node_ptr<T>, 2> children_;  // children_[0] is the left child. children_[1] is the right child
+  unsigned int key_;                     // unique node key
+
 public:
+  // constructor
   Node(T data, unsigned int key) : data_(data), key_(key) {} ;
 
   // add child at first available position. Returns nullptr if there is no room
@@ -112,7 +111,9 @@ public:
   bool insert(const T& data, unsigned int ID, LinkDirection direction);
   
   // get node given its ID
-  Node<T> getNode(unsigned int ID) const { return *nodeTable.at(ID); } ;
+  node_ptr<T> getNode(unsigned int ID) const { return nodeTable.at(ID); } ;
+
+  unsigned int getNumberOfNodes() const { return numNodes; }
 };
 
 // insert a node in the first available position
