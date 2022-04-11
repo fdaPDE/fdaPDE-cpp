@@ -62,6 +62,7 @@ template <typename T> node_ptr<T> Node<T>::addChild(const T& data, unsigned int 
   // link already in use
   if(children_[index] != nullptr)
     return nullptr;
+  
   // add node as child
   children_[index] = std::make_shared<Node<T>>(data, key);
   return children_[index];
@@ -150,7 +151,7 @@ void Tree<T>::insert(const T& data) {
 template <typename T>
 bool Tree<T>::insert(const T &data, unsigned int ID, LinkDirection direction) {
   // take father node using nodeTable
-  node_ptr<T> father = nodeTable[ID];
+  node_ptr<T> father = nodeTable.at(ID);
 
   // add child to father at given direction
   node_ptr<T> child = father->addChild(data, numNodes, direction);

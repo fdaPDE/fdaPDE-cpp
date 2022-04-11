@@ -4,10 +4,12 @@
 #include <Eigen/Core>
 #include <Eigen/src/Core/Matrix.h>
 #include <Eigen/src/Core/util/Constants.h>
+#include <algorithm>
 #include <cstddef>
 #include <initializer_list>
 #include <iostream>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 #include <memory>
 #include <array>
@@ -16,6 +18,7 @@
 #include "CSVReader.h"
 #include "../OPT/Utils.h"
 #include "MeshUtils.h"
+#include "TreeSearch.h"
 
 // at the moment used for barycentric walk
 #include <random>
@@ -146,10 +149,11 @@ class Mesh{
   iterator begin() { return iterator(this, 0); }
   iterator end()   { return iterator(this, triangles_.rows()); }
   
-  // search for an element containg a point (big part here: naive, barycentric walking, ADT, structured meshes)
+  // search for an element containg a point (big part here: naive, barycentric walking, ADT, structured auxiliary meshes (SAM))
 
   std::shared_ptr<Element<N,M>> bruteForceSearch(const SVector<N>& x);
   std::shared_ptr<Element<N,M>> barycentricWalkSearch(const SVector<N>& x);
+  std::shared_ptr<Element<N,M>> treeSearch(const SVector<N>& x);
 };
 
 // implementation for 2D case only...
@@ -227,5 +231,82 @@ std::shared_ptr<Element<N, M>> Mesh<N, M>::barycentricWalkSearch(const SVector<N
   return element;
 }
 
+template <unsigned int N, unsigned int M>
+std::shared_ptr<Element<N, M>> Mesh<N, M>::treeSearch(const SVector<N>& point) {
+  
+  // bring mesh elements to 2N dimensional points
+  std::vector<std::pair<SVector<2*N>, unsigned int>> data;
+  data.reserve(triangles_.size()); // avoid useless reallocations at runtime
+
+  std::array<double, N> minLimit{}, maxLimit{};
+  
+  for(auto e = this->begin(); e != this->end(); ++e){
+    // build bounding box of element e
+    std::array<std::array<double, N_VERTICES(N,M)>, N> limits;
+    for(size_t j = 0; j < N_VERTICES(N,M); ++j){
+      for(size_t dim = 0; dim < N; ++dim){
+	limits[dim][j] = (*e)->getCoords()[j][dim];
+      }
+    }
+    
+    SVector<N> lower_left, upper_right;
+    for(size_t dim = 0; dim < N; ++dim){
+      lower_left[dim]  = *std::min_element(limits[dim].begin(), limits[dim].end());
+      if(lower_left[dim] < minLimit[dim])
+	minLimit[dim] = lower_left[dim];
+      
+      upper_right[dim] = *std::max_element(limits[dim].begin(), limits[dim].end());
+      if(upper_right[dim] > maxLimit[dim])
+	maxLimit[dim] = upper_right[dim];
+    }
+    
+    // create 2N dimensional point
+    SVector<2*N> point_;
+    point_ << lower_left, upper_right;
+    data.push_back(std::make_pair(point_, (*e)->getID()));
+  }
+
+  std::vector<std::pair<SVector<2*N>, unsigned int>> scaledData;
+  scaledData.reserve(triangles_.size()); // avoid useless reallocations at runtime
+  
+  for(size_t j = 0; j < data.size(); ++j){
+    SVector<N> ll, up;
+    for(size_t dim = 0; dim < N; ++dim){
+      ll[dim] = (data[j].first.head(N)[dim] - minLimit[dim])/(maxLimit[dim] - minLimit[dim]);
+      up[dim] = (data[j].first.tail(N)[dim] - minLimit[dim])/(maxLimit[dim] - minLimit[dim]);
+    }
+    SVector<2*N> bb;
+    bb << ll, up;
+    scaledData.push_back(std::make_pair(bb, data[j].second));
+  }
+  
+  // build ADT
+  TreeSearch<2*N> tree(scaledData);
+  
+  // map input point in the unit hypercube
+  SVector<N> scaledPoint;
+  for(size_t dim = 0; dim < N; ++dim){
+    scaledPoint[dim] = (point[dim] - minLimit[dim])/(maxLimit[dim] - minLimit[dim]);
+  }
+
+  // build search query
+  SVector<2*N> a, b;
+  a << SVector<N>::Zero(), scaledPoint;
+  b << scaledPoint, SVector<N>::Ones();
+  rectangle<2*N> query = std::make_pair(a,b);
+    
+  // perform search
+  std::list<unsigned int> searchResult = tree.search(query);
+  
+  // exhaustively scan the query results to get the searched mesh element
+  for(unsigned int ID : searchResult){
+    std::shared_ptr<Element<N,M>> element = requestElementById(ID);
+    if(element->contains(point)){
+      return element;
+    }
+  }
+  
+  return nullptr;
+}
 
 #endif // __MESH_H__
