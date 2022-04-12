@@ -18,12 +18,8 @@
 #include "CSVReader.h"
 #include "../OPT/Utils.h"
 #include "MeshUtils.h"
-#include "TreeSearch.h"
 
 // at the moment used for barycentric walk
-#include <random>
-
-typedef std::mt19937 RNG;  // the Mersenne Twister with a popular choice of parameters
 
 /* at the moment mesh data from R require the development version of RTriangle, download from
    https://github.com/davidcsterratt/RTriangle
@@ -74,10 +70,14 @@ class Mesh{
   // edge with i)
   DynamicMatrix<int> neighbors_;
 
-  // used for barycentric random walk
-  uint32_t seed;
-  RNG rng;
-  std::uniform_int_distribution<uint32_t> uniform_int;
+  // store min-max values for each dimension of the mesh
+  std::array<std::pair<double, double>, N> meshRange;
+  // is often required to access just to the minimum value along each dimension and to the quantity
+  // 1/(max[dim] - min[dim]) = 1/(meshRange[dim].second - meshRange[dim].first). Compute here
+  // once and cache results for efficiency
+  std::array<double, N> minMeshRange;
+  std::array<double, N> kMeshRange; // kMeshRange[dim] = 1/(meshRange[dim].second - meshRange[dim].first)
+  
  public:
 
   // constructor from .csv files
@@ -92,6 +92,15 @@ class Mesh{
     
     // set mesh internal representation to eigen matrix
     points_    = points.toEigen();
+
+    // compute mesh limits
+    for(size_t dim = 0; dim < N; ++dim){
+      meshRange[dim].first  = points_.col(dim).minCoeff();
+      meshRange[dim].second = points_.col(dim).maxCoeff();
+
+      minMeshRange[dim] = meshRange[dim].first;
+      kMeshRange[dim] = 1/(meshRange[dim].second - meshRange[dim].first);
+    }
     
     // need to subtract 1 from all indexes since triangle indexes start from 1
     // C++ start counting from 0 instead
@@ -100,17 +109,11 @@ class Mesh{
 
     triangles_      = triangles.toEigen();
     triangles_      = (triangles_.array() -1).matrix();
-    numElements     = triangles_.maxCoeff();
+    numElements     = triangles_.rows();
     
     // a negative value means no neighbor
     neighbors_      = neighbors.toEigen();
     neighbors_      = (neighbors_.array() - 1).matrix();
-
-    seed = time(NULL);  // seed for RNG
-    rng  = RNG(seed);   // define RNG
-  
-    // define uniform distribution over the ID space
-    uniform_int = std::uniform_int_distribution<uint32_t>(0, numElements); 
   }
 
   // get an element object given its ID (its row number in the triangles_ matrix)
@@ -148,16 +151,16 @@ class Mesh{
   // provide begin() and end() methods
   iterator begin() { return iterator(this, 0); }
   iterator end()   { return iterator(this, triangles_.rows()); }
-  
-  // search for an element containg a point (big part here: naive, barycentric walking, ADT, structured auxiliary meshes (SAM))
 
-  std::shared_ptr<Element<N,M>> bruteForceSearch(const SVector<N>& x);
-  std::shared_ptr<Element<N,M>> barycentricWalkSearch(const SVector<N>& x);
-  std::shared_ptr<Element<N,M>> treeSearch(const SVector<N>& x);
+  // getters
+  unsigned int getNumberOfElements() const { return numElements; }
+  std::array<std::pair<double, double>, N> getMeshRange() const { return meshRange; }
+  std::array<double, N> getMinMeshRange() const { return minMeshRange; }
+  std::array<double, N> getKMeshRange() const { return kMeshRange; }
+  
 };
 
 // implementation for 2D case only...
-// sicuramente si può ottimizzare ###############
 template <unsigned int N, unsigned int M>
 std::shared_ptr<Element<N,M>> Mesh<N,M>::requestElementById(unsigned int ID) const {
   // in the following use auto to take advantage of eigen acceleration
@@ -183,130 +186,6 @@ std::shared_ptr<Element<N,M>> Mesh<N,M>::requestElementById(unsigned int ID) con
   }
          
   return std::make_shared<Element<N,M>>(ID, coords, neighbors);
-}
-
-// apply a brute force strategy to search for the element containing a given point
-template <unsigned int N, unsigned int M>
-std::shared_ptr<Element<N, M>> Mesh<N, M>::bruteForceSearch(const SVector<N>& point) {
-  
-  for(auto e = this->begin(); e != this->end(); ++e){
-    if((*e)->contains(point))
-      return *e;
-  }
-
-  // no element in mesh found
-  return std::shared_ptr<Element<N,M>>();
-}
-
-// applies a barycentric walk search
-template <unsigned int N, unsigned int M>
-std::shared_ptr<Element<N, M>> Mesh<N, M>::barycentricWalkSearch(const SVector<N>& point) {
-  
-  // initialization takes n^(1/3) elements of the mesh at random and starts from the element nearest to
-  // the searched one
-
-  // start from an element at random
-  std::shared_ptr<Element<N,M>> element = requestElementById(uniform_int(rng)); 
-
-  if(element->contains(point)){
-    return element;
-  }
-
-  while(!element->contains(point)){
-    // compute barycantric coordinates with respect to the element
-    SVector<N+1> baryCoord = element->computeBarycentricCoordinates(point);
-  
-    // Pick the vertices corresponding to the n highest coordinates, and move into the adjacent element that
-    // shares those vertices. This is equivalent to find the minimum baricentric coordinate and move to
-    // the element adjacent to the face opposite to this point
-    unsigned int minBaryCoordIndex;
-    baryCoord.minCoeff(&minBaryCoordIndex);
-
-    // by construction barycentric coordinate at position i is relative to vertex i of the mesh element
-    // we can move to the next element in O(1) exploiting the memory representation of mesh in memory
-    unsigned int nextID = element->getNeighbors()[minBaryCoordIndex];
-    element = requestElementById(nextID);
-  }
-  
-  return element;
-}
-
-template <unsigned int N, unsigned int M>
-std::shared_ptr<Element<N, M>> Mesh<N, M>::treeSearch(const SVector<N>& point) {
-  
-  // bring mesh elements to 2N dimensional points
-  std::vector<std::pair<SVector<2*N>, unsigned int>> data;
-  data.reserve(triangles_.size()); // avoid useless reallocations at runtime
-
-  std::array<double, N> minLimit{}, maxLimit{};
-  
-  for(auto e = this->begin(); e != this->end(); ++e){
-    // build bounding box of element e
-    std::array<std::array<double, N_VERTICES(N,M)>, N> limits;
-    for(size_t j = 0; j < N_VERTICES(N,M); ++j){
-      for(size_t dim = 0; dim < N; ++dim){
-	limits[dim][j] = (*e)->getCoords()[j][dim];
-      }
-    }
-    
-    SVector<N> lower_left, upper_right;
-    for(size_t dim = 0; dim < N; ++dim){
-      lower_left[dim]  = *std::min_element(limits[dim].begin(), limits[dim].end());
-      if(lower_left[dim] < minLimit[dim])
-	minLimit[dim] = lower_left[dim];
-      
-      upper_right[dim] = *std::max_element(limits[dim].begin(), limits[dim].end());
-      if(upper_right[dim] > maxLimit[dim])
-	maxLimit[dim] = upper_right[dim];
-    }
-    
-    // create 2N dimensional point
-    SVector<2*N> point_;
-    point_ << lower_left, upper_right;
-    data.push_back(std::make_pair(point_, (*e)->getID()));
-  }
-
-  std::vector<std::pair<SVector<2*N>, unsigned int>> scaledData;
-  scaledData.reserve(triangles_.size()); // avoid useless reallocations at runtime
-  
-  for(size_t j = 0; j < data.size(); ++j){
-    SVector<N> ll, up;
-    for(size_t dim = 0; dim < N; ++dim){
-      ll[dim] = (data[j].first.head(N)[dim] - minLimit[dim])/(maxLimit[dim] - minLimit[dim]);
-      up[dim] = (data[j].first.tail(N)[dim] - minLimit[dim])/(maxLimit[dim] - minLimit[dim]);
-    }
-    SVector<2*N> bb;
-    bb << ll, up;
-    scaledData.push_back(std::make_pair(bb, data[j].second));
-  }
-  
-  // build ADT
-  TreeSearch<2*N> tree(scaledData);
-  
-  // map input point in the unit hypercube
-  SVector<N> scaledPoint;
-  for(size_t dim = 0; dim < N; ++dim){
-    scaledPoint[dim] = (point[dim] - minLimit[dim])/(maxLimit[dim] - minLimit[dim]);
-  }
-
-  // build search query
-  SVector<2*N> a, b;
-  a << SVector<N>::Zero(), scaledPoint;
-  b << scaledPoint, SVector<N>::Ones();
-  rectangle<2*N> query = std::make_pair(a,b);
-    
-  // perform search
-  std::list<unsigned int> searchResult = tree.search(query);
-  
-  // exhaustively scan the query results to get the searched mesh element
-  for(unsigned int ID : searchResult){
-    std::shared_ptr<Element<N,M>> element = requestElementById(ID);
-    if(element->contains(point)){
-      return element;
-    }
-  }
-  
-  return nullptr;
 }
 
 #endif // __MESH_H__

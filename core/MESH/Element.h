@@ -51,6 +51,9 @@ class Element{
 
   // check if a given point is inside the element
   bool contains(const SVector<N>& x) const;
+
+  // compute bounding box of element
+  std::pair<SVector<N>, SVector<N>> computeBoundingBox() const;
 };
 
 template <unsigned int N, unsigned int M>
@@ -77,6 +80,30 @@ bool Element<N, M>::contains(const SVector<N> &x) const {
   return (baryCoord.array() >= 0).all();
 }
 
+template <unsigned int N, unsigned int M>
+std::pair<SVector<N>, SVector<N>> Element<N,M>::computeBoundingBox() const{
+
+  // define lower-left and upper-right corner of bounding box
+  SVector<N> ll, ur;
+
+  // projection of each vertex coordinate on reference axis
+  std::array<std::array<double, N_VERTICES(N,M)>, N> projCoords;
+
+  for(size_t j = 0; j < N_VERTICES(N,M); ++j){
+    for(size_t dim = 0; dim < N; ++dim){
+      projCoords[dim][j] = coords[j][dim];
+    }
+  }
+
+  // take minimum and maximum value along each dimension, those values define the lower-left and
+  // upper-right corner of the bounding box
+  for(size_t dim = 0; dim < N; ++dim){
+    ll[dim] = *std::min_element(projCoords[dim].begin(), projCoords[dim].end());      
+    ur[dim] = *std::max_element(projCoords[dim].begin(), projCoords[dim].end());
+  }
+
+  return std::make_pair(ll, ur);
+}
 
 
 #endif // __ELEMENT_H__
