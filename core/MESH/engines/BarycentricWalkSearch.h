@@ -23,7 +23,7 @@ public:
     rng  = RNG(seed);   // define RNG
     
     // define uniform distribution over the ID space
-    uniform_int = std::uniform_int_distribution<uint32_t>(0, mesh_.getNumberOfElements());
+    uniform_int = std::uniform_int_distribution<uint32_t>(0, mesh_.getNumberOfElements()-1);
   }
 
   // applies a barycentric walk strategy to search for the element containing a given point
@@ -40,7 +40,7 @@ std::shared_ptr<Element<N, M>> BarycentricWalkSearch<N, M>::search(const SVector
   if(element->contains(point)){
     return element;
   }
-
+  
   while(!element->contains(point)){
     // compute barycantric coordinates with respect to the element
     SVector<N+1> baryCoord = element->computeBarycentricCoordinates(point);
