@@ -50,7 +50,7 @@ class Element{
   SVector<N+1> computeBarycentricCoordinates(const SVector<N>& x) const;
 
   // check if a given point is inside the element
-  bool contains(const SVector<N>& x) const;
+  bool contains(const SVector<M>& x) const;
 
   // compute bounding box of element
   std::pair<SVector<N>, SVector<N>> computeBoundingBox() const;
@@ -70,11 +70,11 @@ SVector<N + 1> Element<N, M>::computeBarycentricCoordinates(const SVector<N>& x)
 }
 
 template <unsigned int N, unsigned int M>
-bool Element<N, M>::contains(const SVector<N> &x) const {
+bool Element<N, M>::contains(const SVector<M> &x) const {
   // you can prove that a point is inside the element if all its barycentric coordinates are positive
   
   // get barycentric coordinates of input point
-  SVector<N+1> baryCoord = computeBarycentricCoordinates(x);
+  SVector<M+1> baryCoord = computeBarycentricCoordinates(x);
 
   // use Eigen visitor to check for positiveness of elements
   return (baryCoord.array() >= 0).all();
@@ -104,6 +104,5 @@ std::pair<SVector<N>, SVector<N>> Element<N,M>::computeBoundingBox() const{
 
   return std::make_pair(ll, ur);
 }
-
 
 #endif // __ELEMENT_H__
