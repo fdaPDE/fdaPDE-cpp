@@ -106,7 +106,7 @@ std::pair<SVector<N>, SVector<N>> Element<M,N>::computeBoundingBox() const{
 
   // projection of each vertex coordinate on reference axis
   std::array<std::array<double, N_VERTICES(M,N)>, N> projCoords;
-
+  
   for(size_t j = 0; j < N_VERTICES(M,N); ++j){
     for(size_t dim = 0; dim < N; ++dim){
       projCoords[dim][j] = coords[j][dim];

@@ -171,7 +171,7 @@ std::shared_ptr<Element<M,N>> Mesh<M,N>::requestElementById(unsigned int ID) con
   auto elementNeighbors = neighbors_.row(ID);
   
   // get vertices coordinates
-  std::array<SVector<N>, N_VERTICES(N,M)> coords;
+  std::array<SVector<N>, N_VERTICES(M,N)> coords;
   std::array<unsigned int, N+1> neighbors;
 
   for(size_t i = 0; i < pointIndexes.size(); ++i){
