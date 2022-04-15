@@ -6,6 +6,7 @@
 #include "Geometry.h"
 
 #include <Eigen/LU>
+#include <cstddef>
 #include <limits>
 #include <memory>
 #include <iostream>
@@ -18,10 +19,10 @@ using SurfaceElement = Element<2,3>;
 using NetworkElement = Element<1,2>;
 
 // trait to detect if we are dealing with a manifold mesh (N != M)
-template <unsigned int N, unsigned int M> struct is_manifold {
-public: 
-  static constexpr bool value = (N != M);
-};
+// template <unsigned int N, unsigned int M> struct is_manifold {
+// public: 
+//   static constexpr bool value = (N != M);
+// };
 
 // a mesh element
 template <unsigned int M, unsigned int N>
@@ -71,7 +72,14 @@ class Element{
   SVector<M+1> computeBarycentricCoordinates(const SVector<N>& x) const;
 
   // check if a given point is inside the element
-  bool contains(const SVector<N>& x) const;
+  template <bool is_manifold = (N!=M)>
+  typename std::enable_if<!is_manifold, bool>::type
+  contains(const SVector<N>& x) const;
+
+  // specialization for manifold meshes
+  template <bool is_manifold = (N!=M)>
+  typename std::enable_if<is_manifold, bool>::type
+  contains(const SVector<N>& x) const;
 
   // compute bounding box of element
   std::pair<SVector<N>, SVector<N>> computeBoundingBox() const;
@@ -116,7 +124,9 @@ std::pair<SVector<N>, SVector<N>> Element<M,N>::computeBoundingBox() const{
 }
 
 template <unsigned int M, unsigned int N>
-bool Element<M, N>::contains(const SVector<N> &x) const {
+template <bool is_manifold>
+typename std::enable_if<!is_manifold, bool>::type
+Element<M, N>::contains(const SVector<N> &x) const {
   // you can prove that a point is inside the element if all its barycentric coordinates are positive
   
   // get barycentric coordinates of input point
@@ -132,26 +142,30 @@ Eigen::Matrix<double, 2, 3> SurfaceElement::computeInvBaryMatrix(const Eigen::Ma
   // returns the generalized inverse of baryMatrix (which is a rectangular for surface elements)
   return (baryMatrix.transpose()*baryMatrix).inverse()*baryMatrix.transpose();
 }
-  
-template <>
-bool SurfaceElement::contains(const SVector<3>& x) const {
+
+template <unsigned int M, unsigned int N>
+template <bool is_manifold>
+typename std::enable_if<is_manifold, bool>::type
+Element<M,N>::contains(const SVector<N>& x) const {
   // we start checking if the point is contained in the plane spanned by the mesh element
 
   // basis for the plane passing by the element, observe that the spase spanned by this set of basis is a
   // vector space in the proper sense (the plane passes throught zero). To cope with affine spaces getL2Distance
   // of mdule Geometry accepts an offset parameter representing the point throught which the space
   // spanned by this basis set has to pass
-  SVector<3> a = (coords[1] - coords[0]);
-  SVector<3> b = (coords[2] - coords[0]);
+  std::vector<SVector<N>> basis;
+  for(size_t i = 0; i < M; ++i){
+    basis.push_back(coords[i+1] - coords[0]);
+  }
   
   // if the distance between the point projection into the plane and the point itself is larger than 0
   // return false, the point does not belong to the plane and therefore cannot belong to the surface element
-  if(Geometry<3>::getL2Distance({a,b}, coords[0], x) > std::numeric_limits<double>::epsilon()){
+  if(Geometry<N>::getL2Distance(basis, coords[0], x) > std::numeric_limits<double>::epsilon()){
     return false;
   }
-
+  
   // if the point belongs to the spanned plane, check if its barycentric coordinates are all positive
-  SVector<3> baryCoord = computeBarycentricCoordinates(x);
+  SVector<N> baryCoord = computeBarycentricCoordinates(x);
 
   // use Eigen visitor to check for positiveness of elements
   return (baryCoord.array() >= 0).all();
