@@ -40,6 +40,8 @@ public:
   
   // an utility for converting parsed file into Eigen matrix
   Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> toEigen();
+  // get raw parsed file
+  CSVinternal<T> getRawParsedFile() { return parsedFile; }
 };
 
 template <typename T>

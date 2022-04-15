@@ -24,12 +24,12 @@ struct ADTnode {
 };
 
 // Alternating Decision Tree implementation for tree-based search of elements over an unstructured mesh
-template <unsigned int N, unsigned int M>
+template <unsigned int M, unsigned int N>
 class ADTSearch{
 private:
   Tree<ADTnode<2*N>> tree;
 
-  Mesh<N,M>& mesh_;
+  Mesh<M,N>& mesh_;
 
   // build an Alternating Decision Tree given a set of N-dimensional points
   void init(const std::vector<std::pair<SVector<2*N>, unsigned int>>& data);
@@ -39,13 +39,13 @@ private:
   
 public:
   // initialize the ADT using informations coming from the mesh
-  ADTSearch(Mesh<N,M>& mesh) : mesh_(mesh){
+  ADTSearch(Mesh<M,N>& mesh) : mesh_(mesh){
 
     // move mesh elements to 2N dimensional points
     std::vector<std::pair<SVector<2*N>, unsigned int>> data;
     data.reserve(mesh_.getNumberOfElements()); // avoid useless reallocations at runtime
     
-    for(std::shared_ptr<Element<N,M>> element : mesh_){
+    for(std::shared_ptr<Element<M,N>> element : mesh_){
       // compute bounding box
       std::pair<SVector<N>, SVector<N>> boundingBox = element->computeBoundingBox();
     
@@ -75,7 +75,7 @@ public:
   }
   
   // applies the ADT geometric search to return the mesh element containing a given point
-  std::shared_ptr<Element<N, M>> search(const SVector<N>& point);
+  std::shared_ptr<Element<M, N>> search(const SVector<N>& point);
   
   // getters
   Tree<ADTnode<2*N>> getTree() const { return tree; }
@@ -83,8 +83,8 @@ public:
 
 // data needs not to be rescaled before calling this method. Rescaling of the points in the unit hypercube is handled
 // here as part of the ADT construction
-template <unsigned int N, unsigned int M>
-void ADTSearch<N,M>::init(const std::vector<std::pair<SVector<2*N>, unsigned int>>& data) {
+template <unsigned int M, unsigned int N>
+void ADTSearch<M,N>::init(const std::vector<std::pair<SVector<2*N>, unsigned int>>& data) {
   
   // initialize here once
   SVector<2*N> left_lower_corner = SVector<2*N>::Zero(), right_upper_corner = SVector<2*N>::Ones();
@@ -139,8 +139,8 @@ void ADTSearch<N,M>::init(const std::vector<std::pair<SVector<2*N>, unsigned int
 // a searching range (here called query) is supplied as a pair of points (a,b) where a is the
 // lower-left corner and b the upper-right corner of the query rectangle. This method find all the points
 // which are contained in a given query
-template <unsigned int N, unsigned int M>
-std::list<unsigned int> ADTSearch<N,M>::geometricSearch(const Query<2*N> &query) {
+template <unsigned int M, unsigned int N>
+std::list<unsigned int> ADTSearch<M,N>::geometricSearch(const Query<2*N> &query) {
   // initialize result
   std::list<unsigned int> searchResult;
   
@@ -174,8 +174,8 @@ std::list<unsigned int> ADTSearch<N,M>::geometricSearch(const Query<2*N> &query)
 
 // once mesh elements are mapped as points in a 2N dimensional space, the problem of searching for the
 // element containing a given point can be solved as a geometric search problem in a 2N dimensional space
-template <unsigned int N, unsigned int M>
-std::shared_ptr<Element<N, M>> ADTSearch<N,M>::search(const SVector<N> &point) {
+template <unsigned int M, unsigned int N>
+std::shared_ptr<Element<M, N>> ADTSearch<M,N>::search(const SVector<N> &point) {
 
   // map input point in the unit hypercube
   std::array<double, N> minMeshRange = mesh_.getMinMeshRange();
@@ -205,7 +205,7 @@ std::shared_ptr<Element<N, M>> ADTSearch<N,M>::search(const SVector<N> &point) {
   
   // exhaustively scan the query results to get the searched mesh element
   for(unsigned int ID : searchResult){
-    std::shared_ptr<Element<N,M>> element = mesh_.requestElementById(ID);
+    std::shared_ptr<Element<M,N>> element = mesh_.requestElementById(ID);
     if(element->contains(point)){
       return element;
     }

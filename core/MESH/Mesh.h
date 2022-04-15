@@ -50,7 +50,7 @@ template <typename T> using DynamicMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eig
 // reasoning, i.e. without considering the internal representation of a mesh in
 // memory.
 // N is the order of the mesh, M is the dimension of the space where the mesh is embedded
-template <unsigned int N, unsigned int M>
+template <unsigned int M, unsigned int N>
 class Mesh{
 
  private:
@@ -92,7 +92,7 @@ class Mesh{
     
     // set mesh internal representation to eigen matrix
     points_    = points.toEigen();
-
+    
     // compute mesh limits
     for(size_t dim = 0; dim < N; ++dim){
       meshRange[dim].first  = points_.col(dim).minCoeff();
@@ -120,7 +120,7 @@ class Mesh{
   // this creates an element abstraction only when it is actually needed to avoid waste
   // of resources. Mesh class does not represent explicitly elements of the mesh,
   // instead directly manages raw representation built on matrices
-  std::shared_ptr<Element<N,M>> requestElementById(unsigned int ID) const;
+  std::shared_ptr<Element<M,N>> requestElementById(unsigned int ID) const;
 
   // allow range-for loop over mesh elements
   // we can write something like
@@ -139,7 +139,7 @@ class Mesh{
       return *this;
     }
     // dereference the iterator means to create Element object at current index
-    std::shared_ptr<Element<N,M>> operator*() const {
+    std::shared_ptr<Element<M,N>> operator*() const {
       return meshContainer->requestElementById(index);
     }
     // two iterators are different when their indexes are different
@@ -161,8 +161,8 @@ class Mesh{
 };
 
 // implementation for 2D case only...
-template <unsigned int N, unsigned int M>
-std::shared_ptr<Element<N,M>> Mesh<N,M>::requestElementById(unsigned int ID) const {
+template <unsigned int M, unsigned int N>
+std::shared_ptr<Element<M,N>> Mesh<M,N>::requestElementById(unsigned int ID) const {
   // in the following use auto to take advantage of eigen acceleration
   
   // get the indexes of vertices from triangles_
@@ -185,7 +185,7 @@ std::shared_ptr<Element<N,M>> Mesh<N,M>::requestElementById(unsigned int ID) con
     neighbors[i] = elementNeighbors[i];
   }
          
-  return std::make_shared<Element<N,M>>(ID, coords, neighbors);
+  return std::make_shared<Element<M,N>>(ID, coords, neighbors);
 }
 
 #endif // __MESH_H__
