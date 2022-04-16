@@ -5,30 +5,21 @@
 #include "Element.h"
 #include <memory>
 
-template <unsigned int N, unsigned int M>
+template <unsigned int M, unsigned int N>
 class BruteForceSearch{
 
 private:
-  Mesh<N,M>& mesh_;
+  Mesh<M,N>& mesh_;
 
 public:
-  BruteForceSearch(Mesh<N,M>& mesh) : mesh_(mesh) {} ;
+  // constructor
+  BruteForceSearch(Mesh<M,N>& mesh) : mesh_(mesh) {} ;
 
   // applies a brute force strategy to search for the element containing a given point
-  std::shared_ptr<Element<N, M>> search(const SVector<N>& point);
+  std::shared_ptr<Element<M, N>> search(const SVector<N>& point);
   
 };
 
-template <unsigned int N, unsigned int M>
-std::shared_ptr<Element<N, M>> BruteForceSearch<N, M>::search(const SVector<N>& point) {
-  
-  for(std::shared_ptr<Element<N,M>> element : mesh_){
-    if(element->contains(point))
-      return element;
-  }
-
-  // no element in mesh found
-  return std::shared_ptr<Element<N,M>>();
-}
+#include "BruteForceSearch.tpp"
 
 #endif // __BRUTEFORCE_SEARCH_H__

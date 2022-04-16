@@ -1,16 +1,11 @@
 #ifndef __TREE_H__
 #define __TREE_H__
 
-#include <cstddef>
 #include <memory>
 #include <unordered_map>
 #include <queue>
-#include <functional>
 
-#include <iostream>
-
-
-// An implementation of a binary tree structure
+// An implementation of a binary tree data structure
 
 // forward declaration
 template <typename T> class Node;
@@ -19,8 +14,7 @@ template <typename T> using node_ptr = std::shared_ptr<Node<T>>;
 
 enum LinkDirection {LEFT, RIGHT};
 
-// T is the type of the object stored in the node, N the number of children a node can have.
-// Use N = 2 for binary trees
+// a tree node holding a general type T object
 template <typename T> class Node {
 private:
   
@@ -41,41 +35,10 @@ public:
   bool isLeaf() const;
 
   // getters
-  T getData() const { return data_; }
+  T getData()                              const { return data_;     }
   std::array<node_ptr<T>, 2> getChildren() const { return children_; }
-  unsigned int getKey() const { return key_; }
+  unsigned int getKey()                    const { return key_;      }
 };
-
-template <typename T> node_ptr<T> Node<T>::addChild(const T& data, unsigned int key) {
-  for (size_t i = 0; i < children_.size(); ++i){
-    if(children_[i] == nullptr){
-      // add node at first available position
-      children_[i] = std::make_shared<Node<T>>(data, key);
-      
-      return children_[i];
-    }
-  }
-  return nullptr;
-}
-
-template <typename T> node_ptr<T> Node<T>::addChild(const T& data, unsigned int key, LinkDirection index) {
-  // link already in use
-  if(children_[index] != nullptr)
-    return nullptr;
-  
-  // add node as child
-  children_[index] = std::make_shared<Node<T>>(data, key);
-  return children_[index];
-}
-
-template <typename T> bool Node<T>::isLeaf() const {
-  // check if all pointers are null. If not, this is not a leaf
-  for(node_ptr<T> child : children_){
-    if(child != nullptr)
-      return false;
-  }
-  return true;
-}
 
 // a binary tree storing objects of type T.
 template <typename T>
@@ -111,57 +74,11 @@ public:
   // This routine is usefull if the tree has to be built progressively using some external criterion
   bool insert(const T& data, unsigned int ID, LinkDirection direction);
   
-  // get node given its ID
-  node_ptr<T> getNode(unsigned int ID) const { return nodeTable.at(ID); } ;
-
-  unsigned int getNumberOfNodes() const { return numNodes; }
+  // getters
+  node_ptr<T> getNode(unsigned int ID) const { return nodeTable.at(ID); }
+  unsigned int getNumberOfNodes()      const { return numNodes;         }
 };
 
-// insert a node in the first available position
-template <typename T>
-void Tree<T>::insert(const T& data) {
-  // perform a level-order traversal to find first available position
-  std::queue<unsigned int> queue;
-
-  // insert root key
-  queue.push(0);
-
-  while(!queue.empty()){
-    // get pointer to node
-    unsigned int key = queue.front();
-    queue.pop();
-    node_ptr<T> node = nodeTable[key];
-    
-    // this evaluates true if the insertion happened
-    node_ptr<T> newNode = node->addChild(data, numNodes);
-    if(newNode != nullptr){
-      nodeTable[numNodes] = newNode;
-      numNodes++;
-      return;
-    }else{
-      // in case the node is already full add its children ID to the queue for later processing
-      for(node_ptr<T> child : node->getChildren()){
-	queue.push(child->getKey());
-      }
-    }
-  }
-  return;
-}
-
-template <typename T>
-bool Tree<T>::insert(const T &data, unsigned int ID, LinkDirection direction) {
-  // take father node using nodeTable
-  node_ptr<T> father = nodeTable.at(ID);
-
-  // add child to father at given direction
-  node_ptr<T> child = father->addChild(data, numNodes, direction);
-  if (child != nullptr){ // insertion is ok
-    // add child to nodeTable
-    nodeTable[numNodes] = child;
-    numNodes++;
-    return true;
-  }  
-  return false;
-}
+#include "Tree.tpp"
 
 #endif // __TREE_H__

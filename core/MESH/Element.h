@@ -18,26 +18,20 @@ template <unsigned int M, unsigned int N> class Element; // forward declaration
 using SurfaceElement = Element<2,3>;
 using NetworkElement = Element<1,2>;
 
-// trait to detect if we are dealing with a manifold mesh (N != M)
-// template <unsigned int N, unsigned int M> struct is_manifold {
-// public: 
-//   static constexpr bool value = (N != M);
-// };
-
-// a mesh element
+// A mesh element
 template <unsigned int M, unsigned int N>
 class Element{
 
  private:
-  unsigned int ID;
-  std::array<SVector<N>, N_VERTICES(M,N)> coords;
-  std::array<unsigned int, N+1> neighbors;
+  unsigned int ID;                                 // ID of this element
+  std::array<SVector<N>, N_VERTICES(M,N)> coords;  // coordinates of element's vertices as N dimensional points
+  std::array<unsigned int, M+1> neighbors;         // ID of the neighboring elements
 
-  // matrix defining the affine transformation from cartesian to barycentric coordinates
+  // matrix defining the affine transformation from cartesian to barycentric coordinates and viceversa
   Eigen::Matrix<double, N, M> baryMatrix;
   Eigen::Matrix<double, M, N> invBaryMatrix{};
 
-  // compute the inverse of the barycentric matrix. This will be specialization by manifold elements
+  // compute the inverse of the barycentric matrix. This will be specialized by manifold elements
   Eigen::Matrix<double, M, N> computeInvBaryMatrix(const Eigen::Matrix<double, N, M>& baryMatrix) {
     return baryMatrix.inverse();
   };
@@ -45,130 +39,29 @@ class Element{
  public:
   Element() = default;
   
-  Element(int ID_, std::array<SVector<N>, N_VERTICES(M,N)> coords_, std::array<unsigned int, N+1> neighbors_) :
-    ID(ID_), coords(coords_), neighbors(neighbors_) {
+  Element(int ID_, std::array<SVector<N>, N_VERTICES(M,N)> coords_, std::array<unsigned int, M+1> neighbors_);
 
-    // precompute barycentric coordinate matrix for fast access
-    // use first point as reference
-    SVector<N> ref = coords[0];
-    for(size_t j = 0; j < M; ++j){
-      baryMatrix.col(j) = coords[j+1] - ref;
-    }
-    
-    // find barycentric coordinates is equivalent to solve a linear system
-    // for efficiecy reasons caching the inverse of baryMatrix can be usefull
-    // expetially if there is the need to continuously access to barycentric
-    // coordinates. Moreover Eigen inverse() is fast for very small matrices
-    // (at most 4x4)
-    // see documentation to learn what system we are trying to solve
-    invBaryMatrix = computeInvBaryMatrix(baryMatrix);
-  };
-
-  std::array<SVector<N>, N_VERTICES(M,N)> getCoords() const { return coords; }
-  std::array<unsigned int, N+1> getNeighbors() const { return neighbors; }
-  unsigned int getID() { return ID; }
+  // getters
+  std::array<SVector<N>, N_VERTICES(M,N)> getCoords() const { return coords;    }
+  std::array<unsigned int, M+1> getNeighbors()        const { return neighbors; }
+  unsigned int getID()                                const { return ID;        }
 
   // computes the baricentric coordinates of the element
   SVector<M+1> computeBarycentricCoordinates(const SVector<N>& x) const;
 
   // check if a given point is inside the element
-  template <bool is_manifold = (N!=M)>
-  typename std::enable_if<!is_manifold, bool>::type
+  template <bool is_manifold = (N!=M)> typename std::enable_if<!is_manifold, bool>::type
   contains(const SVector<N>& x) const;
 
-  // specialization for manifold meshes
-  template <bool is_manifold = (N!=M)>
-  typename std::enable_if<is_manifold, bool>::type
+  // specialization of contains() for manifold meshes
+  template <bool is_manifold = (N!=M)> typename std::enable_if< is_manifold, bool>::type
   contains(const SVector<N>& x) const;
 
-  // compute bounding box of element
+  // compute bounding box of this element. A bounding box is the smallest rectangle containing the element
+  // this construction is usefull in searching problems.
   std::pair<SVector<N>, SVector<N>> computeBoundingBox() const;
 };
 
-template <unsigned int M, unsigned int N>
-SVector<M+1> Element<M, N>::computeBarycentricCoordinates(const SVector<N>& x) const {
-  // solve linear system baryMatrix*z = (x - ref) by using the precomputed inverse of baryMatrix
-  SVector<M> z = invBaryMatrix*(x - coords[0]);
-  // compute barycentric coordinate of reference element
-  double z0 = 1 - z.sum();
-  
-  SVector<M+1> result;
-  result << SVector<1>(z0), z;
-
-  return result;
-}
-
-template <unsigned int M, unsigned int N>
-std::pair<SVector<N>, SVector<N>> Element<M,N>::computeBoundingBox() const{
-
-  // define lower-left and upper-right corner of bounding box
-  SVector<N> ll, ur;
-
-  // projection of each vertex coordinate on reference axis
-  std::array<std::array<double, N_VERTICES(M,N)>, N> projCoords;
-  
-  for(size_t j = 0; j < N_VERTICES(M,N); ++j){
-    for(size_t dim = 0; dim < N; ++dim){
-      projCoords[dim][j] = coords[j][dim];
-    }
-  }
-
-  // take minimum and maximum value along each dimension, those values define the lower-left and
-  // upper-right corner of the bounding box
-  for(size_t dim = 0; dim < N; ++dim){
-    ll[dim] = *std::min_element(projCoords[dim].begin(), projCoords[dim].end());      
-    ur[dim] = *std::max_element(projCoords[dim].begin(), projCoords[dim].end());
-  }
-
-  return std::make_pair(ll, ur);
-}
-
-template <unsigned int M, unsigned int N>
-template <bool is_manifold>
-typename std::enable_if<!is_manifold, bool>::type
-Element<M, N>::contains(const SVector<N> &x) const {
-  // you can prove that a point is inside the element if all its barycentric coordinates are positive
-  
-  // get barycentric coordinates of input point
-  SVector<N+1> baryCoord = computeBarycentricCoordinates(x);
-
-  // use Eigen visitor to check for positiveness of elements
-  return (baryCoord.array() >= 0).all();
-}
-
-// specialization for 2.5D domains (surfaces)
-template <> 
-Eigen::Matrix<double, 2, 3> SurfaceElement::computeInvBaryMatrix(const Eigen::Matrix<double, 3, 2>& baryMatrix) {
-  // returns the generalized inverse of baryMatrix (which is a rectangular for surface elements)
-  return (baryMatrix.transpose()*baryMatrix).inverse()*baryMatrix.transpose();
-}
-
-template <unsigned int M, unsigned int N>
-template <bool is_manifold>
-typename std::enable_if<is_manifold, bool>::type
-Element<M,N>::contains(const SVector<N>& x) const {
-  // we start checking if the point is contained in the plane spanned by the mesh element
-
-  // basis for the plane passing by the element, observe that the spase spanned by this set of basis is a
-  // vector space in the proper sense (the plane passes throught zero). To cope with affine spaces getL2Distance
-  // of mdule Geometry accepts an offset parameter representing the point throught which the space
-  // spanned by this basis set has to pass
-  std::vector<SVector<N>> basis;
-  for(size_t i = 0; i < M; ++i){
-    basis.push_back(coords[i+1] - coords[0]);
-  }
-  
-  // if the distance between the point projection into the plane and the point itself is larger than 0
-  // return false, the point does not belong to the plane and therefore cannot belong to the surface element
-  if(Geometry<N>::getL2Distance(basis, coords[0], x) > std::numeric_limits<double>::epsilon()){
-    return false;
-  }
-  
-  // if the point belongs to the spanned plane, check if its barycentric coordinates are all positive
-  SVector<N> baryCoord = computeBarycentricCoordinates(x);
-
-  // use Eigen visitor to check for positiveness of elements
-  return (baryCoord.array() >= 0).all();
-}
+#include "Element.tpp"
 
 #endif // __ELEMENT_H__
