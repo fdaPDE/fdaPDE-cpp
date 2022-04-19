@@ -1,6 +1,6 @@
 // constructor
 template <unsigned int M, unsigned int N>
-ADTSearch<M,N>::ADTSearch(Mesh<M,N>& mesh) : mesh_(mesh){
+ADT<M,N>::ADT(Mesh<M,N>& mesh) : mesh_(mesh){
   
   // move mesh elements to 2N dimensional points
   std::vector<std::pair<SVector<2*N>, unsigned int>> data;
@@ -39,7 +39,7 @@ ADTSearch<M,N>::ADTSearch(Mesh<M,N>& mesh) : mesh_(mesh){
 // here as part of the ADT construction
 // initializes the ADT
 template <unsigned int M, unsigned int N>
-void ADTSearch<M,N>::init(const std::vector<std::pair<SVector<2*N>, unsigned int>>& data) {
+void ADT<M,N>::init(const std::vector<std::pair<SVector<2*N>, unsigned int>>& data) {
   
   // initialize here once
   SVector<2*N> left_lower_corner = SVector<2*N>::Zero(), right_upper_corner = SVector<2*N>::Ones();
@@ -95,7 +95,7 @@ void ADTSearch<M,N>::init(const std::vector<std::pair<SVector<2*N>, unsigned int
 // lower-left corner and b the upper-right corner of the query rectangle. This method find all the points
 // which are contained in a given query
 template <unsigned int M, unsigned int N>
-std::list<unsigned int> ADTSearch<M,N>::geometricSearch(const Query<2*N> &query) {
+std::list<unsigned int> ADT<M,N>::geometricSearch(const Query<2*N> &query) {
   // initialize result
   std::list<unsigned int> searchResult;
   
@@ -130,7 +130,7 @@ std::list<unsigned int> ADTSearch<M,N>::geometricSearch(const Query<2*N> &query)
 // once mesh elements are mapped as points in a 2N dimensional space, the problem of searching for the
 // element containing a given point can be solved as a geometric search problem in a 2N dimensional space
 template <unsigned int M, unsigned int N>
-std::shared_ptr<Element<M, N>> ADTSearch<M,N>::search(const SVector<N> &point) {
+std::shared_ptr<Element<M, N>> ADT<M,N>::search(const SVector<N> &point) {
 
   // map input point in the unit hypercube
   std::array<double, N> minMeshRange = mesh_.getMinMeshRange();

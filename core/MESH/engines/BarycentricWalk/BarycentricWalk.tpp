@@ -1,6 +1,6 @@
 // applies a barycentric walk search
 template <unsigned int M, unsigned int N>
-std::shared_ptr<Element<M,N>> BarycentricWalkSearch<M,N>::search(const SVector<N>& point){
+std::shared_ptr<Element<M,N>> BarycentricWalk<M,N>::search(const SVector<N>& point){
 
   // start from an element at random
   std::shared_ptr<Element<M,N>> element = mesh_.requestElementById(uniform_int(rng)); 
