@@ -4,18 +4,12 @@
 #include "../MESH/Element.h"
 #include "../utils/CompileTime.h"
 #include "../utils/Symbols.h"
+#include <Eigen/src/Core/Matrix.h>
 #include <array>
 #include <cstddef>
+#include <Eigen/QR>
 
 using fdaPDE::core::MESH::Element;
-
-// a class representing a Lagrangian finite element
-template <unsigned int N, unsigned int M>
-class LagrangianElement{
-
-  Element<N,M> domain;
-    
-};
 
 // space of polynomials defined on an N-dimensional simplex of global degree less than or equal to R
 
@@ -72,8 +66,7 @@ constexpr std::array<unsigned, ct_binomial_coefficient(R+N, R)*N> ct_poly_exp(){
       }else{
 	// propagate carry to next element
 	tmp[i] = 0;
-	++i;
-	tmp[i]++;
+	tmp[++i]++;
       }
     }
   }
@@ -85,17 +78,20 @@ template <unsigned int N, unsigned int R>
 class MultivariatePolynomial{
 private:
   // vector of coefficients
-  std::array<double, ct_binomial_coefficient(R+N, R)> coeffVector_;
-
-  // compute this at compile time once
-  static constexpr std::array<unsigned, ct_binomial_coefficient(R+N, R)*N> expTable_ = ct_poly_exp<N,R>();
-  
+  std::array<double, ct_binomial_coefficient(R+N, R)> coeffVector_;  
 public:
+  // compute this at compile time once, let publicly accessible
+  static const constexpr std::array<unsigned, ct_binomial_coefficient(R+N, R)*N> expTable_ = ct_poly_exp<N,R>();
+  
   // constructor
+  MultivariatePolynomial() = default;
   MultivariatePolynomial(const std::array<double, ct_binomial_coefficient(R+N, R)>& coeffVector) : coeffVector_(coeffVector) {};
   
-  double eval(const SVector<N>& point);        // evaluate polynomial at point
+  double     eval(const SVector<N>& point);    // evaluate polynomial at point
   SVector<N> grad(const SVector<N>& point);    // evaluate gradient at point
+
+  // getter
+  std::array<double, ct_binomial_coefficient(R+N, R)> getCoeff() const { return coeffVector_; }
 };
 
 template <unsigned int N, unsigned int R>
@@ -114,22 +110,93 @@ double MultivariatePolynomial<N, R>::eval(const SVector<N> &point) {
   return value;
 }
 
+template <unsigned int N, unsigned int R>
+SVector<N> MultivariatePolynomial<N, R>::grad(const SVector<N> &point) {
+  SVector<N> grad;
+  // cycle over dimensions
+  for(size_t i = 0; i < N; ++i){
+    double value = 0;
+    
+    // for a given monomial x1^i1*...*xN^iN its partial derivative with respect to dimension K is equal to
+    // d/dxK x1^i1*...*xN^iN = iK*x1^i1*...*xK^(iK-1)*...*xN^iN.
 
-// the reference element coincides with the unit N-dimensional simplex. Over the reference element we define
-// a space of polynomials of order R with a particular choice of coefficients which constitute the basis function
-class ReferenceElement {
+    // cycle over monomials
+    for(size_t m = 0; m < ct_binomial_coefficient(R+N,R); ++m){
+      if(expTable_[i + m*N] != 0){ // skip powers of zero, their derivative is zero
+	double tmp = 1;
 
-  
+	// actual partial derivative computation along dimension i
+	for(size_t j = 0; j < N; ++j){
+	  tmp *= std::pow(point[j], j != i ? expTable_[m*N + j] : expTable_[m*N + j] - 1);
+	}
+	value += coeffVector_[m]*expTable_[i + m*N]*tmp;
+      }
+    }
+    // store value of partial derivative in gradient vector
+    grad[i] = value;
+  }
+    
+  return grad;
+}
+
+// A class representing a Lagrangian Basis defined over a given set of nodes.
+// It uses the Vandermonde matrix to compute coefficients of lagrange polynomials
+template <unsigned int N, unsigned int R> class LagrangianBasis {
+private:
+  // nodes of the lagrangian basis
+  std::array<SVector<N>, ct_binomial_coefficient(R + N, R)> nodes_;
+  // a Lagrangian basis is just a collection of properly defined polynomials
+  std::array<MultivariatePolynomial<N,R>, ct_binomial_coefficient(N+R,R)> basis_;
+public:
+  // constructor
+  LagrangianBasis(const std::array<SVector<N>, ct_binomial_coefficient(R + N, R)>& nodes) : nodes_(nodes) {
+
+    // build vandermonde matrix
+    constexpr unsigned int M = ct_binomial_coefficient(N+R,R);
+    constexpr std::array<unsigned, M*N> expTable_ = MultivariatePolynomial<N,R>::expTable_;
+
+    // Vandermonde matrix construction
+    SMatrix<M> vander = Eigen::Matrix<double, M, M>::Ones();
+    for(size_t i = 0; i < M; ++i){
+      for(size_t j = 1; j < M; ++j){
+	for(size_t z = 0; z < N; ++z){
+	  vander(i,j) *= std::pow(nodes_[i][z], expTable_[j*N + z]);
+	}
+      }
+    }
+    
+    // solve system V*a = b with V the vandermonde matrix and b the vector having 1 at position i
+    // and 0 everywhere else. The solution gives the vector of coefficients of the i-th lagrange polynomial
+    Eigen::ColPivHouseholderQR<SMatrix<M>> QRdecomposition(vander);
+
+    for(size_t i = 0; i < M; ++i){
+      // build rhs vector
+      SVector<M> b = Eigen::Matrix<double, M, 1>::Zero();
+      b[i] = 1;
+
+      // system solution
+      SVector<M> coeff = QRdecomposition.solve(b);
+
+      // cast to array
+      std::array<double, M> coeff_array;
+      for(size_t j = 0; j < M; ++j) coeff_array[j] = coeff[j];
+      
+      // store basis
+      basis_[i] = MultivariatePolynomial<N, R>(coeff_array);
+    }    
+  };
+
+  // get basis element
+  MultivariatePolynomial<N, R> getBasisElement(unsigned int n) { return basis_[n]; };
 };
 
-// given a physical element move to reference for doing computations via an
-// affine transformation
+// a class representing a Lagrangian finite element
+template <unsigned int N, unsigned int M>
+class LagrangianElement{
 
-// computations involves mainly integrals over elements of kind nabla_phi_i *
-// nabla_phi_j or phi_i*phi_j
-// here we can implement different quadrature rules for the gaussian case
+  Element<N,M> domain;
+  //LagrangianBasis<N,ORDER> basis;
+};
 
-// hence we can compute stiff and mass matrices for the discretization of an elliptic operator
-// first integrate on single elements then exploit linearity of the integral to compute the overall integral
 
 #endif // __LAGRANGIAN_ELEMENT__
