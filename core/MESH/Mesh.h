@@ -95,6 +95,12 @@ namespace MESH{
     std::array<double, N> getKMeshRange()                   const { return kMeshRange;   }  
   };
 
+  // export some aliases
+  using Mesh2D             = Mesh<2,2>;
+  using Mesh3D             = Mesh<3,3>;
+  using SurfaceMesh        = Mesh<2,3>; // manifold cases
+  using LinearNetworkMesh  = Mesh<1,2>;
+
 #include "Mesh.tpp"
 }}}
   
