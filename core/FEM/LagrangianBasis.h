@@ -85,7 +85,7 @@ public:
 
 // template based unfold of monomial product x1^i1*x2^i2*...*xN^iN. This allow
 // to evaluate monomials at point P without explicitly looping over its individual components
-// P an SVector<N> representing the point where we have to evaluate the monomial, V an array of exp coefficients [i1 i2 ... iN].
+// P an std::array<double, N> representing the point where we have to evaluate the monomial, V an array of exp coefficients [i1 i2 ... iN].
 template<unsigned int N, typename P, typename V> struct MonomialProduct{
   static double unfold(const P& p, const V& v){
     return v[N] == 0 ? MonomialProduct<N-1, P, V>::unfold(p, v) : std::pow(p[N], v[N]) * MonomialProduct<N-1, P, V>::unfold(p, v);
@@ -143,12 +143,12 @@ SVector<N> MultivariatePolynomial<N, R>::grad(const SVector<N> &point) {
 template <unsigned int N, unsigned int R> class LagrangianBasis {
 private:
   // nodes of the lagrangian basis
-  std::array<SVector<N>, ct_binomial_coefficient(R + N, R)> nodes_;
+  std::array<std::array<double, N>, ct_binomial_coefficient(R + N, R)> nodes_;
   // a Lagrangian basis is just a collection of properly defined polynomials
   std::array<MultivariatePolynomial<N,R>, ct_binomial_coefficient(N+R,R)> basis_;
 public:
   // constructor
-  LagrangianBasis(const std::array<SVector<N>, ct_binomial_coefficient(N+R, R)>& nodes) : nodes_(nodes) {
+ LagrangianBasis(const std::array<std::array<double, N>, ct_binomial_coefficient(N+R, R)>& nodes) : nodes_(nodes) {
 
     // build vandermonde matrix
     constexpr unsigned int M = ct_binomial_coefficient(N+R,R);
@@ -158,7 +158,7 @@ public:
     SMatrix<M> V = Eigen::Matrix<double, M, M>::Ones();
     for(size_t i = 0; i < M; ++i){
       for(size_t j = 1; j < M; ++j){
-	V(i,j) = MonomialProduct<N-1, SVector<N>, std::array<unsigned, N>>::unfold(nodes_[i], expTable_[j]);
+	V(i,j) = MonomialProduct<N-1, std::array<double, N>, std::array<unsigned, N>>::unfold(nodes_[i], expTable_[j]);
       }
     }    
     // solve system V*a = b with b vector having 1 at position i and 0 everywhere else.

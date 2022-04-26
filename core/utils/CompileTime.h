@@ -1,6 +1,8 @@
 #ifndef __COMPILE_TIME_H__
 #define __COMPILE_TIME_H__
 
+#include <array>
+
 // this file collects a set of constexpr routines usefull in different part of the core library.
 // some routines in this file require C++14 standard (any constexpr function which is not made by a single return statement)
 
