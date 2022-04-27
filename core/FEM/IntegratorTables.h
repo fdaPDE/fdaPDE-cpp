@@ -3,27 +3,28 @@
 
 #include <array>
 
-// Given a function f() its integral \int_K f(x)dx can be approximated using a quadrature rule. The general
-// scheme of a qudrature formula for the approximation of integral \int_K f(x)dx is given by a finite sum
-// \sum_{i=1}^N [f(x_i) * w_i] where x_i and w_i are properly choosen quadrature nodes and weights.
+// This file is just a collection of weights and nodes for quadrature formulae to be applied on a reference
+// mesh element (N-dimensional unit simplex). Dimensions 1, 2 and 3 considered with difference degree of exactness.
+// values are hard-coded here for efficiency reasons. Recall that the higher the number of quadrature nodes,
+// the higher the obtained precision, the higher the computational cost to obtain the approximation
 
-// this file is just a collection of weights and nodes for quadrature formulae to be applied on a reference
-// mesh element (N-dimensional unit simplex). Dimensions 1,2 and 3 considered for various element orders
+// Tables and theory for the derivation of both weights and nodes can be found in:
+// ** "Numerical Models for Differential Problems, Alfio Quarteroni. Second edition"
+// ** "The finite element method: Linear static and dynamic finite element analysis, Thomas J.R. Hughes"
 
 // N dimension of the integration domain, M number of nodes of the formula
 template <unsigned int N, unsigned int M> struct IntegratorTable;
 
-// the higher the number of quadrature nodes, the higher the numerical precision, but the higher also the
-// computational cost to obtain the approximation
-
-// references: "Numerical Models for Differential Problems, Alfio Quarteroni. Second edition"
-//             "The finite element method: Linear static and dynamic finite element analysis, Thomas J.R. Hughes"
+// tables are exposed via shortnames with the following format T<dimension>D<number_of_nodes>P.
+// For example an integrator over a 2D simplex using 7 nodes is named T2D7P
 
 // 1D linear elements (gaussian integration)
 // reference element: simplex of vertices (0), (1)
 
 // 2 point formula
 template <> struct IntegratorTable<1, 2> {
+  // number of nodes
+  static constexpr unsigned int num_nodes = 2;
   // position of nodes (in barycentric coordinates)
   static constexpr std::array<std::array<double, 1>, 2> nodes = {
     {{0.211324865405187},
@@ -35,9 +36,12 @@ template <> struct IntegratorTable<1, 2> {
      0.500000000000000}
   };
 };
+using T1D2P = IntegratorTable<1, 2>;
 
 // 2 point formula
 template <> struct IntegratorTable<1, 3> {
+  // number of nodes
+  static constexpr unsigned int num_nodes = 3;
   // position of nodes (in barycentric coordinates)
   static constexpr std::array<std::array<double, 1>, 3> nodes = {
     {{0.112701665379258},
@@ -51,13 +55,15 @@ template <> struct IntegratorTable<1, 3> {
      0.277777777777778}
   };
 };
-
+using T1D3P = IntegratorTable<1, 3>;
 
 // 2D triangular elements
 // reference element: simplex of vertices (0,0), (1,0), (0,1)
 
 // 1 point formula, degree of precision 1
 template <> struct IntegratorTable<2, 1> {
+  // number of nodes
+  static constexpr unsigned int num_nodes = 1;
   // position of nodes (in barycentric coordinates)
   static constexpr std::array<std::array<double, 2>, 1> nodes = {
     {{0.333333333333333, 0.333333333333333}}
@@ -67,9 +73,12 @@ template <> struct IntegratorTable<2, 1> {
     {1.}
   };
 };
+using T2D1P = IntegratorTable<2, 1>;
 
 // 3 point formula, degree of precision 3
 template <> struct IntegratorTable<2, 3> {
+  // number of nodes
+  static constexpr unsigned int num_nodes = 3;
   // position of nodes (in barycentric coordinates)
   static constexpr std::array<std::array<double, 2>, 3> nodes = {
     {{0.166666666666667, 0.166666666666667},
@@ -83,9 +92,12 @@ template <> struct IntegratorTable<2, 3> {
      0.333333333333333}
   };  
 };
+using T2D3P = IntegratorTable<2, 3>;
 
 // 6 point formula, degree of precision 4
 template <> struct IntegratorTable<2, 6> {
+  // number of nodes
+  static constexpr unsigned int num_nodes = 6;
   // position of nodes (in barycentric coordinates)
   static constexpr std::array<std::array<double, 2>, 6> nodes = {
     {{0.445948490915965, 0.445948490915965},
@@ -105,18 +117,21 @@ template <> struct IntegratorTable<2, 6> {
      0.109951743655322}
   };  
 };
+using T2D6P = IntegratorTable<2, 6>;
 
 // 7 point formula, degree of precision 5
 template <> struct IntegratorTable<2, 7> {
+  // number of nodes
+  static constexpr unsigned int num_nodes = 7;
   // position of nodes (in barycentric coordinates)
   static constexpr std::array<std::array<double, 2>, 7> nodes = {
-    {{0.333333333333333,0.333333333333333},
-     {0.101286507323456,0.101286507323456},
-     {0.101286507323456,0.797426985353087},
-     {0.797426985353087,0.101286507323456},
-     {0.470142064105115,0.470142064105115},
-     {0.470142064105115,0.059715871789770},
-     {0.059715871789770,0.470142064105115}}
+    {{0.333333333333333, 0.333333333333333},
+     {0.101286507323456, 0.101286507323456},
+     {0.101286507323456, 0.797426985353087},
+     {0.797426985353087, 0.101286507323456},
+     {0.470142064105115, 0.470142064105115},
+     {0.470142064105115, 0.059715871789770},
+     {0.059715871789770, 0.470142064105115}}
   };
   // weights of the quadrature rule
   static constexpr std::array<double, 7> weights = {
@@ -129,9 +144,12 @@ template <> struct IntegratorTable<2, 7> {
      0.132394152788506}
   };  
 };
+using T2D7P = IntegratorTable<2, 7>;
 
 // 12 point formula, degree of precision 6
 template <> struct IntegratorTable<2, 12> {
+  // number of nodes
+  static constexpr unsigned int num_nodes = 12;
   // position of nodes (in barycentric coordinates)
   static constexpr std::array<std::array<double, 2>, 12> nodes = {
     {{0.873821971016996, 0.063089017791802},
@@ -163,12 +181,15 @@ template <> struct IntegratorTable<2, 12> {
      0.082851075618374}
   };  
 };
+using T2D12P = IntegratorTable<2, 12>;
 
 // 3D tetrahedric elements
 // reference element: simplex of vertices (0,0,0), (1,0,0), (0,1,0), (0,0,1)
 
 // 1 point formula, degree of precision 1
 template <> struct IntegratorTable<3, 1> {
+  // number of nodes
+  static constexpr unsigned int num_nodes = 1;
   // position of nodes (in barycentric coordinates)
   static constexpr std::array<std::array<double, 3>, 1> nodes = {
     {{0.250000000000000, 0.250000000000000, 0.250000000000000}}
@@ -178,15 +199,18 @@ template <> struct IntegratorTable<3, 1> {
     {1.}
   };
 };
+using T3D1P = IntegratorTable<3, 1>;
 
 // 4 point formula, degree of precision 3
 template <> struct IntegratorTable<3, 4> {
+  // number of nodes
+  static constexpr unsigned int num_nodes = 4;
   // position of nodes (in barycentric coordinates)
   static constexpr std::array<std::array<double, 3>, 4> nodes = {
-    {{0.585410196624969,0.138196601125011,0.138196601125011},
-     {0.138196601125011,0.138196601125011,0.138196601125011},
-     {0.138196601125011,0.138196601125011,0.585410196624969},
-     {0.138196601125011,0.585410196624969,0.138196601125011}}
+    {{0.585410196624969, 0.138196601125011, 0.138196601125011},
+     {0.138196601125011, 0.138196601125011, 0.138196601125011},
+     {0.138196601125011, 0.138196601125011, 0.585410196624969},
+     {0.138196601125011, 0.585410196624969, 0.138196601125011}}
   };
   // weights of the quadrature rule
   static constexpr std::array<double, 4> weights = {
@@ -196,9 +220,12 @@ template <> struct IntegratorTable<3, 4> {
      0.250000000000000}
   };
 };
+using T3D4P = IntegratorTable<3, 4>;
 
 // 5 point formula, degree of precision 4
 template <> struct IntegratorTable<3, 5> {
+  // number of nodes
+  static constexpr unsigned int num_nodes = 5;
   // position of nodes (in barycentric coordinates)
   static constexpr std::array<std::array<double, 3>, 5> nodes = {
     {{0.250000000000000, 0.250000000000000, 0.250000000000000},
@@ -216,5 +243,6 @@ template <> struct IntegratorTable<3, 5> {
      0.450000000000000}
   };
 };
+using T3D5P = IntegratorTable<3, 5>;
 
 #endif // __INTEGRATOR_TABLES_H__
