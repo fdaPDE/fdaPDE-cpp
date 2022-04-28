@@ -1,4 +1,5 @@
 // construct a mesh from .csv files
+#include <utility>
 template <unsigned int M, unsigned int N>
 Mesh<M,N>::Mesh(const std::string& pointsFile,    const std::string& edgesFile,
 		const std::string& trianglesFile, const std::string& neighborsFile){
@@ -45,13 +46,15 @@ const std::shared_ptr<Element<M,N>> Mesh<M,N>::requestElementById(unsigned int I
   // get neighbors information
   auto elementNeighbors = neighbors_.row(ID);
   
-  // get vertices coordinates
+  // prepare element
   std::array<SVector<N>, N_VERTICES(M,N)> coords;
+  std::array<std::pair<unsigned, SVector<N>>, N_VERTICES(M,N)> FEsupport;
   std::array<unsigned int, M+1> neighbors;
 
   for(size_t i = 0; i < pointIndexes.size(); ++i){
     SVector<N> vertex(points_.row(pointIndexes[i]));
     coords[i] = vertex;
+    FEsupport[i] = std::make_pair(i, vertex);
 
     // from triangle documentation: The first neighbor of triangle i is opposite the first corner of triangle i, and so on.
     // by storing neighboring informations as they come from triangle we have that neighbor[0] is the
@@ -60,5 +63,5 @@ const std::shared_ptr<Element<M,N>> Mesh<M,N>::requestElementById(unsigned int I
     neighbors[i] = elementNeighbors[i];
   }
          
-  return std::make_shared<Element<M,N>>(ID, coords, neighbors);
+  return std::make_shared<Element<M,N>>(ID, FEsupport, coords, neighbors);
 }
