@@ -3,6 +3,8 @@
 
 #include "../utils/CompileTime.h"
 #include "../utils/Symbols.h"
+#include "PolynomialExpressions.h"
+
 #include <functional>
 #include <array>
 
@@ -152,24 +154,25 @@ struct MonomialSum<0, N, M, P, V> {
 
 // class representing an N-dimensional multivariate polynomial of degree R
 template <unsigned int N, unsigned int R>
-class MultivariatePolynomial{
+class MultivariatePolynomial : public PolyExpr<MultivariatePolynomial<N, R>> {
 private:
   // vector of coefficients
   static const constexpr unsigned MON = ct_binomial_coefficient(R+N, R);
   std::array<double, MON> coeffVector_;
-  
+
+  // callable gradient
+  std::function<SVector<N>(SVector<N>)> gradient_;
+
 public:
   // compute this at compile time once, let public access
   static const constexpr expTable<N, R>     expTable_     = ct_poly_exp<N,R>();
   static const constexpr gradExpTable<N, R> gradExpTable_ = ct_grad_exp<N,R>(expTable_);
-
-  std::function<SVector<N>(SVector<N>)> gradient_;
   
   // constructor
   MultivariatePolynomial() = default;
   MultivariatePolynomial(const std::array<double, MON>& coeffVector) : coeffVector_(coeffVector) {
 
-    // define gradient callable
+    // define callable gradient
     std::function<SVector<N>(SVector<N>)> gradient = [&](SVector<N> point) -> SVector<N>{
       SVector<N> grad;
       // cycle over dimensions
@@ -189,22 +192,31 @@ public:
 
     gradient_ = gradient;
   };
-  
-  double     operator()(const SVector<N>& point);   // evaluate polynomial at point
-  std::function<SVector<N>(SVector<N>)> derive();   // return callable gradient
+
+  double operator()(const SVector<N>& point) const;  // evaluate polynomial at point
+  std::function<SVector<N>(SVector<N>)> gradient();  // return callable gradient
 
   // getter
   std::array<double, MON> getCoeff() const { return coeffVector_; }
 };
 
 template <unsigned int N, unsigned int R>
-double MultivariatePolynomial<N, R>::operator()(const SVector<N> &point) {
+double MultivariatePolynomial<N, R>::operator()(const SVector<N> &point) const {
   return MonomialSum<MON - 1, MON, N, SVector<N>, std::array<std::array<unsigned, N>, MON>>::unfold(coeffVector_, point, expTable_);  
 }
 
 template <unsigned int N, unsigned int R>
-std::function<SVector<N>(SVector<N>)> MultivariatePolynomial<N, R>::derive() {
+std::function<SVector<N>(SVector<N>)> MultivariatePolynomial<N, R>::gradient() {
   return gradient_;
 }
+
+
+
+// gestire caso con scalari
+// implementare assignment operator = per assegnare la rappresentazione della computazione ad una variabile auto
+
+// per un VectorField (tipo il vettore gradiente), implementare +,-,*(prodotto
+// per scalare se 2*x o x*2, inner product se x*y o y*x)
+// in questo modo scrivere le objective è molto espressivo (phi_i.grad()*phi_j.grad() è il prodotto scalare tra i gradienti di 2 basis function)
 
 #endif // __MULTIVARIATE_POLYNOMIAL_H__
