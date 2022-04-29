@@ -195,25 +195,20 @@ public:
 
   double operator()(const SVector<N>& point) const;  // evaluate polynomial at point
   std::function<SVector<N>(SVector<N>)> gradient();  // return callable gradient
-
+  
   // getter
   std::array<double, MON> getCoeff() const { return coeffVector_; }
 };
 
 template <unsigned int N, unsigned int R>
 double MultivariatePolynomial<N, R>::operator()(const SVector<N> &point) const {
-  return MonomialSum<MON - 1, MON, N, SVector<N>, std::array<std::array<unsigned, N>, MON>>::unfold(coeffVector_, point, expTable_);  
+  return MonomialSum<MON - 1, MON, N, SVector<N>, std::array<std::array<unsigned, N>, MON>>::unfold(coeffVector_, point, expTable_);
 }
 
 template <unsigned int N, unsigned int R>
 std::function<SVector<N>(SVector<N>)> MultivariatePolynomial<N, R>::gradient() {
   return gradient_;
 }
-
-
-
-// gestire caso con scalari
-// implementare assignment operator = per assegnare la rappresentazione della computazione ad una variabile auto
 
 // per un VectorField (tipo il vettore gradiente), implementare +,-,*(prodotto
 // per scalare se 2*x o x*2, inner product se x*y o y*x)

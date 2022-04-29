@@ -4,55 +4,80 @@
 #include "../utils/Symbols.h"
 
 #include <functional>
+#include <ostream>
+#include <type_traits>
 
 // MultivariatePolynomial class support expression template based arithmetic.
-// Base class for expression templates
+// The goal is to allow to write expressions of polynomials which are lazily evaluated only when a point evaluation is requested.
+
+// Base class for polynomial expressions
 template <typename E> struct PolyExpr {
   // call operator() on the base type E
   template <int N>
   double operator()(const SVector<N>& p) const {
     return static_cast<const E&>(*this)(p);
   }
+
+  // get underyling type composing the expression node
+  const E& get() const { return static_cast<const E&>(*this); }
+};
+
+// an expression node representing a scalar value (double, int, ... even single valued variables)
+class PolyScalar : public PolyExpr<PolyScalar> {
+private:
+  double value_;
+public:
+  PolyScalar(double value) : value_(value) { }
+  
+  // call operator
+  template <int N>
+  double operator()(const SVector<N>& p) const { return value_; };
 };
 
 // expression template based arithmetic
 template <typename OP1, typename OP2, typename BinaryOperation>
 class PolyBinOp : public PolyExpr<PolyBinOp<OP1, OP2, BinaryOperation>> {
 private:
-  const OP1& op1_;          // first  operand
-  const OP2& op2_;          // second operand
-  const BinaryOperation f_; // operation to apply between operands
+  typename std::remove_reference<OP1>::type op1_;   // first  operand
+  typename std::remove_reference<OP2>::type op2_;   // second operand
+  BinaryOperation f_;                               // operation to apply
 
 public:
   // constructor
-  PolyBinOp(const OP1& op1, const OP2& op2, const BinaryOperation& f) : op1_(op1), op2_(op2), f_(f) { };
+  PolyBinOp(const OP1& op1, const OP2& op2, BinaryOperation f) : op1_(op1), op2_(op2), f_(f) { };
 
-  // call operator
+  // call operator, performs the expression evaluation
   template <int N>
   double operator()(const SVector<N>& p) const{
     return f_(op1_(p), op2_(p));
   }
 };
 
-// sum of 2 expressions
-template <typename E1, typename E2>
-PolyBinOp<PolyExpr<E1>, PolyExpr<E2>, std::plus<> >
-operator+(const PolyExpr<E1>& op1, const PolyExpr<E2>& op2) {
-  return PolyBinOp<PolyExpr<E1>, PolyExpr<E2>, std::plus<> >(op1, op2, std::plus<>());
-}
+// macro to define an arithmetic operator between polynomials.
+#define DEF_EXPR_OPERATOR(OPERATOR, FUNCTOR)				\
+  template <typename E1, typename E2>					\
+  PolyBinOp<E1, E2, FUNCTOR >						\
+  OPERATOR(const PolyExpr<E1>& op1, const PolyExpr<E2>& op2) {		\
+    return PolyBinOp<E1, E2, FUNCTOR >					\
+      {op1.get(), op2.get(), FUNCTOR()};				\
+  }									\
+  									\
+  template <typename E>							\
+  PolyBinOp<E, PolyScalar, FUNCTOR >					\
+  OPERATOR(const PolyExpr<E>& op1, double op2) {			\
+  return PolyBinOp<E, PolyScalar, FUNCTOR >				\
+      (op1.get(), PolyScalar(op2), FUNCTOR());				\
+  }									\
+  									\
+  template <typename E>							\
+  PolyBinOp<PolyScalar, E, FUNCTOR >					\
+  OPERATOR(double op1, const PolyExpr<E>& op2) {			\
+    return PolyBinOp<PolyScalar, E, FUNCTOR >				\
+      {PolyScalar(op1), op2.get(), FUNCTOR()};				\
+  }
 
-// difference of 2 expressions
-template <typename E1, typename E2>
-PolyBinOp<PolyExpr<E1>, PolyExpr<E2>, std::minus<> >
-operator-(const PolyExpr<E1>& op1, const PolyExpr<E2>& op2) {
-  return PolyBinOp<PolyExpr<E1>, PolyExpr<E2>, std::minus<> >(op1, op2, std::minus<>());
-}
-
-// product of 2 expressions
-template <typename E1, typename E2>
-PolyBinOp<PolyExpr<E1>, PolyExpr<E2>, std::multiplies<> >
-operator*(const PolyExpr<E1>& op1, const PolyExpr<E2>& op2) {
-  return PolyBinOp<PolyExpr<E1>, PolyExpr<E2>, std::multiplies<> >(op1, op2, std::multiplies<>());
-}
+DEF_EXPR_OPERATOR(operator+, std::plus<>)
+DEF_EXPR_OPERATOR(operator-, std::minus<>)
+DEF_EXPR_OPERATOR(operator*, std::multiplies<>)
 
 #endif // __POLYNOMIAL_EXPRESSIONS_H__
