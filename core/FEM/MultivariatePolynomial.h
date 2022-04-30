@@ -5,6 +5,7 @@
 #include "../utils/Symbols.h"
 #include "PolynomialExpressions.h"
 
+#include <cstddef>
 #include <functional>
 #include <array>
 
@@ -152,6 +153,57 @@ struct MonomialSum<0, N, M, P, V> {
   }  
 };
 
+template <unsigned int N>
+class VectorField {
+private:
+  // each array element is a lambda which computes the i-th component of the vector
+  std::array<std::function<double(SVector<N>)>, N> field_;
+public:
+  // constructor
+  VectorField() = default;
+  VectorField(std::array<std::function<double(SVector<N>)>, N> field) : field_(field) {}
+
+  // call operator
+  SVector<N> operator()(const SVector<N>& point) const;
+  // subscript operator
+  const std::function<double(SVector<N>)>& operator[](size_t i) const;
+
+  // scalar product
+  std::function<double(SVector<N>, SVector<N>)> dot(const VectorField<N>& rhs) const;
+};
+
+template <unsigned int N>
+SVector<N> VectorField<N>::operator()(const SVector<N> &point) const {
+  SVector<N> result;
+  for(size_t i = 0; i < N; ++i){
+    result[i] = field_[i](point);
+  }
+  return result;
+}
+
+template <unsigned int N>
+const std::function<double(SVector<N>)>& VectorField<N>::operator[](size_t i) const {
+  return field_[i];
+}
+
+template <unsigned int N>
+std::function<double(SVector<N>, SVector<N>)> VectorField<N>::dot(const VectorField<N> &rhs) const {
+  // callable scalar product
+  std::function<double(SVector<N>, SVector<N>)> scalarProduct;
+
+  // capture this and the rhs argument by copy to avoid segfault when storing the callable in a temporary
+  scalarProduct = [*this, rhs](SVector<N> x, SVector<N> y) -> double{
+    // implementation of the scalar product operation
+    double result;
+    for(size_t i = 0; i < N; ++i){
+      result += operator[](i)(x)*rhs[i](y);
+    }
+    return result;
+  };
+  
+  return scalarProduct;
+}
+
 // class representing an N-dimensional multivariate polynomial of degree R
 template <unsigned int N, unsigned int R>
 class MultivariatePolynomial : public PolyExpr<MultivariatePolynomial<N, R>> {
@@ -161,7 +213,7 @@ private:
   std::array<double, MON> coeffVector_;
 
   // callable gradient
-  std::function<SVector<N>(SVector<N>)> gradient_;
+  VectorField<N> gradient_;
 
 public:
   // compute this at compile time once, let public access
@@ -172,11 +224,11 @@ public:
   MultivariatePolynomial() = default;
   MultivariatePolynomial(const std::array<double, MON>& coeffVector) : coeffVector_(coeffVector) {
 
-    // define callable gradient
-    std::function<SVector<N>(SVector<N>)> gradient = [&](SVector<N> point) -> SVector<N>{
-      SVector<N> grad;
-      // cycle over dimensions
-      for(size_t i = 0; i < N; ++i){
+    std::array<std::function<double(SVector<N>)>, N> gradient;
+    
+    // define i-th element of gradient field
+    for(size_t i = 0; i < N; ++i){
+      std::function<double(SVector<N>)> item = [=](SVector<N> point) -> double{
 	double value = 0;
 	// cycle over monomials
 	for(size_t m = 0; m < MON; ++m){
@@ -184,17 +236,17 @@ public:
 	    value += coeffVector_[m]*expTable_[m][i]*MonomialProduct<N-1, SVector<N>, std::array<unsigned, N>>::unfold(point, gradExpTable_[i][m]);;
 	  }
 	}
-	// store value of partial derivative in gradient vector
-	grad[i] = value;
-      }
-      return grad;
-    };
+	return value; // return partial derivative
+      };
+      gradient[i] = item;
+    }
 
-    gradient_ = gradient;
+    // store gradient
+    gradient_ = VectorField<N>(gradient);
   };
 
   double operator()(const SVector<N>& point) const;  // evaluate polynomial at point
-  std::function<SVector<N>(SVector<N>)> gradient();  // return callable gradient
+  VectorField<N> gradient();  // return callable gradient
   
   // getter
   std::array<double, MON> getCoeff() const { return coeffVector_; }
@@ -206,12 +258,8 @@ double MultivariatePolynomial<N, R>::operator()(const SVector<N> &point) const {
 }
 
 template <unsigned int N, unsigned int R>
-std::function<SVector<N>(SVector<N>)> MultivariatePolynomial<N, R>::gradient() {
+VectorField<N> MultivariatePolynomial<N, R>::gradient() {
   return gradient_;
 }
-
-// per un VectorField (tipo il vettore gradiente), implementare +,-,*(prodotto
-// per scalare se 2*x o x*2, inner product se x*y o y*x)
-// in questo modo scrivere le objective è molto espressivo (phi_i.grad()*phi_j.grad() è il prodotto scalare tra i gradienti di 2 basis function)
 
 #endif // __MULTIVARIATE_POLYNOMIAL_H__

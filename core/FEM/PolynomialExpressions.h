@@ -4,11 +4,33 @@
 #include "../utils/Symbols.h"
 
 #include <functional>
-#include <ostream>
 #include <type_traits>
 
 // MultivariatePolynomial class support expression template based arithmetic.
 // The goal is to allow to write expressions of polynomials which are lazily evaluated only when a point evaluation is requested.
+
+// macro to define an arithmetic operator between polynomials.
+#define DEF_POLY_EXPR_OPERATOR(OPERATOR, FUNCTOR)			\
+  template <typename E1, typename E2>					\
+  PolyBinOp<E1, E2, FUNCTOR >						\
+  OPERATOR(const PolyExpr<E1>& op1, const PolyExpr<E2>& op2) {		\
+    return PolyBinOp<E1, E2, FUNCTOR >					\
+      {op1.get(), op2.get(), FUNCTOR()};				\
+  }									\
+  									\
+  template <typename E>							\
+  PolyBinOp<E, PolyScalar, FUNCTOR >					\
+  OPERATOR(const PolyExpr<E>& op1, double op2) {			\
+  return PolyBinOp<E, PolyScalar, FUNCTOR >				\
+      (op1.get(), PolyScalar(op2), FUNCTOR());				\
+  }									\
+  									\
+  template <typename E>							\
+  PolyBinOp<PolyScalar, E, FUNCTOR >					\
+  OPERATOR(double op1, const PolyExpr<E>& op2) {			\
+    return PolyBinOp<PolyScalar, E, FUNCTOR >				\
+      {PolyScalar(op1), op2.get(), FUNCTOR()};				\
+  }									\
 
 // Base class for polynomial expressions
 template <typename E> struct PolyExpr {
@@ -53,31 +75,8 @@ public:
   }
 };
 
-// macro to define an arithmetic operator between polynomials.
-#define DEF_EXPR_OPERATOR(OPERATOR, FUNCTOR)				\
-  template <typename E1, typename E2>					\
-  PolyBinOp<E1, E2, FUNCTOR >						\
-  OPERATOR(const PolyExpr<E1>& op1, const PolyExpr<E2>& op2) {		\
-    return PolyBinOp<E1, E2, FUNCTOR >					\
-      {op1.get(), op2.get(), FUNCTOR()};				\
-  }									\
-  									\
-  template <typename E>							\
-  PolyBinOp<E, PolyScalar, FUNCTOR >					\
-  OPERATOR(const PolyExpr<E>& op1, double op2) {			\
-  return PolyBinOp<E, PolyScalar, FUNCTOR >				\
-      (op1.get(), PolyScalar(op2), FUNCTOR());				\
-  }									\
-  									\
-  template <typename E>							\
-  PolyBinOp<PolyScalar, E, FUNCTOR >					\
-  OPERATOR(double op1, const PolyExpr<E>& op2) {			\
-    return PolyBinOp<PolyScalar, E, FUNCTOR >				\
-      {PolyScalar(op1), op2.get(), FUNCTOR()};				\
-  }
-
-DEF_EXPR_OPERATOR(operator+, std::plus<>)
-DEF_EXPR_OPERATOR(operator-, std::minus<>)
-DEF_EXPR_OPERATOR(operator*, std::multiplies<>)
+DEF_POLY_EXPR_OPERATOR(operator+, std::plus<>      )
+DEF_POLY_EXPR_OPERATOR(operator-, std::minus<>     )
+DEF_POLY_EXPR_OPERATOR(operator*, std::multiplies<>)
 
 #endif // __POLYNOMIAL_EXPRESSIONS_H__
