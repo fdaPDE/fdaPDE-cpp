@@ -40,7 +40,7 @@ namespace MESH{
     std::array<std::pair<unsigned, SVector<N>>, N_VERTICES(M,N)> FEsupport;
     
     // matrix defining the affine transformation from cartesian to barycentric coordinates and viceversa
-    Eigen::Matrix<double, N, M> baryMatrix;
+    Eigen::Matrix<double, N, M> baryMatrix{};
     Eigen::Matrix<double, M, N> invBaryMatrix{};
 
     // compute the inverse of the barycentric matrix. This will be specialized by manifold elements
@@ -53,13 +53,17 @@ namespace MESH{
   
     Element(int ID_, std::array<std::pair<unsigned, SVector<N>>, N_VERTICES(M,N)> FEsupport_,
 	    std::array<SVector<N>, N_VERTICES(M,N)> coords_, std::array<unsigned int, M+1> neighbors_);
-
+    
     // getters
-    std::array<std::pair<unsigned, SVector<N>>, N_VERTICES(M,N)> getFESupport() const { return FEsupport; }
-    std::array<SVector<N>, N_VERTICES(M,N)> getCoords()  const { return coords;    }
-    std::array<unsigned int, M+1> getNeighbors()         const { return neighbors; }
-    unsigned int getID()                                 const { return ID;        }
-
+    using FESupport = std::array<std::pair<unsigned, SVector<N>>, N_VERTICES(M,N)>;
+    
+    std::array<SVector<N>, N_VERTICES(M,N)> getCoords() const { return coords;        } 
+    std::array<unsigned int, M+1> getNeighbors()        const { return neighbors;     }
+    Eigen::Matrix<double, N, M> getBaryMatrix()         const { return baryMatrix;    }
+    Eigen::Matrix<double, M, N> getInvBaryMatrix()      const { return invBaryMatrix; }
+    unsigned int getID()                                const { return ID;            }
+    FESupport getFESupport()                            const { return FEsupport;     }
+    
     // computes the baricentric coordinates of the element
     SVector<M+1> computeBarycentricCoordinates(const SVector<N>& x) const;
 

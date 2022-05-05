@@ -12,7 +12,8 @@ Mesh<M,N>::Mesh(const std::string& pointsFile,    const std::string& edgesFile,
     
   // set mesh internal representation to eigen matrix
   points_    = points.toEigen();
-    
+  numNodes   = points_.rows();
+  
   // compute mesh limits
   for(size_t dim = 0; dim < N; ++dim){
     meshRange[dim].first  = points_.col(dim).minCoeff();
@@ -54,7 +55,7 @@ const std::shared_ptr<Element<M,N>> Mesh<M,N>::requestElementById(unsigned int I
   for(size_t i = 0; i < pointIndexes.size(); ++i){
     SVector<N> vertex(points_.row(pointIndexes[i]));
     coords[i] = vertex;
-    FEsupport[i] = std::make_pair(i, vertex);
+    FEsupport[i] = std::make_pair(pointIndexes[i], vertex);
 
     // from triangle documentation: The first neighbor of triangle i is opposite the first corner of triangle i, and so on.
     // by storing neighboring informations as they come from triangle we have that neighbor[0] is the

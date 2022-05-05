@@ -29,6 +29,7 @@ namespace MESH{
   private:
     // coordinates of points constituting the vertices of mesh elements
     DynamicMatrix<double> points_;
+    unsigned int numNodes = 0;
     // matrix of edges. Each row of the matrix contains the row numbers in points_ matrix
     // of the points which form the edge
     DynamicMatrix<int> edges_;
@@ -90,6 +91,7 @@ namespace MESH{
 
     // getters
     unsigned int getNumberOfElements()                      const { return numElements;  }
+    unsigned int getNumberOfNodes()                         const { return numNodes;     }
     std::array<std::pair<double, double>, N> getMeshRange() const { return meshRange;    }
     std::array<double, N> getMinMeshRange()                 const { return minMeshRange; }
     std::array<double, N> getKMeshRange()                   const { return kMeshRange;   }  

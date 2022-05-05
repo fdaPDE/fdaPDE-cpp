@@ -4,6 +4,7 @@
 #include "../utils/CompileTime.h"
 #include "../utils/Symbols.h"
 #include "PolynomialExpressions.h"
+#include "VectorField.h"
 
 #include <cstddef>
 #include <functional>
@@ -153,57 +154,6 @@ struct MonomialSum<0, N, M, P, V> {
   }  
 };
 
-template <unsigned int N>
-class VectorField {
-private:
-  // each array element is a lambda which computes the i-th component of the vector
-  std::array<std::function<double(SVector<N>)>, N> field_;
-public:
-  // constructor
-  VectorField() = default;
-  VectorField(std::array<std::function<double(SVector<N>)>, N> field) : field_(field) {}
-
-  // call operator
-  SVector<N> operator()(const SVector<N>& point) const;
-  // subscript operator
-  const std::function<double(SVector<N>)>& operator[](size_t i) const;
-
-  // scalar product
-  std::function<double(SVector<N>, SVector<N>)> dot(const VectorField<N>& rhs) const;
-};
-
-template <unsigned int N>
-SVector<N> VectorField<N>::operator()(const SVector<N> &point) const {
-  SVector<N> result;
-  for(size_t i = 0; i < N; ++i){
-    result[i] = field_[i](point);
-  }
-  return result;
-}
-
-template <unsigned int N>
-const std::function<double(SVector<N>)>& VectorField<N>::operator[](size_t i) const {
-  return field_[i];
-}
-
-template <unsigned int N>
-std::function<double(SVector<N>, SVector<N>)> VectorField<N>::dot(const VectorField<N> &rhs) const {
-  // callable scalar product
-  std::function<double(SVector<N>, SVector<N>)> scalarProduct;
-
-  // capture this and the rhs argument by copy to avoid segfault when storing the callable in a temporary
-  scalarProduct = [*this, rhs](SVector<N> x, SVector<N> y) -> double{
-    // implementation of the scalar product operation
-    double result;
-    for(size_t i = 0; i < N; ++i){
-      result += operator[](i)(x)*rhs[i](y);
-    }
-    return result;
-  };
-  
-  return scalarProduct;
-}
-
 // class representing an N-dimensional multivariate polynomial of degree R
 template <unsigned int N, unsigned int R>
 class MultivariatePolynomial : public PolyExpr<MultivariatePolynomial<N, R>> {
@@ -233,7 +183,7 @@ public:
 	// cycle over monomials
 	for(size_t m = 0; m < MON; ++m){
 	  if(expTable_[m][i] != 0){ // skip powers of zero, their derivative is zero
-	    value += coeffVector_[m]*expTable_[m][i]*MonomialProduct<N-1, SVector<N>, std::array<unsigned, N>>::unfold(point, gradExpTable_[i][m]);;
+	    value += coeffVector[m]*expTable_[m][i]*MonomialProduct<N-1, SVector<N>, std::array<unsigned, N>>::unfold(point, gradExpTable_[i][m]);;
 	  }
 	}
 	return value; // return partial derivative

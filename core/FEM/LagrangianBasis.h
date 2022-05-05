@@ -17,7 +17,8 @@ private:
   std::array<MultivariatePolynomial<N,R>, ct_binomial_coefficient(N+R,R)> basis_;
 public:
   // constructor
- LagrangianBasis(const std::array<std::array<double, N>, ct_binomial_coefficient(N+R, R)>& nodes) : nodes_(nodes) {
+  LagrangianBasis() = default;
+  LagrangianBasis(const std::array<std::array<double, N>, ct_binomial_coefficient(N+R, R)>& nodes) : nodes_(nodes) {
 
     // build vandermonde matrix
     constexpr unsigned int M = ct_binomial_coefficient(N+R,R);

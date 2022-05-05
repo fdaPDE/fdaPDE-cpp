@@ -7,7 +7,7 @@
 #include "Tree.h"
 #include "../../../OPT/Utils.h"
 #include "Query.h"
-#include "Mesh.h"
+#include "../../Mesh.h"
 
 namespace fdaPDE{
 namespace core{
