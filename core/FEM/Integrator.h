@@ -3,9 +3,11 @@
 
 #include "../MESH/Element.h"
 #include "../utils/Symbols.h"
-#include "VectorField.h"
+#include "../utils/fields/VectorField.h"
 #include "IntegratorTables.h"
 
+using fdaPDE::core::InnerProduct;
+using fdaPDE::core::VectorField;
 using fdaPDE::core::MESH::Element;
 
 // compile time loop unfolding based on template recursion for quadrature rules.
