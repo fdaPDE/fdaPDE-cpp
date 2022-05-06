@@ -3,7 +3,8 @@
 
 #include <array>
 #include <tuple>
-#include "../ScalarField.h"
+#include "../../utils/Symbols.h"
+#include "../../utils/fields/ScalarField.h"
 #include "../extensions/Extension.h"
 
 namespace fdaPDE{

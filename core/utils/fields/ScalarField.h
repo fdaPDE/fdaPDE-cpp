@@ -2,11 +2,10 @@
 #define __SCALAR_FIELD_H__
 
 #include <functional>
-#include "Utils.h"
+#include "../Symbols.h"
 
 namespace fdaPDE{
 namespace core{
-namespace OPT{
 
   // a template class for handling general scalar fields. A field wrapped
   // by this template doesn't guarantee any regularity condition.
@@ -78,6 +77,6 @@ namespace OPT{
   };
 
 #include "ScalarField.tpp"
-}}}
+}}
   
 #endif // __SCALAR_FIELD_H__

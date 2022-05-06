@@ -1,8 +1,8 @@
 #ifndef __BFGS_H__
 #define __BFGS_H__
 
-#include "../Utils.h"
-#include "../ScalarField.h"
+#include "../../utils/Symbols.h"
+#include "../../utils/fields/ScalarField.h"
 #include "../extensions/Extension.h"
 
 namespace fdaPDE{

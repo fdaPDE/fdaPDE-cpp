@@ -2,7 +2,8 @@
 #define __BACKTRACKING_ADAPTIVE_STEP_H__
 
 // an extension implementing the backtracking policy for step selection
-#include "Utils.h"
+#include "../../utils/Symbols.h"
+
 class BacktrackingAdaptiveStep{
 
 private:

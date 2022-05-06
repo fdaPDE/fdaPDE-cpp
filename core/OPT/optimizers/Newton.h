@@ -2,9 +2,9 @@
 #define __NEWTON_H__
 
 #include <Eigen/Dense>
-#include "../ScalarField.h"
+#include "../../utils/Symbols.h"
+#include "../../utils/fields/ScalarField.h"
 #include "../extensions/Extension.h"
-#include "../Utils.h"
 
 namespace fdaPDE{
 namespace core{

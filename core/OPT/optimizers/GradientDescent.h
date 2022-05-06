@@ -1,11 +1,10 @@
 #ifndef __GRADIENT_DESCENT_OPTIMIZER__
 #define __GRADIENT_DESCENT_OPTIMIZER__
 
-#include "../extensions/Extension.h"
-#include "../ScalarField.h"
-#include "../Utils.h"
-
 #include <tuple>
+#include "../../utils/Symbols.h"
+#include "../../utils/fields/ScalarField.h"
+#include "../extensions/Extension.h"
 
 namespace fdaPDE{
 namespace core{
