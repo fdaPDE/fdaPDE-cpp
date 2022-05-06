@@ -29,6 +29,7 @@ class Assembler {
 
 private:
   Mesh<M, N>& mesh_;
+  constexpr static unsigned n_basis = ct_binomial_coefficient(N+ORDER, ORDER);
   
 public:
   Assembler(Mesh<M, N>& mesh) : mesh_(mesh) {};
@@ -50,7 +51,6 @@ Eigen::SparseMatrix<double> Assembler<M,N,ORDER>::assemble() {
   ReferenceElement<N, ORDER> fe;                    // reference element where functional information is defined
 
   // properly allocate memory to avoid reallocations
-  constexpr unsigned n_basis = ct_binomial_coefficient(N+ORDER, ORDER);
   tripletList.reserve(n_basis*n_basis*mesh_.getNumberOfElements());
   stiffnessMatrix.resize(mesh_.getNumberOfNodes(), mesh_.getNumberOfNodes());
 
@@ -97,23 +97,18 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> Assembler<M,N,ORDER>::forcingTerm(const
   // define the reference element
   ReferenceElement<N, ORDER> fe;
 
-  constexpr unsigned n_basis = ct_binomial_coefficient(N+ORDER, ORDER);
   for(std::shared_ptr<Element<M,N>> e : mesh_){    
     for(size_t i = 0; i < n_basis; ++i){
-	// get basis elements
-	auto phi_i = fe.getBasis().getBasisElement(i);
+	auto phi_i = fe.getBasis().getBasisElement(i);	// basis function
+	auto functional = f*phi_i;	                // functional to integrate
 
-	// integrate the functional over the reference element
-	auto functional = f*phi_i;
-
-	// integrate the functional over the reference element
+	// perform integration
 	double value = integrator.integrate(*e, functional);
 	
-	// exploit additiviy of the integral
+	// store result exploiting additiviy of the integral
         result[e->getFESupport()[i].first] += value;
-    }    
+    }
   }
-
   return result;
 }
 
