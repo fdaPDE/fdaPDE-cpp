@@ -57,7 +57,9 @@ struct InnerProduct{
   InnerProduct(const VectorField<N>& lhs, const VectorField<N>& rhs) :
     lhs_(lhs), rhs_(rhs) {}
 
-  double operator()(const SVector<N>& x, const SVector<N>& y){
+  // evaluate the form on two different points (this is like evaluating one scalar field at one point,
+  // the second one at another point and then perform the inner product between the two numerical results)
+  double operator()(const SVector<N>& x, const SVector<N>& y) const{
     // implementation of the scalar product operation
     double result;
     for(size_t i = 0; i < N; ++i){
@@ -65,19 +67,30 @@ struct InnerProduct{
     }
     return result;
   }
+
+  // consider the analytical expression of the inner product as a scalar field, evaluate it at point x
+  double operator()(const SVector<N>& x) const{
+    // implementation of the scalar product operation
+    double result;
+    for(size_t i = 0; i < N; ++i){
+      result += lhs_[i](x)*rhs_[i](x);
+    }
+    return result;
+  }
+
 };
 
 // return a functor representing the inner product operation.
 template <int N>
 InnerProduct<N> VectorField<N>::dot(const VectorField<N> &rhs) const {  
-  return InnerProduct<N>(this, rhs);
+  return InnerProduct<N>(*this, rhs);
 }
 
 // matrix vector-field multiplication
-template <int N>
-VectorField<N> operator*(const SMatrix<N>& op1, const VectorField<N>& op2) {
-  VectorField<N> result;
-  for(size_t i = 0; i < N; ++i){
+template <int N, int M>
+VectorField<M> operator*(const Eigen::Matrix<double,N,M>& op1, const VectorField<N>& op2) {
+  VectorField<M> result;
+  for(size_t i = 0; i < M; ++i){
     std::function<double(SVector<N>)> f;
 
     f = [i, op1, op2](const SVector<N>& p) -> double {

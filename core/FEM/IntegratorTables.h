@@ -36,7 +36,6 @@ template <> struct IntegratorTable<1, 2> {
      0.500000000000000}
   };
 };
-using T1D2P = IntegratorTable<1, 2>;
 
 // 2 point formula
 template <> struct IntegratorTable<1, 3> {
@@ -55,7 +54,6 @@ template <> struct IntegratorTable<1, 3> {
      0.277777777777778}
   };
 };
-using T1D3P = IntegratorTable<1, 3>;
 
 // 2D triangular elements
 // reference element: simplex of vertices (0,0), (1,0), (0,1)
@@ -73,7 +71,6 @@ template <> struct IntegratorTable<2, 1> {
     {1.}
   };
 };
-using T2D1P = IntegratorTable<2, 1>;
 
 // 3 point formula, degree of precision 3
 template <> struct IntegratorTable<2, 3> {
@@ -92,7 +89,6 @@ template <> struct IntegratorTable<2, 3> {
      0.333333333333333}
   };  
 };
-using T2D3P = IntegratorTable<2, 3>;
 
 // 6 point formula, degree of precision 4
 template <> struct IntegratorTable<2, 6> {
@@ -117,7 +113,6 @@ template <> struct IntegratorTable<2, 6> {
      0.109951743655322}
   };  
 };
-using T2D6P = IntegratorTable<2, 6>;
 
 // 7 point formula, degree of precision 5
 template <> struct IntegratorTable<2, 7> {
@@ -144,7 +139,6 @@ template <> struct IntegratorTable<2, 7> {
      0.132394152788506}
   };  
 };
-using T2D7P = IntegratorTable<2, 7>;
 
 // 12 point formula, degree of precision 6
 template <> struct IntegratorTable<2, 12> {
@@ -181,7 +175,6 @@ template <> struct IntegratorTable<2, 12> {
      0.082851075618374}
   };  
 };
-using T2D12P = IntegratorTable<2, 12>;
 
 // 3D tetrahedric elements
 // reference element: simplex of vertices (0,0,0), (1,0,0), (0,1,0), (0,0,1)
@@ -199,7 +192,6 @@ template <> struct IntegratorTable<3, 1> {
     {1.}
   };
 };
-using T3D1P = IntegratorTable<3, 1>;
 
 // 4 point formula, degree of precision 3
 template <> struct IntegratorTable<3, 4> {
@@ -220,7 +212,6 @@ template <> struct IntegratorTable<3, 4> {
      0.250000000000000}
   };
 };
-using T3D4P = IntegratorTable<3, 4>;
 
 // 5 point formula, degree of precision 4
 template <> struct IntegratorTable<3, 5> {
@@ -243,6 +234,5 @@ template <> struct IntegratorTable<3, 5> {
      0.450000000000000}
   };
 };
-using T3D5P = IntegratorTable<3, 5>;
 
 #endif // __INTEGRATOR_TABLES_H__
