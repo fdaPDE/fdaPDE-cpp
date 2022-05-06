@@ -94,12 +94,14 @@ private:
   OP oper_;
 
 public:
+  // constructor
   VectFunctorOP(const OP& oper) : oper_(oper) {}
-
+  
   // call operator
   std::function<double(SVector<N>)> operator()(const std::function<double(SVector<N>)>& op1,
 					       const std::function<double(SVector<N>)>& op2) const{
     std::function<double(SVector<N>)> lambda;
+    // build a lambda expression which return the evaluation of the functional op1 OP op2 at point p
     lambda = [*this, op1, op2](const SVector<N>& p) -> double{
       return oper_(op1(p),op2(p));
     };

@@ -12,7 +12,7 @@ namespace core{
 // ScalarField (and its derived classes as consequece) support expression template based arithmetic.
 // The goal is to allow to write expressions of scalar fields which are lazily evaluated only when a point evaluation is requested.
 
-// macro to define an arithmetic operator between polynomials.
+// macro to define an arithmetic operator between scalar fields.
 #define DEF_FIELD_EXPR_OPERATOR(OPERATOR, FUNCTOR)			\
   template <typename E1, typename E2>					\
   FieldBinOp<E1, E2, FUNCTOR >						\
@@ -35,7 +35,7 @@ namespace core{
       {FieldScalar(op1), op2.get(), FUNCTOR()};				\
   }									\
 
-// Base class for polynomial expressions
+// Base class for scalar field expressions
 template <typename E> struct FieldExpr {
   // call operator() on the base type E
   template <int N>

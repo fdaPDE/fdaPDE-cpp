@@ -11,8 +11,9 @@ namespace core{
   // a template class for handling general scalar fields. A field wrapped
   // by this template doesn't guarantee any regularity condition.
   // N is the dimension of the domain.
+  // extend FieldExpr to allow for expression templates
   template <unsigned int N>
-  class ScalarField : public FieldExpr<ScalarField<N>>{
+  class ScalarField : public FieldExpr<ScalarField<N>> {
   protected:
     // the function this class wraps
     std::function<double(SVector<N>)> f;
@@ -21,7 +22,7 @@ namespace core{
     // constructor
     ScalarField(std::function<double(SVector<N>)> f_) : f(f_) {};
 
-    // preserve std::function syntax for evaluating a function at point
+    // preserve std::function syntax for evaluating a function at point, required for expression templates
     inline double operator()(const SVector<N>& x) const { return f(x); };
     // method for explicitly evaluate the function at point
     inline double evaluateAtPoint(const SVector<N>& x) const { return f(x); };

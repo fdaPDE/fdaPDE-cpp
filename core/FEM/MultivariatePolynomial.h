@@ -3,8 +3,11 @@
 
 #include "../utils/CompileTime.h"
 #include "../utils/Symbols.h"
-#include "PolynomialExpressions.h"
-#include "VectorField.h"
+#include "../utils/fields/ScalarFieldExpressions.h"
+#include "../utils/fields/VectorField.h"
+
+using fdaPDE::core::VectorField;
+using fdaPDE::core::FieldExpr;
 
 #include <cstddef>
 #include <functional>
@@ -156,7 +159,7 @@ struct MonomialSum<0, N, M, P, V> {
 
 // class representing an N-dimensional multivariate polynomial of degree R
 template <unsigned int N, unsigned int R>
-class MultivariatePolynomial : public PolyExpr<MultivariatePolynomial<N, R>> {
+class MultivariatePolynomial : public FieldExpr<MultivariatePolynomial<N, R>> {
 private:
   // vector of coefficients
   static const constexpr unsigned MON = ct_binomial_coefficient(R+N, R);
