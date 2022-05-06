@@ -5,7 +5,7 @@
 #include <stack>
 
 #include "Tree.h"
-#include "../../../OPT/Utils.h"
+#include "../../../utils/Symbols.h"
 #include "Query.h"
 #include "../../Mesh.h"
 

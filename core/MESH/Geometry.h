@@ -1,7 +1,7 @@
 #ifndef __GEOMETRY_H__
 #define __GEOMETRY_H__
 
-#include "../OPT/Utils.h"
+#include "../utils/Symbols.h"
 #include <Eigen/src/Core/util/Constants.h>
 #include <vector>
 

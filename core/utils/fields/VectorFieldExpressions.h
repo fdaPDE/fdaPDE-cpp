@@ -3,6 +3,9 @@
 
 #include "../utils/Symbols.h"
 
+namespace fdaPDE{
+namespace core{
+
 // macro for the definition of standard operations between vector fields
 #define DEF_VECT_EXPR_OPERATOR(OPERATOR, FUNCTOR)                              \
   template <int N, typename E1, typename E2>                                   \
@@ -106,5 +109,7 @@ public:
 
 DEF_VECT_EXPR_OPERATOR(operator+, std::plus<>)
 DEF_VECT_EXPR_OPERATOR(operator-, std::minus<>)
+
+}}
 
 #endif // __VECTOR_FIELD_EXPRESSIONS_H__

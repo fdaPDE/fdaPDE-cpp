@@ -1,7 +1,7 @@
 #ifndef __ELEMENT_H__
 #define __ELEMENT_H__
 
-#include "../OPT/Utils.h"
+#include "../utils/Symbols.h"
 #include "MeshUtils.h"
 #include "Geometry.h"
 

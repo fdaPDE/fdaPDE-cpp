@@ -3,6 +3,7 @@
 
 #include <functional>
 #include "../Symbols.h"
+#include "ScalarFieldExpressions.h"
 
 namespace fdaPDE{
 namespace core{
@@ -11,7 +12,7 @@ namespace core{
   // by this template doesn't guarantee any regularity condition.
   // N is the dimension of the domain.
   template <unsigned int N>
-  class ScalarField {
+  class ScalarField : public FieldExpr<ScalarField<N>>{
   protected:
     // the function this class wraps
     std::function<double(SVector<N>)> f;

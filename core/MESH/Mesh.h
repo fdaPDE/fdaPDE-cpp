@@ -11,7 +11,7 @@
 
 #include "Element.h"
 #include "CSVReader.h"
-#include "../OPT/Utils.h"
+#include "../utils/Symbols.h"
 #include "MeshUtils.h"
 
 namespace fdaPDE{
