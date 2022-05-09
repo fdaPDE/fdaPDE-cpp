@@ -26,17 +26,17 @@ using fdaPDE::core::MESH::Mesh;
 
 template <unsigned int M, unsigned int N, unsigned int ORDER>
 class Assembler {
-
 private:
-  Mesh<M, N>& mesh_;
   constexpr static unsigned n_basis = ct_binomial_coefficient(N+ORDER, ORDER);
+  Mesh<M, N>& mesh_;                                // mesh
+  Integrator<2,6> integrator{};                     // quadrature rule to approximate integrals
+  ReferenceElement<N, ORDER> fe{};                  // reference element where functional information is defined
   
 public:
   Assembler(Mesh<M, N>& mesh) : mesh_(mesh) {};
 
   // assemble stiffness matrix
   Eigen::SparseMatrix<double> assemble();
-
   // assemble forcing vector
   Eigen::Matrix<double, Eigen::Dynamic, 1> forcingTerm(const ScalarField<N>& f);
 };
@@ -47,8 +47,6 @@ Eigen::SparseMatrix<double> Assembler<M,N,ORDER>::assemble() {
 
   std::vector<Eigen::Triplet<double>> tripletList;  // store triplets (node_i, node_j, integral_value)
   Eigen::SparseMatrix<double> stiffnessMatrix;      // stiffness matrix is sparse due to the local support of basis functions
-  Integrator<2,6> integrator;                       // quadrature rule to approximate integrals
-  ReferenceElement<N, ORDER> fe;                    // reference element where functional information is defined
 
   // properly allocate memory to avoid reallocations
   tripletList.reserve(n_basis*n_basis*mesh_.getNumberOfElements());
@@ -68,7 +66,7 @@ Eigen::SparseMatrix<double> Assembler<M,N,ORDER>::assemble() {
 	
 	// integrate the functional over the reference element
 	double value = integrator.integrate(*e, bilinear_form);
-	
+
 	// From Eigen doucmentation: A triplet is a tuple (i,j,value) defining a non-zero element. The input list of triplets
 	// does not have to be sorted, and can contains duplicated elements. In any case, the result is a sorted and compressed
 	// sparse matrix where the duplicates have been summed up.
@@ -80,7 +78,7 @@ Eigen::SparseMatrix<double> Assembler<M,N,ORDER>::assemble() {
   
   // stiff matrix assembled
   stiffnessMatrix.setFromTriplets(tripletList.begin(), tripletList.end());
-  stiffnessMatrix.prune(std::numeric_limits<double>::epsilon() * 10); // remove almost zero entries
+  //stiffnessMatrix.prune(std::numeric_limits<double>::epsilon() * 10); // remove almost zero entries
 
   return stiffnessMatrix;
 };
@@ -90,27 +88,27 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> Assembler<M,N,ORDER>::forcingTerm(const
 
   Eigen::Matrix<double, Eigen::Dynamic, 1> result{};
   result.resize(mesh_.getNumberOfNodes(), 1); // there are as many basis functions as number of nodes in the mesh
-  result.fill(0);                            // init result vector to zero
-  
-  Integrator<2,6> integrator;
+  result.fill(0);                             // init result vector to zero
 
-  // define the reference element
-  ReferenceElement<N, ORDER> fe;
+  // build forcing vector
+  for(std::shared_ptr<Element<M,N>> e : mesh_){
 
-  for(std::shared_ptr<Element<M,N>> e : mesh_){    
-    for(size_t i = 0; i < n_basis; ++i){
-	auto phi_i = fe.getBasis().getBasisElement(i);	// basis function
-	auto functional = f*phi_i;	                // functional to integrate
+    // build functional basis over the current element e
+    std::array<std::array<double, 2>, 3> nodes{};
+    for(size_t j = 0; j < e->getFESupport().size(); ++j) 
+      nodes[j] = {e->getFESupport()[j].second[0], e->getFESupport()[j].second[1]};
+    LagrangianBasis<N, ORDER> basis(nodes);
 
-	// perform integration
-	double value = integrator.integrate(*e, functional);
+    // integrate on each node
+    for(size_t i = 0; i < n_basis; ++i){      
+	auto phi_i = basis.getBasisElement(i);	// basis function
+	auto functional = f*phi_i;	        // functional to integrate
 	
-	// store result exploiting additiviy of the integral
-        result[e->getFESupport()[i].first] += value;
+	double value = integrator.integrate(*e, functional);  // perform integration
+        result[e->getFESupport()[i].first] += value;	      // store result exploiting additiviy of the integral
     }
   }
   return result;
 }
-
 
 #endif // __ASSEMBLER_H__

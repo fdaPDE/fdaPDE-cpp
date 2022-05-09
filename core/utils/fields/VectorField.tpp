@@ -34,11 +34,36 @@ VectorField<M> operator*(const Eigen::Matrix<double,N,M>& op1, const VectorField
       }
       return product;
     };
-      
     result[i] = f;
   }
   return result;
 }  
+
+// double-VectorField product operator. Multiply the scalar to each dimension of the VectorField
+template <int N>
+VectorField<N> operator*(double scalar, const VectorField<N>& op){
+  VectorField<N> result;
+  for(size_t i = 0; i < N; ++i){
+    std::function<double(SVector<N>)> f;
+
+    // create lambda expression to represent the multiplication between a matrix and the field
+    f = [scalar, op](const SVector<N>& p) -> double {
+      double product = 0;
+      // matrix row times vector field
+      for(size_t j = 0; j < N; ++j){
+	product += scalar*op[j](p);
+      }
+      return product;
+    };
+    result[i] = f;
+  }
+  return result;  
+}
+
+template <int N>
+VectorField<N> operator*(const VectorField<N>& op, double scalar){
+  return scalar*op;
+}
 
 // return a functor representing an inner product.
 template <int N>
@@ -53,7 +78,7 @@ InnerProduct<N> VectorField<N>::dot(const VectorField<N> &rhs) const {
 template <int N>
 double InnerProduct<N>::operator()(const SVector<N>& x, const SVector<N>& y) const{
   // implementation of the scalar product operation
-  double result;
+  double result = 0;
   for(size_t i = 0; i < N; ++i){
     result += lhs_[i](x)*rhs_[i](y);
   }
@@ -64,7 +89,7 @@ double InnerProduct<N>::operator()(const SVector<N>& x, const SVector<N>& y) con
 template <int N>
 double InnerProduct<N>::operator()(const SVector<N>& x) const{
   // implementation of the scalar product operation
-  double result;
+  double result = 0;
   for(size_t i = 0; i < N; ++i){
     result += lhs_[i](x)*rhs_[i](x);
   }

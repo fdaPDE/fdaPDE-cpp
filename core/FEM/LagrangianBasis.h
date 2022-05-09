@@ -30,7 +30,8 @@ public:
       for(size_t j = 1; j < M; ++j){
 	V(i,j) = MonomialProduct<N-1, std::array<double, N>, std::array<unsigned, N>>::unfold(nodes_[i], expTable_[j]);
       }
-    }    
+    }
+    
     // solve system V*a = b with b vector having 1 at position i and 0 everywhere else.
     // Its solution gives the vector of coefficients of the i-th Lagrange polynomial
     Eigen::ColPivHouseholderQR<SMatrix<M>> QRdecomposition(V);

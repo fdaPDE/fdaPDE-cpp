@@ -1,8 +1,8 @@
 #ifndef __BRUTEFORCE_H__
 #define __BRUTEFORCE_H__
 
-#include "Mesh.h"
-#include "Element.h"
+#include "../../Mesh.h"
+#include "../../Element.h"
 #include <memory>
 
 namespace fdaPDE{
