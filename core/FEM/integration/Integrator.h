@@ -50,7 +50,8 @@ Integrator<N, M>::integral(const Element<ORDER, N>& e, F& f) const {
   // (J^{-1})^T * \Nabla phi_i. 
 
   Eigen::Matrix<double, N, ORDER> invJ = e.getInvBaryMatrix().transpose();
-  // Given \Nabla phi_i premultiply it by (J^{-1})^T = invJ. f.lhs_ and f.rhs_ are already basis over the reference element
+  // Given \Nabla phi_i premultiply it by (J^{-1})^T = invJ.
+  // NOTE: f.lhs_ and f.rhs_ are already basis over the reference element
   f.lhs_ = invJ * f.lhs_; 
   f.rhs_ = invJ * f.rhs_; 
 
@@ -61,7 +62,7 @@ Integrator<N, M>::integral(const Element<ORDER, N>& e, F& f) const {
     value += f(SVector<N>(integrationTable_.nodes[iq].data()))*integrationTable_.weights[iq];
   }
   
-  return value*std::abs(e.getBaryMatrix().determinant());
+  return value * std::abs(e.getBaryMatrix().determinant())/ct_factorial(N);
 }
 
 template <int N, int M>
@@ -72,7 +73,7 @@ Integrator<N, M>::integral(const Element<ORDER, N>& e, F& f) const {
   // execute quadrature rule
   for(size_t iq = 0; iq < integrationTable_.num_nodes; ++iq){
     // map quadrature point to current element e
-    SVector<N> p = e.getBaryMatrix()*SVector<N>(integrationTable_.nodes[iq].data());
+    SVector<N> p = e.getBaryMatrix()*SVector<N>(integrationTable_.nodes[iq].data()) + e.getCoords()[0];
     value += f(p)*integrationTable_.weights[iq];
   }
   // correct for measure of domain (element e)
@@ -84,7 +85,8 @@ Integrator<N, M>::integral(const Element<ORDER, N>& e, F& f) const {
 // scheme of a qudrature formula for the approximation of integral \int_K f(x)dx is given by a finite sum
 // \sum_{i=1}^N [f(x_i) * w_i] where x_i and w_i are properly choosen quadrature nodes and weights.
 template <int N, int M>
-template <unsigned int ORDER, typename F> double Integrator<N, M>::integrate(const Element<ORDER, N>& e, F& f) const {
+template <unsigned int ORDER, typename F>
+double Integrator<N, M>::integrate(const Element<ORDER, N>& e, F& f) const {
   return integral(e, f);
 }
 

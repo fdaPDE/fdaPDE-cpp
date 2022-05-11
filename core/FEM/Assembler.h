@@ -63,11 +63,11 @@ Eigen::SparseMatrix<double> Assembler<M,N,ORDER>::assemble() {
 	// get a pair of basis functions over the reference element
 	VectorField<N> NablaPhi_i = referenceBasis[i].gradient();
 	VectorField<N> NablaPhi_j = referenceBasis[j].gradient();
-
+	
 	// for laplacian: \nabla phi_i * \nabla * phi_j
-        InnerProduct<N> bilinear_form = NablaPhi_i.dot(NablaPhi_j);
+	InnerProduct<N> bilinear_form = NablaPhi_i.dot(NablaPhi_j);
 	double value = integrator.integrate(*e, bilinear_form); // integrate
-
+	
 	// From Eigen doucmentation: The input list of triplets does not have to be sorted, and can contains duplicated elements.
 	// In any case, the result is a sorted and compressed sparse matrix where the duplicates have been summed up.
 	// Linearity of the integral is implicitly used during matrix construction by eigen!
@@ -79,6 +79,14 @@ Eigen::SparseMatrix<double> Assembler<M,N,ORDER>::assemble() {
   stiffnessMatrix.setFromTriplets(tripletList.begin(), tripletList.end());
   stiffnessMatrix.prune(std::numeric_limits<double>::epsilon() * 10); // remove almost zero entries
 
+  // impose homogeneous boundary condition to remove not necessary degrees of freedom
+  // (otherwise the corresponding linear system is undetermined system!)
+  for(size_t i = 0; i < stiffnessMatrix.rows(); ++i){
+    if(mesh_.isOnBoundary(i)){ 
+      stiffnessMatrix.row(i) *= 0;              // zero all entries of this row
+      stiffnessMatrix.coeffRef(i,i) = 1;        // set diagonal element to 1 to impose equation u_j = b_j
+    }
+  }
   return stiffnessMatrix;
 };
 
@@ -94,14 +102,17 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> Assembler<M,N,ORDER>::forcingTerm(const
 
     // build functional basis over the current element e
     FunctionalBasis<M, N, ORDER> basis(*e);
-    
+
     // integrate on each node
-    for(size_t i = 0; i < n_basis; ++i){      
+    for(size_t i = 0; i < n_basis; ++i){
+      if(e->getBoundaryMarkers()[i].second == 0){ // skip computation if node is a boundary node
 	auto phi_i = basis[i];	      // basis function
 	auto functional = f*phi_i;    // functional to integrate
 	
 	// perform integration and store result exploiting additiviy of the integral
         result[e->getFESupport()[i].first] += integrator.integrate(*e, functional);
+      }
+      else result[e->getFESupport()[i].first] += 0;
     }
   }
   return result;
