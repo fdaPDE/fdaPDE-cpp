@@ -38,6 +38,10 @@ namespace MESH{
     // the nodes to support a functional basis are more than the geometrical vertices of the element. From here
     // the need to keep the geometrical informations separate from the functional ones.
     std::array<std::pair<unsigned, SVector<N>>, N_VERTICES(M,N)> FEsupport;
+
+    // boundary informations. this stores pairs of nodeID-value, where value is 1 if nodeID is on the boundary
+    // of the domain, 0 otherwise
+    std::array<std::pair<unsigned, unsigned>, N_VERTICES(M,N)> boundaryMarkers;
     
     // matrix defining the affine transformation from cartesian to barycentric coordinates and viceversa
     Eigen::Matrix<double, N, M> baryMatrix{};
@@ -52,7 +56,8 @@ namespace MESH{
     Element() = default;
   
     Element(int ID_, std::array<std::pair<unsigned, SVector<N>>, N_VERTICES(M,N)> FEsupport_,
-	    std::array<SVector<N>, N_VERTICES(M,N)> coords_, std::array<unsigned int, M+1> neighbors_);
+	    std::array<SVector<N>, N_VERTICES(M,N)> coords_, std::array<unsigned int, M+1> neighbors_,
+	    std::array<std::pair<unsigned, unsigned>, N_VERTICES(M,N)> boundaryMarkers_);
     
     // getters
     using FESupport = std::array<std::pair<unsigned, SVector<N>>, N_VERTICES(M,N)>;
@@ -78,6 +83,11 @@ namespace MESH{
     // compute bounding box of this element. A bounding box is the smallest rectangle containing the element
     // this construction is usefull in searching problems.
     std::pair<SVector<N>, SVector<N>> computeBoundingBox() const;
+
+    // returns true if the element has at least a vertex on the boundary
+    bool isOnBoundary(void) const;
+    // returns the whole boundary marker vector
+    std::array<std::pair<unsigned, unsigned>, N_VERTICES(M,N)> getBoundaryMarkers() const { return boundaryMarkers; }
   };
 
 #include "Element.tpp"

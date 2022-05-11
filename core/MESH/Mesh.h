@@ -41,7 +41,10 @@ namespace MESH{
     // neighboring triangles to triangle i (all triangles in the triangulation which share an
     // edge with i)
     DynamicMatrix<int> neighbors_;
-
+    // store boundary informations. This is a vector of binary coefficients such that, if element j is 1
+    // then mesh node j is on boundary, otherwise 0
+    DynamicMatrix<int> boundaryMarkers_;
+    
     // store min-max values for each dimension of the mesh
     std::array<std::pair<double, double>, N> meshRange;
     // is often required to access just to the minimum value along each dimension and to the quantity
@@ -53,7 +56,8 @@ namespace MESH{
   public:
     // constructor from .csv files
     Mesh(const std::string& pointsFile,    const std::string& edgesFile,
-	 const std::string& trianglesFile, const std::string& neighborsFile);
+	 const std::string& trianglesFile, const std::string& neighborsFile,
+	 const std::string& boundaryMarkersFile);
 
     // get an element object given its ID (its row number in the triangles_ matrix)
     // this creates an element abstraction only when it is actually needed to avoid waste
@@ -94,7 +98,10 @@ namespace MESH{
     unsigned int getNumberOfNodes()                         const { return numNodes;     }
     std::array<std::pair<double, double>, N> getMeshRange() const { return meshRange;    }
     std::array<double, N> getMinMeshRange()                 const { return minMeshRange; }
-    std::array<double, N> getKMeshRange()                   const { return kMeshRange;   }  
+    std::array<double, N> getKMeshRange()                   const { return kMeshRange;   }
+
+    // return true if the given node is on boundary, false otherwise
+    bool isOnBoundary(size_t j) const { return boundaryMarkers_(j) == 1; }
   };
 
   // export some aliases

@@ -2,14 +2,16 @@
 #include <utility>
 template <unsigned int M, unsigned int N>
 Mesh<M,N>::Mesh(const std::string& pointsFile,    const std::string& edgesFile,
-		const std::string& trianglesFile, const std::string& neighborsFile){
+		const std::string& trianglesFile, const std::string& neighborsFile,
+		const std::string& boundaryMarkersFile){
   // open and parse CSV files
   CSVReader reader;
   CSVFile<double> points = reader.parseFile<double>(pointsFile);
   CSVFile<int> edges     = reader.parseFile<int>(edgesFile);
   CSVFile<int> triangles = reader.parseFile<int>(trianglesFile);
   CSVFile<int> neighbors = reader.parseFile<int>(neighborsFile);
-    
+  CSVFile<int> boundary  = reader.parseFile<int>(boundaryMarkersFile);
+  
   // set mesh internal representation to eigen matrix
   points_    = points.toEigen();
   numNodes   = points_.rows();
@@ -35,6 +37,8 @@ Mesh<M,N>::Mesh(const std::string& pointsFile,    const std::string& edgesFile,
   // a negative value means no neighbor
   neighbors_      = neighbors.toEigen();
   neighbors_      = (neighbors_.array() - 1).matrix();
+
+  boundaryMarkers_ = boundary.toEigen();
 }
 
 // build and provides a nice abstraction for an element given its ID
@@ -51,7 +55,8 @@ const std::shared_ptr<Element<M,N>> Mesh<M,N>::requestElementById(unsigned int I
   std::array<SVector<N>, N_VERTICES(M,N)> coords;
   std::array<std::pair<unsigned, SVector<N>>, N_VERTICES(M,N)> FEsupport;
   std::array<unsigned int, M+1> neighbors;
-
+  std::array<std::pair<unsigned, unsigned>, N_VERTICES(M,N)> boundaryMarkers;
+  
   for(size_t i = 0; i < pointIndexes.size(); ++i){
     SVector<N> vertex(points_.row(pointIndexes[i]));
     coords[i] = vertex;
@@ -60,9 +65,11 @@ const std::shared_ptr<Element<M,N>> Mesh<M,N>::requestElementById(unsigned int I
     // from triangle documentation: The first neighbor of triangle i is opposite the first corner of triangle i, and so on.
     // by storing neighboring informations as they come from triangle we have that neighbor[0] is the
     // triangle adjacent to the face opposite to coords[0]
-
     neighbors[i] = elementNeighbors[i];
+
+    // store boundary informations
+    boundaryMarkers[i] = std::make_pair(pointIndexes[i], boundaryMarkers_(pointIndexes[i]));
   }
          
-  return std::make_shared<Element<M,N>>(ID, FEsupport, coords, neighbors);
+  return std::make_shared<Element<M,N>>(ID, FEsupport, coords, neighbors, boundaryMarkers);
 }

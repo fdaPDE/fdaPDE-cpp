@@ -1,8 +1,9 @@
 // constructor
 template <unsigned int M, unsigned int N>
 Element<M,N>::Element(int ID_, std::array<std::pair<unsigned, SVector<N>>, N_VERTICES(M,N)> FEsupport_,
-		      std::array<SVector<N>, N_VERTICES(M,N)> coords_, std::array<unsigned int, M+1> neighbors_) :
-  ID(ID_), FEsupport(FEsupport_), coords(coords_), neighbors(neighbors_) {
+		      std::array<SVector<N>, N_VERTICES(M,N)> coords_, std::array<unsigned int, M+1> neighbors_,
+		        std::array<std::pair<unsigned, unsigned>, N_VERTICES(M,N)> boundaryMarkers_) :
+  ID(ID_), FEsupport(FEsupport_), coords(coords_), neighbors(neighbors_), boundaryMarkers(boundaryMarkers_) {
 
   // precompute barycentric coordinate matrix for fast access
   // use first point as reference
@@ -107,4 +108,13 @@ Element<M,N>::contains(const SVector<N>& x) const {
 
   // use Eigen visitor to check for positiveness of elements
   return (baryCoord.array() >= 0).all();
+}
+
+// return true if the element has at least one vertex on the boundary of the domain
+template <unsigned int M, unsigned int N>
+bool Element<M,N>::isOnBoundary(void) const{
+  for(size_t i = 0; i < N_VERTICES(M,N); ++i){
+    if(boundaryMarkers[i].second == 1) return true;
+  }
+  return false;
 }
