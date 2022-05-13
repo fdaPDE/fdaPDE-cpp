@@ -68,5 +68,6 @@ operator*(double op1, const BilinearFormExpr<E> &op2) {
 }  
 
 DEF_BILINEAR_FORM_EXPR_OPERATOR(operator+, std::plus<>)
+DEF_BILINEAR_FORM_EXPR_OPERATOR(operator-, std::minus<>)
 
 #endif // __BILINEAR_FORM_EXPRESSIONS_H__
