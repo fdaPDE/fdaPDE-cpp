@@ -49,7 +49,7 @@ public:
   };
 
   // get basis element
-  MultivariatePolynomial<N, R> getBasisElement(unsigned int n) { return basis_[n]; };
+  MultivariatePolynomial<N, R> getBasisElement(unsigned int n) const { return basis_[n]; };
 };
 
 #endif // __LAGRANGIAN_BASIS_H__

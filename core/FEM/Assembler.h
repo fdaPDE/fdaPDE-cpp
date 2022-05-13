@@ -21,20 +21,22 @@ using fdaPDE::core::MESH::Mesh;
 #include "integration/Integrator.h"
 #include "FunctionalBasis.h"
 #include "MultivariatePolynomial.h"
+#include "operators/BilinearFormExpressions.h"
 
 template <unsigned int M, unsigned int N, unsigned int ORDER>
 class Assembler {
 private:
   constexpr static unsigned n_basis = ct_binomial_coefficient(N+ORDER, ORDER);
   Mesh<M, N>& mesh_;                                // mesh
-  Integrator<2,6> integrator{};                     // quadrature rule to approximate integrals
+  Integrator<2U,6U> integrator{};                     // quadrature rule to approximate integrals
   ReferenceBasis<M, N, ORDER> referenceBasis{};     // functional basis over reference N-dimensional unit simplex
   
 public:
   Assembler(Mesh<M, N>& mesh) : mesh_(mesh) {};
 
   // assemble stiffness matrix
-  Eigen::SparseMatrix<double> assemble();
+  template <typename E>
+  Eigen::SparseMatrix<double> assemble(const E& bilinearForm);
   // assemble forcing vector
   Eigen::Matrix<double, Eigen::Dynamic, 1> forcingTerm(const ScalarField<N>& f);
 
@@ -46,7 +48,8 @@ public:
 
 // stiff matrix for laplacian operator
 template <unsigned int M, unsigned int N, unsigned int ORDER>
-Eigen::SparseMatrix<double> Assembler<M,N,ORDER>::assemble() {
+template <typename E>
+Eigen::SparseMatrix<double> Assembler<M,N,ORDER>::assemble(const E& bilinearForm) {
 
   std::vector<Eigen::Triplet<double>> tripletList;  // store triplets (node_i, node_j, integral_value)
   Eigen::SparseMatrix<double> stiffnessMatrix;      // stiffness matrix is sparse due to the local support of basis functions
@@ -60,13 +63,8 @@ Eigen::SparseMatrix<double> Assembler<M,N,ORDER>::assemble() {
     // consider all pair of nodes
     for(size_t i = 0; i < n_basis; ++i){
       for(size_t j = 0; j < n_basis; ++j){
-	// get a pair of basis functions over the reference element
-	VectorField<N> NablaPhi_i = referenceBasis[i].gradient();
-	VectorField<N> NablaPhi_j = referenceBasis[j].gradient();
-	
-	// for laplacian: \nabla phi_i * \nabla * phi_j
-	InnerProduct<N> bilinear_form = NablaPhi_i.dot(NablaPhi_j);
-	double value = integrator.integrate(*e, bilinear_form); // integrate
+	// any integral computation for the construction of the stiffness matrix is performed on the reference element
+	double value = integrator.integrate(referenceBasis, *e, i, j, bilinearForm);
 	
 	// From Eigen doucmentation: The input list of triplets does not have to be sorted, and can contains duplicated elements.
 	// In any case, the result is a sorted and compressed sparse matrix where the duplicates have been summed up.

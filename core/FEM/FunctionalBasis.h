@@ -34,7 +34,7 @@ public:
 
   LagrangianBasis<N, ORDER> getBasis() const { return basis_; };      // getter
   // subscript operator to directly access basis elements
-  MultivariatePolynomial<N, ORDER> operator[](size_t i) { return basis_.getBasisElement(i); }
+  MultivariatePolynomial<N, ORDER> operator[](size_t i) const { return basis_.getBasisElement(i); }
 };
 
 // hard code the coordinates of nodes over an N-dimensional unit simplex for Lagrange interpolation
