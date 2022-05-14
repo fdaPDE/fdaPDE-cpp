@@ -3,6 +3,7 @@
 
 #include "../utils/Symbols.h"
 #include "VectorFieldExpressions.h"
+#include "ScalarField.h"
 
 namespace fdaPDE{
 namespace core{
@@ -27,8 +28,9 @@ namespace core{
     const std::function<double(SVector<N>)>& operator[](size_t i) const;
     std::function<double(SVector<N>)>& operator[](size_t i);
 
-    // inner product
+    // inner product VectorField.dot(VectorField)
     InnerProduct<N> dot(const VectorField<N>& rhs) const;
+    ScalarField<N> dot(const SVector<N>& op) const;
   };
 
   // A functor to represent an inner product.

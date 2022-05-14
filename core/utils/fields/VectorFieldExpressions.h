@@ -2,6 +2,7 @@
 #define __VECTOR_FIELD_EXPRESSIONS_H__
 
 #include "../utils/Symbols.h"
+#include "ScalarField.h"
 #include <functional>
 
 namespace fdaPDE{
@@ -33,7 +34,7 @@ namespace core{
   // Base class for vectorial expressions
   // need to carry N to avoid template argument deduction failed
   template <int N, typename E> struct VectExpr {
-    // call operator() on the base type E
+    // call operator[] on the base type E
     std::function<double(SVector<N>)> operator[](size_t i) const {
       return static_cast<const E&>(*this)[i];
     }
@@ -51,6 +52,9 @@ namespace core{
       }
       return result;
     }
+
+    // dot product between VectExpr and SVector
+    virtual ScalarField<N> dot(const SVector<N>& op) const;
   };
 
   // an expression node representing a constant vector
@@ -145,6 +149,22 @@ namespace core{
     return VectBinOp<N, E, VectScalar<N>, VectFunctorOP<N, std::multiplies<>> >
       (op1.get(), VectScalar<N>(op2), VectFunctorOP<N, std::multiplies<>>(std::multiplies<>()));
   }
+
+  // allow dot product between a VectExpr and an (eigen) SVector.
+  template <int N, typename E>
+  ScalarField<N> VectExpr<N, E>::dot(const SVector<N>& op) const {
+    std::function<double(SVector<N>)> result;
+    // build lambda expressing inner product
+    result = [this, op](const SVector<N>& x) -> double{
+      double y = 0;
+      for(size_t i = 0; i < N; ++i)
+	y += op[i]*operator[](i)(x);
+      
+      return y;
+    };
+    return ScalarField<N>(result);
+  }
+  // NOTE: the other notation requires extending Eigen::Matrix class. See "utils/MatrixAddons.h" for details
   
 }}
 

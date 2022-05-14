@@ -71,6 +71,21 @@ InnerProduct<N> VectorField<N>::dot(const VectorField<N> &rhs) const {
   return InnerProduct<N>(*this, rhs);
 }
 
+template <int N>
+ScalarField<N> VectorField<N>::dot(const SVector<N>& op) const {
+  std::function<double(SVector<N>)> result;
+  // build lambda expressing inner product
+  result = [this, op](const SVector<N>& x) -> double{
+    double y = 0;
+    for(size_t i = 0; i < N; ++i)
+      y += op[i]*operator[](i)(x);
+      
+    return y;
+  };
+  return ScalarField<N>(result);
+}
+
+
 // InnerProduct definitions
 
 // evaluate the form on two different points (this is like evaluating one scalar field at one point,
