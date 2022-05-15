@@ -67,8 +67,8 @@ VectorField<N> operator*(const VectorField<N>& op, double scalar){
 
 // return a functor representing an inner product.
 template <int N>
-InnerProduct<N> VectorField<N>::dot(const VectorField<N> &rhs) const {  
-  return InnerProduct<N>(*this, rhs);
+DotProduct<VectorField<N>, VectorField<N>> VectorField<N>::dot(const VectorField<N> &rhs) const {  
+  return DotProduct<VectorField<N>, VectorField<N>>(*this, rhs);
 }
 
 template <int N>
@@ -83,30 +83,4 @@ ScalarField<N> VectorField<N>::dot(const SVector<N>& op) const {
     return y;
   };
   return ScalarField<N>(result);
-}
-
-
-// InnerProduct definitions
-
-// evaluate the form on two different points (this is like evaluating one scalar field at one point,
-// the second one at another point and then perform the inner product between the two numerical results)
-template <int N>
-double InnerProduct<N>::operator()(const SVector<N>& x, const SVector<N>& y) const{
-  // implementation of the scalar product operation
-  double result = 0;
-  for(size_t i = 0; i < N; ++i){
-    result += lhs_[i](x)*rhs_[i](y);
-  }
-  return result;
-}
-
-// consider the analytical expression of the inner product as a scalar field, evaluate it at point x
-template <int N>
-double InnerProduct<N>::operator()(const SVector<N>& x) const{
-  // implementation of the scalar product operation
-  double result = 0;
-  for(size_t i = 0; i < N; ++i){
-    result += lhs_[i](x)*rhs_[i](x);
-  }
-  return result;
 }

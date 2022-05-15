@@ -3,7 +3,6 @@
 
 #include "../utils/Symbols.h"
 #include "../utils/fields/VectorField.h"
-using fdaPDE::core::InnerProduct;
 using fdaPDE::core::VectorField;
 #include "../MESH/Element.h"
 using fdaPDE::core::MESH::Element;
@@ -13,15 +12,15 @@ using fdaPDE::core::MESH::Element;
 // class representing the gradient operator (transport term)
 // requires C++17 standard to allow for automatic class template argument deduction
 
-template <unsigned int L>
+template <unsigned int L = 0>
 class Gradient : public BilinearFormExpr<Gradient<L>>{
 private:
-  SVector<L> b_ = Eigen::Matrix<double, L, 1>::Ones(); // default initialization just sets b to the identity
+  SVector<L> b_;
 
 public:
   Gradient() = default;
   Gradient(const SVector<L>& b) : b_(b) {}
-
+  
   // provide the discretization for the gradient operator. In particular this method implements a custom quadrature rule
   // for approximating the (i,j)-th element of the stiffness matrix \int_e phi_i * b.dot(\Nabla phi_j)
   // integrate() will be called by Integrator as a result of the expression template expansion of the problem's bilinear form
@@ -46,7 +45,13 @@ public:
   }
 };
 
-// deduction guide for Gradient class to avoid specifying any template parameter while typing differential operators
+// template argument deduction guide
 template <int L> Gradient(const SVector<L>&) -> Gradient<L>;
+
+// out of class definition for dot product, allow for formal syntax dot(b, Gradient()) where b is any vector
+template <int L>
+Gradient<L> dot(const SVector<L>& b, const Gradient<0>& g){
+  return Gradient(b);
+}
 
 #endif // __GRADIENT_H__

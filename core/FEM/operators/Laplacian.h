@@ -2,7 +2,6 @@
 #define __LAPLACIAN_H__
 
 #include "../utils/fields/VectorField.h"
-using fdaPDE::core::InnerProduct;
 using fdaPDE::core::VectorField;
 #include "../MESH/Element.h"
 using fdaPDE::core::MESH::Element;

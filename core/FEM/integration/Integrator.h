@@ -10,7 +10,6 @@
 #include "../FunctionalBasis.h"
 #include <cstddef>
 
-using fdaPDE::core::InnerProduct;
 using fdaPDE::core::VectorField;
 using fdaPDE::core::MESH::Element;
 
