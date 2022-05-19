@@ -28,7 +28,7 @@ class Assembler {
 private:
   constexpr static unsigned n_basis = ct_binomial_coefficient(N+ORDER, ORDER);
   Mesh<M, N>& mesh_;                                // mesh
-  Integrator<2U,6U> integrator{};                     // quadrature rule to approximate integrals
+  Integrator<2U,6U> integrator{};                   // quadrature rule to approximate integrals
   ReferenceBasis<M, N, ORDER> referenceBasis{};     // functional basis over reference N-dimensional unit simplex
   
 public:
@@ -38,7 +38,7 @@ public:
   template <typename E>
   Eigen::SparseMatrix<double> assemble(const E& bilinearForm);
   // assemble forcing vector
-  Eigen::Matrix<double, Eigen::Dynamic, 1> forcingTerm(const ScalarField<N>& f);
+  Eigen::Matrix<double, Eigen::Dynamic, 1> forcingTerm(const Eigen::Matrix<double, Eigen::Dynamic, 1>& f);
 
   // prescribe Dirichlet Boundary condtions
   void dirichletBoundaryConditions(Eigen::SparseMatrix<double>& stiffMatrix,
@@ -89,7 +89,7 @@ Eigen::SparseMatrix<double> Assembler<M,N,ORDER>::assemble(const E& bilinearForm
 };
 
 template <unsigned int M, unsigned int N, unsigned int ORDER>
-Eigen::Matrix<double, Eigen::Dynamic, 1> Assembler<M,N,ORDER>::forcingTerm(const ScalarField<N>& f) {
+Eigen::Matrix<double, Eigen::Dynamic, 1> Assembler<M,N,ORDER>::forcingTerm(const Eigen::Matrix<double, Eigen::Dynamic, 1>& f) {
 
   Eigen::Matrix<double, Eigen::Dynamic, 1> result{};
   result.resize(mesh_.getNumberOfNodes(), 1); // there are as many basis functions as number of nodes in the mesh
@@ -104,8 +104,9 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> Assembler<M,N,ORDER>::forcingTerm(const
     // integrate on each node
     for(size_t i = 0; i < n_basis; ++i){
       if(e->getBoundaryMarkers()[i].second == 0){ // skip computation if node is a boundary node
-	auto phi_i = basis[i];	      // basis function
-	auto functional = f*phi_i;    // functional to integrate
+	auto phi_i = basis[i];	                  // basis function
+	// f[e->getID()] is the value of the discretized forcing field (given as datum) over the current element
+	auto functional = f[e->getID()]*phi_i;    // functional to integrate
 	
 	// perform integration and store result exploiting additiviy of the integral
         result[e->getFESupport()[i].first] += integrator.integrate(*e, functional);

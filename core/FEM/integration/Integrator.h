@@ -17,7 +17,7 @@ using fdaPDE::core::VectorField;
 // Given a function f() its integral \int_K f(x)dx can be approximated using a quadrature rule. The general
 // scheme of a qudrature formula for the approximation of integral \int_K f(x)dx is given by a finite sum
 // \sum_{i=1}^N [f(x_i) * w_i] where x_i and w_i are properly choosen quadrature nodes and weights.
-//N space dimension, K number of nodes in the quadrature rule
+// N space dimension, K number of nodes in the quadrature rule
 template <unsigned int N, unsigned int K>
 class Integrator {
  private:
@@ -45,8 +45,8 @@ class Integrator {
 };
 
 // integrate a BilinearFormExpr over mesh element e using basis B. The pair (i,j) indicates the element position of the produced
-// value in the stiff matrix discretizing the form itself. This method is used as part of the assembly loop in the computation of the
-// stiff matrix
+// value in the matrix discretizing the form. This method is used as part of the assembly loop in the computation of the
+// discretization matrix of the differential operator L
 template <unsigned int N, unsigned int K>
 template <unsigned int ORDER, typename B, typename F>
 double Integrator<N, K>::integrate(const B& basis, const Element<ORDER, N>& e, int i , int j, const F& bilinearForm) const{
