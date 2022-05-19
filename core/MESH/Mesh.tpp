@@ -42,7 +42,7 @@ Mesh<M,N>::Mesh(const std::string& pointsFile,    const std::string& edgesFile,
 
 // build and provides a nice abstraction for an element given its ID
 template <unsigned int M, unsigned int N>
-const std::shared_ptr<Element<M,N>> Mesh<M,N>::requestElementById(unsigned int ID) const {
+std::shared_ptr<Element<M,N>> Mesh<M,N>::requestElementById(unsigned int ID) const {
   // in the following use auto to take advantage of eigen acceleration
   
   // get the indexes of vertices from triangles_

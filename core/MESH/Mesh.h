@@ -63,7 +63,7 @@ namespace MESH{
     // this creates an element abstraction only when it is actually needed to avoid waste
     // of resources. Mesh class does not represent explicitly elements of the mesh,
     // instead directly manages raw representation built on matrices
-    const std::shared_ptr<Element<M,N>> requestElementById(unsigned int ID) const;
+    std::shared_ptr<Element<M,N>> requestElementById(unsigned int ID) const;
 
     // allow range-for loop over mesh elements
     struct iterator{
@@ -82,11 +82,14 @@ namespace MESH{
       // dereference the iterator means to create Element object at current index
       std::shared_ptr<Element<M,N>> operator*() {
 	return meshContainer->requestElementById(index);
-      }    
+      }
       // two iterators are different when their indexes are different
       friend bool operator!=(const iterator& lhs, const iterator& rhs) {
 	return lhs.index != rhs.index;
       }
+
+      // const version to enable const auto& syntax
+      std::shared_ptr<Element<M,N>> operator*() const { return meshContainer->requestElementById(index); }
     };
 
     // provide begin() and end() methods
