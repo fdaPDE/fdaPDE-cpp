@@ -69,9 +69,9 @@ namespace MESH{
     unsigned int getID()                                const { return ID;            }
     FESupport getFESupport()                            const { return FEsupport;     }
     
-    // computes the baricentric coordinates of the element
-    SVector<M+1> computeBarycentricCoordinates(const SVector<N>& x) const;
-
+    SVector<M+1> computeBarycentricCoordinates(const SVector<N>& x) const;    // computes the baricentric coordinates of the element
+    SVector<N> computeMidPoint() const;                                       // computes the midpoint of the element
+    
     // check if a given point is inside the element
     template <bool is_manifold = (N!=M)> typename std::enable_if<!is_manifold, bool>::type
     contains(const SVector<N>& x) const;

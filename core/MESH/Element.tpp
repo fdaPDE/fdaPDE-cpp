@@ -34,6 +34,18 @@ SVector<M+1> Element<M, N>::computeBarycentricCoordinates(const SVector<N>& x) c
   return result;
 }
 
+// returns the midpoint of the element (dimension of the returned point is the same of the embedding dimension)
+template <unsigned int M, unsigned int N>
+SVector<N> Element<M, N>::computeMidPoint() const {
+  // a remarkable property of barycentric coordinates is that the center of gravity of an element has all its
+  // barycentric coordinates equal to 1/(N+1). In order to compute the midpoint of an element we hence map this
+  // point back in cartesian coordinates
+  SVector<M> barycentricMidPoint;
+  barycentricMidPoint.fill(1/(N+1));
+  
+  return baryMatrix*barycentricMidPoint + coords[0];
+}
+
 // returns the bounding box of the element
 template <unsigned int M, unsigned int N>
 std::pair<SVector<N>, SVector<N>> Element<M,N>::computeBoundingBox() const{
