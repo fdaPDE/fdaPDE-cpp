@@ -4,6 +4,8 @@
 #include <functional>
 #include "../Symbols.h"
 #include "ScalarFieldExpressions.h"
+#include "../../MESH/Mesh.h"
+using fdaPDE::core::MESH::Mesh;
 
 namespace fdaPDE{
 namespace core{
@@ -41,6 +43,12 @@ namespace core{
     virtual std::function<SVector<N>(SVector<N>)> derive() const { return nullptr; };
     // a ScalarField implementing this method has an analytical expression for its hessian
     virtual std::function<SMatrix<N>(SVector<N>)> deriveTwice() const { return nullptr; };
+
+    // discretize the scalar field over the given mesh with a discontinuous function which is constant at every mesh element.
+    // The result of the discretization is a numeric vector where element i corresponds to the evaluation of the scalar field
+    // at the midpoint of element i
+    template <unsigned int L, unsigned int K>
+    Eigen::Matrix<double, Eigen::Dynamic, 1> discretize(const Mesh<L, K>& mesh) const;
   };
 
   // the following classes can be used to force particular regularity conditions

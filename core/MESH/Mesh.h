@@ -93,8 +93,8 @@ namespace MESH{
     };
 
     // provide begin() and end() methods
-    iterator begin() { return iterator(this, 0); }
-    iterator end()   { return iterator(this, triangles_.rows()); }
+    iterator begin() const { return iterator(this, 0); }
+    iterator end()   const { return iterator(this, triangles_.rows()); }
 
     // getters
     unsigned int getNumberOfElements()                      const { return numElements;  }

@@ -39,11 +39,6 @@ public:
   Eigen::SparseMatrix<double> assemble(const E& bilinearForm);
   // assemble forcing vector
   Eigen::Matrix<double, Eigen::Dynamic, 1> forcingTerm(const Eigen::Matrix<double, Eigen::Dynamic, 1>& f);
-
-  // prescribe Dirichlet Boundary condtions
-  void dirichletBoundaryConditions(Eigen::SparseMatrix<double>& stiffMatrix,
-				   Eigen::Matrix<double, Eigen::Dynamic, 1>& forcingVector,
-				   const std::string& boundary_markers_file, const std::string& data_file) const;
 };
 
 // stiff matrix for laplacian operator
@@ -115,35 +110,6 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> Assembler<M,N,ORDER>::forcingTerm(const
     }
   }
   return result;
-}
-
-template <unsigned int M, unsigned int N, unsigned int ORDER>
-void Assembler<M,N,ORDER>::dirichletBoundaryConditions(Eigen::SparseMatrix<double>& stiffMatrix,
-						       Eigen::Matrix<double, Eigen::Dynamic, 1>& forcingVector,
-						       const std::string& boundary_markers_file,
-						       const std::string& data_file) const{
-  // read files and impose boundary condition...
-  CSVReader reader;
-  CSVFile<double> boundary_data = reader.parseFile<double>(data_file);
-  CSVFile<int> boundary_markers = reader.parseFile<int>(boundary_markers_file);
-
-  Eigen::Matrix<double, Eigen::Dynamic, 1> boundaryMatrix = boundary_data.toEigen();
-  Eigen::Matrix<int, Eigen::Dynamic, 1> boundaryMarkersMatrix = boundary_markers.toEigen();
-
-  // impose dirichet conditions in stiffness matrix
-  for(size_t j = 0; j < boundaryMarkersMatrix.rows(); ++j){
-    // if this node is a boundary node, change the corresponding row in the stiff matrix
-    // To impose a Dirichlet boundary condition means to introduce an equation of the kind u_j = b_j where j is the index
-    // of the boundary node and b_j is the boundary value we want to impose on this node. This actually removes one degree
-    // of freedom from the system. We do so by zeroing out the j-th row of the stiff matrix and set the corresponding
-    // diagonal element to 1
-    if(boundaryMarkersMatrix[j] == 1){
-      stiffMatrix.row(j) *= 0;              // zero all entries of this row
-      stiffMatrix.coeffRef(j,j) = 1;        // set diagonal element to 1 to impose equation u_j = b_j
-      forcingVector[j] = boundaryMatrix[j]; // impose boundary value
-    }
-  }
-  return;
 }
 
 #endif // __ASSEMBLER_H__

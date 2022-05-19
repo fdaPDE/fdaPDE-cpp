@@ -45,3 +45,17 @@ SMatrix<N> ScalarField<N>::getHessianApprox(const SVector<N>& x, double step) co
   
   return hessian;
 }
+
+// discretize the scalar field over the given mesh
+template <unsigned int N>
+template <unsigned int L, unsigned int K>
+Eigen::Matrix<double, Eigen::Dynamic, 1> ScalarField<N>::discretize(const Mesh<L, K>& mesh) const{
+  Eigen::Matrix<double, Eigen::Dynamic, 1> discretizedField;
+  discretizedField.resize(mesh.getNumberOfElements(), 1); // allocate space
+  discretizedField.fill(0);                               // init result vector to zero
+
+  // perform discretization
+  for(const auto& e : mesh) discretizedField[e->getID()] = f(e->computeMidPoint());
+
+  return discretizedField;
+}
