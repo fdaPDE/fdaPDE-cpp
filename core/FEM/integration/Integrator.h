@@ -2,16 +2,16 @@
 #define __INTEGRATOR_H__
 
 #include "../MESH/Element.h"
+using fdaPDE::core::MESH::Element;
+#include "../MESH/Mesh.h"
+using fdaPDE::core::MESH::Mesh;
+
 #include "../utils/Symbols.h"
 #include "../utils/CompileTime.h"
 #include "../utils/fields/VectorField.h"
-#include "IntegratorTables.h"
-#include "../LagrangianBasis.h"
-#include "../FunctionalBasis.h"
-#include <cstddef>
-
 using fdaPDE::core::VectorField;
-using fdaPDE::core::MESH::Element;
+
+#include "IntegratorTables.h"
 
 // An integrator class. Just integrates a given integrable function (i.e. ScalarField or MultivariatePolynomials) on a mesh element.
 // Given a function f() its integral \int_K f(x)dx can be approximated using a quadrature rule. The general
@@ -28,10 +28,14 @@ class Integrator {
   // constructor
   Integrator() : integrationTable_(IntegratorTable<N, K>()) {};
 
-  // F is any callable representing the function to integrate. L is the order of the mesh
+  // integrate a callable F over a mesh element e
   template <unsigned int ORDER, typename F>
   double integrate(const Element<ORDER, N>& e, F& f) const;
 
+  // integrate a callable F over the entire mesh m
+  template <unsigned int M, unsigned int L, typename F>
+  double integrate(const Mesh<M, L>& m, const F& f) const;
+  
   // integrate a BilinearFormExpr to produce the (i,j)-th element of its discretization
   template <unsigned int ORDER, typename B, typename F>
   double integrate(const B& basis, const Element<ORDER, N>& e, int i , int j, const F& bilinearForm) const;
@@ -57,7 +61,7 @@ double Integrator<N, K>::integrate(const B& basis, const Element<ORDER, N>& e, i
   return value * std::abs(e.getBaryMatrix().determinant())/ct_factorial(N);
 }
 
-// Integrate a callable F given an integrator table T and a mesh element e.
+// integrate a callable F over a mesh element e.
 template <unsigned int N, unsigned int K>
 template <unsigned int ORDER, typename F>
 double Integrator<N, K>::integrate(const Element<ORDER, N> &e, F &f) const {
@@ -72,5 +76,18 @@ double Integrator<N, K>::integrate(const Element<ORDER, N> &e, F &f) const {
   return value * (std::abs(e.getBaryMatrix().determinant())/ct_factorial(N));  
 }
 
+// integrate a callable F over the entire mesh m.
+// Just exploit linearity of the integral operation to sum the result of integrating F over each single mesh element
+template <unsigned int N, unsigned int K>
+template <unsigned int M, unsigned int L, typename F>
+double Integrator<N,K>::integrate(const Mesh<M, L> &m, const F &f) const {
+  double value = 0;
+  // cycle over all mesh elements
+  for(auto& element : m){
+    // integrate over the element and accumulate the result
+    value += integrate(element, f);
+  }
+  return value;
+}
 
 #endif // __INTEGRATOR_H__
