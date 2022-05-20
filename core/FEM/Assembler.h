@@ -80,7 +80,12 @@ Eigen::SparseMatrix<double> Assembler<M,N,ORDER>::assemble(const E& bilinearForm
       stiffnessMatrix.coeffRef(i,i) = 1;        // set diagonal element to 1 to impose equation u_j = b_j
     }
   }
-  return stiffnessMatrix;
+
+  // return just half of the discretization matrix if the form is symmetric (lower triangular part)
+  if (bilinearForm.isSymmetric())
+    return stiffnessMatrix.selfadjointView<Eigen::Lower>();
+  else
+    return stiffnessMatrix;
 };
 
 template <unsigned int M, unsigned int N, unsigned int ORDER>
