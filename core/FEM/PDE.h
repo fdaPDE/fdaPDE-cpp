@@ -56,7 +56,7 @@ public:
 // fill all internal data structures relative to the problem. Automatically called by constructor
 template <unsigned int M, unsigned int N, unsigned int ORDER, typename E, typename I>
 void PDE<M, N, ORDER, E, I>::init() {
-  Assembler<M,N,ORDER> assembler(domain_);              // create assembler object 
+  Assembler<M,N,ORDER> assembler(domain_);              // create assembler object
   R1_ = assembler.assemble(bilinearForm_);              // fill discretization matrix for current operator
   // SparseQR solver needs its matrix in compressed form (see Eigen documentation for details)
   R1_.makeCompressed();
