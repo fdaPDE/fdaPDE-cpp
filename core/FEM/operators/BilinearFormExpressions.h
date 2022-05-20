@@ -15,7 +15,6 @@ using fdaPDE::core::MESH::Element;
   }									\
   									
 template <typename E> struct BilinearFormExpr{
-
   // call integration method on base type
   template <unsigned int N, int M, unsigned int ORDER, typename B>
   double integrate(const B& b, const Element<ORDER, N>& e, int i , int j, const SVector<M>& qp) const{
@@ -24,6 +23,12 @@ template <typename E> struct BilinearFormExpr{
   
   // get underyling type composing the expression node
   const E& get() const { return static_cast<const E&>(*this); }
+
+  // computes if the expression refers to a symmetric bilinear form (this can be used to activate useful optimizations)
+  constexpr bool isSymmetric() const{
+    return static_cast<const E&>(*this).isSymmetric();
+  };
+
 };
 
 // a generic binary operation node
@@ -43,6 +48,9 @@ public:
   double integrate(const B& b, const Element<ORDER, N>& e, int i , int j, const SVector<M>& qp) const{
     return f_(op1_.integrate(b, e, i, j, qp), op2_.integrate(b, e, i, j, qp));
   }
+
+  // computes if the node refers to a symmetric bilinear form (both operands are symmetric, ok for linear operations)
+  constexpr bool isSymmetric() const{ return op1_.isSymmetric() && op2_.isSymmetric(); }
 };
 
 // node representing a single scalar in an expression
@@ -50,6 +58,9 @@ class BilinearFormScalar : public BilinearFormExpr<BilinearFormScalar> {
 private:
   double value_;
 public:
+  constexpr bool isSymmetric() const { return true;} // constant never break symmetry of the operator
+
+  // constructor
   BilinearFormScalar(double value) : value_(value) { }
   
   // integrate method. return the stored value

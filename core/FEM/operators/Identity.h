@@ -10,6 +10,7 @@ using fdaPDE::core::MESH::Element;
 
 // class representing the identity operator (reaction term)
 struct Identity : public BilinearFormExpr<Identity>{
+  constexpr bool isSymmetric() const { return true; } // symmetric operator
 
   // provide the discretization for the identity operator. In particular this method implements the quadrature rule
   // for approximating the (i,j)-th element of the stiffness matrix \int_e [phi_i * phi_j]
