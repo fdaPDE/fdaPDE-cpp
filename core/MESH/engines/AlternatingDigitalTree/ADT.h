@@ -4,10 +4,11 @@
 #include <list>
 #include <stack>
 
-#include "Tree.h"
 #include "../../../utils/Symbols.h"
-#include "Query.h"
+#include "../../../utils/DataStructures/Tree.h"
+using fdaPDE::core::Tree;
 #include "../../Mesh.h"
+#include "Query.h"
 
 namespace fdaPDE{
 namespace core{

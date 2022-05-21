@@ -7,7 +7,6 @@
 
 namespace fdaPDE{
 namespace core{
-namespace MESH{
   
   // An implementation of a binary tree data structure
 
@@ -81,6 +80,6 @@ namespace MESH{
   };
 
 #include "Tree.tpp"
-}}}
+}}
   
 #endif // __TREE_H__
