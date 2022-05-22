@@ -28,6 +28,9 @@ namespace core{
     // constructor
     Node(T data, unsigned int key) : data_(data), key_(key) {} ;
 
+    // low level utilities to directly set child pointers
+    void set_ptr(const node_ptr<T>& child, LinkDirection index) { children_[index] = child; }
+    
     // add child at first available position. Returns nullptr if there is no room
     node_ptr<T> addChild(const T& data, unsigned int key);
     // add child at node at the specified position. Returns nullptr if the index is already in use
@@ -68,6 +71,9 @@ namespace core{
       numNodes++;
     }
 
+    // initialize the tree from an already existing node_ptr. Usefull to build views
+    Tree(const node_ptr<T>& root_ptr) : root_(root_ptr) { nodeTable[root_ptr->getKey()] = root_; }
+    
     // insert node at first available position, returns the pointer to the inserted node
     node_ptr<T> insert(const T& data);
     // insert node as child given the ID of the father. Do nothing and return nullptr if there is already a child in that direction.
