@@ -85,3 +85,32 @@ node_ptr<T> Tree<T>::insert(const T &data, unsigned int ID, LinkDirection direct
   }  
   return nullptr;
 }
+
+template <typename T>
+template <typename F>
+void Tree<T>::DFS(const F& f) const {
+  std::stack<node_ptr<T>> stack{};        // use a stack to assist the search
+  std::set<unsigned int> visitedNodes{};  // set containing the IDs of visited nodes
+    
+  // push reference to root on stack
+  stack.push(root_);
+
+  // start visit
+  while(!stack.empty()){ // repeat until stack is not empty
+    node_ptr<T> currentNode = stack.top();
+    stack.pop();
+    if(visitedNodes.find(currentNode->getKey()) == visitedNodes.end()){ // node still not marked as visited
+      visitedNodes.insert(currentNode->getKey()); // mark this node as visited
+
+      // execute functor on data contained in this node
+      f(currentNode->getData());
+
+      // add child nodes to stack for later processing
+      for(const auto& childNode : currentNode->getChildren()){
+	if(childNode != nullptr)
+	  stack.push(childNode);
+      }
+    }
+  }
+  return;
+}

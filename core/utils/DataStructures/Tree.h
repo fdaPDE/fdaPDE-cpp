@@ -27,9 +27,6 @@ namespace core{
   public:
     // constructor
     Node(T data, unsigned int key) : data_(data), key_(key) {} ;
-
-    // low level utilities to directly set child pointers
-    void set_ptr(const node_ptr<T>& child, LinkDirection index) { children_[index] = child; }
     
     // add child at first available position. Returns nullptr if there is no room
     node_ptr<T> addChild(const T& data, unsigned int key);
@@ -79,9 +76,13 @@ namespace core{
     // insert node as child given the ID of the father. Do nothing and return nullptr if there is already a child in that direction.
     // This routine is usefull if the tree has to be built progressively using some external criterion
     node_ptr<T> insert(const T& data, unsigned int ID, LinkDirection direction);
-  
+
+    // perform depth-first-search over this tree applying functor F at each node. Observe that search always moves towards the right child
+    template <typename F> void DFS(const F& f) const;
+    
     // getters
     node_ptr<T> getNode(unsigned int ID) const { return nodeTable.at(ID); }
+    node_ptr<T> getRoot()                const { return root_;            }
     unsigned int getNumberOfNodes()      const { return numNodes;         }
   };
 
