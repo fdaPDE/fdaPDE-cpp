@@ -68,11 +68,11 @@ namespace core{
       numNodes++;
     }
 
-    // insert node at first available position
-    void insert(const T& data);
-    // insert node as child given the ID of the father. Do nothing if there is already a child in that direction.
+    // insert node at first available position, returns the pointer to the inserted node
+    node_ptr<T> insert(const T& data);
+    // insert node as child given the ID of the father. Do nothing and return nullptr if there is already a child in that direction.
     // This routine is usefull if the tree has to be built progressively using some external criterion
-    bool insert(const T& data, unsigned int ID, LinkDirection direction);
+    node_ptr<T> insert(const T& data, unsigned int ID, LinkDirection direction);
   
     // getters
     node_ptr<T> getNode(unsigned int ID) const { return nodeTable.at(ID); }

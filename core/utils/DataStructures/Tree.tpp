@@ -39,7 +39,7 @@ template <typename T> bool Node<T>::isLeaf() const {
 
 // insert a node at first available position
 template <typename T>
-void Tree<T>::insert(const T& data) {
+node_ptr<T> Tree<T>::insert(const T& data) {
   // perform a level-order traversal to find first available position
   std::queue<unsigned int> queue;
 
@@ -57,7 +57,7 @@ void Tree<T>::insert(const T& data) {
     if(newNode != nullptr){
       nodeTable[numNodes] = newNode;
       numNodes++;
-      return;
+      return newNode;
     }else{
       // in case the node is already full add its children ID to the queue for later processing
       for(node_ptr<T> child : node->getChildren()){
@@ -65,13 +65,13 @@ void Tree<T>::insert(const T& data) {
       }
     }
   }
-  return;
+  return nullptr;
 }
 
 // add node as child of ID following the specified direction (LEFT or RIGHT child). Returns false if
 // the operation cannot be performed.
 template <typename T>
-bool Tree<T>::insert(const T &data, unsigned int ID, LinkDirection direction) {
+node_ptr<T> Tree<T>::insert(const T &data, unsigned int ID, LinkDirection direction) {
   // take father node using nodeTable
   node_ptr<T> father = nodeTable.at(ID);
 
@@ -81,7 +81,7 @@ bool Tree<T>::insert(const T &data, unsigned int ID, LinkDirection direction) {
     // add child to nodeTable
     nodeTable[numNodes] = child;
     numNodes++;
-    return true;
+    return child;
   }  
-  return false;
+  return nullptr;
 }

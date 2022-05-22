@@ -66,7 +66,7 @@ void ADT<M,N>::init(const std::vector<std::pair<SVector<2*N>, unsigned int>>& da
 	double split_point = offset[dim] + std::pow(0.5, iteration); // split point
 	if(nodeData[dim] < split_point){
       	  nodeRange.second[dim] = split_point;   // shrink node range on the left
-	  if(tree.insert(ADTnode<2*N>(nodeID, nodeData, nodeRange), current->getKey(), LinkDirection::LEFT )){ // O(1) operation
+	  if(tree.insert(ADTnode<2*N>(nodeID, nodeData, nodeRange), current->getKey(), LinkDirection::LEFT ) != nullptr){ // O(1) operation
 	    inserted = true;                     // stop searching for location
 	    break;
 	  }else
@@ -74,7 +74,7 @@ void ADT<M,N>::init(const std::vector<std::pair<SVector<2*N>, unsigned int>>& da
 	}
 	else{
 	  nodeRange.first[dim] = split_point;    // shrink node range on the right
-	  if(tree.insert(ADTnode<2*N>(nodeID, nodeData, nodeRange), current->getKey(), LinkDirection::RIGHT)){ // O(1) operation
+	  if(tree.insert(ADTnode<2*N>(nodeID, nodeData, nodeRange), current->getKey(), LinkDirection::RIGHT) != nullptr){ // O(1) operation
 	    inserted = true;                     // stop searching for location
 	    break;
 	  }else{
