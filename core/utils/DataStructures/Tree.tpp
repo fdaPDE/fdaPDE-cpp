@@ -1,11 +1,11 @@
 // Node
 
 // add node containing data as child of "key" at first available position. Do nothing if no child can be added
-template <typename T> node_ptr<T> Node<T>::addChild(const T& data, unsigned int key) {
+template <typename T> node_ptr<T> Node<T>::addChild(const T& data, unsigned int key, const node_ptr<T>& father) {
   for (size_t i = 0; i < children_.size(); ++i){
     if(children_[i] == nullptr){
       // add node at first available position
-      children_[i] = std::make_shared<Node<T>>(data, key);
+      children_[i] = std::make_shared<Node<T>>(data, key, father);
       
       return children_[i];
     }
@@ -15,13 +15,13 @@ template <typename T> node_ptr<T> Node<T>::addChild(const T& data, unsigned int 
 
 // add node containing data as child of "key" at the given position (LEFT or RIGHT child). Do nothing if link
 // already busy
-template <typename T> node_ptr<T> Node<T>::addChild(const T& data, unsigned int key, LinkDirection index) {
+template <typename T> node_ptr<T> Node<T>::addChild(const T& data, unsigned int key, const node_ptr<T>& father, LinkDirection index) {
   // link already in use
   if(children_[index] != nullptr)
     return nullptr;
   
   // add node as child
-  children_[index] = std::make_shared<Node<T>>(data, key);
+  children_[index] = std::make_shared<Node<T>>(data, key, father);
   return children_[index];
 }
 
@@ -37,9 +37,8 @@ template <typename T> bool Node<T>::isLeaf() const {
 
 // Tree
 
-// insert a node at first available position
 template <typename T>
-node_ptr<T> Tree<T>::insert(const T& data) {
+node_ptr<T> Tree<T>::insert(const T& data, unsigned int ID) {
   // perform a level-order traversal to find first available position
   std::queue<unsigned int> queue;
 
@@ -53,9 +52,9 @@ node_ptr<T> Tree<T>::insert(const T& data) {
     node_ptr<T> node = nodeTable[key];
     
     // this evaluates true if the insertion happened
-    node_ptr<T> newNode = node->addChild(data, numNodes);
+    node_ptr<T> newNode = node->addChild(data, ID, node);
     if(newNode != nullptr){
-      nodeTable[numNodes] = newNode;
+      nodeTable[ID] = newNode;
       numNodes++;
       return newNode;
     }else{
@@ -68,22 +67,33 @@ node_ptr<T> Tree<T>::insert(const T& data) {
   return nullptr;
 }
 
-// add node as child of ID following the specified direction (LEFT or RIGHT child). Returns false if
-// the operation cannot be performed.
+// insert a node at first available position
 template <typename T>
-node_ptr<T> Tree<T>::insert(const T &data, unsigned int ID, LinkDirection direction) {
+node_ptr<T> Tree<T>::insert(const T& data) {
+  return insert(data, numNodes);
+}
+
+template <typename T>
+node_ptr<T> Tree<T>::insert(const T &data, unsigned int ID, unsigned int fatherID, LinkDirection direction) {
   // take father node using nodeTable
-  node_ptr<T> father = nodeTable.at(ID);
+  node_ptr<T> father = nodeTable.at(fatherID);
 
   // add child to father at given direction
-  node_ptr<T> child = father->addChild(data, numNodes, direction);
+  node_ptr<T> child = father->addChild(data, ID, father, direction);
   if (child != nullptr){ // insertion is ok
     // add child to nodeTable
-    nodeTable[numNodes] = child;
+    nodeTable[ID] = child;
     numNodes++;
     return child;
   }  
   return nullptr;
+}
+
+// add node as child of fatherID following the specified direction (LEFT or RIGHT child). Returns nullptr if
+// the operation cannot be performed.
+template <typename T>
+node_ptr<T> Tree<T>::insert(const T &data, unsigned int fatherID, LinkDirection direction) {
+  return insert(data, numNodes, fatherID, direction);
 }
 
 template <typename T>

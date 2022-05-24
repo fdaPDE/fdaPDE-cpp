@@ -23,15 +23,16 @@ namespace core{
     T data_;                               // the actual stored data
     std::array<node_ptr<T>, 2> children_;  // children_[0] is the left child. children_[1] is the right child
     unsigned int key_;                     // unique node key
-
+    node_ptr<T> father_;                   // father
+    
   public:
     // constructor
-    Node(T data, unsigned int key) : data_(data), key_(key) {} ;
+    Node(T data, unsigned int key, const node_ptr<T>& father) : data_(data), key_(key), father_(father) {} ;
     
     // add child at first available position. Returns nullptr if there is no room
-    node_ptr<T> addChild(const T& data, unsigned int key);
+    node_ptr<T> addChild(const T& data, unsigned int key, const node_ptr<T>& father);
     // add child at node at the specified position. Returns nullptr if the index is already in use
-    node_ptr<T> addChild(const T& data, unsigned int key, LinkDirection index);
+    node_ptr<T> addChild(const T& data, unsigned int key, const node_ptr<T>& father, LinkDirection index);
 
     // a method to check if this node has no children (leaf node)
     bool isLeaf() const;
@@ -40,6 +41,7 @@ namespace core{
     T getData()                              const { return data_;     }
     std::array<node_ptr<T>, 2> getChildren() const { return children_; }
     unsigned int getKey()                    const { return key_;      }
+    node_ptr<T> getFather()                  const { return father_;   }
   };
 
   // a binary tree storing objects of type T.
@@ -58,25 +60,33 @@ namespace core{
   public:
     // an empty tree
     Tree() = default;
-    // initialize the tree with its root node
-    Tree(const T& root) {
-      node_ptr<T> rootNode = std::make_shared<Node<T>>(root, 0);
-      root_ = rootNode;
-
-      // store reference to root in nodeTable
-      nodeTable[numNodes] = rootNode;
-      numNodes++;
-    }
 
     // initialize the tree from an already existing node_ptr. Usefull to build views
     Tree(const node_ptr<T>& root_ptr) : root_(root_ptr) { nodeTable[root_ptr->getKey()] = root_; }
+
+    // initialize the tree with a non 0 ID for the root node
+    Tree(const T& root, unsigned int rootID) {
+      node_ptr<T> rootNode = std::make_shared<Node<T>>(root, rootID, nullptr);
+      root_ = rootNode;
+
+      // store reference to root in nodeTable
+      nodeTable[rootID] = rootNode;
+      numNodes++;
+    }
+
+    Tree(const T& root) : Tree(root, 0) {}
     
     // insert node at first available position, returns the pointer to the inserted node
     node_ptr<T> insert(const T& data);
+    // insert node at first available position using the given ID as node identifier
+    node_ptr<T> insert(const T& data, unsigned int ID);
+    
     // insert node as child given the ID of the father. Do nothing and return nullptr if there is already a child in that direction.
     // This routine is usefull if the tree has to be built progressively using some external criterion
-    node_ptr<T> insert(const T& data, unsigned int ID, LinkDirection direction);
-
+    node_ptr<T> insert(const T& data, unsigned int fatherID, LinkDirection direction);
+    // the following overloading allow to specify the ID of the inserted node
+    node_ptr<T> insert(const T& data, unsigned int ID, unsigned int fatherID, LinkDirection direction);
+    
     // perform depth-first-search over this tree applying functor F at each node. Observe that search always moves towards the right child
     template <typename F> void DFS(const F& f) const;
     
