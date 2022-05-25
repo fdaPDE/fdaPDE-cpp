@@ -70,6 +70,8 @@ private:
 
   // evaluate a single tree in the spline_ vector
   double eval(const Tree<SplineNode>& tree, double x) const;
+  // extract i-th subtree
+  Tree<SplineNode>& operator[](std::size_t i) { return std::get<1>(spline_[i]); } 
   
 public:
   // wraps an already existing spline tree in a spline object
@@ -82,14 +84,10 @@ public:
   // initialize a spline from a vector of spline trees and associated weights (used by gradient() method)
   Spline(const std::vector<std::tuple<double, Tree<SplineNode>, int, int> >& spline) : spline_(spline) {}
   
-  double operator()(double) const;              // evaluates the spline vector at a given point
-  Spline gradient() const;                      // compute derivative of spline. This is another spline object
-  Tree<SplineNode>& operator[](std::size_t i) { // extract i-th subtree
-    return std::get<1>(spline_[i]);
-  } 
+  double operator()(double) const;    // evaluates the spline vector at a given point
+  Spline gradient() const;            // compute derivative of spline. This is another spline object
 };
 
-// spline basis implementation
 class SplineBasis{
 private:
   std::vector<double> knotsVector_{};  // vector of knots
@@ -97,15 +95,23 @@ private:
 
 public:
   // constructor
-  SplineBasis(const std::vector<double>& knotsVector, int order) : knotsVector_(knotsVector) {
+  SplineBasis(const std::vector<double>& knotsVector, int order) {
+    
+    // pad the knot vector to obtain a full basis for the whole knot span [u_0, u_n]
+    for(std::size_t i = 0; i < order; ++i) 
+      knotsVector_.push_back(knotsVector[0]);
+    knotsVector_.insert(knotsVector_.end(), knotsVector.begin(), knotsVector.end());
+    for(std::size_t i = 0; i < order; ++i)
+      knotsVector_.push_back(knotsVector[knotsVector.size()-1]);
+
     // build spline basis
     for(std::size_t k = 0; k < knotsVector_.size() - order; ++k){ // create spline at each iteration
       basis_.push_back(Spline(knotsVector_, k, order));
     }
   }
 
-  // return i-th element of the basis
-  Spline& operator[](std::size_t i) { return basis_[i]; }
+  Spline& operator[](std::size_t i) { return basis_[i]; }   // return i-th element of the basis
+  int getNumberOfBasis() const { return basis_.size(); }    // return the number of basis elements
 };
 
 #include "SplineBasis.tpp"

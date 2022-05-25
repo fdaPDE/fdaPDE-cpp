@@ -52,9 +52,9 @@ double Spline::eval(const Tree<SplineNode>& tree, double x) const {
     double partialProduct_ = 1;
     double inputPoint_;
     
-  ResultCollector(const node_ptr<SplineNode>& root_ptr, double inputPoint) : inputPoint_(inputPoint) {
-    partialMap_[root_ptr->getKey()] = 1;
-  };
+    ResultCollector(const node_ptr<SplineNode>& root_ptr, double inputPoint) : inputPoint_(inputPoint) {
+      partialMap_[root_ptr->getKey()] = 1;
+    };
 
     // add result only if N_i0(x) = 1, that is if x is contained in the knot span [u_i, u_i+1)
     void leafAction(const node_ptr<SplineNode>& currentNode) {
@@ -69,7 +69,7 @@ double Spline::eval(const Tree<SplineNode>& tree, double x) const {
     // develop spline recursion to build either [(x-u_i)/(u_i+j - u_i)]*N_i,j-1(x) or [(u_i+j+1 - x)/(u_i+j+1 - u_i+1)]*N_i+1,j-1(x)
     //                                          |---------------------|               |-------------------------------|
     //                                                    wL                                          wR
-    // in particular this member computes wL or wR (depending if currentNode is a left or right child of N_ij(x)) via a call to
+    // depending if currentNode is a left or right child of N_ij(x). This action computes either wL or wR depending on the result of
     // currentNode->getData()(inputPoint_)
     void firstVisitAction(const node_ptr<SplineNode>& currentNode) {
       // update partial product
@@ -90,7 +90,7 @@ double Spline::eval(const Tree<SplineNode>& tree, double x) const {
   ResultCollector resultCollector = ResultCollector(tree.getRoot(), x);
   tree.DFS(resultCollector);
   return resultCollector.result_;
- }
+}
 
 // evaluate a spline at a given point.
 double Spline::operator()(double x) const {
@@ -115,13 +115,15 @@ Spline Spline::gradient() const {
     Spline N_L(knotVector_, i,   j-1);
     Spline N_R(knotVector_, i+1, j-1);
     
-    // compute adjust coefficient
-    double alpha = j/(knotVector_[i+j] - knotVector_[i]);
-    double beta  = -j/(knotVector_[i+j+1] - knotVector_[i+1]);
-
-    // push result in gradientSpline vector
-    gradientSpline.push_back(std::make_tuple(alpha, N_L[0], i,  j-1));    
-    gradientSpline.push_back(std::make_tuple(beta, N_R[0], i+1, j-1));
+    // compute adjustment coefficients and push result in gradientSpline vector
+    if(knotVector_[i+j] - knotVector_[i] != 0){
+      double alpha = j/(knotVector_[i+j] - knotVector_[i]);
+      gradientSpline.push_back(std::make_tuple(alpha, N_L[0], i,   j-1));    
+    }
+    if(knotVector_[i+j+1] - knotVector_[i+1] != 0){
+      double beta  = -j/(knotVector_[i+j+1] - knotVector_[i+1]);
+      gradientSpline.push_back(std::make_tuple(beta,  N_R[0], i+1, j-1));
+    }
   }
 
   return Spline(gradientSpline);
