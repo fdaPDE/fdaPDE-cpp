@@ -58,14 +58,6 @@ public:
 class Spline {
 private:
   Tree<SplineNode> spline_; // the actual spline
-
-  // associate to a pair of non-negative integers a unique integer
-  inline int cantorPairingFunction(int x, int y) const {
-    return (x+y)*(x+y+1)/2 + y;
-  }
-  inline int cantorPairingFunction(std::pair<int, int> pair) const {
-    return cantorPairingFunction(pair.first, pair.second);
-  }
   
 public:
   // wraps an already existing spline tree in a spline object
@@ -79,38 +71,38 @@ public:
     pairID rootID = std::make_pair(i,j-1);
     
     // insert root in spline tree
-    spline_ = Tree<SplineNode>(SplineNode()/*, cantorPairingFunction(rootID)*/);
+    spline_ = Tree<SplineNode>(SplineNode());
     
     // use a queue structure to assist the spline build process
-    std::queue<pairID> queue{};
-    std::queue<unsigned int> queueID{};
-    queue.push(rootID); // push root to queue
-    queueID.push(spline_.getRoot()->getKey());
+    std::queue<std::pair<unsigned int, pairID>> queue{};
+    //    std::queue<unsigned int> queueID{};
+    queue.push(std::make_pair(spline_.getRoot()->getKey(),rootID)); // push root to queue
+    //    queueID.push(spline_.getRoot()->getKey());
     
     // spline construction
     while(!queue.empty()){
-      pairID currentPair = queue.front();
+      std::pair<unsigned int, pairID> currentNode = queue.front();
       queue.pop();
 
-      int nodeID = queueID.front(); // identifier of this node
-      queueID.pop();
-
-      // child pair identifiers
-      pairID leftChild  = std::make_pair(currentPair.first,   currentPair.second - 1);
-      pairID rightChild = std::make_pair(currentPair.first+1, currentPair.second - 1);
+      int nodeID = currentNode.first;           // identifier of this node
+      pairID currentPair = currentNode.second;  // pair (i,j) of spline node N_ij(x)
       
       // build left spline node
-      SplineNode leftNode  = SplineNode(knotVector[leftChild.first], knotVector[leftChild.first + currentPair.second]);
-      auto left_ptr = spline_.insert(leftNode/*, leftChildID*/, nodeID, LinkDirection::LEFT);
+      SplineNode leftNode  = SplineNode(knotVector[currentPair.first],
+					knotVector[currentPair.first + currentPair.second]);
+      auto left_ptr = spline_.insert(leftNode, nodeID, LinkDirection::LEFT);
       
       // build right spline node
-      SplineNode rightNode = SplineNode(knotVector[rightChild.first + currentPair.second], knotVector[rightChild.first]);
-      auto right_ptr = spline_.insert(rightNode/*, rightChildID*/, nodeID, LinkDirection::RIGHT);      
+      SplineNode rightNode = SplineNode(knotVector[currentPair.first + 1 + currentPair.second],
+					knotVector[currentPair.first + 1]);
+      auto right_ptr = spline_.insert(rightNode, nodeID, LinkDirection::RIGHT);      
       
-      // push child nodes to queue for later processing if children nodes are not leaf
+      // push child nodes to queue for later processing if children nodes are not leafs
       if(currentPair.second - 1 > 0){
-	queue.push(leftChild); queue.push(rightChild);
-	queueID.push(left_ptr->getKey()); queueID.push(right_ptr->getKey());
+	queue.push(std::make_pair(left_ptr->getKey(),
+				  std::make_pair(currentPair.first,     currentPair.second - 1)));
+	queue.push(std::make_pair(right_ptr->getKey(),
+				  std::make_pair(currentPair.first + 1, currentPair.second - 1)));
       }
     }
     return;
@@ -124,70 +116,52 @@ public:
 };
 
 double Spline::operator()(double x) const {
-  // perform a slight variation of the DFS search to collect the spline evaluation
-  std::set<unsigned int> visitedNodes{};     // set containing the IDs of visited nodes
-  node_ptr<SplineNode> currentNode = spline_.getRoot();
-  
-  double result  = 0;
-  std::map<int, double> partials{};
-  partials[currentNode->getKey()] = 1;
-  
-  double partial = 1;
-  LinkDirection lastLink;
-  
-  // start visit
-  while(visitedNodes.size() < spline_.getNumberOfNodes()){ // repeat until tree not completely explored
-    if(currentNode->isLeaf()){ // leaf node, this is an N_i0 node
-      std::pair<double, double> support = currentNode->getData().getKnotSpan();
 
-      if(currentNode->getData().contains(x)){ // add result only if N_i0(x) = 1
-	result += partial;
-      }
-      visitedNodes.insert(currentNode->getKey()); // leaf visited
-      
-      // back to previous node 
-      currentNode = currentNode->getFather();
+  struct ResultCollector{
+    double result_ = 0;
+    std::map<int, double> partialMap_{};
+    double partialProduct_ = 1;
+    double inputPoint_;
+    
+    ResultCollector(const node_ptr<SplineNode>& root_ptr, double inputPoint) : inputPoint_(inputPoint) {
+      partialMap_[root_ptr->getKey()] = 1;
+    };
 
-      partial = partials[currentNode->getKey()];
-    }else{
-      // search for child to visit
-      std::size_t i = 0;
-      while(i < 2){
-	auto childNode = currentNode->getChildren()[i];
-	
-	if(childNode != nullptr &&
-	   visitedNodes.find(childNode->getKey()) == visitedNodes.end()){ // node still not marked as visited
+    // add result only if N_i0(x) = 1, that is if x is contained in the knot span [u_i, u_i+1)
+    void leafAction(const node_ptr<SplineNode>& currentNode) {
+      if(currentNode->getData().contains(inputPoint_))
+	result_ += partialProduct_;
 
-          lastLink = static_cast<LinkDirection>(i);             // keep track of last move
-	  partial *= childNode->getData()(x); // update result
-	  partials[childNode->getKey()] = partial;
-
-          currentNode = childNode;                              // move to child
-	  visitedNodes.insert(currentNode->getKey());           // insert child as visited node
-	  break;
-	}
-	++i;
-      }
-      // if all child visited mark this node as visited and go back to father
-      if(i == 2){
-
-        visitedNodes.insert(currentNode->getKey());
-	// back to previous node
-	if(currentNode->getFather() != nullptr){ // only root has nullptr father
-	  currentNode = currentNode->getFather();
-	  partial = partials[currentNode->getKey()];
-	}
-      }
+      // restore partialProduct to the one of the father
+      partialProduct_ = partialMap_[currentNode->getFather()->getKey()];
+      return;
     }
-  }
-  return result;
+    
+    void firstVisitAction(const node_ptr<SplineNode>& currentNode) {
+      // update partial product
+      partialProduct_ *= currentNode->getData()(inputPoint_);
+      partialMap_[currentNode->getKey()] = partialProduct_;
+      return;
+    }
+
+    void lastVisitAction(const node_ptr<SplineNode>& currentNode) {
+      // restore to partialProduct of the father
+      partialProduct_ = partialMap_[currentNode->getFather()->getKey()];
+      return;
+    }
+  };
+  
+  // perform a DFS search to collect the spline evaluation
+  ResultCollector resultObject = ResultCollector(spline_.getRoot(), x);
+  spline_.DFS(resultObject);
+  return resultObject.result_;;
 }
 
 // spline basis implementation
 class SplineBasis{
 private:
-  std::vector<double> knotsVector_{};
-  std::vector<Spline> basis_{}; // the spline basis. Each tree represent a single spline
+  std::vector<double> knotsVector_{};  // vector of knots
+  std::vector<Spline> basis_{};        // the spline basis.
 
 public:
   // constructor
@@ -197,6 +171,8 @@ public:
       basis_.push_back(Spline(knotsVector_, k, order));
     }
   }
+
+  // return i-th element of the basis
   Spline& operator[](std::size_t i) { return basis_[i]; }
 };
 

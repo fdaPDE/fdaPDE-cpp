@@ -98,7 +98,8 @@ node_ptr<T> Tree<T>::insert(const T &data, unsigned int fatherID, LinkDirection 
 
 template <typename T>
 template <typename F>
-void Tree<T>::DFS(const F& f) const {
+typename std::enable_if<std::is_invocable<F, T>::value, void>::type
+Tree<T>::DFS(const F& f) const {
   std::stack<node_ptr<T>> stack{};        // use a stack to assist the search
   std::set<unsigned int> visitedNodes{};  // set containing the IDs of visited nodes
     
@@ -122,5 +123,45 @@ void Tree<T>::DFS(const F& f) const {
       }
     }
   }
+  return;
+}
+
+template <typename T>
+template <typename F>
+typename std::enable_if<!std::is_invocable<F, T>::value, void>::type
+Tree<T>::DFS(F& f) const{
+  // visit starts from root
+  node_ptr<T> currentNode = root_;
+
+  // start visit
+  while(!root_->isVisited()){ // repeat until tree not completely explored
+    if(currentNode->isLeaf()){ // leaf node, this is an N_i0 node
+      f.leafAction(currentNode);      // perform leaf action
+
+      // set leaf as visited and go one level up
+      currentNode->setAsVisited();
+      currentNode = currentNode->getFather();  
+    }else{
+      // if childs are all visited mark this node as visited and go back to father
+      if(currentNode->isVisited()){
+	f.lastVisitAction(currentNode);	         // perform last visit action
+	
+	currentNode->setAsVisited();             // set this node as visited
+	currentNode = currentNode->getFather();  // back to father
+      }else{
+	// search for child to visit
+	for(std::size_t i = 0; i < currentNode->getChildren().size(); ++i){
+	  auto childNode = currentNode->getChildren()[i];
+	  if(childNode != nullptr && !childNode->isVisited()){ // node still not marked as visited
+	    currentNode = childNode;          // move to child
+	    
+	    f.firstVisitAction(currentNode);  // perform first visit action
+	    break;                            // stop searching
+	  }}}}
+  }
+
+  // reset visit status to allow a new fresh visit
+  for(auto& p : nodeTable) p.second->visited_ = false;
+
   return;
 }

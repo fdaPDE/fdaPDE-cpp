@@ -2,8 +2,11 @@
 #define __TREE_H__
 
 #include <memory>
+#include <type_traits>
 #include <unordered_map>
 #include <queue>
+#include <stack>
+#include <functional>
 
 namespace fdaPDE{
 namespace core{
@@ -12,18 +15,20 @@ namespace core{
 
   // forward declaration
   template <typename T> class Node;
+  template <typename T> class Tree;
   // define a node_ptr as a shared pointer to a node
   template <typename T> using node_ptr = std::shared_ptr<Node<T>>;
 
   enum LinkDirection {LEFT, RIGHT};
 
-  // a tree node holding a general type T object
+  // a tree node holding a general type T
   template <typename T> class Node {
   private:  
     T data_;                               // the actual stored data
     std::array<node_ptr<T>, 2> children_;  // children_[0] is the left child. children_[1] is the right child
     unsigned int key_;                     // unique node key
-    node_ptr<T> father_;                   // father
+    node_ptr<T> father_;                   // pointer to father
+    bool visited_ = false;                 // in a visiting algorithm this can be used to check if a node has been visited or not
     
   public:
     // constructor
@@ -42,6 +47,15 @@ namespace core{
     std::array<node_ptr<T>, 2> getChildren() const { return children_; }
     unsigned int getKey()                    const { return key_;      }
     node_ptr<T> getFather()                  const { return father_;   }
+
+    // a node is visited if both its children are visited. 
+    bool isVisited() const { return isLeaf() ? visited_ : children_[0]->visited_ && children_[1]->visited_; }
+
+    // declare tree as friend
+    friend Tree<T>;
+
+    void setAsVisited()    { visited_ = true;  }
+    void clearVisited()    { visited_ = false; }
   };
 
   // a binary tree storing objects of type T.
@@ -80,15 +94,25 @@ namespace core{
     node_ptr<T> insert(const T& data);
     // insert node at first available position using the given ID as node identifier
     node_ptr<T> insert(const T& data, unsigned int ID);
-    
     // insert node as child given the ID of the father. Do nothing and return nullptr if there is already a child in that direction.
     // This routine is usefull if the tree has to be built progressively using some external criterion
     node_ptr<T> insert(const T& data, unsigned int fatherID, LinkDirection direction);
     // the following overloading allow to specify the ID of the inserted node
     node_ptr<T> insert(const T& data, unsigned int ID, unsigned int fatherID, LinkDirection direction);
     
-    // perform depth-first-search over this tree applying functor F at each node. Observe that search always moves towards the right child
-    template <typename F> void DFS(const F& f) const;
+    // perform depth-first-search over this tree applying lambda function f at each node.
+    template <typename F>
+    typename std::enable_if<std::is_invocable<F, T>::value, void>::type
+    DFS(const F& f) const;
+    // general depth-first-search strategy accepting a type F. F must expose the following 3 methods:
+    //  - leafAction(const node_ptr<T>&):       action to perform when a leaf is visited (leafs are visited ones).
+    //  - firstVisitAction(const node_ptr<T>&): action to perform when a non-leaf node is visited for the first time
+    //  - lastVisitAction(const node_ptr<T>&):  action to perform when a non-leaf node has been completely visited. This action is executed
+    //                                          right before moving to father node
+    // moreover F can have a state to store and perform additional computations during the visit
+    template <typename F>
+    typename std::enable_if<!std::is_invocable<F, T>::value, void>::type
+    DFS(F& f) const;
     
     // getters
     node_ptr<T> getNode(unsigned int ID) const { return nodeTable.at(ID); }
