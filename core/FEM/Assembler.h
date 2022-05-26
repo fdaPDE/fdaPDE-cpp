@@ -8,19 +8,18 @@
 #include <memory>
 
 #include "../utils/fields/VectorField.h"
+using fdaPDE::core::VectorField;
 #include "../utils/fields/ScalarField.h"
+using fdaPDE::core::ScalarField;
 #include "../MESH/Mesh.h"
 #include "../MESH/Element.h"
-
-using fdaPDE::core::VectorField;
-using fdaPDE::core::ScalarField;
 using fdaPDE::core::MESH::Element;
 using fdaPDE::core::MESH::Mesh;
 
 // FEM module includes
 #include "integration/Integrator.h"
-#include "FunctionalBasis.h"
-#include "MultivariatePolynomial.h"
+#include "basis/LagrangianBasis.h"
+#include "basis/MultivariatePolynomial.h"
 #include "operators/BilinearFormExpressions.h"
 
 template <unsigned int M, unsigned int N, unsigned int ORDER>
@@ -29,7 +28,7 @@ private:
   constexpr static unsigned n_basis = ct_binomial_coefficient(N+ORDER, ORDER);
   Mesh<M, N>& mesh_;                                // mesh
   Integrator<2U,6U> integrator{};                   // quadrature rule to approximate integrals
-  ReferenceBasis<M, N, ORDER> referenceBasis{};     // functional basis over reference N-dimensional unit simplex
+  LagrangianBasis<N, ORDER> referenceBasis{};       // functional basis over reference N-dimensional unit simplex
   
 public:
   Assembler(Mesh<M, N>& mesh) : mesh_(mesh) {};
@@ -99,7 +98,7 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> Assembler<M,N,ORDER>::forcingTerm(const
   for(std::shared_ptr<Element<M,N>> e : mesh_){
 
     // build functional basis over the current element e
-    FunctionalBasis<M, N, ORDER> basis(*e);
+    LagrangianBasis<N, ORDER> basis(*e);
 
     // integrate on each node
     for(size_t i = 0; i < n_basis; ++i){

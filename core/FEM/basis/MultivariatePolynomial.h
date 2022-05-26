@@ -199,7 +199,7 @@ public:
   };
 
   double operator()(const SVector<N>& point) const;  // evaluate polynomial at point
-  VectorField<N> gradient();  // return callable gradient
+  VectorField<N> gradient() const;  // return callable gradient
   
   // getter
   std::array<double, MON> getCoeff() const { return coeffVector_; }
@@ -211,7 +211,7 @@ double MultivariatePolynomial<N, R>::operator()(const SVector<N> &point) const {
 }
 
 template <unsigned int N, unsigned int R>
-VectorField<N> MultivariatePolynomial<N, R>::gradient() {
+VectorField<N> MultivariatePolynomial<N, R>::gradient() const {
   return gradient_;
 }
 

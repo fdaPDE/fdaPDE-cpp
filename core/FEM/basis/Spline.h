@@ -1,20 +1,11 @@
-#ifndef __SPLINE_BASIS_H__
-#define __SPLINE_BASIS_H__
+#ifndef __SPLINE_H__
+#define __SPLINE_H__
 
-#include "../utils/DataStructures/Tree.h"
-#include <queue>
-#include <utility>
-using fdaPDE::core::node_ptr;
-using fdaPDE::core::LinkDirection;
-#include <cstddef>
-using fdaPDE::core::Tree;
 #include <vector>
-#include <cmath>
-#include <stack>
 #include <set>
-#include <functional>
 #include <map>
 #include <tuple>
+#include <queue>
 
 /* Let u_0, u_1, ..., u_n n distinct knots. Call U = [u_0, u_1, ..., u_n] knot vector. Define B_ij the i-th spline basis of order j.
    By Cox-de Boor formula splines can be recursively defined as
@@ -31,11 +22,11 @@ using fdaPDE::core::Tree;
 	   wL*N_01                    wR*N_11
    wL*N_00         wR*N_10    wL*N_10         wR*N_20
    
-   As such a B-Spline will be stored as a collection of well defined binary trees. Each node of the tree will contains the
-   knots required for computing weights w1 and w2. Evaluation will take place using a DFS visit with a proper defined functor.
+   Each node of the tree will contains the knots required for computing weights w1 and w2. Evaluation will take place using a
+   DFS visit with a proper defined functor (see Tree.h for specifications on how the DFS works).
 */
 
-// a node of a spline tree
+// a node of a spline tree (an N_ij object in the above schema)
 class SplineNode {
 private:
   double k1_, k2_; // knots u_i   and u_i+j
@@ -45,22 +36,67 @@ public:
   // constructor
   SplineNode() = default;
   SplineNode(double k1, double k2) : k1_(k1), k2_(k2), d1_(1/(k2_ - k1_)){ }
-  
-  std::pair<double, double> getKnotSpan() const { // for a spline of order j get the knot span [u_i, u_i+j)
+
+  // for a spline of order j get the knot span [u_i, u_i+j)
+  std::pair<double, double> getKnotSpan() const {
     return std::make_pair(k1_, k2_);
   }
+  
+  double operator()(double x) const { return (x - k1_)*d1_; }
 
-  double operator()(double x) const { // evaluate the weight for this node
-    return (x - k1_)*d1_;
-  }
-
+  // returns true if the point x belongs to the knot span of N_ij
   bool contains(double x) const {
     if(k1_ < k2_) return (x >= k1_ && x < k2_) ? true : false;
     else          return (x >= k2_ && x < k1_) ? true : false;
   }
 };
+
+// functor passed to the DFS visit. See Tree.h for more details
+struct SplineEvaluator{
+  double result_ = 0;
+  std::map<int, double> partialMap_{};
+  double partialProduct_ = 1;
+  double inputPoint_;
+    
+  SplineEvaluator(const node_ptr<SplineNode>& root_ptr, double inputPoint) : inputPoint_(inputPoint) {
+    partialMap_[root_ptr->getKey()] = 1;
+  };
+
+  // add result only if N_i0(x) = 1, that is if x is contained in the knot span [u_i, u_i+1)
+  void leafAction(const node_ptr<SplineNode>& currentNode) {
+    if(currentNode->getData().contains(inputPoint_))
+      result_ += partialProduct_;
+
+    // restore partialProduct to the one of the father
+    partialProduct_ = partialMap_[currentNode->getFather()->getKey()];
+    return;
+  }
+
+  /* A spline is defined by the recursive formula
+
+     [(x-u_i)/(u_i+j - u_i)]*N_i,j-1(x) or [(u_i+j+1 - x)/(u_i+j+1 - u_i+1)]*N_i+1,j-1(x)
+
+     At the end of recursion the spline equation can be seens as N_ij = w0*N_00 + w1*N_10 + ... + wM*N_M0
+     
+     During DFS visit coefficients w0, w1, ..., wM are computed from root to leafs. firstVisitAction() just develops the coefficients
+     product of each term N_i0.
+  */
+  void firstVisitAction(const node_ptr<SplineNode>& currentNode) {
+    // update partial product
+    partialProduct_ *= currentNode->getData()(inputPoint_);
+    partialMap_[currentNode->getKey()] = partialProduct_;
+    return;
+  }
+
+  // go back in the recursion tree
+  void lastVisitAction(const node_ptr<SplineNode>& currentNode) {
+    // restore to partialProduct of the father
+    partialProduct_ = partialMap_[currentNode->getFather()->getKey()];
+    return;
+  }
+};
   
-// just a functor wrapping a Tree<SplineNode>
+// just a collection of Tree<SplineNode>. Compliant with the functional basis concept adopted in the library.
 class Spline {
 private:
   // the actual spline. This is a vector since spline derivatives are stored as a a vector of lower degree spline trees
@@ -89,32 +125,6 @@ public:
   Spline gradient() const;            // compute derivative of spline. This is another spline object
 };
 
-class SplineBasis{
-private:
-  std::vector<double> knotsVector_{};  // vector of knots
-  std::vector<Spline> basis_{};        // the spline basis.
+#include "Spline.tpp"
 
-public:
-  // constructor
-  SplineBasis(const std::vector<double>& knotsVector, int order) {
-    
-    // pad the knot vector to obtain a full basis for the whole knot span [u_0, u_n]
-    for(std::size_t i = 0; i < order; ++i) 
-      knotsVector_.push_back(knotsVector[0]);
-    knotsVector_.insert(knotsVector_.end(), knotsVector.begin(), knotsVector.end());
-    for(std::size_t i = 0; i < order; ++i)
-      knotsVector_.push_back(knotsVector[knotsVector.size()-1]);
-
-    // build spline basis
-    for(std::size_t k = 0; k < knotsVector_.size() - order; ++k){ // create spline at each iteration
-      basis_.push_back(Spline(knotsVector_, k, order));
-    }
-  }
-
-  Spline& operator[](std::size_t i) { return basis_[i]; }   // return i-th element of the basis
-  int getNumberOfBasis() const { return basis_.size(); }    // return the number of basis elements
-};
-
-#include "SplineBasis.tpp"
-
-#endif // __SPLINE_BASIS_H__
+#endif // __SPLINE_H__

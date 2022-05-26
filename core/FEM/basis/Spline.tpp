@@ -47,51 +47,10 @@ Spline::Spline(const std::vector<double>& knotVector, int i, int j) : knotVector
 }
 
 double Spline::eval(const Tree<SplineNode>& tree, double x) const {
-
-  struct ResultCollector{
-    double result_ = 0;
-    std::map<int, double> partialMap_{};
-    double partialProduct_ = 1;
-    double inputPoint_;
-    
-    ResultCollector(const node_ptr<SplineNode>& root_ptr, double inputPoint) : inputPoint_(inputPoint) {
-      partialMap_[root_ptr->getKey()] = 1;
-    };
-
-    // add result only if N_i0(x) = 1, that is if x is contained in the knot span [u_i, u_i+1)
-    void leafAction(const node_ptr<SplineNode>& currentNode) {
-      if(currentNode->getData().contains(inputPoint_))
-	result_ += partialProduct_;
-
-      // restore partialProduct to the one of the father
-      partialProduct_ = partialMap_[currentNode->getFather()->getKey()];
-      return;
-    }
-
-    // develop spline recursion to build either [(x-u_i)/(u_i+j - u_i)]*N_i,j-1(x) or [(u_i+j+1 - x)/(u_i+j+1 - u_i+1)]*N_i+1,j-1(x)
-    //                                          |---------------------|               |-------------------------------|
-    //                                                    wL                                          wR
-    // depending if currentNode is a left or right child of N_ij(x). This action computes either wL or wR depending on the result of
-    // currentNode->getData()(inputPoint_)
-    void firstVisitAction(const node_ptr<SplineNode>& currentNode) {
-      // update partial product
-      partialProduct_ *= currentNode->getData()(inputPoint_);
-      partialMap_[currentNode->getKey()] = partialProduct_;
-      return;
-    }
-
-    // go back in the recursion tree
-    void lastVisitAction(const node_ptr<SplineNode>& currentNode) {
-      // restore to partialProduct of the father
-      partialProduct_ = partialMap_[currentNode->getFather()->getKey()];
-      return;
-    }
-  };
-  
   // perform a DFS search to collect the spline evaluation
-  ResultCollector resultCollector = ResultCollector(tree.getRoot(), x);
-  tree.DFS(resultCollector);
-  return resultCollector.result_;
+  SplineEvaluator evaluator = SplineEvaluator(tree.getRoot(), x);
+  tree.DFS(evaluator);
+  return evaluator.result_;
 }
 
 // evaluate a spline at a given point.
