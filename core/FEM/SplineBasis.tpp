@@ -16,15 +16,17 @@ Spline::Spline(const std::vector<double>& knotVector, int i, int j) : knotVector
   while(!queue.empty()){
     std::pair<unsigned int, pairID> currentNode = queue.front();
     queue.pop();
-
+    
     int nodeID = currentNode.first;           // identifier of this node
     pairID currentPair = currentNode.second;  // pair (i,j) of spline node N_ij(x)
-      
+
     // build left spline node
     SplineNode leftNode  = SplineNode(knotVector[currentPair.first],
 				      knotVector[currentPair.first + currentPair.second]);
+
     auto left_ptr = splineTree.insert(leftNode, nodeID, LinkDirection::LEFT);
-      
+
+    
     // build right spline node
     SplineNode rightNode = SplineNode(knotVector[currentPair.first + 1 + currentPair.second],
 				      knotVector[currentPair.first + 1]);
@@ -126,5 +128,5 @@ Spline Spline::gradient() const {
     }
   }
 
-  return Spline(gradientSpline);
+  return Spline(knotVector_, gradientSpline);
 }

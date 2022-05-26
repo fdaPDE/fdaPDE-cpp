@@ -82,7 +82,8 @@ public:
   Spline(const std::vector<double>& knotVector, int i, int j);
 
   // initialize a spline from a vector of spline trees and associated weights (used by gradient() method)
-  Spline(const std::vector<std::tuple<double, Tree<SplineNode>, int, int> >& spline) : spline_(spline) {}
+  Spline(const std::vector<double>& knotVector, const std::vector<std::tuple<double, Tree<SplineNode>, int, int> >& spline)
+    : knotVector_(knotVector), spline_(spline) {}
   
   double operator()(double) const;    // evaluates the spline vector at a given point
   Spline gradient() const;            // compute derivative of spline. This is another spline object
