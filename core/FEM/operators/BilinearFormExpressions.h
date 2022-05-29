@@ -5,6 +5,8 @@
 using fdaPDE::core::MESH::Element;
 #include "../utils/Symbols.h"
 
+#include <tuple>
+
 #define DEF_BILINEAR_FORM_EXPR_OPERATOR(OPERATOR, FUNCTOR)		\
   template <typename E1, typename E2>					\
   BilinearFormBinOp<E1, E2, FUNCTOR >					\
@@ -12,8 +14,8 @@ using fdaPDE::core::MESH::Element;
 	   const BilinearFormExpr<E2>& op2) {				\
     return BilinearFormBinOp<E1, E2, FUNCTOR >				\
       {op1.get(), op2.get(), FUNCTOR()};				\
-  }									\
-  									
+  }
+
 template <typename E> struct BilinearFormExpr{
   // call integration method on base type
   template <unsigned int N, int M, unsigned int ORDER, typename B>
@@ -24,11 +26,10 @@ template <typename E> struct BilinearFormExpr{
   // get underyling type composing the expression node
   const E& get() const { return static_cast<const E&>(*this); }
 
-  // computes if the expression refers to a symmetric bilinear form (this can be used to activate useful optimizations)
-  constexpr bool isSymmetric() const{
-    return static_cast<const E&>(*this).isSymmetric();
-  };
-
+  // returns the set of types associated with this expression
+  auto getTypeList() const {
+    return static_cast<const E&>(*this).getTypeList();
+  }
 };
 
 // a generic binary operation node
@@ -49,8 +50,7 @@ public:
     return f_(op1_.integrate(b, e, i, j, qp), op2_.integrate(b, e, i, j, qp));
   }
 
-  // computes if the node refers to a symmetric bilinear form (both operands are symmetric, ok for linear operations)
-  constexpr bool isSymmetric() const{ return op1_.isSymmetric() && op2_.isSymmetric(); }
+  auto getTypeList() const { return std::tuple_cat(op1_.getTypeList(), op2_.getTypeList()); }
 };
 
 // node representing a single scalar in an expression
@@ -58,8 +58,6 @@ class BilinearFormScalar : public BilinearFormExpr<BilinearFormScalar> {
 private:
   double value_;
 public:
-  constexpr bool isSymmetric() const { return true;} // constant never break symmetry of the operator
-
   // constructor
   BilinearFormScalar(double value) : value_(value) { }
   
@@ -68,6 +66,8 @@ public:
   double integrate(const B& b, const Element<ORDER, N>& e, int i , int j, const SVector<M>& qp) const{
     return value_;
   }
+
+  std::tuple<BilinearFormScalar> getTypeList() const { return std::make_tuple(*this); }
 };
 
 // allow scalar*operator expressions

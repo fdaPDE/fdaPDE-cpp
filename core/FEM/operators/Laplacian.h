@@ -15,7 +15,8 @@ private:
   SMatrix<L> diffusionTensor_{};
 
 public:
-  constexpr bool isSymmetric() const { return true; } // symmetric operator
+  std::tuple<Laplacian<L>> getTypeList() const { return std::make_tuple(*this); }
+
   
   Laplacian() = default; // use default constructor for isotropic diffusion
   Laplacian(const SMatrix<L>& diffusionTensor) : diffusionTensor_(diffusionTensor) {}

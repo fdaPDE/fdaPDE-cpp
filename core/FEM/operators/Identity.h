@@ -9,9 +9,11 @@ using fdaPDE::core::MESH::Element;
 #include "BilinearFormExpressions.h"
 
 // class representing the identity operator (reaction term)
-struct Identity : public BilinearFormExpr<Identity>{
-  constexpr bool isSymmetric() const { return true; } // symmetric operator
+template <unsigned int L = 0>
+struct Identity : public BilinearFormExpr<Identity<L>>{
 
+  std::tuple<Identity> getTypeList() const { return std::make_tuple(*this); }
+  
   // provide the discretization for the identity operator. In particular this method implements the quadrature rule
   // for approximating the (i,j)-th element of the stiffness matrix \int_e [phi_i * phi_j]
   // integrate() will be called by Integrator as a result of the expression template expansion of the problem's bilinear form

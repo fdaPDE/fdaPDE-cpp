@@ -21,7 +21,7 @@ public:
   Gradient() = default;
   Gradient(const SVector<L>& b) : b_(b) {}
 
-  constexpr bool isSymmetric() const { return false; } // non-symmetric operator
+  std::tuple<Gradient<L>> getTypeList() const { return std::make_tuple(*this); }
   
   // provide the discretization for the gradient operator. In particular this method implements a custom quadrature rule
   // for approximating the (i,j)-th element of the stiffness matrix \int_e phi_i * b.dot(\Nabla phi_j)
