@@ -21,17 +21,20 @@ using fdaPDE::core::MESH::Mesh;
 #include "basis/LagrangianBasis.h"
 #include "basis/MultivariatePolynomial.h"
 #include "operators/BilinearFormExpressions.h"
+#include "operators/BilinearFormTraits.h"
 
-template <unsigned int M, unsigned int N, unsigned int ORDER>
+// FEM assembler. M local dimension, N embedding dimension, B basis function, I integrator
+template <unsigned int M, unsigned int N, typename B, typename I>
 class Assembler {
 private:
-  constexpr static unsigned n_basis = ct_binomial_coefficient(N+ORDER, ORDER);
-  Mesh<M, N>& mesh_;                                // mesh
-  Integrator<2U,6U> integrator{};                   // quadrature rule to approximate integrals
-  LagrangianBasis<N, ORDER> referenceBasis{};       // functional basis over reference N-dimensional unit simplex
+  constexpr static unsigned n_basis = ct_binomial_coefficient(N+B::order_, B::order_);
+  const Mesh<M, N>& mesh_;  // mesh
+  I integrator_;            // quadrature rule to approximate integrals
+  B referenceBasis_;        // functional basis over reference N-dimensional unit simplex
   
 public:
-  Assembler(Mesh<M, N>& mesh) : mesh_(mesh) {};
+  Assembler(const Mesh<M, N>& mesh, const B& referenceBasis, const I& integrator) :
+    mesh_(mesh), referenceBasis_(referenceBasis), integrator_(integrator) {};
 
   // assemble stiffness matrix
   template <typename E>
@@ -41,9 +44,9 @@ public:
 };
 
 // stiff matrix for laplacian operator
-template <unsigned int M, unsigned int N, unsigned int ORDER>
+template <unsigned int M, unsigned int N, typename B, typename I>
 template <typename E>
-Eigen::SparseMatrix<double> Assembler<M,N,ORDER>::assemble(const E& bilinearForm) {
+Eigen::SparseMatrix<double> Assembler<M, N, B, I>::assemble(const E& bilinearForm) {
 
   std::vector<Eigen::Triplet<double>> tripletList;  // store triplets (node_i, node_j, integral_value)
   Eigen::SparseMatrix<double> stiffnessMatrix;      // stiffness matrix is sparse due to the local support of basis functions
@@ -58,7 +61,7 @@ Eigen::SparseMatrix<double> Assembler<M,N,ORDER>::assemble(const E& bilinearForm
     for(size_t i = 0; i < n_basis; ++i){
       for(size_t j = 0; j < n_basis; ++j){
 	// any integral computation for the construction of the stiffness matrix is performed on the reference element
-	double value = integrator.integrate(referenceBasis, *e, i, j, bilinearForm);
+	double value = integrator_.integrate(referenceBasis_, *e, i, j, bilinearForm);
 	
 	// From Eigen doucmentation: The input list of triplets does not have to be sorted, and can contains duplicated elements.
 	// In any case, the result is a sorted and compressed sparse matrix where the duplicates have been summed up.
@@ -72,7 +75,7 @@ Eigen::SparseMatrix<double> Assembler<M,N,ORDER>::assemble(const E& bilinearForm
   stiffnessMatrix.prune(std::numeric_limits<double>::epsilon() * 10); // remove almost zero entries
 
   // impose homogeneous boundary condition to remove not necessary degrees of freedom
-  // (otherwise the corresponding linear system is undetermined system!)
+  // (otherwise the corresponding linear system is undetermined!)
   for(size_t i = 0; i < stiffnessMatrix.rows(); ++i){
     if(mesh_.isOnBoundary(i)){ 
       stiffnessMatrix.row(i) *= 0;              // zero all entries of this row
@@ -81,14 +84,14 @@ Eigen::SparseMatrix<double> Assembler<M,N,ORDER>::assemble(const E& bilinearForm
   }
 
   // return just half of the discretization matrix if the form is symmetric (lower triangular part)
-  if (bilinearForm.isSymmetric())
+  if constexpr(is_symmetric<decltype(bilinearForm)>::value)
     return stiffnessMatrix.selfadjointView<Eigen::Lower>();
   else
     return stiffnessMatrix;
 };
 
-template <unsigned int M, unsigned int N, unsigned int ORDER>
-Eigen::Matrix<double, Eigen::Dynamic, 1> Assembler<M,N,ORDER>::forcingTerm(const Eigen::Matrix<double, Eigen::Dynamic, 1>& f) {
+template <unsigned int M, unsigned int N, typename B, typename I>
+Eigen::Matrix<double, Eigen::Dynamic, 1> Assembler<M, N, B, I>::forcingTerm(const Eigen::Matrix<double, Eigen::Dynamic, 1>& f) {
 
   Eigen::Matrix<double, Eigen::Dynamic, 1> result{};
   result.resize(mesh_.getNumberOfNodes(), 1); // there are as many basis functions as number of nodes in the mesh
@@ -98,7 +101,7 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> Assembler<M,N,ORDER>::forcingTerm(const
   for(std::shared_ptr<Element<M,N>> e : mesh_){
 
     // build functional basis over the current element e
-    LagrangianBasis<N, ORDER> basis(*e);
+    B basis(*e);
 
     // integrate on each node
     for(size_t i = 0; i < n_basis; ++i){
@@ -108,7 +111,7 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> Assembler<M,N,ORDER>::forcingTerm(const
 	auto functional = f[e->getID()]*phi_i;    // functional to integrate
 	
 	// perform integration and store result exploiting additiviy of the integral
-        result[e->getFESupport()[i].first] += integrator.integrate(*e, functional);
+        result[e->getFESupport()[i].first] += integrator_.integrate(*e, functional);
       }
       else result[e->getFESupport()[i].first] += 0;
     }

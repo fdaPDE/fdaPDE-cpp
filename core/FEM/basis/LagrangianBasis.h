@@ -56,6 +56,9 @@ private:
   // a Lagrangian basis is just a collection of properly defined polynomials
   std::array<MultivariatePolynomial<N,R>, ct_binomial_coefficient(N+R,R)> basis_;
 public:
+  // expose basis order
+  static constexpr unsigned int order_ = R;
+  
   // a Lagrangian basis built over a given set of nodes
   LagrangianBasis(const std::array<std::array<double, N>, ct_binomial_coefficient(N+R, R)>& nodes) : nodes_(nodes) {
 

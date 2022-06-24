@@ -7,6 +7,7 @@
 #include "operators/Gradient.h"
 #include "operators/Identity.h"
 #include "operators/Laplacian.h"
+#include "operators/dT.h"
 
 // returns true if type T is instance of template E<L> with L some unsigned int.
 template <typename T, template <unsigned int L> typename E>
@@ -45,8 +46,7 @@ struct has_instance_of<E, std::tuple<U, Tail...>> {
   using type = typename has_instance_of<E, std::tuple<Tail...>>::type;
 };
 
-// trait to detect if the bilinear form is symmetric. A bilinear form is
-// symmetric if it does not contain any not symmetric operator.
+// trait to detect if the bilinear form is symmetric. 
 template <typename E> struct is_symmetric {
 public:
   // returns false if an instantiation of Gradient<> is contained in the typelist of the bilinar form
@@ -56,11 +56,18 @@ public:
 // trait to detect if the bilinear form denotes an elliptic operator.
 template <typename E> struct is_elliptic {
 public:
-  // returns true if an instantiation of Gradient<> is contained in the typelist of the bilinar form
+  // returns true if an instantiation of Gradient<> is not contained in the typelist of the bilinar form
   static constexpr bool value =
-    (has_instance_of<Laplacian, decltype(std::declval<E>().getTypeList())>::type::value  ||
-     has_instance_of<Identity,  decltype(std::declval<E>().getTypeList())>::type::value) &&
-    !has_instance_of<Gradient,  decltype(std::declval<E>().getTypeList())>::type::value;
+    has_instance_of<Laplacian, decltype(std::declval<E>().getTypeList())>::type::value ||
+    has_instance_of<Identity,  decltype(std::declval<E>().getTypeList())>::type::value ||
+    has_instance_of<Gradient,  decltype(std::declval<E>().getTypeList())>::type::value;
+};
+
+// trait to detect if the bilinear form denotes a parabolic PDE.
+template <typename E> struct is_parabolic {
+public:
+  // returns true if the time derivative operator dT() is detected in the expression
+  static constexpr bool value = has_instance_of<dT, decltype(std::declval<E>().getTypeList())>::type::value;  
 };
 
 #endif // __BILINEAR_FORM_TRAITS_H__
