@@ -55,13 +55,42 @@ private:
   std::array<std::array<double, N>, ct_binomial_coefficient(R + N, R)> nodes_;
   // a Lagrangian basis is just a collection of properly defined polynomials
   std::array<MultivariatePolynomial<N,R>, ct_binomial_coefficient(N+R,R)> basis_;
+
+  void computeCoefficients(const std::array<std::array<double, N>, ct_binomial_coefficient(N+R, R)>& nodes);
+  
 public:
   // expose basis order
   static constexpr unsigned int order_ = R;
   
   // a Lagrangian basis built over a given set of nodes
   LagrangianBasis(const std::array<std::array<double, N>, ct_binomial_coefficient(N+R, R)>& nodes) : nodes_(nodes) {
+    computeCoefficients(nodes_);
+  };
 
+  // default constructor constructs a Lagrangian basis built over the referece N-dimensional unit simplex
+  LagrangianBasis() : LagrangianBasis<N, R>(ReferenceNodes<N, R>::nodes) {};
+
+  // construct a Lagrangian basis over a mesh element e
+  template <unsigned int M, unsigned int K>
+  LagrangianBasis(const Element<M, K>& e){
+    // collect nodes from mesh element
+    std::array<std::array<double, N>, ct_binomial_coefficient(N+R, R)> elementNodes{};
+    for(size_t j = 0; j < e.getFESupport().size(); ++j)
+      elementNodes[j] = {e.getFESupport()[j].second[0], e.getFESupport()[j].second[1]};
+
+    // call computing coefficients routine
+    computeCoefficients(elementNodes);    
+    return;
+  }
+
+  // subscript operator to directly access basis elements
+  const MultivariatePolynomial<N, R>& operator[](size_t i) const { return basis_[i]; }
+  int size() const { return basis_.size(); }  // return the number of basis elements
+  
+};
+
+template <unsigned int N, unsigned int R>
+void LagrangianBasis<N, R>::computeCoefficients(const std::array<std::array<double, N>, ct_binomial_coefficient(N+R, R)>& nodes){
     // build vandermonde matrix
     constexpr unsigned int M = ct_binomial_coefficient(N+R,R);
     constexpr std::array<std::array<unsigned, N>, M> expTable_ = MultivariatePolynomial<N,R>::expTable_;
@@ -79,7 +108,9 @@ public:
     Eigen::ColPivHouseholderQR<SMatrix<M>> QRdecomposition(V);
     for(size_t i = 0; i < M; ++i){
       // build rhs vector
-      SVector<M> b = Eigen::Matrix<double, M, 1>::Zero(); b[i] = 1;
+      SVector<M> b = Eigen::Matrix<double, M, 1>::Zero();
+      b[i] = 1;
+
       SVector<M> coeff = QRdecomposition.solve(b); // solve system
 
       // cast to array
@@ -87,28 +118,9 @@ public:
       for(size_t j = 0; j < M; ++j) coeff_array[j] = coeff[j];
       
       basis_[i] = MultivariatePolynomial<N, R>(coeff_array); // store basis
-    }    
-  };
+    }
+    return;
+}
 
-  // default constructor constructs a Lagrangian basis built over the referece N-dimensional unit simplex
-  LagrangianBasis() : LagrangianBasis<N, R>(ReferenceNodes<N, R>::nodes) {};
-
-  // construct a Lagrangian basis over a mesh element e
-  template <unsigned int M, unsigned int K>
-  LagrangianBasis(const Element<M, K>& e){
-    // collect nodes from mesh element
-    std::array<std::array<double, N>, ct_binomial_coefficient(N+R, R)> nodes{};
-    for(size_t j = 0; j < e.getFESupport().size(); ++j) 
-      nodes[j] = {e.getFESupport()[j].second[0], e.getFESupport()[j].second[1]};
-
-    // call constructor
-    LagrangianBasis(nodes_);
-  }
-
-  // subscript operator to directly access basis elements
-  const MultivariatePolynomial<N, R>& operator[](size_t i) const { return basis_[i]; }
-  int size() const { return basis_.size(); }  // return the number of basis elements
-  
-};
 
 #endif // __LAGRANGIAN_BASIS_H__
