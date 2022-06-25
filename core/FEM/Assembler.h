@@ -29,8 +29,8 @@ class Assembler {
 private:
   constexpr static unsigned n_basis = ct_binomial_coefficient(N+B::order_, B::order_);
   const Mesh<M, N>& mesh_;  // mesh
-  I integrator_;            // quadrature rule to approximate integrals
-  B referenceBasis_;        // functional basis over reference N-dimensional unit simplex
+  const I& integrator_;            // quadrature rule to approximate integrals
+  const B& referenceBasis_;        // functional basis over reference N-dimensional unit simplex
   
 public:
   Assembler(const Mesh<M, N>& mesh, const B& referenceBasis, const I& integrator) :
@@ -96,13 +96,11 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> Assembler<M, N, B, I>::forcingTerm(cons
   Eigen::Matrix<double, Eigen::Dynamic, 1> result{};
   result.resize(mesh_.getNumberOfNodes(), 1); // there are as many basis functions as number of nodes in the mesh
   result.fill(0);                             // init result vector to zero
-
+  
   // build forcing vector
-  for(std::shared_ptr<Element<M,N>> e : mesh_){
-
+  for(const std::shared_ptr<Element<M,N>>& e : mesh_){
     // build functional basis over the current element e
     B basis(*e);
-
     // integrate on each node
     for(size_t i = 0; i < n_basis; ++i){
       if(e->getBoundaryMarkers()[i].second == 0){ // skip computation if node is a boundary node
@@ -112,8 +110,9 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> Assembler<M, N, B, I>::forcingTerm(cons
 	
 	// perform integration and store result exploiting additiviy of the integral
         result[e->getFESupport()[i].first] += integrator_.integrate(*e, functional);
+      }else{
+	result[e->getFESupport()[i].first] += 0;
       }
-      else result[e->getFESupport()[i].first] += 0;
     }
   }
   return result;

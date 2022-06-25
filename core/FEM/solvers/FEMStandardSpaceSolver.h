@@ -40,8 +40,7 @@ public:
   Eigen::SparseMatrix<double> getR0() const { return R0_; }
 };
 
-// fill all internal data structures required by FEM to solve the problem. These
-// operations constitute the core of FEM and should be independent on any specific solver (both space or space-time)
+// fill internal data structures required by FEM to solve the problem.
 template <typename B, typename I>
 template <unsigned int M, unsigned int N, typename E> 
 void FEMStandardSpaceSolver<B, I>::init(const PDE<M, N, E>& pde) {
@@ -49,16 +48,15 @@ void FEMStandardSpaceSolver<B, I>::init(const PDE<M, N, E>& pde) {
   R1_ = assembler.assemble(pde.getBilinearForm());       // fill discretization matrix for current operator
   // SparseQR solver needs its matrix in compressed form (see Eigen documentation for details)
   R1_.makeCompressed();
-  
-  // differs between space and space-time solvers
-  forcingVector_ = assembler.forcingTerm(pde.getForcingData()[0]); // fill discretization of rhs for FEM linear system
+
+  forcingVector_ = assembler.forcingTerm(pde.getForcingData()); // fill discretization of rhs for FEM linear system
 
   // impose boundary conditions
   for(std::size_t i = 0; i < pde.getDomain().getNumberOfNodes(); ++i){
     if(pde.getDomain().isOnBoundary(i)){
       // boundaryDatum is a pair (nodeID, boundary value)
       double boundaryDatum = pde.getBoundaryData().at(i)[0];
-      
+
       // To impose a Dirichlet boundary condition means to introduce an equation of the kind u_j = b_j where j is the index
       // of the boundary node and b_j is the boundary value we want to impose on this node. This actually removes one degree
       // of freedom from the system. We do so by zeroing out the j-th row of the stiff matrix and set the corresponding
