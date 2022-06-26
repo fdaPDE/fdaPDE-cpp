@@ -5,11 +5,23 @@
 #include "../MESH/Mesh.h"
 #include "operators/BilinearFormTraits.h"
 #include <cstddef>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 using fdaPDE::core::MESH::Mesh;
 #include "Assembler.h"
 #include "operators/Identity.h"
+
+// forward declarations
+template <typename B, typename I> class FEMStandardSpaceTimeSolver;
+template <typename B, typename I> class FEMStandardSpaceSolver;
+
+// trait to select the space-only or the space-time variant of the PDE standard solver
+template <typename E, typename B, typename I> struct pde_standard_solver_selector {
+  using type = typename std::conditional<is_parabolic<E>::value,
+					 FEMStandardSpaceTimeSolver<B, I>,
+					 FEMStandardSpaceSolver<B, I>>::type;
+};
 
 // top level class to describe a partial differential equation. PDE objects are used by solvers to obtain a solution to the problem
 
@@ -29,11 +41,14 @@ private:
   // memorize boundary data in a sparse structure, by storing the index of the boundary node and the relative boundary value.
   // a vector is used as mapped type to handle space-time problems
   std::unordered_map<unsigned, DVector> boundaryData_{};
-  
+
+  DMatrix solution_;
 public:
   // expose space dimensions to PDE solver
   static constexpr unsigned M_ = M;
   static constexpr unsigned N_ = N;
+
+  typedef std::unordered_map<unsigned, DVector> boundary_data;
   
   // constructor, a DMatrix is accepted as forcingData to handle also space-time problems
   PDE(const Mesh<M,N>& domain, E bilinearForm, const DMatrix& forcingData) :
@@ -44,13 +59,21 @@ public:
   //void setNeumannBC();
   
   void setInitialCondition(const DVector& data) { initialCondition_ = data; };
+
+  // solves the differential equation using the supplied solver.
+  template <typename B, typename I, typename SOLVER = typename pde_standard_solver_selector<E, B, I>::type, typename... Args >
+  void solve(const B& base, const I& integrator, Args... args);
   
   // getters
-  const Mesh<M, N>& getDomain() const { return domain_; }
-  E getBilinearForm() const { return bilinearForm_; }
-  const std::unordered_map<unsigned, DVector>& getBoundaryData() const { return boundaryData_; };
-  DMatrix getForcingData() const { return forcingData_; }
-  DVector getInitialCondition() const { return initialCondition_; }
+  const Mesh<M, N>& getDomain()          const { return domain_; }
+  E getBilinearForm()                    const { return bilinearForm_; }
+  const boundary_data& getBoundaryData() const { return boundaryData_; };
+  DMatrix getForcingData()               const { return forcingData_; }
+  DVector getInitialCondition()          const { return initialCondition_; }
+
+  DMatrix getSolution() const { return solution_; }
+
+  void setSolution(const DMatrix& solution) { solution_ = solution; }
 };
 
 // argument deduction rule for PDE object
@@ -69,5 +92,16 @@ void PDE<M, N, E>::setDirichletBC(const DMatrix& data){
   }
   return;
 }
+
+template <unsigned int M, unsigned int N, typename E>
+template <typename B, typename I, typename SOLVER, typename... Args>
+void PDE<M, N, E>::solve(const B &base, const I &integrator, Args... args) {
+  // define solver and call solve method on it
+  SOLVER solver(base, integrator);
+  solver.solve(*this, args...);
+
+  return;
+}
+
 
 #endif // __PDE_H__
