@@ -6,21 +6,19 @@
 #include "../PDE.h"
 #include "FEMBaseSolver.h"
 
-template <typename B, typename I>
-struct FEMStandardSpaceSolver : public FEMBaseSolver<B, I>{
+struct FEMStandardSpaceSolver : public FEMBaseSolver{
   // constructor
-  FEMStandardSpaceSolver(const B& basis, const I& integrator) : FEMBaseSolver<B, I>(basis, integrator) {};
+  FEMStandardSpaceSolver() = default;
 
   // solves the PDE using the classical FEM approach: compute stiffness matrix using some finite element basis R1_ and forcing
   // vector b, then solves the linear system R1_*u = b where u is the searched PDE approximation
-  template <unsigned int M, unsigned int N, typename E> 
-  void solve(PDE<M, N, E>& pde);
+  template <unsigned int M, unsigned int N, typename E, typename B, typename I> 
+  void solve(const PDE<M, N, E>& pde, const B& basis, const I& integrator);
 };
 
-template <typename B, typename I>
-template <unsigned int M, unsigned int N, typename E> 
-void FEMStandardSpaceSolver<B, I>::solve(PDE<M, N, E>& pde){
-  this->init(pde); // init solver for this PDE
+template <unsigned int M, unsigned int N, typename E, typename B, typename I> 
+void FEMStandardSpaceSolver::solve(const PDE<M, N, E>& pde, const B& basis, const I& integrator){
+  this->init(pde, basis, integrator); // init solver for this PDE
 
   // impose boundary conditions
   for(std::size_t i = 0; i < pde.getDomain().getNumberOfNodes(); ++i){
@@ -49,9 +47,7 @@ void FEMStandardSpaceSolver<B, I>::solve(PDE<M, N, E>& pde){
   }
   
   // solve FEM linear system: discretizationMatrix_*solution_ = forcingVector_;
-  this->solution_ = solver.solve(this->forcingVector_);
-  
-  pde.setSolution(this->solution_);
+  this->solution_ = solver.solve(this->forcingVector_);  
   return;
 }
 

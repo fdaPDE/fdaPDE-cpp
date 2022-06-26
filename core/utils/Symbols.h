@@ -15,4 +15,7 @@ template <unsigned int N> using SMatrix = Eigen::Matrix<double, N, N>;
 using DMatrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 using DVector = Eigen::Matrix<double, Eigen::Dynamic, 1>;
 
+// sparse structures
+using SpMatrix = Eigen::SparseMatrix<double>;
+
 #endif // __SYMBOLS_H__

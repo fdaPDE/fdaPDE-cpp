@@ -13,14 +13,13 @@ using fdaPDE::core::MESH::Mesh;
 #include "operators/Identity.h"
 
 // forward declarations
-template <typename B, typename I> class FEMStandardSpaceTimeSolver;
-template <typename B, typename I> class FEMStandardSpaceSolver;
+class FEMStandardSpaceTimeSolver;
+class FEMStandardSpaceSolver;
 
 // trait to select the space-only or the space-time variant of the PDE standard solver
-template <typename E, typename B, typename I> struct pde_standard_solver_selector {
+template <typename E> struct pde_standard_solver_selector {
   using type = typename std::conditional<is_parabolic<E>::value,
-					 FEMStandardSpaceTimeSolver<B, I>,
-					 FEMStandardSpaceSolver<B, I>>::type;
+					 FEMStandardSpaceTimeSolver, FEMStandardSpaceSolver>::type;
 };
 
 // top level class to describe a partial differential equation. PDE objects are used by solvers to obtain a solution to the problem
@@ -30,26 +29,25 @@ template <typename E, typename B, typename I> struct pde_standard_solver_selecto
 // the manifold describing the domain. Refer to Mesh documentation for more details
 template <unsigned int M,  // dimension of the mesh embedding space
 	  unsigned int N,  // local dimension of the mesh
-	  typename E>      // type for the BilinearFormExpr
+	  typename E,      // type of the BilinearFormExpr
+	  typename SOLVER = typename pde_standard_solver_selector<E>::type>
 class PDE{
 private:
   const Mesh<M,N>& domain_;     // problem domain
   E bilinearForm_;              // the differential operator of the problem in its weak formulation
-  DMatrix forcingData_{};         // forcing data, a vector is used to handle space-time problems
-  DVector initialCondition_{};    // initial condition, used in space-time problems only
+  DMatrix forcingData_{};       // forcing data, a vector is used to handle space-time problems
+  DVector initialCondition_{};  // initial condition, used in space-time problems only
   
   // memorize boundary data in a sparse structure, by storing the index of the boundary node and the relative boundary value.
   // a vector is used as mapped type to handle space-time problems
   std::unordered_map<unsigned, DVector> boundaryData_{};
 
-  DMatrix solution_;
+  SOLVER solver_{}; // the solver used to solve the PDE
 public:
   // expose space dimensions to PDE solver
   static constexpr unsigned M_ = M;
   static constexpr unsigned N_ = N;
 
-  typedef std::unordered_map<unsigned, DVector> boundary_data;
-  
   // constructor, a DMatrix is accepted as forcingData to handle also space-time problems
   PDE(const Mesh<M,N>& domain, E bilinearForm, const DMatrix& forcingData) :
     domain_(domain), bilinearForm_(bilinearForm), forcingData_(forcingData) {};
@@ -57,23 +55,24 @@ public:
   // vector at index j gives the values at the domain boundary at time step j
   void setDirichletBC(const DMatrix& data);
   //void setNeumannBC();
-  
   void setInitialCondition(const DVector& data) { initialCondition_ = data; };
 
   // solves the differential equation using the supplied solver.
-  template <typename B, typename I, typename SOLVER = typename pde_standard_solver_selector<E, B, I>::type, typename... Args >
+  template <typename B, typename I, typename... Args>
   void solve(const B& base, const I& integrator, Args... args);
   
   // getters
-  const Mesh<M, N>& getDomain()          const { return domain_; }
-  E getBilinearForm()                    const { return bilinearForm_; }
-  const boundary_data& getBoundaryData() const { return boundaryData_; };
-  DMatrix getForcingData()               const { return forcingData_; }
-  DVector getInitialCondition()          const { return initialCondition_; }
+  const Mesh<M, N>& getDomain() const { return domain_; }
+  E getBilinearForm()           const { return bilinearForm_; }
+  DMatrix getForcingData()      const { return forcingData_; }
+  DVector getInitialCondition() const { return initialCondition_; }
+  const std::unordered_map<unsigned, DVector>& getBoundaryData() const { return boundaryData_; };
 
-  DMatrix getSolution() const { return solution_; }
-
-  void setSolution(const DMatrix& solution) { solution_ = solution; }
+  // solution informations produced by call to .solve() according to employed solver
+  const DMatrix& getSolution() const { return solver_.getSolution(); };
+  const DMatrix& getForce()    const { return solver_.getForce(); }
+  const SpMatrix& getR1()      const { return solver_.getR1(); };
+  const SpMatrix& getR0()      const { return solver_.getR0(); };
 };
 
 // argument deduction rule for PDE object
@@ -82,8 +81,8 @@ PDE(const Mesh<M,N>& domain, E bilinearForm, const DVector& forcingData) -> PDE<
 
 // store in the format (boundaryID, { ... }) the dirichlet boundary conditions, where { ... } is the time series of the
 // data at boundary for boundary node boundaryID
-template <unsigned int M, unsigned int N, typename E>
-void PDE<M, N, E>::setDirichletBC(const DMatrix& data){
+template <unsigned int M, unsigned int N, typename E, typename SOLVER>
+void PDE<M, N, E, SOLVER>::setDirichletBC(const DMatrix& data){
  for(size_t j = 0; j < domain_.getNumberOfNodes(); ++j){
     // if j is a node on the domain boundary store the pair (node ID - boundary value)
     if(domain_.isOnBoundary(j)){
@@ -93,15 +92,12 @@ void PDE<M, N, E>::setDirichletBC(const DMatrix& data){
   return;
 }
 
-template <unsigned int M, unsigned int N, typename E>
-template <typename B, typename I, typename SOLVER, typename... Args>
-void PDE<M, N, E>::solve(const B &base, const I &integrator, Args... args) {
+template <unsigned int M, unsigned int N, typename E, typename SOLVER>
+template <typename B, typename I, typename... Args>
+void PDE<M, N, E, SOLVER>::solve(const B &base, const I &integrator, Args... args) {
   // define solver and call solve method on it
-  SOLVER solver(base, integrator);
-  solver.solve(*this, args...);
-
+  solver_.solve(*this, base, integrator, args...);
   return;
 }
-
 
 #endif // __PDE_H__

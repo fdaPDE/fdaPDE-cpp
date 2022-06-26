@@ -6,22 +6,20 @@
 #include "../PDE.h"
 #include "FEMBaseSolver.h"
 
-template <typename B, typename I>
-struct FEMStandardSpaceTimeSolver : public FEMBaseSolver<B, I>{
+struct FEMStandardSpaceTimeSolver : public FEMBaseSolver{
   // constructor
-  FEMStandardSpaceTimeSolver(const B& basis, const I& integrator) : FEMBaseSolver<B, I>(basis, integrator) {};
+  FEMStandardSpaceTimeSolver() = default;
 
   // solves the PDE using a FEM discretization in space and a finite difference discretization in time (forward-euler scheme)
-  template <unsigned int M, unsigned int N, typename E> 
-  void solve(PDE<M, N, E>& pde, double deltaT);
+  template <unsigned int M, unsigned int N, typename E, typename B, typename I> 
+  void solve(const PDE<M, N, E>& pde, const B& basis, const I& integrator, double deltaT);
 };
 
 // use forward-euler to discretize the time derivative. Under this approximation we get a discretization matrix for the PDE operator
 // equal to K = [M/deltaT + A] (forward Euler scheme)
-template <typename B, typename I>
-template <unsigned int M, unsigned int N, typename E> 
-void FEMStandardSpaceTimeSolver<B, I>::solve(PDE<M, N, E>& pde, double deltaT) {
-  this->init(pde);
+template <unsigned int M, unsigned int N, typename E, typename B, typename I> 
+void FEMStandardSpaceTimeSolver::solve(const PDE<M, N, E>& pde, const B& basis, const I& integrator, double deltaT) {
+  this->init(pde, basis, integrator);
   // define eigen system solver, use QR decomposition.
   Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver;
 
@@ -44,7 +42,7 @@ void FEMStandardSpaceTimeSolver<B, I>::solve(PDE<M, N, E>& pde, double deltaT) {
     }
   }
   
-  // execute temporal loop to solve ODE system
+  // execute temporal loop to solve ODE system via forward-euler scheme
   for(std::size_t i = 1; i < timeSteps - 1; ++i){
     // impose boundary conditions
     for(std::size_t j = 0; j < pde.getDomain().getNumberOfNodes(); ++j){
@@ -59,12 +57,11 @@ void FEMStandardSpaceTimeSolver<B, I>::solve(PDE<M, N, E>& pde, double deltaT) {
       this->success = false;
       return;
     }
+    
     DVector u_i = solver.solve(rhs);                               // solve linear system
     this->solution_.col(i) = u_i;                                  // append time step solution to solution matrix
     rhs = (this->R0_/deltaT)*u_i + this->forcingVector_.col(i+1);  // update rhs for next iteration
   }
-
-  pde.setSolution(this->solution_);
   return;
 }
 
