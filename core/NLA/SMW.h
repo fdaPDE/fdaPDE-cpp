@@ -33,9 +33,6 @@ public:
     sparseSolver_.analyzePattern(A);     // Compute the ordering permutation vector from the structural pattern of A
     sparseSolver_.factorize(A);          // compute LU factorization of matrix A
   }
-
-  const SparseSolver& getSparseSolver() const { return sparseSolver_; }
-  const DenseSolver& getDenseSolver() const { return denseSolver_; }
   
   // solves linear system (A + U*C^{-1}*V)x = b, observe that we assume to supply the already computed inversion of the dense matrix C.
   // Indeed in some cases the inverse of C can be directly computed from known quantites without performing any inversion. In the case
@@ -61,6 +58,10 @@ public:
     // return system solution
     return y - v;
   }
+
+  // getters
+  const SparseSolver& getSparseSolver() const { return sparseSolver_; }
+  const DenseSolver&  getDenseSolver()  const { return denseSolver_;  }
   
 };
 
