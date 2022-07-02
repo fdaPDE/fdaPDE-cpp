@@ -68,8 +68,7 @@ private:
   void updateApproximateInverse(const Eigen::Index& k, const DVector& bk, const DVector& yk,
 				const column_sparsity_pattern& tildeJk){
     // compute diagonal entry l_kk
-    double l_kk = A_.coeff(k,k) - bk.transpose().dot(yk);
-    l_kk = 1/(std::sqrt(l_kk));
+    double l_kk = 1/(std::sqrt(A_.coeff(k,k) - bk.transpose().dot(yk)));
     Lk_[k] = l_kk;
 
     // update other entries according to current sparsity pattern tildeJk
@@ -114,14 +113,12 @@ public:
     Lk_.resize(n_, 1); 
   }
 
-  // getters
-
   // returns the Cholesky factor of matrix A_
   const Eigen::SparseMatrix<double>& getL() const { return L_; }
   // returns the approximate inverse of A_
   Eigen::SparseMatrix<double> getInverse()  const { return L_*L_.transpose(); }
   
-  // compute the Factorize Sparse Approximate Inverse of A using its K-condition number minimization
+  // compute the Factorize Sparse Approximate Inverse of A using a K-condition number minimization method
   // alpha:   number of sparsity pattern updates to compute for each column k of A_
   // beta:    number of indexes to augment the sparsity pattern of Lk_ per update step
   // epsilon: do not consider an entry of A_ as valid if it causes a reduction to its K-condition number lower than epsilon
@@ -143,7 +140,6 @@ public:
 	  // skip computation if tildeJk is empty. No linear system to solve here, just compute the diagonal
 	  // element of the current approximate inverse
 	  double l_kk = 1/(std::sqrt(A_.coeff(k, k)));
-	  tripetList.push_back(Eigen::Triplet<double>(k, k, l_kk));
 	  Lk_[k] = l_kk;
 	}else{
 	  // we must find the best vector fixed its sparsity pattern minimizing the K-condition number of L^T*A*L.
@@ -160,23 +156,15 @@ public:
 	  Eigen::LLT<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>> choleskySolver;
 	  choleskySolver.compute(Ak);
 	  yk = choleskySolver.solve(bk); // compute yk = A(tildeJk, tildeJk)^{-1}*Ak(tildeJk)
-
-	  // update approximate inverse
-	  updateApproximateInverse(k, bk, yk, tildeJk);
 	  
-	  // update current solution
-	  tripetList.push_back(Eigen::Triplet<double>(k,k,Lk_[k]));
-	  for(auto it = std::make_pair(tildeJk.begin(), 0);
-	      it.first != tildeJk.end();
-	      ++it.first, ++it.second){
-	    
-	    tripetList.push_back(Eigen::Triplet<double>(*it.first, k, Lk_[*it.first]));
-	  }	  
+	  // update approximate inverse
+	  updateApproximateInverse(k, bk, yk, tildeJk);	  
 	}
-
+	
 	// search for best update of the sparsity pattern
 	if(s != alpha){
           // computation of candidate indexes for sparsity pattern update
+	  // hatJk contains (candidateID j, A(j, Jk)^T * Lk[Jk])
 	  std::unordered_map<std::size_t, double> hatJk = selectCandidates(k);
 
 	  // use average value heuristic for selection of best candidates
@@ -184,7 +172,7 @@ public:
 	  double max_tau = 0; // tau > 0, ok to use 0 as starting treshold for maximum value search
 	  
 	  for(auto it = hatJk.begin(); it != hatJk.end(); ++it){
-	    double tau_jk = std::pow(it->second, 2)/A_.coeff(it->first, it->first);
+	    double tau_jk = std::pow(it->second, 2)/A_.coeff(it->first, it->first);	    
 	    hatJk[it->first] = tau_jk;
 	    tau_k += tau_jk;
 
@@ -213,6 +201,13 @@ public:
 	  }
 	}
       }
+
+      // update current solution
+      for(std::size_t i = 0; i < n_; ++i){
+	if(Lk_[i] != 0)
+	  tripetList.push_back(Eigen::Triplet<double>(i, k, Lk_[i]));
+      }	  
+      
     }
 
     // build final result
