@@ -5,16 +5,14 @@
 #include <Eigen/Dense>
 #include <Eigen/Cholesky>
 
-#include <Eigen/src/Core/util/Meta.h>
 #include <unordered_map>
 #include <unordered_set>
+#include <list>
 #include <vector>
 
 #include "../utils/Symbols.h"
 
-#include <chrono>
-
-// an implementation of the Factorized Sparse Approximate Inverse algorithm with sparsity pattern update.
+// An implementation of the Factorized Sparse Approximate Inverse algorithm with sparsity pattern update.
 // FSPAI assumes that the square, n x n, sparse matrix A of which we want to compute the inverse is SPD, in this sense there exists a lower
 // triangular matrix L_A such that A = L_A.transpose()*L_A. FSPAI finds an approximate inverse for the Cholesky factor L_A of matrix A
 // while keeping L_A sparse (in general indeed the inverse of a sparse matrix is not generally sparse, i.e. it could be dense)
@@ -37,9 +35,11 @@ private:
   SPDsolver choleskySolver_{}; // solver internally used for the solution of linear system A(tildeJk, tildeJk)*yk = Ak(tildeJk)
 
   // data structures used for efficiency reasons
-  sparsity_pattern sparsityPattern_{}; // the sparsity pattern of matrix A_ stored in RowMajor mode
-  std::unordered_set<Eigen::Index> candidateSet_{}; // set of candidate indexes to enter in the sparsity pattern of column Lk_
-  std::unordered_set<Eigen::Index> deltaPattern_{}; // set of new indexes entering the sparsity pattern of column Lk_ wrt previous iteration
+  sparsity_pattern sparsityPattern_{};               // the sparsity pattern of matrix A_ stored in RowMajor mode
+  std::unordered_set<Eigen::Index> candidateSet_{};  // set of candidate indexes to enter in the sparsity pattern of column Lk_
+  std::unordered_set<Eigen::Index> deltaPattern_{};  // set of new indexes entering the sparsity pattern of column Lk_ wrt previous iteration
+  std::unordered_map<Eigen::Index, double> hatJk_{}; // stores the tau_jk values of indexes eligible to enter the sparsity pattern of column Lk
+  
   Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> Ak_; // value of A(tildeJk, tildeJk). Stored here to avoid expensive copies
   Eigen::Matrix<double, Eigen::Dynamic, 1> bk_;              // value of Ak(tildeJk). Stored here to avoid expensive copies
   
@@ -83,10 +83,8 @@ private:
     return;
   }
 
-  // select candidate indexes for sparsity pattern update for column k
-  std::unordered_map<std::size_t, double> selectCandidates(const Eigen::Index& k) {
-    std::unordered_map<std::size_t, double> result{};
-
+  // select candidate indexes for sparsity pattern update for column k (this reflects in a modification to the hatJk_ structure)
+  void selectCandidates(const Eigen::Index& k) {
     // computation of candidate rows to enter in the sparsity pattern of column Lk_
     for(auto row = deltaPattern_.begin(); row != deltaPattern_.end(); ++row){
       for(auto j = sparsityPattern_.at(*row).begin(); j != sparsityPattern_.at(*row).end(); ++j)
@@ -96,7 +94,8 @@ private:
     }
     // clear delta pattern, waiting for a new one...
     deltaPattern_.clear();
-
+    hatJk_.clear();
+    
     // for efficiency reasons, compute the value of A(j, Jk)^T * Lk[Jk] here once and store for later use
     for(Eigen::Index j : candidateSet_){
       double v = 0;
@@ -106,11 +105,10 @@ private:
       }
       // index j is a possible candidate for updating the sparsity pattern of the solution along column k
       if(J_[k].find(j) == J_[k].end()){
-	result.emplace(j, v);
+	hatJk_.emplace(j, v);
       }
     }
-
-    return result;
+    return;
   }
   
 public:
@@ -133,10 +131,9 @@ public:
 	sparsityPattern_[it.row()].emplace(it.col());
       }
     }
-
   }
 
-  // returns the Cholesky factor of matrix A_
+  // returns the approximate inverse of the Cholesky factor of matrix A_
   const Eigen::SparseMatrix<double>& getL() const { return L_; }
   // returns the approximate inverse of A_
   Eigen::SparseMatrix<double> getInverse()  const { return L_*L_.transpose(); }
@@ -152,7 +149,7 @@ public:
 
     // cycle over each column of the sparse matrix A_
     for(std::size_t k = 0; k < n_; ++k){
-      Lk_.fill(0);              // reset column vector Lk_
+      Lk_.fill(0); // reset column vector Lk_
       candidateSet_.clear();    // reset candidateSet
       deltaPattern_.insert(k);  // init deltaPattern to allow for sparsity pattern updates
       
@@ -185,20 +182,19 @@ public:
 	    // update approximate inverse
 	    updateApproximateInverse(k, bk_, yk, tildeJk);	  
 	  }
-
+	  
 	  // search for best update of the sparsity pattern
-
-          // computation of candidate indexes for sparsity pattern update: hatJk contains (candidateID j, value of A(j, Jk)^T * Lk[Jk])
-	  std::unordered_map<std::size_t, double> hatJk = selectCandidates(k);
+          // computation of candidate indexes for sparsity pattern update: hatJk_ contains (candidateID j, value of A(j, Jk)^T * Lk[Jk])
+	  selectCandidates(k);
 
 	  // use average value heuristic for selection of best candidates
 	  double tau_k = 0;   // the average improvement to the K-condition number
 	  double max_tau = 0; // the maximum possible improvement.
 	  
-	  for(auto it = hatJk.begin(); it != hatJk.end(); ++it){
+	  for(auto it = hatJk_.begin(); it != hatJk_.end(); ++it){
 	    // compute tau_jk value
 	    double tau_jk = std::pow(it->second, 2)/A_.coeff(it->first, it->first);	    
-	    hatJk[it->first] = tau_jk;
+	    hatJk_[it->first] = tau_jk;
 	    // update average value
 	    tau_k += tau_jk;
 	    // update maximum value
@@ -207,37 +203,31 @@ public:
 
 	  // if the best improvement is higher than accetable treshold
 	  if(max_tau >= epsilon){
-	    tau_k /= hatJk.size();
+	    tau_k /= hatJk_.size();
 
 	    // select most promising first beta entries according to average heuristic
-	    for(std::size_t idx = 0; idx < beta && !hatJk.empty(); ++idx){
+	    for(std::size_t idx = 0; idx < beta && !hatJk_.empty(); ++idx){
 	      // find maximum
-	      auto max = hatJk.begin();
-	      for(auto it = hatJk.begin(); it != hatJk.end(); ++it){
+	      auto max = hatJk_.begin();
+	      for(auto it = hatJk_.begin(); it != hatJk_.end(); ++it){
 		if(it->second > max->second) max = it; 
 	      }
-
 	      // sparsity pattern update
 	      if(max->second > tau_k){
 		J_[k].insert(max->first);
 		deltaPattern_.insert(max->first); 
 	      }
-
 	      // erase current maximum to start a new maximum search until idx == beta
-	      hatJk.erase(max);
+	      hatJk_.erase(max);
 	    }
 	  }
 	}
       }
-
       // save approximate inverse of column k
       for(std::size_t i = 0; i < n_; ++i){
-	if(Lk_[i] != 0)
-	  tripetList.push_back(Eigen::Triplet<double>(i, k, Lk_[i]));
-      }	  
-      
+	if(Lk_[i] != 0) tripetList.push_back(Eigen::Triplet<double>(i, k, Lk_[i]));
+      }	        
     }
-
     // build final result
     L_.setFromTriplets(tripetList.begin(), tripetList.end());
     return;
