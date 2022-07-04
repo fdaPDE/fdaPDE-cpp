@@ -98,13 +98,13 @@ private:
     
     // for efficiency reasons, compute the value of A(j, Jk)^T * Lk[Jk] here once and store for later use
     for(Eigen::Index j : candidateSet_){
-      double v = 0;
-      // compute A(j, jK)*Lk(jK)
-      for(auto it = J_[k].begin(); it != J_[k].end(); ++it){
-	v += A_.coeff(j, *it)*Lk_[*it]; 
-      }
-      // index j is a possible candidate for updating the sparsity pattern of the solution along column k
       if(J_[k].find(j) == J_[k].end()){
+	double v = 0;
+	// compute A(j, jK)*Lk(jK)
+	for(auto it = J_[k].begin(); it != J_[k].end(); ++it){
+	  v += A_.coeff(j, *it)*Lk_[*it]; 
+	}
+	// index j is a possible candidate for updating the sparsity pattern of the solution along column k	
 	hatJk_.emplace(j, v);
       }
     }
@@ -186,7 +186,7 @@ public:
 	  // search for best update of the sparsity pattern
           // computation of candidate indexes for sparsity pattern update: hatJk_ contains (candidateID j, value of A(j, Jk)^T * Lk[Jk])
 	  selectCandidates(k);
-
+	  
 	  // use average value heuristic for selection of best candidates
 	  double tau_k = 0;   // the average improvement to the K-condition number
 	  double max_tau = 0; // the maximum possible improvement.
