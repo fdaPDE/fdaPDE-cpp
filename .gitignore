@@ -32,9 +32,15 @@
 !docs/core/MESH/*
 !test/
 !test/*
+!.github/
+!.github/*
+!.github/workflows/
+!.github/workflows/*
 
 *.csv
 *.txt
 *.json
 *.cmake
 *Makefile
+
+!test/CMakeLists.txt
