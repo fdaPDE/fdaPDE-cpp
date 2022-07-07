@@ -7,7 +7,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: fdapde-docker-image:latest
+      image: alepalu/fdapde-docker-image:latest
     steps:
     - uses: actions/checkout@v2
     - name: RunOne
