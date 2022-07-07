@@ -8,7 +8,7 @@ template <unsigned int N> using VectorSpace = std::vector<SVector<N>>;
 
 // a template class to perform geometric operations in general vector and affine spaces
 template <unsigned int N>
-class VectorSpace {
+class Geometry {
 public:
   // produce an orthonormal basis from the input set of vectors given in input (implementation of the modified gram schmidt method)
   static VectorSpace<N> orthonormalize(const VectorSpace<N>& basis);
@@ -26,7 +26,7 @@ public:
 // orthonormalize a given set of vectors, producing an orthonormal basis for the vector space spanned by
 // the set of vectors passed as input (implementation of the modified gram-schmidt method)
 template <unsigned int N>
-VectorSpace<N> VectorSpace<N>::orthonormalize(const VectorSpace<N>& basis){
+VectorSpace<N> Geometry<N>::orthonormalize(const VectorSpace<N>& basis){
 
   VectorSpace<N> orthonormalBasis;
   orthonormalBasis.reserve(basis.size());
@@ -59,7 +59,7 @@ VectorSpace<N> VectorSpace<N>::orthonormalize(const VectorSpace<N>& basis){
 // orthonormalize() ) this returns a vector of the same dimension of the space
 // where we are projecting written as linear combination of the elements of the set of basis vectors
 template <unsigned int N>
-DVector VectorSpace<N>::projectOnto(const VectorSpace<N>& spaceBasis, const SVector<N> &x){
+DVector Geometry<N>::projectOnto(const VectorSpace<N>& spaceBasis, const SVector<N> &x){
   // build the projection onto the space spanned by the basis set
   Eigen::Matrix<double, Eigen::Dynamic, 1> projection;
   projection.resize(spaceBasis.size(),1);
@@ -76,7 +76,7 @@ DVector VectorSpace<N>::projectOnto(const VectorSpace<N>& spaceBasis, const SVec
 // vectors, returns an N-dimensional vector corresponding to the projected point (written with respect
 // to the canonical basis of the N-dimensional space where x lies). Basis must be an orthonormal basis
 template <unsigned int N>
-SVector<N> VectorSpace<N>::projectInto(const VectorSpace<N>& basis, const SVector<N> &x){
+SVector<N> Geometry<N>::projectInto(const VectorSpace<N>& basis, const SVector<N> &x){
   // build the projection operator on the space spanned by the basis
   Eigen::Matrix<double, N, Eigen::Dynamic> A;
   A.resize(N, basis.size());
@@ -93,7 +93,7 @@ SVector<N> VectorSpace<N>::projectInto(const VectorSpace<N>& basis, const SVecto
 // compute the euclidean distance of x from the linear subspace spanned by basis and passing throught offset
 // this allows to cope with affine spaces (i.e. planes or lines not passing throught the origin)
 template <unsigned int N>
-double VectorSpace<N>::getL2Distance(const VectorSpace<N>& basis, const SVector<N>& offset, const SVector<N> &x) {
+double Geometry<N>::getL2Distance(const VectorSpace<N>& basis, const SVector<N>& offset, const SVector<N> &x) {
   // project point on subspace spanned by the basis vector, compute the distance between
   // the point and its projection
   

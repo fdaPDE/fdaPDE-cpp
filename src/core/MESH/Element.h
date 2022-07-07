@@ -3,7 +3,7 @@
 
 #include "../utils/Symbols.h"
 #include "MeshUtils.h"
-#include "Geometry.h"
+#include "../NLA/VectorSpace.h"
 
 #include <Eigen/LU>
 #include <cstddef>
