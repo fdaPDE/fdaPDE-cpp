@@ -8,14 +8,13 @@ RUN apk --no-cache add --update \
     g++ \
     libstdc++ \
     cmake \
-    git
+    git \
+    make
 
 # c++ library dependencies
 RUN apk add --update \
-    eigen
+    eigen-dev
 
 # test dependencies
 RUN apk add --update \
     gtest-dev
-
-RUN git clone https://github.com/AlePalu/fdaPDE/tree/develop

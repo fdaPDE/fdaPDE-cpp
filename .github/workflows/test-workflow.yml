@@ -2,14 +2,18 @@ name: test-workflow
 on:
   push:
      branches: [ develop ]
+     
 jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: fdapde-docker:latest
+      image: fdapde-docker-image:latest
     steps:
     - uses: actions/checkout@v2
     - name: RunOne
       run: |
-        cd src/core/NLA/
+        cd test/
+        export Eigen3_DIR=/usr/share/cmake/Modules # reguired to let eigen3 work with CMake in alpine
         cmake CMakeLists.txt
+        make
+        ctest
