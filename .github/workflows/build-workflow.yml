@@ -1,0 +1,16 @@
+name: build-workflow
+
+on:
+  push:
+     branches: [ develop ]
+     
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: alepalu/fdapde-docker-image:latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build
+      run: |
+        cd src/core/

@@ -10,10 +10,14 @@ jobs:
       image: alepalu/fdapde-docker-image:latest
     steps:
     - uses: actions/checkout@v2
-    - name: RunOne
+    - name: Build-Tests
       run: |
         cd test/
         export Eigen3_DIR=/usr/share/cmake/Modules # reguired to let eigen3 work with CMake in alpine
         cmake CMakeLists.txt
         make
+    - name: Run-Tests 
+      run: |
+        cd test/
+        export Eigen3_DIR=/usr/share/cmake/Modules # reguired to let eigen3 work with CMake in alpine
         ctest
