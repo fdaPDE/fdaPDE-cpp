@@ -1,6 +1,5 @@
 #include <functional>
 #include <iostream>
-#include "Main.h"
 
 #include "../src/core/utils/fields/ScalarField.h"
 #include "utils/Symbols.h"
