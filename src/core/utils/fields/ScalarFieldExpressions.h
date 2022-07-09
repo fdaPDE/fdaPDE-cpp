@@ -3,6 +3,7 @@
 
 #include "../Symbols.h"
 
+#include <cstddef>
 #include <functional>
 #include <type_traits>
 
@@ -42,7 +43,6 @@ template <typename E> struct FieldExpr {
   double operator()(const SVector<N>& p) const {
     return static_cast<const E&>(*this)(p);
   }
-
   // get underyling type composing the expression node
   const E& get() const { return static_cast<const E&>(*this); }
 };
@@ -56,7 +56,7 @@ public:
   
   // call operator
   template <int N>
-  double operator()(const SVector<N>& p) const { return value_; };
+  double operator()(const SVector<N>& p) const { return value_; };    
 };
 
 // expression template based arithmetic
@@ -81,6 +81,7 @@ public:
 DEF_FIELD_EXPR_OPERATOR(operator+, std::plus<>      )
 DEF_FIELD_EXPR_OPERATOR(operator-, std::minus<>     )
 DEF_FIELD_EXPR_OPERATOR(operator*, std::multiplies<>)
+DEF_FIELD_EXPR_OPERATOR(operator/, std::divides<>   )
 
 }}
 

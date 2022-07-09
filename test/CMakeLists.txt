@@ -23,13 +23,13 @@ FetchContent_MakeAvailable(googletest)
 
 enable_testing()
 
-add_executable(cpp_test test.cpp)
-target_link_libraries (cpp_test Eigen3::Eigen)
-target_link_libraries (cpp_test gtest_main)
+add_executable(fdaPDE_test ScalarFieldTest.cpp)
+target_link_libraries (fdaPDE_test Eigen3::Eigen)
+target_link_libraries (fdaPDE_test gtest_main)
 
-add_test(NAME cpp_test
-	 COMMAND $<TARGET_FILE:cpp_test>
+add_test(NAME fdaPDE_test
+	 COMMAND $<TARGET_FILE:fdaPDE_test>
   )
 
 include(GoogleTest)
-gtest_discover_tests(cpp_test)
+gtest_discover_tests(fdaPDE_test)

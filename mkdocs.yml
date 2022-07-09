@@ -36,19 +36,26 @@ nav:
    - Getting started : 'start.md'
    - Documentation:
        - Core :
+           - utils :
+               - ScalarField: 'core/utils/ScalarField.md'
+               - DifferentiableScalarField: 'core/utils/DifferentiableScalarField.md'
+               - TwiceDifferentiableScalarField: 'core/utils/TwiceDifferentiableScalarField.md'
            - OPT :
                - core/OPT/index.md
-               - ScalarField: 'core/OPT/ScalarField.md'
-               - DifferentiableScalarField: 'core/OPT/DifferentiableScalarField.md'
-               - TwiceDifferentiableScalarField: 'core/OPT/TwiceDifferentiableScalarField.md'
                - GridOptimizer: 'core/OPT/GridOptimizer.md'
                - NewtonOptimizer: 'core/OPT/NewtonOptimizer.md'
                - ExactNewtonOptimizer: 'core/OPT/ExactNewtonOptimizer.md'
                - GradientDescentOptimizer: 'core/OPT/GradientDescentOptimizer.md'
                - BFGS : 'core/OPT/BFGSOptimizer.md'
                - Extensions : 'core/OPT/Extensions.md'
-           - MESH:
-               -core/MESH/index.md
+           - MESH :
+               - 'core/MESH/index.md'
+               - Mesh : 'core/MESH/Mesh.md'
+               - Element : 'core/MESH/Element.md'
+               - Geometry : 'core/MESH/Geometry.md'
+               - BruteForceSearch : 'core/MESH/BFS.md'
+               - BarycentricWalkSearch : 'core/MESH/BWS.md'
+               - TreeBasedSearch : 'core/MESH/TBS.md'
            - R Interface: 'R.md'
 
 repo_url: https://github.com/fdaPDE/fdaPDE

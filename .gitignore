@@ -30,6 +30,8 @@
 !docs/core/OPT/*
 !docs/core/MESH/
 !docs/core/MESH/*
+!docs/core/utils/
+!docs/core/utils/*
 !test/
 !test/*
 !.github/

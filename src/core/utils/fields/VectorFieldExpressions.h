@@ -1,13 +1,15 @@
 #ifndef __VECTOR_FIELD_EXPRESSIONS_H__
 #define __VECTOR_FIELD_EXPRESSIONS_H__
 
-#include "../utils/Symbols.h"
-#include "ScalarField.h"
+#include "../Symbols.h"
 #include <functional>
 
 namespace fdaPDE{
 namespace core{
 
+  // forward declaration
+  template <int N> class ScalarField;
+  
 // macro for the definition of standard operations between vector fields
 #define DEF_VECT_EXPR_OPERATOR(OPERATOR, FUNCTOR)                              \
   template <int N, typename E1, typename E2>                                   \
@@ -114,7 +116,7 @@ namespace core{
     }
   };
 
-  DEF_VECT_EXPR_OPERATOR(operator+, std::plus<>)
+  DEF_VECT_EXPR_OPERATOR(operator+, std::plus<> )
   DEF_VECT_EXPR_OPERATOR(operator-, std::minus<>)
 
   // special logic to handle double*VectExpr operation. The application of operator* between a double and a
@@ -164,8 +166,6 @@ namespace core{
     };
     return ScalarField<N>(result);
   }
-  // NOTE: the other notation requires extending Eigen::Matrix class. See "utils/MatrixAddons.h" for details
-  
 }}
 
 #endif // __VECTOR_FIELD_EXPRESSIONS_H__
