@@ -1,6 +1,7 @@
 #ifndef __SCALAR_FIELD_H__
 #define __SCALAR_FIELD_H__
 
+#include <cmath>
 #include <functional>
 #include <initializer_list>
 #include "../Symbols.h"
@@ -40,14 +41,27 @@ namespace core{
     
     std::function<SMatrix<N>(SVector<N>)> deriveTwice(double step) const;
     virtual std::function<SMatrix<N>(SVector<N>)> deriveTwice() const; // returns exact hessian in TwiceDifferentiableScalarField
-
-    // discretize the scalar field over the given mesh with a discontinuous function which is constant at every mesh element.
-    // The result of the discretization is a numeric vector where element i corresponds to the evaluation of the scalar field
-    // at the midpoint of element i
-    // template <unsigned int L, unsigned int K>
-    // Eigen::Matrix<double, Eigen::Dynamic, 1> discretize(const Mesh<L, K>& mesh) const;
   };
 
+  // macro for the definition of application of trascendental functions to ScalarFields
+#define DEF_SCALAR_FIELD_UNARY_FUNCTOR(FUN_NAME)			\
+  template <int N>							\
+  ScalarField<N> FUN_NAME(const ScalarField<N>& op){			\
+    std::function<double(SVector<N>)> result =				\
+    [=](SVector<N> x) -> double {					\
+       return std::FUN_NAME(op(x));					\
+    };									\
+									\
+    return ScalarField<N>(result);					\
+  }									\
+
+  // definition of most common mathematical function. This allows, e.g. sin(ScalarField)
+  DEF_SCALAR_FIELD_UNARY_FUNCTOR(sin);
+  DEF_SCALAR_FIELD_UNARY_FUNCTOR(cos);
+  DEF_SCALAR_FIELD_UNARY_FUNCTOR(tan);
+  DEF_SCALAR_FIELD_UNARY_FUNCTOR(exp);
+  DEF_SCALAR_FIELD_UNARY_FUNCTOR(log);
+  
   // the following classes can be used to force particular regularity conditions on the field which might be required for some numerical methods.
   // i.e. Using a DifferentiableScalarfield as argument for a function forces to define an analytical expression for the gradient vector
   template <int N>

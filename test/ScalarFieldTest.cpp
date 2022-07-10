@@ -145,6 +145,7 @@ TEST(ScalarFieldTest, ExprTemplate) {
   ASSERT_DOUBLE_EQ(sf8(p), 3);
 }
 
+// use case for wrapping the result of a field expression in a valid ScalarField
 TEST(ScalarFieldTest, ExprCanBeWrapped) {
   // define a field expression
   auto fieldExpr1 = [](SVector<2> x) -> double { // x^3 + y
@@ -172,6 +173,25 @@ TEST(ScalarFieldTest, ExprCanBeWrapped) {
   // exact gradient evaluated at p
   SVector<2> trueGradient = SVector<2>(3 - 0.25*std::exp(3), 1 + 0.25*std::exp(3));
   EXPECT_TRUE((grad(p) - trueGradient).squaredNorm() < std::pow(0.01, 2));
+}
+
+TEST(ScalarFieldTest, UnaryExpr) {
+  // define a scalar field
+  auto fieldExpr1 = [](SVector<2> x) -> double { // x^3 + y
+    return std::pow(x[0], 3) + x[1];
+  };
+  ScalarField<2> sf1(fieldExpr1);
+  // define a new scalar field as the application of sin to sf1
+  ScalarField<2> sf2 = sin(sf1);
+  // define evaluation point
+  SVector<2> p(1,1);
+  // field sf1 evaluated in (1,1) gives 2, sf2 expects equal to sin(2) ~ 0,03489949670250097165
+  EXPECT_DOUBLE_EQ(std::sin(2), sf2(p));
+
+  // apply sin function to a field expression
+  auto sf3 = sin(2*sf1 + sf2) + sf1;
+  // evaluate it at p. expected value: sin(2*2 + sin(2)) + 2
+  EXPECT_DOUBLE_EQ(std::sin(2*2 + std::sin(2)) + 2, sf3(p));
 }
 
 // checks DifferentiableScalarField calls analytical gradient on .derive() call
