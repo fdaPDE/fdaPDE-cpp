@@ -1,6 +1,7 @@
 #ifndef __VECTOR_FIELD_H__
 #define __VECTOR_FIELD_H__
 
+#include <cstddef>
 #include <initializer_list>
 #include "../Symbols.h"
 #include "ScalarField.h"
@@ -15,34 +16,45 @@ namespace core{
   class VectorField : public VectExpr<N, VectorField<N>>{
   private:
     // each array element is a lambda which computes the i-th component of the vector
-    std::array<std::function<double(SVector<N>)>, N> field_;
+    std::array<ScalarField<N>, N> field_;
   public:
     // constructor
     VectorField() = default;
-    VectorField(std::array<std::function<double(SVector<N>)>, N> field) : field_(field) {}
+    VectorField(std::array<std::function<double(SVector<N>)>, N> field) {
+      for(std::size_t i = 0; i < N; ++i){
+	field_[i] = ScalarField<N>(field[i]);
+      }
+    }
     // allow braced-list initialization
     VectorField(std::initializer_list<std::function<double(SVector<N>)>> field) {
       std::size_t i = 0;
       for(auto it = field.begin(); it != field.end(); ++it){
-	field_[i] = *it;
+	field_[i] = ScalarField<N>(*it);
 	i++;
       }
-    }
-    
-    // this constructor allows for the construction of a VectorField from a single vectorial lambda. Observe that this method
-    // is more inefficient wrt the above constructor since evaluating the field along direction i only still requires the evaluation
-    // of all other dimesions. Use with care.
+    }    
+    // allow for the construction of a VectorField from a single vectorial lambda. Observe that by doing so evaluating the
+    // field along direction i only still requires the evaluation of all other dimesions. Use with care.
     VectorField(const std::function<SVector<N>(SVector<N>)>& field) {
       for(std::size_t i = 0; i < N; ++i){
-	field_[i] = [=](SVector<N> x) -> double { return field(x)[i]; };
+	auto fieldExpr = [=](SVector<N> x) -> double { return field(x)[i]; };
+	field_[i] = ScalarField<N>(fieldExpr);
       }
     }
+
+    // wrap a VectExpr into a valid VectorField
+    template <typename E>
+    VectorField(const VectExpr<N, E>& expr) {
+      for(std::size_t i = 0; i < N; ++i){
+	field_[i] = expr[i];
+      }
+    };
     
     // call operator
     SVector<N> operator()(const SVector<N>& point) const;
     // subscript operator
-    const std::function<double(SVector<N>)>& operator[](size_t i) const;
-    std::function<double(SVector<N>)>& operator[](size_t i);
+    const ScalarField<N>& operator[](size_t i) const;
+    ScalarField<N>& operator[](size_t i);
 
     // inner product VectorField.dot(VectorField)
     DotProduct<VectorField<N>, VectorField<N>> dot(const VectorField<N>& rhs) const;

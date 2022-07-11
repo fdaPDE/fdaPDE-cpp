@@ -37,7 +37,7 @@ namespace core{
   // need to carry N to avoid template argument deduction failed
   template <int N, typename E> struct VectExpr {
     // call operator[] on the base type E
-    std::function<double(SVector<N>)> operator[](size_t i) const {
+    ScalarField<N> operator[](size_t i) const {
       return static_cast<const E&>(*this)[i];
     }
 
@@ -68,12 +68,12 @@ namespace core{
     VectConst(SVector<N> value) : value_(value) { }
   
     // subsript operator, returns a fake lambda just to provide a call operator
-    std::function<double(SVector<N>)> operator[](size_t i) const {
+    ScalarField<N> operator[](size_t i) const {
       std::function<double(SVector<N>)> lambda;
       lambda = [*this, i](const SVector<N>& p) -> double {
 	return value_[i];
       };
-      return lambda; 
+      return ScalarField<N>(lambda); 
     }
   };
   
@@ -90,8 +90,8 @@ namespace core{
     VectBinOp(const OP1& op1, const OP2& op2, BinaryOperation f) : op1_(op1), op2_(op2), f_(f) { };
 
     // subscript operator. Apply the functor to each subscripted operand. This returns a callable object
-    std::function<double(SVector<N>)> operator[](size_t i) const{
-      return f_(op1_[i], op2_[i]);
+    ScalarField<N> operator[](size_t i) const{
+      return f_(op1_[i], op2_[i]); // converting constructor ScalarField(std::function<double(SVector<N>)>) called
     }
   };
 

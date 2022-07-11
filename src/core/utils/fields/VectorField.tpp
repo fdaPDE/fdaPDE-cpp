@@ -11,9 +11,9 @@ SVector<N> VectorField<N>::operator()(const SVector<N> &point) const {
 
 // subscript operator, constant and not constant version
 template <int N>
-const std::function<double(SVector<N>)>& VectorField<N>::operator[](size_t i) const { return field_[i]; }
+const ScalarField<N>& VectorField<N>::operator[](size_t i) const { return field_[i]; }
 template <int N>
-std::function<double(SVector<N>)>& VectorField<N>::operator[](size_t i) { return field_[i]; }
+ScalarField<N>& VectorField<N>::operator[](size_t i) { return field_[i]; }
 
 // out of class definition for VectorField
 

@@ -11,6 +11,18 @@
 namespace fdaPDE{
 namespace core{
 
+  // macro for the definition of application of trascendental functions to ScalarFields
+#define DEF_FIELD_UNARY_FUNCTOR(FUN_NAME)			\
+  template <int N>							\
+  ScalarField<N> FUN_NAME(const ScalarField<N>& op){			\
+    std::function<double(SVector<N>)> result =				\
+    [=](SVector<N> x) -> double {					\
+       return std::FUN_NAME(op(x));					\
+    };									\
+									\
+    return ScalarField<N>(result);					\
+  }									\
+  
   // a template class for handling general scalar fields. A field wrapped by this template doesn't guarantee any regularity condition.
   // N is the domain dimension. The wrapped field must be encoded in a lambda expression receiving an SVector<N> in input and returning a double
   // extend FieldExpr to allow for expression templates
@@ -26,8 +38,27 @@ namespace core{
     std::function<double(SVector<N>)> f_;
 
   public:
-    // constructor
+    // default constructor
+    ScalarField() = default;
+    // construct a scalar field from a std::function object
     ScalarField(const std::function<double(SVector<N>)>& f) : f_(f) {};
+    // converting constructor from field expression to ScalarField
+    template <typename E>
+    ScalarField(const FieldExpr<E>& f) {
+      // wraps field expression in lambda
+      E op = f.get();
+      std::function<double(SVector<N>)> fieldExpr = [op](SVector<N> x) -> double {
+	return op(x);
+      };
+      f_ = fieldExpr;
+    };
+
+    // assignment from lambda expression
+    template <typename L>
+    ScalarField& operator=(const L& lambda) {
+      f_ = lambda;
+      return *this;
+    }
     
     // preserve std::function syntax for evaluating a function at point, required for expression templates
     double operator()(const SVector<N>& x) const { return f_(x); };
@@ -43,24 +74,12 @@ namespace core{
     virtual std::function<SMatrix<N>(SVector<N>)> deriveTwice() const; // returns exact hessian in TwiceDifferentiableScalarField
   };
 
-  // macro for the definition of application of trascendental functions to ScalarFields
-#define DEF_SCALAR_FIELD_UNARY_FUNCTOR(FUN_NAME)			\
-  template <int N>							\
-  ScalarField<N> FUN_NAME(const ScalarField<N>& op){			\
-    std::function<double(SVector<N>)> result =				\
-    [=](SVector<N> x) -> double {					\
-       return std::FUN_NAME(op(x));					\
-    };									\
-									\
-    return ScalarField<N>(result);					\
-  }									\
-
   // definition of most common mathematical function. This allows, e.g. sin(ScalarField)
-  DEF_SCALAR_FIELD_UNARY_FUNCTOR(sin);
-  DEF_SCALAR_FIELD_UNARY_FUNCTOR(cos);
-  DEF_SCALAR_FIELD_UNARY_FUNCTOR(tan);
-  DEF_SCALAR_FIELD_UNARY_FUNCTOR(exp);
-  DEF_SCALAR_FIELD_UNARY_FUNCTOR(log);
+  DEF_FIELD_UNARY_FUNCTOR(sin);
+  DEF_FIELD_UNARY_FUNCTOR(cos);
+  DEF_FIELD_UNARY_FUNCTOR(tan);
+  DEF_FIELD_UNARY_FUNCTOR(exp);
+  DEF_FIELD_UNARY_FUNCTOR(log);
   
   // the following classes can be used to force particular regularity conditions on the field which might be required for some numerical methods.
   // i.e. Using a DifferentiableScalarfield as argument for a function forces to define an analytical expression for the gradient vector

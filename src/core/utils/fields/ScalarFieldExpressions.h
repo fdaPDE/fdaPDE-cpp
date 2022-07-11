@@ -55,7 +55,7 @@ namespace core{
       // call operator() on the base type E
       template <int N>
       double operator()(const SVector<N>& p) const {
-    return static_cast<const E&>(*this)(p);
+	return static_cast<const E&>(*this)(p);
       }
       // get underyling type composing the expression node
       const E& get() const { return static_cast<const E&>(*this); }

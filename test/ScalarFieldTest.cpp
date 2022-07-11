@@ -22,9 +22,13 @@ TEST(ScalarFieldTest, ScalarFieldWrapsCorrectly) {
   // test if the ScalarField wraps correctly the lambda
   SVector<2> p(1,1);
   double trueResult = std::exp(1);
-  
   // expect equality
   EXPECT_EQ(field(p), trueResult);
+
+  // initialize directly with a lambda
+  ScalarField<2> lambda_field([](SVector<2> x) -> double { return std::pow(x[0], 2) + x[1]; });
+  trueResult = 2;
+  EXPECT_EQ(lambda_field(p), trueResult);
 }
 
 // checks if ScalarField approximates correctly its analytical gradient
@@ -175,6 +179,7 @@ TEST(ScalarFieldTest, ExprCanBeWrapped) {
   EXPECT_TRUE((grad(p) - trueGradient).squaredNorm() < std::pow(0.01, 2));
 }
 
+// checks if DEF_FIELD_UNARY_OPERATOR and DEF_FIELD_UNARY_FUNCTOR defines valid operators
 TEST(ScalarFieldTest, UnaryExpr) {
   // define a scalar field
   auto fieldExpr1 = [](SVector<2> x) -> double { // x^3 + y
@@ -192,6 +197,22 @@ TEST(ScalarFieldTest, UnaryExpr) {
   auto sf3 = sin(2*sf1 + sf2) + sf1;
   // evaluate it at p. expected value: sin(2*2 + sin(2)) + 2
   EXPECT_DOUBLE_EQ(std::sin(2*2 + std::sin(2)) + 2, sf3(p));
+}
+
+// checks if a ScalarField can be built from a field expression
+TEST(ScalarFieldTest, FieldExprImplicitConversion) {
+  // define scalar field object
+  auto fieldExpr = [](SVector<2> x) -> double { // x^3 + y
+    return std::pow(x[0], 3) + x[1];
+  };
+  ScalarField<2> sf1(fieldExpr);
+  // define field expression
+  auto expr = 2*log(sf1) + sf1;
+  // convert expr to a scalar field
+  ScalarField<2> sf2(expr);
+
+  SVector<2> p(1,1);
+  EXPECT_EQ(expr(p), sf2(p));
 }
 
 // checks DifferentiableScalarField calls analytical gradient on .derive() call

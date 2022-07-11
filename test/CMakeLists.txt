@@ -23,7 +23,7 @@ FetchContent_MakeAvailable(googletest)
 
 enable_testing()
 
-add_executable(fdaPDE_test ScalarFieldTest.cpp)
+add_executable(fdaPDE_test MainTest.cpp)
 target_link_libraries (fdaPDE_test Eigen3::Eigen)
 target_link_libraries (fdaPDE_test gtest_main)
 
