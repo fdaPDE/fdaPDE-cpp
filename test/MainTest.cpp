@@ -2,6 +2,7 @@
 
 #include "ScalarFieldTest.cpp"
 #include "VectorFieldTest.cpp"
+#include "GridOptimizerTest.cpp"
 
 int main(int argc, char **argv){
   // start testing

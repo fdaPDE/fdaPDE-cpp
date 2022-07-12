@@ -1,7 +1,8 @@
-#ifndef __GRID_H__
-#define __GRID_H__
+#ifndef __GRID_OPTIMIZER_H__
+#define __GRID_OPTIMIZER_H__
 
 #include <array>
+#include <string>
 #include <tuple>
 #include "../../utils/Symbols.h"
 #include "../../utils/fields/ScalarField.h"
@@ -11,28 +12,40 @@ namespace fdaPDE{
 namespace core{
 namespace OPT{
   // optimize a given scalar field over an N-dimensional grid of equidistant points
-  template <unsigned int N>
+  template <int N>
   class GridOptimizer{
 
   private:
-    std::array<std::pair<double,double>, N> domainLimits; /* an array of pairs where each pair indicate inferior limit
-							     and superior limit of the grid along that dimension */
-    unsigned int spaceDimension;                          // dimension of the space where the grid is embedded
-    std::array<double, N> steps;                          /* an array of double representing the increment step
-							     along each dimension (element at position i refers to dimension i) */
+    // results of the optimization
+    SVector<N> minimumPoint_;
+    double objectiveValue_;
   public:
     // constructor
-    GridOptimizer(std::array<std::pair<double,double>, N> domain_, std::array<double, N> steps_)
-      : spaceDimension(N), domainLimits(domain_), steps(steps_) {}
+    GridOptimizer() = default;
   
-    // optimization routine
+    // perform the minimum search over an automatically built grid of equidistant N-dimensional points
     template <typename... Args>
-    std::pair<SVector<N>, double> findMinimum(const ScalarField<N>& objective_, const Args&... args);
+    void findMinimum(const ScalarField<N>& objective, // objective to optimize
+		     const std::array<std::pair<double,double>, N>& domainLimits, // domain where search for minimum
+		     const std::array<double, N>& stepSizes, // stepSizes for each dimension of the grid
+		     const Args&... args);
+    template <typename... Args>
+    void findMinimum(const ScalarField<N>& objective, // objective to optimize
+		     const std::array<std::pair<double,double>, N>& domainLimits, // domain where search for minimum
+		     double stepSize, // use the same step size along all dimensions
+		     const Args&... args);
+    
+    // perform the minimum search over a vector of used defined values
+    template <typename... Args>
+    void findMinimum(const ScalarField<N>& objective, // objective to optimize
+		     const std::vector<SVector<N>>& pointList, // set of pointw where to perform the search
+		     const Args&... args);
 
-    std::string description = "Grid optimization over " + spaceDimension + "D space";
+    SVector<N> getSolution() const { return minimumPoint_; }
+    double getObjValue() const { return objectiveValue_; }    
   };
 
-#include "Grid.tpp"
+#include "GridOptimizer.tpp"
 }}}
 
-#endif // __GRID_H__
+#endif // __GRID_OPTIMIZER_H__
