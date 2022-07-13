@@ -9,49 +9,53 @@
 namespace fdaPDE{
 namespace core{
 namespace OPT{  
-  // newton method based on approximate gradient and hessian computation. 
+
+  // newton method based on exact gradient and hessian computation. It requires second differentiabiliy
+  // of the scalar field passed as objective
   template <unsigned int N>
   class NewtonOptimizer{
 
-  private:
-    double step;                      // step employed by the optimization scheme.
-  
+  private:  
     // internal status of the optimizer 
-    SVector<N> x_old;                 // value of the optimization point before the update step
-    SVector<N> x_new;                 // value of the optimization point after the update step
-    SVector<N> update;                // update vector computed at each step
-    double error;                     // squared l^2 norm of the gradient after the update step
+    SVector<N> x_old_{};  // value of the optimization point before the update step
+    SVector<N> x_new_{};  // value of the optimization point after the update step
+    SVector<N> update_{}; // update vector computed at each step
+    double error_ = 0;    // squared l^2 norm of the gradient after the update step
 
     // optimization problem data
-    unsigned int maxIt;               // maximum number of iterations before forced stop
-    double tolerance;                 // tolerance on error
-    unsigned int numIt = 0;           // counter to keep track of the number of iterations executed
+    unsigned int maxIter_; // maximum number of iterations before forced stop
+    double tolerance_; // tolerance on error
+    unsigned int numIter_ = 0; // counter to keep track of the number of iterations executed
+    double h_; // step employed by the optimization scheme.
 
-    double gradient_step;             // step to use in gradient approximation via central differences
-    double hessian_step;              // step to use in hessian approximazion via central differences  
+    // results of the optimization
+    SVector<N> minimumPoint_;
+    double objectiveValue_;
+    
   public:
     // constructor
-    NewtonOptimizer(unsigned int maxIt_, double tolerance_, double gradient_step_, double hessian_step_)
-      : maxIt(maxIt_), tolerance(tolerance_), gradient_step(gradient_step_), hessian_step(hessian_step_) {};
-
-    // set step size (use this if you want to employ a fixed step method. For adaptive step, use a proper extension)
-    void setStepSize(double step_) { step = step_; }
-  
-    // getters to internal state
-    unsigned int getNumIteration() const { return numIt;  }
-    double getError()              const { return error;  }
-    SVector<N> getXold()           const { return x_old;  }
-    SVector<N> getXnew()           const { return x_new;  }
-    SVector<N> getUpdate()         const { return update; }
-  
-    // optimization routine
+    NewtonOptimizer(unsigned int maxIter, double tolerance, double h)
+      : maxIter_(maxIter), tolerance_(tolerance), h_(h) {};
+    
+    // optimization routine, depending on the objective type the method employs an approximation or the exact expression
+    // of gradient and/or hessian function.
     template <typename... Args>
-    std::pair<SVector<N>, double> findMinimum(const ScalarField<N>& objective, const SVector<N>& x0, const Args&... args);
+    void findMinimum(const ScalarField<N>& objective, // objective to optimize
+		     const SVector<N>& x0, // initial point
+		     const Args&... args);
 
-    const std::string description = "Newton method with approximate gradient and hessian computation";
+    // getters to internal state
+    unsigned int iterations() const { return numIter_;  }
+    double error() const { return error_;  }
+    SVector<N> x_old() const { return x_old_;  }
+    SVector<N> x_new() const { return x_new_;  }
+    SVector<N> update_vector() const { return update_; }
+    // getters to optimization solution
+    SVector<N> getSolution() const { return minimumPoint_; }
+    double getObjValue() const { return objectiveValue_; }    
   };
 
 #include "Newton.tpp"
 }}}
-  
+
 #endif // __NEWTON_H__

@@ -11,7 +11,7 @@ using fdaPDE::core::ScalarField;
 #include "../src/core/OPT/optimizers/GridOptimizer.h"
 using fdaPDE::core::OPT::GridOptimizer;
 
-TEST(GridOptimizerTest, optimizeOver1DGrid) {
+TEST(GridOptimizerTest, OptimizeOver1DGrid) {
   // define objective function: x^3 + 2x^2
   ScalarField<1> field([](SVector<1> x) -> double { return std::pow(x[0], 3) + 2*std::pow(x[0], 2); });
   // define search domain
@@ -28,7 +28,7 @@ TEST(GridOptimizerTest, optimizeOver1DGrid) {
   EXPECT_TRUE((optPoint - SVector<1>(-5)).norm() < std::pow(0.1, 4));
 }
 
-TEST(GridOptimizerTest, optimizeOver2DGridConvex) {
+TEST(GridOptimizerTest, OptimizeOver2DGridConvex) {
   // define objective function: x^2 + y^2
   ScalarField<2> field([](SVector<2> x) -> double { return std::pow(x[0],2) + std::pow(x[1], 2); });
   // define square [-1,1] x [-1,1] domain
@@ -47,7 +47,7 @@ TEST(GridOptimizerTest, optimizeOver2DGridConvex) {
   EXPECT_TRUE((optPoint - SVector<2>(0,0)).norm() < std::pow(0.1, 4));
 }
 
-TEST(GridOptimizerTest, optimizeOver2DGridNonConvex) {
+TEST(GridOptimizerTest, OptimizeOver2DGridNonConvex) {
   // define objective function: x*e^{-x^2 - y^2} + (x^2 + y^2)/20
   ScalarField<2> field([](SVector<2> x) -> double {
     return x[0]*std::exp(- std::pow(x[0],2) - std::pow(x[1], 2)) + (std::pow(x[0],2) + std::pow(x[1], 2))/20;
@@ -71,7 +71,7 @@ TEST(GridOptimizerTest, optimizeOver2DGridNonConvex) {
 }
 
 // check if optimizer is able to optimize over an user defined set of points
-TEST(GridOptimizerTest, optimizeOverCustomdGrid) {
+TEST(GridOptimizerTest, OptimizeOverCustomdGrid) {
   // define objective function: x^2 + y^2
   ScalarField<2> field([](SVector<2> x) -> double { return std::pow(x[0],2) + std::pow(x[1], 2); });
   // define optimizer

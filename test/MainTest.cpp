@@ -1,8 +1,11 @@
 #include <gtest/gtest.h>
 
+// fields test suites
 #include "ScalarFieldTest.cpp"
 #include "VectorFieldTest.cpp"
+// OPT test suites
 #include "GridOptimizerTest.cpp"
+#include "NewtonOptimizerTest.cpp"
 
 int main(int argc, char **argv){
   // start testing
