@@ -74,7 +74,7 @@ VectorField<N>  ScalarField<N>::derive() const{
   for(std::size_t i = 0; i < N; ++i){
     // functor wrapping the gradient approximation along direction i using fixed step
     std::function<double(SVector<N>)> gradientApprox = [=](SVector<N> x) -> double {
-      return approxFirstDerivative(x, i, 0.001);
+      return approxFirstDerivative(x, i, step_);
     };
     components[i] = gradientApprox;
   }
@@ -96,7 +96,7 @@ template <int N>
 std::function<SMatrix<N>(SVector<N>)> ScalarField<N>::deriveTwice() const{
   // lambda wrapping the hessian approximation method using fixed step
   std::function<SMatrix<N>(SVector<N>)> hessianApprox = [=](SVector<N> x) -> SMatrix<N> {
-    return approxHessian(x, 0.001);
+    return approxHessian(x, step_);
   };
   return hessianApprox;
 }

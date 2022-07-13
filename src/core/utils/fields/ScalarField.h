@@ -34,9 +34,9 @@ namespace core{
     double approxSecondDerivative(const SVector<N>& x, std::size_t i, std::size_t j, double step) const;
     
   protected:
-    // the function this class wraps
-    std::function<double(SVector<N>)> f_;
-
+    std::function<double(SVector<N>)> f_{}; // the function this class wraps
+    double step_ = 0.001; // the step size used in the approximation of derivatives in .derive() and .deriveTwice() method
+    
   public:
     // default constructor
     ScalarField() = default;
@@ -68,13 +68,15 @@ namespace core{
     SMatrix<N> approxHessian  (const SVector<N>& x, double step) const;
     
     VectorField<N> derive(double step) const;
-    virtual VectorField<N> derive() const; // returns exact gradient in DifferentiableScalarField
+    virtual VectorField<N> derive() const; // uses the value of step_ as step size in central difference formula
     
     std::function<SMatrix<N>(SVector<N>)> deriveTwice(double step) const;
-    virtual std::function<SMatrix<N>(SVector<N>)> deriveTwice() const; // returns exact hessian in TwiceDifferentiableScalarField
+    virtual std::function<SMatrix<N>(SVector<N>)> deriveTwice() const; // uses the value of step_ as step size in central difference formula
+
+    void setStep(double step) { step_ = step; }
   };
 
-  // definition of most common mathematical function. This allows, e.g. sin(ScalarField)
+  // definition of most common mathematical functions. This allows, e.g. sin(ScalarField)
   DEF_FIELD_UNARY_FUNCTOR(sin);
   DEF_FIELD_UNARY_FUNCTOR(cos);
   DEF_FIELD_UNARY_FUNCTOR(tan);
@@ -87,7 +89,7 @@ namespace core{
   class DifferentiableScalarField : public ScalarField<N> {
   protected:
     // gradient vector of scalar field f
-    VectorField<N> df_;
+    VectorField<N> df_{};
   
   public:
     // constructor
@@ -107,7 +109,7 @@ namespace core{
   class TwiceDifferentiableScalarField : public DifferentiableScalarField<N> {
   protected:
     // hessian matrix of scalar field f
-    std::function<SMatrix<N>(SVector<N>)> ddf_;
+    std::function<SMatrix<N>(SVector<N>)> ddf_{};
   
   public:
     // constructor
