@@ -5,7 +5,9 @@
 #include "VectorFieldTest.cpp"
 // OPT test suites
 #include "GridOptimizerTest.cpp"
-#include "NewtonOptimizerTest.cpp"
+//#include "NewtonOptimizerTest.cpp"
+//#include "BFGSOptimizerTest.cpp"
+#include "IterativeOptimizerTest.cpp"
 
 int main(int argc, char **argv){
   // start testing
