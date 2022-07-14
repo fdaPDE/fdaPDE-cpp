@@ -6,11 +6,11 @@
 #include <limits>
 #include <utility>
 
-#include "../src/core/utils/Symbols.h"
-#include "../src/core/utils/fields/ScalarField.h"
+#include "../fdaPDE/core/utils/Symbols.h"
+#include "../fdaPDE/core/utils/fields/ScalarField.h"
 using fdaPDE::core::ScalarField;
 using fdaPDE::core::TwiceDifferentiableScalarField;
-#include "../src/core/OPT/optimizers/Newton.h"
+#include "../fdaPDE/core/OPT/optimizers/Newton.h"
 using fdaPDE::core::OPT::NewtonOptimizer;
 
 TEST(NewtonOptimizerTest, Optimize1D) {

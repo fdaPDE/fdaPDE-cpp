@@ -2,12 +2,12 @@
 #include <vector>
 #include <gtest/gtest.h> // testing framework
 
-#include "../src/core/utils/fields/ScalarField.h"
+#include "../fdaPDE/core/utils/fields/ScalarField.h"
 using fdaPDE::core::ScalarField;
 using fdaPDE::core::DifferentiableScalarField;
 using fdaPDE::core::TwiceDifferentiableScalarField;
-#include "utils/Symbols.h"
-#include "../src/core/utils/fields/VectorField.h"
+#include "../fdaPDE/core/utils/Symbols.h"
+#include "../fdaPDE/core/utils/fields/VectorField.h"
 using fdaPDE::core::VectorField;
 
 // check if ScalarField class wraps lambda correctly

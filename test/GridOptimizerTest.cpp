@@ -5,10 +5,10 @@
 #include <limits>
 #include <utility>
 
-#include "../src/core/utils/Symbols.h"
-#include "../src/core/utils/fields/ScalarField.h"
+#include "../fdaPDE/core/utils/Symbols.h"
+#include "../fdaPDE/core/utils/fields/ScalarField.h"
 using fdaPDE::core::ScalarField;
-#include "../src/core/OPT/optimizers/GridOptimizer.h"
+#include "../fdaPDE/core/OPT/optimizers/GridOptimizer.h"
 using fdaPDE::core::OPT::GridOptimizer;
 
 TEST(GridOptimizerTest, OptimizeOver1DGrid) {

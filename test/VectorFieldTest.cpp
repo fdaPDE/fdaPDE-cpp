@@ -3,14 +3,14 @@
 #include <functional>
 #include <gtest/gtest.h> // testing framework
 
-#include "../src/core/utils/fields/ScalarField.h"
+#include "../fdaPDE/core/utils/fields/ScalarField.h"
 using fdaPDE::core::ScalarField;
-#include "utils/Symbols.h"
-#include "../src/core/utils/fields/VectorField.h"
+#include "../fdaPDE/core/utils/Symbols.h"
+#include "../fdaPDE/core/utils/fields/VectorField.h"
 using fdaPDE::core::VectorField;
-#include "../src/core/utils/fields/DotProduct.h"
+#include "../fdaPDE/core/utils/fields/DotProduct.h"
 using fdaPDE::core::DotProduct;
-#include "../src/core/utils/fields/Divergence.h"
+#include "../fdaPDE/core/utils/fields/Divergence.h"
 using fdaPDE::core::Divergence;
 
 // test different constructors of VectorField
