@@ -13,20 +13,47 @@ using fdaPDE::core::TwiceDifferentiableScalarField;
 using fdaPDE::core::OPT::BFGSOptimizer;
 #include "../fdaPDE/core/OPT/optimizers/Newton.h"
 using fdaPDE::core::OPT::NewtonOptimizer;
+#include "../fdaPDE/core/OPT/optimizers/GradientDescent.h"
+using fdaPDE::core::OPT::GradientDescentOptimizer;
 
-// a templated test suite for testing iterative optimizers over 2D problems. Any iterative optimizer in OPT must satisfy this test suite
-
-// create templated test fixture
-template <typename T> class IterativeOptimizerTest : public ::testing::Test {};
-
-// associate list of types to the test suite. If you insert a new *iterative* optimizer in OPT module it must be inserted in this
-// type list. Any iterative optimizer MUST pass all the test cases here listed to guarantee it conforms to the adopted interface in OPT.
+// a templated test suite for testing iterative optimizers over 2D problems. Any iterative optimizer in OPT must pass this test suite.
 // You can further add specific test cases for the optimizer at hand in a different dedicated file.
-using optList = ::testing::Types<BFGSOptimizer<2>, NewtonOptimizer<2>>;
-TYPED_TEST_SUITE(IterativeOptimizerTest, optList);
+
+// create templated test fixture for 2D case
+template <typename T>
+class IterativeOptimizer2DTest : public ::testing::Test {};
+
+// If you insert a new *iterative* optimizer in OPT module it must be inserted in this type list. Be sure to set N = 2.
+using optList2D = ::testing::Types<BFGSOptimizer<2>, NewtonOptimizer<2>, GradientDescentOptimizer<2>>;
+TYPED_TEST_SUITE(IterativeOptimizer2DTest, optList2D);
+
+// create templated test fixture for 1D case
+template <typename T>
+class IterativeOptimizer1DTest : public ::testing::Test {};
+using optList1D = ::testing::Types<BFGSOptimizer<1>, NewtonOptimizer<1>, GradientDescentOptimizer<1>>;
+TYPED_TEST_SUITE(IterativeOptimizer1DTest, optList1D);
+
+// just a simple test case to check optimization works in 1D, other properties are tested in the 2D case
+TYPED_TEST(IterativeOptimizer1DTest, Optimize1D) {
+  // define some objective to optimize
+  ScalarField<1> field([](SVector<1> x) -> double { return std::sin(x[0]); });
+
+  // define optimizer
+  double tolerance = 0.0001;
+  TypeParam opt(1000, tolerance, 0.01);
+  // perform optimization
+  // some optimizers moves toward the direction reducing the gradient vector, is not guaranteed to converge to a minimum if the
+  // function is not convex. Select a starting point forcing newton to converge to the minimum of the function
+  SVector<1> init(-0.1);
+  opt.findMinimum(field, init);
+  // optimum value should be near to expectedValue, at least below opt tolerance
+  double expectedValue = -1;
+  double objValue = opt.getObjValue();
+  EXPECT_TRUE(std::abs(objValue - expectedValue) < tolerance);
+}
 
 // optimization using numerical approximation of derivatives works
-TYPED_TEST(IterativeOptimizerTest, Optimize2DConvexNonExact) {
+TYPED_TEST(IterativeOptimizer2DTest, Optimize2DConvexNonExact) {
   // define objective function: x^2 + y^2
   ScalarField<2> field([](SVector<2> x) -> double { return std::pow(x[0],2) + std::pow(x[1], 2); });
   // do not define analytical gradient and hessian, instead resort to numerical approximations
@@ -44,7 +71,7 @@ TYPED_TEST(IterativeOptimizerTest, Optimize2DConvexNonExact) {
 
 // check that calling .findMinimum after a previous call to .findMinimum returns the same result, this means to check
 // that the optimizer is left to a valid state after execution of .findMinimum
-TYPED_TEST(IterativeOptimizerTest, SubsequentCallsSameResult) {
+TYPED_TEST(IterativeOptimizer2DTest, SubsequentCallsSameResult) {
   // define objective function: x^2 + y^2
   ScalarField<2> field([](SVector<2> x) -> double { return std::pow(x[0],2) + std::pow(x[1], 2); });
   // do not define analytical gradient and hessian, instead resort to numerical approximations
@@ -75,14 +102,14 @@ TYPED_TEST(IterativeOptimizerTest, SubsequentCallsSameResult) {
   opt.findMinimum(field2, init2);
   // optimum found should be equal to true optimum
   double exprectedOptimum = -0.405236870266690;
-  EXPECT_DOUBLE_EQ(exprectedOptimum, opt.getObjValue()) << opt.iterations();
+  EXPECT_DOUBLE_EQ(exprectedOptimum, opt.getObjValue());
   
   // if the above assertion is not met, most likely the optimizer doesn't clean its state after a call to .findMinimum()
   // you should always clean the state of the optimizer before starting a new optimization
 }
 
 // supply an objective with exact expression of gradient and hessian triggers the optimizer to use these quantites
-TYPED_TEST(IterativeOptimizerTest, Optimize2DConvexExact) {
+TYPED_TEST(IterativeOptimizer2DTest, Optimize2DConvexExact) {
   // define objective function: x^2 + y^2
   std::function<double(SVector<2>)> fieldExpr = [](SVector<2> x) -> double {
     return std::pow(x[0],2) + std::pow(x[1], 2);
@@ -113,13 +140,13 @@ TYPED_TEST(IterativeOptimizerTest, Optimize2DConvexExact) {
   // expect objValue_exact below tolerance
   EXPECT_TRUE(std::abs(objValue_exact - 0) < tolerance);
   // expect the two values different (this means that the analytical expressions are actually used by the method)
-  EXPECT_FALSE(objValue_exact == objValue_approx) << objValue_exact << " - " << opt.iterations();
+  EXPECT_FALSE(objValue_exact == objValue_approx);
   // expect solution obtained with exact expressions approximately equal to the approximated one
   EXPECT_TRUE(std::abs(objValue_exact - objValue_approx) < tolerance);
 }
 
 // use a non convex objective to stress the optimizer but with a unique minimum
-TYPED_TEST(IterativeOptimizerTest, Optimize2DNonConvexUniqueMin) {
+TYPED_TEST(IterativeOptimizer2DTest, Optimize2DNonConvexUniqueMin) {
   // define non convex objective function having just one minimum : x*e^{-x^2 - y^2} + (x^2 + y^2)/20
   ScalarField<2> field([](SVector<2> x) -> double {
     return x[0]*std::exp(- std::pow(x[0],2) - std::pow(x[1], 2)) + (std::pow(x[0],2) + std::pow(x[1], 2))/20;
@@ -135,11 +162,11 @@ TYPED_TEST(IterativeOptimizerTest, Optimize2DNonConvexUniqueMin) {
   // optimum value should be near to expectedValue, at least below opt tolerance
   double expectedValue = -0.405236870266690;
   double objValue = opt.getObjValue();
-  EXPECT_TRUE(std::abs(objValue - expectedValue) < tolerance) << objValue << " - " << opt.iterations();
+  EXPECT_TRUE(std::abs(objValue - expectedValue) < tolerance);
 }
 
 // check that if tolerance is not reached maximum iteration is met
-TYPED_TEST(IterativeOptimizerTest, StopOnMaxIter) {
+TYPED_TEST(IterativeOptimizer2DTest, StopOnMaxIter) {
   // select a convex function with a single minimum point: 2*x^2 + 4*y^2
   ScalarField<2> field([](SVector<2> x) -> double { return 2*std::pow(x[0],2) + 4*std::pow(x[1], 2); });
 
