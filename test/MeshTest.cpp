@@ -24,10 +24,10 @@ protected:
   CSVFile<double> pointFile;
   CSVFile<int> elementFile, neighborFile;
   // load mesh from .csv files
-  Mesh2DTest() : m(Mesh2D("circle_points.csv", "circle_edges.csv", "circle_triangles.csv", "circle_neighbors.csv", "circle_boundary_markers.csv")),
-		 pointFile(reader.parseFile<double>("circle_points.csv")),
-		 elementFile(reader.parseFile<int>("circle_triangles.csv")),
-		 neighborFile(reader.parseFile<int>("circle_neighbors.csv")) {};
+  Mesh2DTest() : m(Mesh2D("data/m2D_points.csv", "data/m2D_edges.csv", "data/m2D_elements.csv", "data/m2D_neigh.csv", "data/m2D_boundary.csv")),
+		 pointFile(reader.parseFile<double>("data/m2D_points.csv")),
+		 elementFile(reader.parseFile<int>("data/m2D_elements.csv")),
+		 neighborFile(reader.parseFile<int>("data/m2D_neigh.csv")) {};
 };
 
 // check that mesh correctly load in memory the mesh information
