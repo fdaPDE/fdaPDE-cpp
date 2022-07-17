@@ -7,6 +7,8 @@
 #include "GridOptimizerTest.cpp"
 #include "IterativeOptimizerTest.cpp"
 #include "OptimizerExtensionTest.cpp"
+// MESH test suites
+#include "MeshTest.cpp"
 
 int main(int argc, char **argv){
   // start testing
