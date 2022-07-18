@@ -13,11 +13,12 @@
 using fdaPDE::core::MESH::Mesh2D;
 using fdaPDE::core::MESH::Mesh3D;
 using fdaPDE::core::MESH::SurfaceMesh;
+using fdaPDE::core::MESH::LinearNetworkMesh;
 #include "../fdaPDE/core/MESH/Element.h"
 using fdaPDE::core::MESH::Element;
 #include "../fdaPDE/core/MESH/CSVReader.h"
 
-// test suite for testing non-manifold meshes (2D/3D)
+// test suite for testing non-manifold meshes (2D/3D) and manifold mesh (2.5D/1.5D)
  
 // mesh used for testing: unit disk with 441 2D points (nodes), 780 elements and 1220 edges.
 // see m2D_*.csv data series in test/data/ folder to inspect raw informations
@@ -412,4 +413,59 @@ TEST_F(Mesh2_5DTest, RangeForLoop) {
   }
   // check that no ID is left in the initial set
   EXPECT_TRUE(meshIDs.empty());
+}
+
+// linear network has 204 nodes, 559 elements
+class Mesh1_5DTest : public ::testing::Test {
+protected:
+  LinearNetworkMesh m; // loaded mesh
+  CSVReader reader{}; // csv parser
+  // raw files
+  CSVFile<double> pointFile;
+  CSVFile<int> elementFile;
+  CSVSparseFile<int> neighborFile;
+  // load mesh from .csv files
+  Mesh1_5DTest() : m(LinearNetworkMesh("data/m1.5D_points.csv", "data/m1.5D_edges.csv", "data/m1.5D_elements.csv", "data/m1.5D_neigh.csv", "data/m1.5D_boundary.csv")),
+		   pointFile(reader.parseFile<double>("data/m1.5D_points.csv")),
+		   elementFile(reader.parseFile<int>("data/m1.5D_elements.csv")),
+		   neighborFile(reader.parseSparseFile<int>("data/m1.5D_neigh.csv")) {};
+};
+
+
+TEST_F(Mesh1_5DTest, DimensionsAreCorrect) {
+  // check that at least dimensions are correct
+  EXPECT_EQ(m.getNumberOfElements(), 559);
+  EXPECT_EQ(m.getNumberOfNodes(),    204);
+}
+
+// check points' coordinate embedded in an element are loaded correctly
+TEST_F(Mesh1_5DTest, PointCoordinatesAreLoadedCorrectly) {
+  // prepare RNG
+  std::default_random_engine rng;
+  std::uniform_int_distribution<int> randomID(0, m.getNumberOfElements()-1);
+  // draw some elements at random and test if contained information reflects raw information
+  for(std::size_t i = 0; i < 0.1*m.getNumberOfNodes(); ++i){
+    std::size_t elementID = randomID(rng); // draw an ID at random
+    // request the element with that ID
+    std::shared_ptr<Element<1,2>> e = m.requestElementById(elementID);
+
+    // check vertices coordinates are loaded correctly
+    std::vector<SVector<2>> rawPointSet; // the set of vertices' coordinates of e directly coming from raw file
+    auto rawElementFile = elementFile.getRawParsedFile();
+    for(auto it = rawElementFile.begin(); it != rawElementFile.end(); ++it){	
+      // C++ starts counting from 0 -> the element with index i > 0 in mesh has index i-1 in fdaPDE internals
+      std::size_t rawPointID = it->second[elementID] - 1; // subtract 1 to realign indexes!
+      // observe that Mesh automatically subtracts 1 to all indexes at construction time, so that this realignment is
+      // never required. Here we are doing bare-metal testing to strees the Mesh module hence we should not trust what is coming from Mesh
+      double x = pointFile.getRawParsedFile()["V1"][rawPointID];
+      double y = pointFile.getRawParsedFile()["V2"][rawPointID];
+      SVector<2> rawPoint(x,y);
+      rawPointSet.push_back(rawPoint);
+    }
+    // check coordinates coming from the element built from Mesh match raw informations
+    for(std::size_t j = 0; j < e->getCoords().size(); ++j){
+      SVector<2> ePoint = e->getCoords()[j];
+      EXPECT_TRUE(std::find(rawPointSet.begin(), rawPointSet.end(), ePoint) != rawPointSet.end());
+    }
+  }
 }
