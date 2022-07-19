@@ -469,3 +469,86 @@ TEST_F(Mesh1_5DTest, PointCoordinatesAreLoadedCorrectly) {
     }
   }
 }
+
+// check neighboring identifiers embedded in an element are loaded correctly
+TEST_F(Mesh1_5DTest, NeighboringInformationsAreLoadedCorrectly) {
+  // prepare RNG
+  std::default_random_engine rng;
+  std::uniform_int_distribution<int> randomID(0, m.getNumberOfElements()-1);
+  // draw some elements at random and test if contained information reflects raw information
+  for(std::size_t i = 0; i < 0.1*m.getNumberOfNodes(); ++i){
+    std::size_t elementID = randomID(rng); // draw an ID at random
+    // request the element with that ID
+    std::shared_ptr<Element<1,2>> e = m.requestElementById(elementID);
+
+    // check neighboring information are loaded correctly
+    std::vector<int> rawNeighSet;
+    auto rawNeighFile = neighborFile.getRawParsedFile(); // for a CSVSparseFile this is a map mappting a vector of vectors
+    auto eNeighbors   = e->getNeighbors();
+    
+    // indexes of neighbors' element built from Mesh are all contained in the indexes set built from raw information?
+    for(auto it = rawNeighFile.begin(); it != rawNeighFile.end(); ++it){
+      for(auto neighID = it->second[elementID].begin(); neighID != it->second[elementID].end(); ++neighID){
+	int searchedID = (*neighID) - 1; // subtract 1 to realign indexes!
+	auto search_it = std::find(eNeighbors.begin(), eNeighbors.end(), searchedID);
+	EXPECT_TRUE(search_it != eNeighbors.end());
+	eNeighbors.erase(search_it);
+      }
+    }
+    // no neighbor left out
+    EXPECT_TRUE(eNeighbors.empty());
+  }
+}
+
+// performs some checks on the mesh topologi, i.e. checks that stated neighbors are indeed geometrically so, checks the domain boundary
+TEST_F(Mesh1_5DTest, MeshTopologyChecks) {
+  // prepare RNG
+  std::default_random_engine rng;
+  std::uniform_int_distribution<int> randomID(0, m.getNumberOfElements()-1);
+
+  for(std::size_t i = 0; i < 0.1*m.getNumberOfNodes(); ++i){
+    std::size_t elementID = randomID(rng); // draw an ID at random
+    // request the element with that ID
+    std::shared_ptr<Element<1,2>> e = m.requestElementById(elementID);
+    // check that neighboing elements have always 1 points in common, this tests that if we consider two elements as
+    // neighbors they are geometrically linked (there is a vertes in common, which is what we expect from neighboring relation)
+    for(int neighID : e->getNeighbors()){
+      if(neighID >= 0){
+	std::shared_ptr<Element<1,2>> n = m.requestElementById(neighID);
+	std::array<SVector<2>, 2> pList = e->getCoords(), nList = n->getCoords();
+        std:size_t matches = 0;
+	for(SVector<2> p : pList){
+	  if(std::find(nList.begin(), nList.end(), p) != nList.end())
+	    matches++;
+	}
+	EXPECT_TRUE(matches == 1); // exactly one vertex in common
+      }else{ // we are considering the boundary of the domain
+	EXPECT_TRUE(e->isOnBoundary());
+    	// check that Mesh is choerent with this information, i.e. at least one vertex of e is detected as boundary point
+	bool element_on_boundary = false;
+	for(auto it = e->getBoundaryMarkers().begin(); it != e->getBoundaryMarkers().end(); ++it){
+	  if(m.isOnBoundary(it->first)) // mesh detects this point is a boundary point
+	    element_on_boundary = true;
+	}
+	EXPECT_TRUE(element_on_boundary);
+      }
+    }
+  }
+}
+
+// check the range for loop scans the whole mesh element by element
+TEST_F(Mesh1_5DTest, RangeForLoop) {
+  // prepare set with all indexes of IDs to touch
+  std::unordered_set<int> meshIDs{};
+  for(int i = 0; i < m.getNumberOfElements(); ++i)
+    meshIDs.insert(i);
+
+  // range-for over all elements removing the element's ID from the above set when the element is visited
+  for(const auto& e : m){
+    // check element ID still present in the IDs set (ID not visisted by means of a different element)
+    EXPECT_TRUE(meshIDs.find(e->getID()) != meshIDs.end());
+    meshIDs.erase(e->getID());
+  }
+  // check that no ID is left in the initial set
+  EXPECT_TRUE(meshIDs.empty());
+}
