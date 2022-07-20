@@ -9,6 +9,7 @@
 #include "OptimizerExtensionTest.cpp"
 // MESH test suites
 #include "MeshTest.cpp"
+#include "ElementTest.cpp"
 
 int main(int argc, char **argv){
   // start testing

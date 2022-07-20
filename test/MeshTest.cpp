@@ -18,7 +18,7 @@ using fdaPDE::core::MESH::SurfaceMesh;
 using fdaPDE::core::MESH::is_linear_network;
 #include "../fdaPDE/core/MESH/Element.h"
 using fdaPDE::core::MESH::Element;
-#include "../fdaPDE/core/MESH/CSVReader.h"
+#include "../fdaPDE/core/utils/IO/CSVReader.h"
 
 // test suite for testing both non-manifold meshes (2D/3D) and manifold mesh (2.5D/1.5D)
 
