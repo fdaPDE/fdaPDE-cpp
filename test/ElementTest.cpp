@@ -105,19 +105,19 @@ TYPED_TEST(ElementTest, BarycentricCoordinates) {
   while(e->ID() == f->ID()){
     f = this->generateRandomElement();
   }
-  EXPECT_FALSE((e->toBarycentricCoords(f->midPoint()).array() >= 0).all());
+  EXPECT_FALSE((e->toBarycentricCoords(f->midPoint()).array() > 0).all()) << f->midPoint() << "\n----" << e->toBarycentricCoords(f->midPoint()) << "\n-----" << f->coords()[0] << "\n~~~~~~" << f->coords()[1] << "\nAAA " << f->ID() << "\nBBB " << e->ID() << "\n~~~~~~~" << e->coords()[0] << "\n --" << e->coords()[1];
   
   // the barycentric coordinates of the mid point of an element are all equal to (1+M)^{-1} (M is the dimension of the space
   // where the element belongs)
   SVector<TestFixture::M + 1> expected = SVector<TestFixture::M + 1>::Constant(1.0/(1+TestFixture::M));
-  EXPECT_TRUE((e->toBarycentricCoords(e->midPoint()) - expected).norm() < 10*std::numeric_limits<double>::epsilon());
+  EXPECT_TRUE((e->toBarycentricCoords(e->midPoint()) - expected).norm() < 50*std::numeric_limits<double>::epsilon());
 
   // a vertex has all its barycentric coordinates equal to 0 except a single one
   for(std::size_t i = 0; i < e->coords().size(); ++i){
     SVector<TestFixture::N> node = e->coords()[i];
     q = e->toBarycentricCoords(node);
-    EXPECT_TRUE(((q.array()-1).abs() < 10*std::numeric_limits<double>::epsilon()).count() == 1 &&
-		(q.array() < 10*std::numeric_limits<double>::epsilon()).count() == TestFixture::M);
+    EXPECT_TRUE(((q.array()-1).abs() < 50*std::numeric_limits<double>::epsilon()).count() == 1 &&
+		(q.array() < 50*std::numeric_limits<double>::epsilon()).count() == TestFixture::M);
   }
 }
 
@@ -134,7 +134,7 @@ TYPED_TEST(ElementTest, MidPoint) {
     double x = b[i];
     for(std::size_t j = i+1; j < TestFixture::M + 1; ++j){
       double y = b[j];
-      EXPECT_NEAR(x, y, 10*std::numeric_limits<double>::epsilon());
+      EXPECT_NEAR(x, y, 50*std::numeric_limits<double>::epsilon());
     }
   }
 }

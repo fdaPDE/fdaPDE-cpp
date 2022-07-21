@@ -23,10 +23,10 @@ using fdaPDE::core::MESH::Element;
 // test suite for testing both non-manifold meshes (2D/3D) and manifold mesh (2.5D/1.5D)
 
 // sample meshes used for testing: see m*D_*.csv data series in test/data/ folder to inspect raw informations
-//     * 2D:   unit disk with:   441  2D points, 780   elements, 1220  edges. /test/data/m2D_*.csv
-//     * 3D:   unit sphere with: 4193 3D points, 22200 elements, 45380 faces. /test/data/m3D_*.csv
-//     * 2.5D: manifold with:    340  3D points, 616   elements, 956   edges. /test/data/m2.5D_*.csv
-//     * 1.5D: graph with:       204  2D points, 559   elements               /test/data/m1.5D_*.csv
+//     * 2D:   unit disk with:   441 2D points, 780  elements, 1220 edges. /test/data/m2D_*.csv
+//     * 3D:   unit sphere with: 587 3D points, 2775 elements, 5795 faces. /test/data/m3D_*.csv
+//     * 2.5D: manifold with:    340 3D points, 616  elements, 956  edges. /test/data/m2.5D_*.csv
+//     * 1.5D: graph with:       204 2D points, 559  elements              /test/data/m1.5D_*.csv
 // observe that 1.5D testing requires special logic. Specialized code is compiled to test the neighboring structure stored by 
 // LinearNetworkMesh objects
 

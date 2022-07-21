@@ -10,6 +10,7 @@
 // MESH test suites
 #include "MeshTest.cpp"
 #include "ElementTest.cpp"
+#include "SearchEngineTest.cpp"
 
 int main(int argc, char **argv){
   // start testing
