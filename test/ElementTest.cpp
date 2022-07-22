@@ -12,6 +12,8 @@ using fdaPDE::core::MESH::SurfaceMesh;
 #include "../fdaPDE/core/MESH/Element.h"
 using fdaPDE::core::MESH::Element;
 #include "../fdaPDE/core/utils/IO/CSVReader.h"
+#include "../fdaPDE/core/NLA/VectorSpace.h"
+using fdaPDE::core::NLA::VectorSpace;
 
 // correctness of contained information in an Element object has been asserted in MeshTest.cpp test suite, please refer to it if you believe
 // that some information stored in an Element object is not correct (is indeed responsibility of Mesh.h to build the single Element instance).
@@ -34,6 +36,9 @@ public:
   // RNG stuffs
   uint32_t seed = time(NULL);
   std::default_random_engine rng;
+
+  // tolerance on zero values
+  double tolerance = 50*std::numeric_limits<double>::epsilon();
   
   // load mesh from .csv files
   ElementTest() {
@@ -100,24 +105,30 @@ TYPED_TEST(ElementTest, BarycentricCoordinates) {
   EXPECT_DOUBLE_EQ(q.sum(), 1);
   // the barycentric coordinates of a point inside the element are all positive
   EXPECT_TRUE((q.array() >= 0).all());
+
   // a point outside the element has at least one negative barycentric coordinate
   auto f = this->generateRandomElement();
-  while(e->ID() == f->ID()){
-    f = this->generateRandomElement();
+  while(e->ID() == f->ID()) f = this->generateRandomElement();
+  
+  if constexpr(TestFixture::N == TestFixture::M){
+    EXPECT_FALSE((e->toBarycentricCoords(f->midPoint()).array() > 0).all());
+  }else{
+    // for manifolds we have to consider if the point x belongs to the space spanned by the element
+    VectorSpace<TestFixture::N> vs = e->spannedSpace();
+    EXPECT_FALSE(vs.distance(f->midPoint()) < this->tolerance && (e->toBarycentricCoords(f->midPoint()).array() > 0).all());
   }
-  EXPECT_FALSE((e->toBarycentricCoords(f->midPoint()).array() > 0).all()) << f->midPoint() << "\n----" << e->toBarycentricCoords(f->midPoint()) << "\n-----" << f->coords()[0] << "\n~~~~~~" << f->coords()[1] << "\nAAA " << f->ID() << "\nBBB " << e->ID() << "\n~~~~~~~" << e->coords()[0] << "\n --" << e->coords()[1];
   
   // the barycentric coordinates of the mid point of an element are all equal to (1+M)^{-1} (M is the dimension of the space
   // where the element belongs)
   SVector<TestFixture::M + 1> expected = SVector<TestFixture::M + 1>::Constant(1.0/(1+TestFixture::M));
-  EXPECT_TRUE((e->toBarycentricCoords(e->midPoint()) - expected).norm() < 50*std::numeric_limits<double>::epsilon());
+  EXPECT_TRUE((e->toBarycentricCoords(e->midPoint()) - expected).norm() < this->tolerance);
 
   // a vertex has all its barycentric coordinates equal to 0 except a single one
   for(std::size_t i = 0; i < e->coords().size(); ++i){
     SVector<TestFixture::N> node = e->coords()[i];
     q = e->toBarycentricCoords(node);
-    EXPECT_TRUE(((q.array()-1).abs() < 50*std::numeric_limits<double>::epsilon()).count() == 1 &&
-		(q.array() < 50*std::numeric_limits<double>::epsilon()).count() == TestFixture::M);
+    EXPECT_TRUE(((q.array()-1).abs() < this->tolerance).count() == 1 &&
+		(q.array() < this->tolerance).count() == TestFixture::M);
   }
 }
 
@@ -134,7 +145,7 @@ TYPED_TEST(ElementTest, MidPoint) {
     double x = b[i];
     for(std::size_t j = i+1; j < TestFixture::M + 1; ++j){
       double y = b[j];
-      EXPECT_NEAR(x, y, 50*std::numeric_limits<double>::epsilon());
+      EXPECT_NEAR(x, y, this->tolerance);
     }
   }
 }
