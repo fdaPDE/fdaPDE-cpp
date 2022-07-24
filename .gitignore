@@ -45,7 +45,7 @@
 
 *.csv
 !test/data/*.csv
-
+!test/data/*.mtx
 *.txt
 *.json
 *.cmake

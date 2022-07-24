@@ -11,6 +11,8 @@
 #include "MeshTest.cpp"
 #include "ElementTest.cpp"
 #include "SearchEngineTest.cpp"
+// NLA test suites
+#include "FSPAITest.cpp"
 
 int main(int argc, char **argv){
   // start testing
