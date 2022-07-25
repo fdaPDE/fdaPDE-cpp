@@ -13,6 +13,7 @@
 #include "SearchEngineTest.cpp"
 // NLA test suites
 #include "FSPAITest.cpp"
+#include "VectorSpaceTest.cpp"
 
 int main(int argc, char **argv){
   // start testing

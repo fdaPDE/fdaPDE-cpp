@@ -1,13 +1,8 @@
-#include <cstddef>
 #include <gtest/gtest.h> // testing framework
-#include <limits>
-#include <memory>
-#include <random>
-#include <utility>
 #include <unsupported/Eigen/SparseExtra>
 
-#include "../fdaPDE/core/utils/Symbols.h"
 #include "../fdaPDE/core/NLA/FSPAI.h"
+using fdaPDE::core::NLA::FSPAI;    
 
 // test FSPAI implementation using different matrices taken from matrix market with respect to output coming from
 // fspai-1.1, Matous Sedlacek https://www5.in.tum.de/wiki/index.php/FSPAI.

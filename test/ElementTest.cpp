@@ -114,7 +114,7 @@ TYPED_TEST(ElementTest, BarycentricCoordinates) {
     EXPECT_FALSE((e->toBarycentricCoords(f->midPoint()).array() > 0).all());
   }else{
     // for manifolds we have to consider if the point x belongs to the space spanned by the element
-    VectorSpace<TestFixture::N> vs = e->spannedSpace();
+    VectorSpace<TestFixture::M, TestFixture::N> vs = e->spannedSpace();
     EXPECT_FALSE(vs.distance(f->midPoint()) < this->tolerance && (e->toBarycentricCoords(f->midPoint()).array() > 0).all());
   }
   
