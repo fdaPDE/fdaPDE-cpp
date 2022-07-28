@@ -113,7 +113,7 @@ SearchEngineTest<E>::generateTestSet() {
   return result;
 }
 
-using meshList = ::testing::Types<Mesh2D, SurfaceMesh, Mesh3D, NetworkMesh>;
+using meshList = ::testing::Types<Mesh2D<>, SurfaceMesh<>, Mesh3D<>, NetworkMesh<>>;
 TYPED_TEST_SUITE(SearchEngineTest, meshList);
 
 // in the following a test is passed if **all** the queries are correctly satisfied

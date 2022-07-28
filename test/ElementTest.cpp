@@ -91,7 +91,7 @@ SVector<E::embedding_dimension> ElementTest<E>::generateRandomPoint(
   return p;
 } 
 
-using meshList = ::testing::Types<Mesh2D, SurfaceMesh, Mesh3D, NetworkMesh>;
+using meshList = ::testing::Types<Mesh2D<>, SurfaceMesh<>, Mesh3D<>, NetworkMesh<>>;
 TYPED_TEST_SUITE(ElementTest, meshList);
 
 // check computation of barycentric coordinates is coherent with well known properties

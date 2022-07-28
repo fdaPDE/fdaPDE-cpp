@@ -112,7 +112,7 @@ std::vector<int> MeshTest<E>::collectNeighborsFromFile(std::size_t elementID) co
   return rawNeighboringSet;
 }
 
-using meshList = ::testing::Types<Mesh2D, SurfaceMesh, Mesh3D, NetworkMesh>;
+using meshList = ::testing::Types<Mesh2D<>, SurfaceMesh<>, Mesh3D<>, NetworkMesh<>>;
 TYPED_TEST_SUITE(MeshTest, meshList);
 
 // check that mesh correctly load in memory the mesh information
