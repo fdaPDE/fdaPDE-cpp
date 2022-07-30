@@ -14,6 +14,8 @@
 // NLA test suites
 #include "FSPAITest.cpp"
 #include "VectorSpaceTest.cpp"
+// FEM test suites
+#include "LagrangianBasisTest.cpp"
 
 int main(int argc, char **argv){
   // start testing
