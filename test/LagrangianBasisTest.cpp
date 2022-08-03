@@ -2,6 +2,7 @@
 #include <gtest/gtest.h> // testing framework
 #include <gtest/internal/gtest-type-util.h>
 #include <limits>
+#include <string>
 #include <type_traits>
 #include <random>
 
@@ -17,6 +18,7 @@ using fdaPDE::core::MESH::Mesh2D;
 using fdaPDE::core::MESH::Mesh3D;
 using fdaPDE::core::MESH::NetworkMesh;
 using fdaPDE::core::MESH::SurfaceMesh;
+using fdaPDE::core::MESH::is_manifold;
 
 // a type representing a pair of integer values
 template <int i, int j> struct int_pair {
@@ -57,7 +59,7 @@ TYPED_TEST_SUITE(LagrangianBasisTest, pairs);
 // tests a Lagrangian basis can be successfully built over the reference unit simplex
 TYPED_TEST(LagrangianBasisTest, ReferenceElement) {
   // create lagrangian basis over unit dimensional simplex
-  LagrangianBasis<TestFixture::N, TestFixture::R> basis;
+  LagrangianBasis<TestFixture::N, TestFixture::N, TestFixture::R> basis;
 
   // expect correct number of basis functions
   EXPECT_EQ(basis.size(), TestFixture::n_basis);
@@ -71,8 +73,9 @@ TYPED_TEST(LagrangianBasisTest, ReferenceElement) {
   }
 }
 
+// fixture used to check if a lagrangian basis can be defined over a generic mesh (also manifold)
 template <typename E>
-class MeshFixture : public ::testing::Test {
+class LagrangianBasisMeshTest : public ::testing::Test {
 private:
   // RNG stuffs
   std::default_random_engine rng{};
@@ -81,11 +84,11 @@ public:
   E m; // mesh
   static constexpr unsigned int M = E::local_dimension;
   static constexpr unsigned int N = E::embedding_dimension;
-  static constexpr std::size_t n_basis = ct_binomial_coefficient(N+1,1);
+  static constexpr std::size_t n_basis = ct_binomial_coefficient(M+1,1);
   double tolerance = std::pow(0.1, 13);
   
   // load mesh from .csv files
-  MeshFixture() {
+  LagrangianBasisMeshTest() {
     std::string dim = (E::manifold) ? std::to_string(M) + ".5" : std::to_string(M);
     // compute file names
     std::string point    = "data/m" + dim + "D_points.csv";
@@ -105,33 +108,35 @@ public:
 
 template <typename E>
 std::shared_ptr<Element<E::local_dimension, E::embedding_dimension>>
-MeshFixture<E>::generateRandomElement() {
+LagrangianBasisMeshTest<E>::generateRandomElement() {
   std::uniform_int_distribution<int> randomID(0, this->m.elements()-1);
   int ID = randomID(rng);  
   return m.element(ID);
 }
 
-
-using meshList_2 = ::testing::Types<Mesh2D<>, Mesh3D<>>;
-TYPED_TEST_SUITE(MeshFixture, meshList_2);
+using meshList = ::testing::Types<Mesh2D<>, SurfaceMesh<>, Mesh3D<>, NetworkMesh<>>;
+TYPED_TEST_SUITE(LagrangianBasisMeshTest, meshList);
 
 // tests a Lagrangian basis can be built on any kind of mesh element
-TYPED_TEST(MeshFixture, MeshElement) {
+TYPED_TEST(LagrangianBasisMeshTest, DefineOverElement) {
   // take element at random
   auto e = this->generateRandomElement();
-  std::cout << e->ID() << std::endl;
   // build basis over the element
-  LagrangianBasis<TestFixture::M, 1> basis(*e);
-
+  LagrangianBasis<TestFixture::M, TestFixture::N, 1> basis(*e);
   // expect correct number of basis functions
   EXPECT_EQ(basis.size(), TestFixture::n_basis);
   // check lagrangian property (each basis function is 1 in one and only one node and 0 in any other)
   for(const MultivariatePolynomial<TestFixture::M, 1>& b : basis){
+    // a possible way to do so is to sum the value of the basis function at all nodes and check at the end it equals 1
     double sum = 0;
     for(std::size_t i = 0; i < TestFixture::n_basis; ++i){ // there are as many nodes as basis functions
-      sum += b(e->coords()[i]);
+      if constexpr(!is_manifold<TestFixture::M, TestFixture::N>::value){
+	sum += b(e->coords()[i]);
+      }else{
+	// in case of manifolds we must consider the projection of basis nodes onto the space spanned by the element
+	sum += b(e->spannedSpace().projectOnto(e->coords()[i]));
+      }
     }
     EXPECT_NEAR(sum, 1.0, this->tolerance);
   }
-
 }
