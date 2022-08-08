@@ -1,18 +1,15 @@
-#include <cstddef>
 #include <gtest/gtest.h> // testing framework
-#include <gtest/internal/gtest-type-util.h>
 #include <limits>
 #include <string>
 #include <type_traits>
 #include <random>
 
 #include "../fdaPDE/core/utils/Symbols.h"
-#include "../fdaPDE/core/FEM/basis/LagrangianBasis.h"
 #include "../fdaPDE/core/utils/CompileTime.h"
+#include "../fdaPDE/core/FEM/basis/LagrangianBasis.h"
 using fdaPDE::core::FEM::LagrangianBasis;
 using fdaPDE::core::FEM::ReferenceNodes;
 using fdaPDE::core::FEM::point_list;
-#include "../fdaPDE/core/FEM/basis/MultivariatePolynomial.h"
 #include "../fdaPDE/core/MESH/Mesh.h"
 using fdaPDE::core::MESH::Mesh2D;
 using fdaPDE::core::MESH::Mesh3D;
@@ -75,7 +72,7 @@ TYPED_TEST(LagrangianBasisTest, ReferenceElement) {
 
 // fixture used to check if a lagrangian basis can be defined over a generic mesh (also manifold)
 template <typename E>
-class LagrangianBasisMeshTest : public ::testing::Test {
+class LagrangianBasisOverMeshTest : public ::testing::Test {
 private:
   // RNG stuffs
   std::default_random_engine rng{};
@@ -88,7 +85,7 @@ public:
   double tolerance = std::pow(0.1, 13);
   
   // load mesh from .csv files
-  LagrangianBasisMeshTest() {
+  LagrangianBasisOverMeshTest() {
     std::string dim = (E::manifold) ? std::to_string(M) + ".5" : std::to_string(M);
     // compute file names
     std::string point    = "data/m" + dim + "D_points.csv";
@@ -108,20 +105,20 @@ public:
 
 template <typename E>
 std::shared_ptr<Element<E::local_dimension, E::embedding_dimension>>
-LagrangianBasisMeshTest<E>::generateRandomElement() {
+LagrangianBasisOverMeshTest<E>::generateRandomElement() {
   std::uniform_int_distribution<int> randomID(0, this->m.elements()-1);
   int ID = randomID(rng);  
   return m.element(ID);
 }
 
 using meshList = ::testing::Types<Mesh2D<>, SurfaceMesh<>, Mesh3D<>, NetworkMesh<>>;
-TYPED_TEST_SUITE(LagrangianBasisMeshTest, meshList);
+TYPED_TEST_SUITE(LagrangianBasisOverMeshTest, meshList);
 
 // tests a Lagrangian basis can be built on any kind of mesh element
-TYPED_TEST(LagrangianBasisMeshTest, DefineOverElement) {
+TYPED_TEST(LagrangianBasisOverMeshTest, DefineOverElement) {
   // take element at random
   auto e = this->generateRandomElement();
-  // build basis over the element
+  // build basis over the element (assume linear elements)
   LagrangianBasis<TestFixture::M, TestFixture::N, 1> basis(*e);
   // expect correct number of basis functions
   EXPECT_EQ(basis.size(), TestFixture::n_basis);
@@ -139,4 +136,7 @@ TYPED_TEST(LagrangianBasisMeshTest, DefineOverElement) {
     }
     EXPECT_NEAR(sum, 1.0, this->tolerance);
   }
+  // if the basis function represents a linear function built over an element, its evaluation at the element's midpoint must be
+  // equal to 1/n_basis. This check is fundamental to assess if what a LagrangianBasis is building behaves as expected
+  EXPECT_NEAR(basis[0](e->spannedSpace().projectOnto(e->midPoint())), 1.0/TestFixture::n_basis, this->tolerance);
 }
