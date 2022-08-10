@@ -29,7 +29,7 @@ public:
   static constexpr int N = E::first;
   static constexpr int R = E::second;
   static constexpr std::size_t n_basis = ct_binomial_coefficient(N+R,R);
-  double tolerance = 20*std::numeric_limits<double>::epsilon();
+  double tolerance = std::pow(0.1, 14);
 
   LagrangianBasisTest() = default;
   

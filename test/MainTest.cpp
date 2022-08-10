@@ -16,6 +16,7 @@
 #include "VectorSpaceTest.cpp"
 // FEM test suites
 #include "LagrangianBasisTest.cpp"
+#include "IntegratorTest.cpp"
 
 int main(int argc, char **argv){
   // start testing

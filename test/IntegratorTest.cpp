@@ -1,6 +1,8 @@
+#include <cstddef>
 #include <gtest/gtest-typed-test.h>
 #include <gtest/gtest.h> // testing framework
 #include <limits>
+#include <memory>
 #include <string>
 #include <type_traits>
 #include <random>
@@ -9,6 +11,7 @@
 #include "../fdaPDE/core/MESH/Element.h"
 #include "core/utils/Symbols.h"
 using fdaPDE::core::MESH::Element;
+using fdaPDE::core::MESH::ct_nnodes;
 #include "../fdaPDE/core/MESH/Mesh.h"
 using fdaPDE::core::MESH::Mesh2D;
 using fdaPDE::core::MESH::Mesh3D;
@@ -63,38 +66,29 @@ TYPED_TEST_SUITE(IntegratorTest, MeshList);
 TYPED_TEST(IntegratorTest, ElementMeasure){
   // generate random element from mesh
   auto e = this->generateRandomElement();
-  Integrator<TestFixture::N> integrator; // define integrator
+  Integrator<TestFixture::M> integrator; // define integrator
   // the integral of the constant field 1 over the mesh element equals its measure
   std::function<double(SVector<TestFixture::N>)> f = [](SVector<TestFixture::N> x) -> double { return 1; };
   EXPECT_NEAR(e->measure(), integrator.integrate(*e, f), this->tolerance);
 }
 
+// the following test checks if it is possible to integrate a general scalar field over a mesh element. Because for linear elements
+// we have a closed formula for the true value of the integral we test only if the quadrature rule works on linear fields. In particular
+// the volume of a truncated prism defined over an element B having height h1, h2, ..., hm at the m vertices equals
+//     B.measure()*(h1 + h2 + ... hm)/m
 TYPED_TEST(IntegratorTest, LinearField){
-  if constexpr(TestFixture::N == TestFixture::M){
     // generate random element from mesh
     auto e = this->generateRandomElement();
-    Integrator<TestFixture::N> integrator; // define integrator
+    Integrator<TestFixture::M> integrator; // define integrator
+    // a linear function over an element e defines a truncated prism over e
     std::function<double(SVector<TestFixture::N>)> f = [](SVector<TestFixture::N> x) -> double {
       return x[0] + x[1];
     };
-    // compute volume of truncated rectangular prism: 1/(M+1)*V*(h1 + h2 + ... + hM)
+    // compute volume of truncated rectangular prism: 1/(M+1)*V*(h1 + h2 + ... + hM), where V is the element's measure
     double h = 0;
-    for(auto p : *e) h += f(p);
+    for(auto p : *e)
+      h += f(p);
     double measure = e->measure()*h/(TestFixture::M+1);
+    // test for equality
     EXPECT_NEAR(measure, integrator.integrate(*e, f), this->tolerance);
-  }
-  // if constexpr(TestFixture::N == 2 && TestFixture::M == 1){
-  //   // generate random element from mesh
-  //   auto e = this->generateRandomElement();
-  //   Integrator<TestFixture::N> integrator; // define integrator
-  //   std::function<double(SVector<TestFixture::N>)> f = [](SVector<TestFixture::N> x) -> double {
-  //     return x[0] + x[1];
-  //   };
-  //   // compute volume of trapezoid
-  //   double h = 0;
-  //   for(auto p : *e){ h += f(p); std::cout << f(p) << "\n----\n" << p << "\n....." << std::endl; }
-  //   double measure = e->measure()*h/2;
-  //   EXPECT_NEAR(measure, integrator.integrate(*e, f), this->tolerance);
-  // }
-
 }
