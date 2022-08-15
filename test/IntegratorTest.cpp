@@ -1,6 +1,7 @@
 #include <cstddef>
 #include <gtest/gtest-typed-test.h>
 #include <gtest/gtest.h> // testing framework
+#include <gtest/internal/gtest-internal.h>
 #include <limits>
 #include <memory>
 #include <string>
@@ -19,6 +20,11 @@ using fdaPDE::core::MESH::NetworkMesh;
 using fdaPDE::core::MESH::SurfaceMesh;
 #include "../fdaPDE/core/utils/CompileTime.h"
 #include "../fdaPDE/core/FEM/integration/Integrator.h"
+#include "../fdaPDE/core/FEM/basis/LagrangianBasis.h"
+using fdaPDE::core::FEM::LagrangianBasis;
+#include "../fdaPDE/core/FEM/operators/Identity.h"
+#include "../fdaPDE/core/FEM/operators/Gradient.h"
+#include "../fdaPDE/core/FEM/operators/Laplacian.h"
 
 template <typename E>
 class IntegratorTest : public ::testing::Test {
@@ -31,7 +37,7 @@ public:
   static constexpr unsigned int M = E::local_dimension;
   static constexpr unsigned int N = E::embedding_dimension;
   static constexpr std::size_t n_basis = ct_binomial_coefficient(M+1,1);
-  double tolerance = std::pow(0.1, 15);
+  double tolerance = std::pow(0.1, 14);
   
   // load mesh from .csv files
   IntegratorTest() {
@@ -61,6 +67,7 @@ IntegratorTest<E>::generateRandomElement() {
 }
 
 using MeshList = ::testing::Types<Mesh2D<>, SurfaceMesh<>, Mesh3D<>, NetworkMesh<>>;
+//using MeshList = ::testing::Types<Mesh2D<>, Mesh3D<>>;
 TYPED_TEST_SUITE(IntegratorTest, MeshList);
 
 TYPED_TEST(IntegratorTest, ElementMeasure){
@@ -74,8 +81,8 @@ TYPED_TEST(IntegratorTest, ElementMeasure){
 
 // the following test checks if it is possible to integrate a general scalar field over a mesh element. Because for linear elements
 // we have a closed formula for the true value of the integral we test only if the quadrature rule works on linear fields. In particular
-// the volume of a truncated prism defined over an element B having height h1, h2, ..., hm at the m vertices equals
-//     B.measure()*(h1 + h2 + ... hm)/m
+// the volume of a truncated prism defined over an element e having height h1, h2, ..., hm at the m vertices equals
+//     e.measure()*(h1 + h2 + ... hm)/m
 TYPED_TEST(IntegratorTest, LinearField){
     // generate random element from mesh
     auto e = this->generateRandomElement();
@@ -91,4 +98,89 @@ TYPED_TEST(IntegratorTest, LinearField){
     double measure = e->measure()*h/(TestFixture::M+1);
     // test for equality
     EXPECT_NEAR(measure, integrator.integrate(*e, f), this->tolerance);
+}
+
+TYPED_TEST(IntegratorTest, IdentityOperator) {
+  // generate random element from mesh
+  auto e = this->generateRandomElement();
+  Integrator<TestFixture::M> integrator;
+  // define basis over the element
+  LagrangianBasis<TestFixture::M, TestFixture::N, 1> elementBasis(*e);
+  // define identity operator
+  auto form = Identity();
+
+  // wrap the M-dimesional function into an N-dimensional one
+  std::function<double(SVector<TestFixture::N>)> f = [elementBasis, e](SVector<TestFixture::N> x) -> double {
+    // project point on space spanned by the element
+    SVector<TestFixture::M> p = e->spannedSpace().projectOnto(x);
+    return (elementBasis[0]*elementBasis[0])(p);
+  };
+  // differential operators assume to be integrated over a basis defined on the reference element.
+  LagrangianBasis<TestFixture::M, TestFixture::N, 1> referenceBasis;
+  EXPECT_NEAR(integrator.integrate(referenceBasis, *e, 0, 0, form), integrator.integrate(*e, f), this->tolerance);
+}
+
+TYPED_TEST(IntegratorTest, LaplacianOperator) {
+  // generate random element from mesh
+  auto e = this->generateRandomElement();
+  Integrator<TestFixture::M> integrator;
+  // define basis over the element
+  LagrangianBasis<TestFixture::M, TestFixture::N, 1> elementBasis(*e);
+  // define laplacian operator
+  auto form = Laplacian();
+  
+  // wrap the M-dimesional function into an N-dimensional one
+  std::function<double(SVector<TestFixture::N>)> f = [elementBasis, e](SVector<TestFixture::N> x) -> double {
+    // project point on space spanned by the element
+    SVector<TestFixture::M> p = e->spannedSpace().projectOnto(x);
+    return (elementBasis[1].derive().dot(elementBasis[0].derive()))(p);
+  };
+  // differential operators assume to be integrated over a basis defined on the reference element.
+  LagrangianBasis<TestFixture::M, TestFixture::N, 1> referenceBasis{};
+  EXPECT_NEAR(integrator.integrate(referenceBasis, *e, 1, 0, form), integrator.integrate(*e, f), this->tolerance);
+}
+
+TYPED_TEST(IntegratorTest, GradientOperator) {
+  if constexpr(TestFixture::M == TestFixture::N){ // tested only for non-manifold
+    // generate random element from mesh
+    auto e = this->generateRandomElement();
+    Integrator<TestFixture::M> integrator;
+    // define basis over the element
+    LagrangianBasis<TestFixture::M, TestFixture::N, 1> elementBasis(*e);
+    // define gradient operator
+    SVector<TestFixture::N> b = SVector<TestFixture::N>::Ones();
+    auto form = dot(b, Gradient());
+
+    // wrap the M-dimesional function into an N-dimensional one
+    std::function<double(SVector<TestFixture::N>)> f = [elementBasis, e](SVector<TestFixture::N> x) -> double {
+      // project point on space spanned by the element
+      SVector<TestFixture::M> p = e->spannedSpace().projectOnto(x);
+      return (elementBasis[0]*elementBasis[0].derive().dot(SVector<TestFixture::M>::Ones()))(p);
+    };
+    
+    // differential operators assume to be integrated over a basis defined on the reference element.
+    LagrangianBasis<TestFixture::M, TestFixture::N, 1> referenceBasis{};
+    EXPECT_NEAR(integrator.integrate(referenceBasis, *e, 0, 0, form), integrator.integrate(*e, f), this->tolerance);
+  }else{
+    // skip test for manifold case: NEED FIX!
+    GTEST_SKIP();
+  }
+}
+
+// test if is possible to integrate a field over the entire mesh. Integrating the scalar field 1 over the mesh must return
+// its volume. Tested on the sample 2D mesh only (unit circle) for which we know pi to be the true value of the area
+TEST(IntegratorTest, AreaOfUnitCircle) {
+  std::string point    = "data/m2D_points.csv";
+  std::string edges    = "data/m2D_edges.csv";
+  std::string elements = "data/m2D_elements.csv";
+  std::string neigh    = "data/m2D_neigh.csv";
+  std::string boundary = "data/m2D_boundary.csv";
+  Mesh2D<1> m = Mesh<2,2,1>(point, edges, elements, neigh, boundary); 
+  Integrator<2> integrator{};
+  // define field to integrate
+  std::function<double(SVector<2>)> f = [](SVector<2> x) -> double { return 1; };
+
+  constexpr double pi = 3.14159265358979323846;
+  // the mesh is very rought, not expecting a precise estimation of pi. At least get the 3.14 estimate
+  EXPECT_NEAR(pi, integrator.integrate(m, f), std::pow(0.1, 2));
 }
