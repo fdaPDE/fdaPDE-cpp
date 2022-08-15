@@ -224,3 +224,76 @@ TEST(VectorFieldTest, Divergence) {
   auto sf1 = fieldDivergece + 2*field[0];
   EXPECT_TRUE(std::abs(sf1(p) - (4 + 2)) < 2*std::pow(0.001, 2));
 }
+
+// check definition of field with unequal sizes for domain and codomain space dimensions
+TEST(VectorFieldTest, RectangularField) {
+  // define a field from a 2D space to a 3D space
+  VectorField<2,3> vf1;
+  vf1[0] = [](SVector<2> x) -> double { return std::pow(x[0], 2) + 1; }; // x^2 + 1
+  vf1[1] = [](SVector<2> x) -> double { return std::exp(x[0]*x[1]); }; // e^{xy}
+  vf1[2] = [](SVector<2> x) -> double { return x[0]+x[1]; }; // x+y
+
+  // evaluation point
+  SVector<2> p(1,1);
+  // access to a single element of the field returns a 2D scalar field
+  EXPECT_DOUBLE_EQ(vf1[0](p), 2);
+  // check the entire field is evaluated correctly0
+  SVector<3> vf1_eval(2, std::exp(1), 2); // vf1 -> (2, e, 2)
+  for(std::size_t i = 0; i < 3; ++i)
+    EXPECT_DOUBLE_EQ(vf1[i](p), vf1_eval[i]);
+
+  // define another field for better testing
+  VectorField<2,3> vf2;
+  vf2[0] = [](SVector<2> x) -> double { return std::pow(x[0], 3) + std::pow(x[1], 2); }; // x^3 + y^2
+  vf2[1] = [](SVector<2> x) -> double { return std::exp(x[0]*x[1]); }; // e^{xy}
+  vf2[2] = [](SVector<2> x) -> double { return x[0] + 1; }; // x+1
+  SVector<3> vf2_eval(2, std::exp(1), 2); // evaluation of field vf2 in (1,1)
+  
+  // check expression template mechanism
+  auto vf3 = vf1 + vf2;
+  SVector<3> vf3_eval(4, 2*std::exp(1), 4);
+  for(std::size_t i = 0; i < 3; ++i)
+    EXPECT_DOUBLE_EQ(vf3[i](p), vf3_eval[i]);
+  
+  auto vf5 = 2*vf1;
+  SVector<3> vf5_eval = 2*vf1_eval;
+  for(std::size_t i = 0; i < 3; ++i)
+    EXPECT_DOUBLE_EQ(vf5[i](p), vf5_eval[i]);
+  
+  auto vf6 = vf1 + 2*vf2;
+  SVector<3> vf6_eval = vf1_eval + 2*vf2_eval;
+  for(std::size_t i = 0; i < 3; ++i)
+    EXPECT_DOUBLE_EQ(vf6[i](p), vf6_eval[i]);
+  
+  // matrix-vectorfield product
+  Eigen::Matrix<double, 2, 3> M;
+  M << 1, 1, 2, 2, 3, 0;
+
+  // expected field with equation
+  //     1*(x^2 + 1) + 1*e^{xy} + 2*(x+y)
+  //     2*(x^2 + 1) + 3*e^{xy}
+  VectorField<2, 2> vf4 = M * vf1;
+  SVector<2> vf4_eval(6 + std::exp(1), 4 + 3*std::exp(1));
+  for(std::size_t i = 0; i < 2; ++i)
+    EXPECT_DOUBLE_EQ(vf4[i](p), vf4_eval[i]);
+
+  VectorField<2> vf7;
+  vf7[0] = [](SVector<2> x) -> double { return std::pow(x[0], 3) + std::pow(x[1], 2); }; // x^3 + y^2
+  vf7[1] = [](SVector<2> x) -> double { return std::exp(x[0]*x[1]); }; // e^{xy}
+  Eigen::Matrix<double, 3, 2> K;
+  K << 1, 1, 2, 2, 3, 0;  
+
+  // expected 2x3 vector field with equation
+  //     x^3 + y^2 + e^{xy}
+  //     2*(x^3 + y^2) + 2*e^{xy}
+  //     3*(x^3 + y^2)
+  VectorField<2, 3> vf8 = K*vf7;
+  SVector<3> vf8_eval(2 + std::exp(1), 4 + 2*std::exp(1), + 6);
+  for(std::size_t i = 0; i < 3; ++i)
+    EXPECT_DOUBLE_EQ(vf8[i](p), vf8_eval[i]);
+  
+  // check dot product
+  auto dotProduct = vf1.dot(vf2);
+  // expected scalar field of expression: (x^2+1)*(x^3+y^2) + e^{2*xy} + (x+y)*(x+1)
+  EXPECT_DOUBLE_EQ(dotProduct(p), 2*2 + std::exp(2) + 2*2);
+}
