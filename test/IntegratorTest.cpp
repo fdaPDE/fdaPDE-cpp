@@ -9,8 +9,8 @@
 #include <random>
 #include <Eigen/Dense>
 
-#include "../fdaPDE/core/MESH/Element.h"
 #include "core/utils/Symbols.h"
+#include "../fdaPDE/core/MESH/Element.h"
 using fdaPDE::core::MESH::Element;
 using fdaPDE::core::MESH::ct_nnodes;
 #include "../fdaPDE/core/MESH/Mesh.h"
@@ -20,11 +20,15 @@ using fdaPDE::core::MESH::NetworkMesh;
 using fdaPDE::core::MESH::SurfaceMesh;
 #include "../fdaPDE/core/utils/CompileTime.h"
 #include "../fdaPDE/core/FEM/integration/Integrator.h"
+using fdaPDE::core::FEM::Integrator;
 #include "../fdaPDE/core/FEM/basis/LagrangianBasis.h"
 using fdaPDE::core::FEM::LagrangianBasis;
 #include "../fdaPDE/core/FEM/operators/Identity.h"
 #include "../fdaPDE/core/FEM/operators/Gradient.h"
 #include "../fdaPDE/core/FEM/operators/Laplacian.h"
+using fdaPDE::core::FEM::Identity;
+using fdaPDE::core::FEM::Gradient;
+using fdaPDE::core::FEM::Laplacian;
 
 template <typename E>
 class IntegratorTest : public ::testing::Test {
