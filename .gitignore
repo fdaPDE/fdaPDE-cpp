@@ -26,6 +26,8 @@
 !fdaPDE/core/MESH/engines/*
 !fdaPDE/core/FEM/
 !fdaPDE/core/FEM/*
+!fdaPDE/regression/
+!fdaPDE/regression/*
 !docs/
 !docs/*
 !docs/core/OPT/
