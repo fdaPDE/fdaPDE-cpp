@@ -1,0 +1,4 @@
+## set C++17 as standard
+CXX_STD=CXX17
+## include fdaPDE library in PATH and set compiler flags
+PKG_CXXFLAGS=-Wno-ignored-attributes -I$(PWD)/../../../ -O3 -march=native -std=c++17

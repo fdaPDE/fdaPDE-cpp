@@ -2,6 +2,7 @@
 #define __SRPDE_H__
 
 #include <memory>
+#include <Eigen/SparseQR>
 #include "../core/utils/Symbols.h"
 #include "../core/FEM/PDE.h"
 using fdaPDE::core::FEM::PDE;
@@ -23,14 +24,14 @@ public:
   SRPDE(const PDE<M,N,R,E>& pde, double lambda) : pde_(pde), lambda_(lambda) {};
 
   // finds a solution to the regression problem
-  void smooth(const DVector<double>& data);
+  DVector<double> smooth(const DVector<double>& data);
 };
 
 template <unsigned int M, unsigned int N, unsigned int R, typename E>
 SRPDE(const PDE<M,N,R,E>& pde_, double lambda_) -> SRPDE<M,N,R,E>;
 
 template <unsigned int M, unsigned int N, unsigned int R, typename E>
-void SRPDE<M, N, R, E>::smooth(const DVector<double>& data) {
+DVector<double> SRPDE<M, N, R, E>::smooth(const DVector<double>& data) {
   // assemble system matrix and solve linear system
   SpMatrix<double> Psi = *(psi(pde_));
   
@@ -55,7 +56,7 @@ void SRPDE<M, N, R, E>::smooth(const DVector<double>& data) {
   solver.factorize(A.derived());
   // solve linear system A*x = b
   DVector<double> sol = solver.solve(b);
-  std::cout << Psi*sol.head(A.rows()/2) << std::endl;
+  return Psi*sol.head(A.rows()/2);
 }
 
 #endif // __SRPDE_H__
