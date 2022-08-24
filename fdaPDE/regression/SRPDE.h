@@ -56,7 +56,7 @@ DVector<double> SRPDE<M, N, R, E>::smooth(const DVector<double>& data) {
   solver.factorize(A.derived());
   // solve linear system A*x = b
   DVector<double> sol = solver.solve(b);
-  return Psi*sol.head(A.rows()/2);
+  return (Psi*sol).head(A.rows()/2);
 }
 
 #endif // __SRPDE_H__

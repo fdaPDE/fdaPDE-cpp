@@ -23,7 +23,7 @@ namespace internal{
     // fill psi matrix
     std::list<Eigen::Triplet<double>> tripletList;  
     for(std::size_t i = 0; i < locations; ++i){
-      tripletList.push_back(Eigen::Triplet<double>(i, i, 1));
+      tripletList.push_back(Eigen::Triplet<double>(i, i, 1.0));
     }
   
     psi->setFromTriplets(tripletList.begin(), tripletList.end());

@@ -93,113 +93,57 @@ public:
 	y_coord.push_back(y);
       }
     }
-
     return List::create(Named("x") = x_coord, Named("y") = y_coord, Named("field") = result);
-
   }
 
   List smooth(DVector<double> data, double h) {
     // define mesh object
     Mesh<2,2,1> m(domain_.points_, domain_.edges_, domain_.elements_, domain_.neighbors_, domain_.boundary_);
-    // define differential operator
-    auto form = Laplacian();
-    // forcing term
-    DMatrix<double> forcingData;
+
+    // definition of PDE Lf = u used in the regularization term
+    auto form = Laplacian(); // differential operator L
+    DMatrix<double> forcingData; // forcing term u
     forcingData.resize(m.elements(), 1);
     forcingData.fill(4);
-
+    // define differential problem
     PDE problem(m, form, forcingData);
-    // set dirichelt BC
-    DMatrix<double> bc;
+    DMatrix<double> bc; // set dirichelt BC
     bc.resize(m.elements(), 1);
     bc.fill(0);
-  
     problem.setDirichletBC(bc);
-
-    LagrangianBasis<2, 2, 1> basis{};  // define functional basis
-    Integrator<2, 6> integrator{};  // define integrator
-    // solve problem
+    // solve differential problem
+    // define functional basis for FEM approximation of PDE solution
+    LagrangianBasis<2, 2, 1> basis{};
+    // define integrator for numerical approximations of integrals
+    Integrator<2, 6> integrator{};
     problem.solve(basis, integrator);
 
-    SRPDE model(problem, 0.001);
-    DVector<double> f = model.smooth(data);
-    // evaluate solution
+    // define statistical model: simple spatial regression with laplacian regularization
+    SRPDE model(problem, lambda_[0]);
+    DVector<double> f = model.smooth(data); // solve the problem
+
+    // solution evaluation
     Evaluator<2,2,1> eval;
     Raster<2> img = eval.toRaster(m, f, h);
-
     // print stuffs required by R
     std::vector<double> x_coord{};
     x_coord.resize(img.size());
     std::vector<double> y_coord{};
     y_coord.resize(img.size());
-
+    // prepare for R layer
     for(std::size_t i = 0; i < img.size(); ++i){
       x_coord[i] = img.coords_[i][0];
       y_coord[i] = img.coords_[i][1];
     }
-    return List::create(Named("x") = x_coord, Named("y") = y_coord, Named("field") = img.data_, Named("coeff") = f);
+    return List::create
+      (Named("x") = x_coord,
+       Named("y") = y_coord,
+       Named("field") = img.data_,
+       Named("coeff") = f);
   }
-
 };
 
-// void Model::plotProva(DVector<double> coeff, double h) {
-//   // // define mesh object
-//   Mesh<2,2,1> m(domain_.points_, domain_.edges_, domain_.elements_, domain_.neighbors_, domain_.boundary_);
-//   // // evaluate field
-//   // Evaluator<2,2,1> eval;
-//   // Raster<2> img = eval.toRaster(m, coeff, h);
-//   // Rcout << "ci sono" << std::endl;
-  
-//   // NumericVector result;
-//   // NumericVector x_coord;
-//   // NumericVector y_coord;
-
-//   // Rcout << "sono proprio io :)" << std::endl;
-  
-//   // // for(std::size_t j = 0; j < img.data_.size(); ++j){
-//   // //   result.push_back(img.data_[j]);
-//   // //   x_coord.push_back(img.coords_[j][0]);
-//   // //   y_coord.push_back(img.coords_[j][1]);
-//   // // }
-//   // return List::create(Named("x") = x_coord, Named("y") = y_coord, Named("field") = result);
-
-//   // define differential operator
-//   auto form = Laplacian();
-//   // forcing term
-//   DMatrix<double> forcingData;
-//   forcingData.resize(m.elements(), 1);
-//   forcingData.fill(4);
-
-//   PDE problem(m, form, forcingData);
-//   // set dirichelt BC
-//   DMatrix<double> bc;
-//   bc.resize(m.elements(), 1);
-//   bc.fill(0);
-  
-//   problem.setDirichletBC(bc);
-
-//   LagrangianBasis<2, 2, 1> basis{};  // define functional basis
-//   Integrator<2, 6> integrator{};  // define integrator
-//   // solve problem
-//   problem.solve(basis, integrator);
-//   // evaluate solution
-//   //Evaluator<2,2,1> eval;
-//   //Raster<2> img = eval.toRaster(problem, 0.1);
-
-//   // print stuffs required by R
-//   NumericVector result{};
-//   NumericVector x_coord{};
-//   NumericVector y_coord{};
-
-//   // for(std::size_t i = 0; i < img.data_.size(); ++i){
-//   //   result.push_back(img.data_[i]);
-//   //   x_coord.push_back(img.coords_[i][0]);
-//   //   y_coord.push_back(img.coords_[i][1]);
-//   // }
-  
-//   return List::create(Named("x") = x_coord, Named("y") = y_coord, Named("field") = result);  
-// }
-
+// exposed interface to R layer
 RCPP_MODULE(model) {
   Rcpp::class_<Model>("Model")
     .constructor()
