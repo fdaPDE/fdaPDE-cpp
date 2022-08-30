@@ -3,6 +3,7 @@
 
 #include "../core/utils/Symbols.h"
 #include "../core/FEM/PDE.h"
+#include <Eigen/src/Core/Matrix.h>
 #include <memory>
 using fdaPDE::core::FEM::PDE;
 
@@ -13,9 +14,9 @@ namespace internal{
   // compute Psi matrix assuming locations equal to mesh's nodes (there is 1 only at mesh nodes and 0 elsewhere due to support of lagrangian basis)
   // in general it is not diagonal!
   template <unsigned int M, unsigned int N, unsigned int R, typename E>
-  std::shared_ptr<SpMatrix<double>> psi(const PDE<M,N,R,E>& pde) {
+  std::unique_ptr<SpMatrix<double>> psi(const PDE<M,N,R,E>& pde) {
     // preallocate space for Psi matrix
-    std::shared_ptr<SpMatrix<double>> psi = std::make_shared<SpMatrix<double>>();
+    std::unique_ptr<SpMatrix<double>> psi = std::make_unique<SpMatrix<double>>();
     unsigned int locations = pde.domain().nodes();
     unsigned int nbasis = pde.domain().nodes();
     psi->resize(locations, nbasis);
@@ -29,6 +30,20 @@ namespace internal{
     psi->setFromTriplets(tripletList.begin(), tripletList.end());
     psi->makeCompressed();
     return psi;
+  }
+
+  std::unique_ptr<DMatrix<double>> H(const DMatrix<double>& W){
+    // compute transpose of W once here
+    DMatrix<double> Wt = W.transpose();
+    // H = W*(W*W^T)^{-1}*W^T
+    std::unique_ptr<DMatrix<double>> H = std::make_unique<DMatrix<double>>(W*(Wt*W).ldlt().solve(Wt));
+    return H;
+  }
+
+  std::unique_ptr<DMatrix<double>> Q(const DMatrix<double>& H){
+    DMatrix<double> I = DMatrix<double>::Identity(H.rows(), H.cols());
+    // Q = I - H
+    return std::make_unique<DMatrix<double>>(I - H);
   }
   
 }}}

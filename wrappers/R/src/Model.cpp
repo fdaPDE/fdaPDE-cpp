@@ -81,22 +81,22 @@ public:
 	std::cos(2 * pi * (coe(x[1],1) * x[0] * std::cos(z-2+pi/2) + coe(x[0],1) * x[1] * sin((z-2) * pi/2)));
     };
     
-    NumericVector result;
-    NumericVector x_coord;
-    NumericVector y_coord;
-
-    for(double x = 0; x <= 1.0; x+=0.05){
-      for(double y = 0; y <= 1.0; y+=0.05){
-	double eval = f(SVector<2>(x,y));
-	result.push_back(eval);
-	x_coord.push_back(x);
-	y_coord.push_back(y);
-      }
+    Evaluator<2,2,1> eval;
+    Raster<2> img = eval.toRaster(m, f, h);
+    // print stuffs required by R
+    std::vector<double> x_coord{};
+    x_coord.resize(img.size());
+    std::vector<double> y_coord{};
+    y_coord.resize(img.size());
+    // prepare for R layer
+    for(std::size_t i = 0; i < img.size(); ++i){
+      x_coord[i] = img.coords_[i][0];
+      y_coord[i] = img.coords_[i][1];
     }
-    return List::create(Named("x") = x_coord, Named("y") = y_coord, Named("field") = result);
+    return List::create(Named("x") = x_coord, Named("y") = y_coord, Named("field") = img.data_);
   }
 
-  List smooth(DVector<double> data, double h) {
+  List smooth(DVector<double> observations, Rcpp::Nullable<Rcpp::NumericMatrix> covariates = R_NilValue) {
     // define mesh object
     Mesh<2,2,1> m(domain_.points_, domain_.edges_, domain_.elements_, domain_.neighbors_, domain_.boundary_);
 
@@ -120,10 +120,16 @@ public:
 
     // define statistical model: simple spatial regression with laplacian regularization
     SRPDE model(problem, lambda_[0]);
-    DVector<double> f = model.smooth(data); // solve the problem
-
+    DVector<double> f;
+    if(covariates.isNotNull()){
+      DMatrix<double> W = Rcpp::as<DMatrix<double>>(covariates);
+      f = model.smooth(observations, W);
+    }else      
+      f = model.smooth(observations); // solve the problem
+    
     // solution evaluation
     Evaluator<2,2,1> eval;
+    double h = 0.01;
     Raster<2> img = eval.toRaster(m, f, h);
     // print stuffs required by R
     std::vector<double> x_coord{};
@@ -135,11 +141,7 @@ public:
       x_coord[i] = img.coords_[i][0];
       y_coord[i] = img.coords_[i][1];
     }
-    return List::create
-      (Named("x") = x_coord,
-       Named("y") = y_coord,
-       Named("field") = img.data_,
-       Named("coeff") = f);
+    return List::create(Named("x") = x_coord, Named("y") = y_coord, Named("field") = img.data_, Named("coeff") = f);
   }
 };
 
