@@ -5,6 +5,7 @@
 #include "../core/FEM/PDE.h"
 #include <Eigen/src/Core/Matrix.h>
 #include <memory>
+#include <tuple>
 using fdaPDE::core::FEM::PDE;
 
 namespace fdaPDE{
@@ -30,20 +31,6 @@ namespace internal{
     psi->setFromTriplets(tripletList.begin(), tripletList.end());
     psi->makeCompressed();
     return psi;
-  }
-
-  std::unique_ptr<DMatrix<double>> H(const DMatrix<double>& W){
-    // compute transpose of W once here
-    DMatrix<double> Wt = W.transpose();
-    // H = W*(W*W^T)^{-1}*W^T
-    std::unique_ptr<DMatrix<double>> H = std::make_unique<DMatrix<double>>(W*(Wt*W).ldlt().solve(Wt));
-    return H;
-  }
-
-  std::unique_ptr<DMatrix<double>> Q(const DMatrix<double>& H){
-    DMatrix<double> I = DMatrix<double>::Identity(H.rows(), H.cols());
-    // Q = I - H
-    return std::make_unique<DMatrix<double>>(I - H);
   }
   
 }}}
