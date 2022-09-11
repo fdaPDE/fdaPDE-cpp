@@ -155,7 +155,7 @@ TYPED_TEST(IntegratorTest, GradientOperator) {
     SVector<TestFixture::N> b = SVector<TestFixture::N>::Ones();
     auto form = dot(b, Gradient());
 
-    // wrap the M-dimesional function into an N-dimensional one
+    // wrap the M-dimesional function into an N-dimensional one (this is useless in the non manifold case)
     std::function<double(SVector<TestFixture::N>)> f = [elementBasis, e](SVector<TestFixture::N> x) -> double {
       // project point on space spanned by the element
       SVector<TestFixture::M> p = e->spannedSpace().projectOnto(x);
