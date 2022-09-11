@@ -109,7 +109,6 @@ void SRPDE<M, N, R, E>::smooth(const DVector<double>& z) {
   
   // solve linear system A_*x = b
   DVector<double> sol = solver.solve(b);
-  std::cout << sol << std::endl;
   f_ = std::make_unique<DVector<double>>( (*Psi_)*sol.head(A_->rows()/2) );
 }
 
