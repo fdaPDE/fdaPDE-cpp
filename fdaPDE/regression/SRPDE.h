@@ -109,7 +109,8 @@ void SRPDE<M, N, R, E>::smooth(const DVector<double>& z) {
   
   // solve linear system A_*x = b
   DVector<double> sol = solver.solve(b);
-  f_ = std::make_unique<DVector<double>>( ((*Psi_)*sol).head(A_->rows()/2) );
+  std::cout << sol << std::endl;
+  f_ = std::make_unique<DVector<double>>( (*Psi_)*sol.head(A_->rows()/2) );
 }
 
 // smoothing in case covariates are supplied to the model. In this case the efficient solution of the linear system requires the application
@@ -171,7 +172,7 @@ void SRPDE<M, N, R, E>::smooth(const DVector<double>& z, const DMatrix<double>& 
   DVector<double> sol = solver.solve(U, *WTW_, V, b);
 
   // store result of regression problem
-  f_    = std::make_unique<DVector<double>>( ((*Psi_)*sol).head(A.rows()/2) );
+  f_    = std::make_unique<DVector<double>>( (*Psi_)*sol.head(A.rows()/2) );
   beta_ = std::make_unique<DVector<double>>( invWTW_.solve(W.transpose())*(z - *f_) );  
   return;
 }
