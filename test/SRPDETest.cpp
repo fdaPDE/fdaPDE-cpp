@@ -89,7 +89,8 @@ TEST_F(SRPDETest, Smooth2DNoCov) {
   // define spatial regression model
   double lambda = 0.001;
   SRPDE model(problem, lambda);
-  model.smooth(data);
+  model.setObservations(data);
+  model.smooth();
   DVector<double> estimated_f = model.f();
 
   // check estimated parameters equal to expected ones

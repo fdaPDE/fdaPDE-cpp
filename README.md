@@ -43,3 +43,33 @@ install.packages(".", type="source", repos=NULL)
 ```
 
 Compilation under `RcppEigen` produces a lot of annoying warnings. Those are kept hidden by `-Wno-ignored-attributes` flag in `wrappers/R/Makevars` file. Recall that CRAN policies doesn't allow to hide such kind of warnings.
+
+## C++ development
+The C++ core of fdaPDE is extremely modular, this means that you can focus on single modules during development and work in isolation with respect to other modules. This avoid the need to recompile the whole codebase, e.g. from the R layer, at each change in the C++ core library, opening for faster development, better debugging and a direct interaction with the C++ layer.
+To work on single modules is enought to put a `Main.cpp` file containing what you want to execute togheter with the following minimal `CMakeLists.txt` file in the module's folder:
+
+```CMake
+cmake_minimum_required(VERSION 3.14)
+
+project(__MODULE_NAME__)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_CXX_FLAGS "-O3 -march=native -std=c++17")
+
+find_package (Eigen3 3.3 REQUIRED NO_MODULE)
+
+include_directories(.)
+
+add_executable(Main Main.cpp)
+target_link_libraries (Main Eigen3::Eigen)
+```
+
+Then just execute (from a terminal)
+
+```Shell
+cmake CMakeLists.txt
+make
+./Main
+```
+
+`Main.cpp` files as well as `CMakeLists.txt` files and any `cmake` releated file are all filtered out from the repo to keep the codebase clean.

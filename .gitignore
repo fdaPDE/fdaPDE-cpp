@@ -28,6 +28,8 @@
 !fdaPDE/core/FEM/*
 !fdaPDE/regression/
 !fdaPDE/regression/*
+!fdaPDE/validation/
+!fdaPDE/validation/*
 !docs/
 !docs/*
 !docs/core/OPT/
@@ -54,5 +56,11 @@
 *Makefile
 *.Rhistory
 *.tar.gz
+*Main.cpp
+*Main
+*.RData
+*.o
+*.so
+test/fdaPDE_test
 
 !test/CMakeLists.txt
