@@ -4,21 +4,21 @@
 #include "ScalarFieldTest.cpp"
 #include "VectorFieldTest.cpp"
 // OPT test suites
-#include "GridOptimizerTest.cpp"
-#include "IterativeOptimizerTest.cpp"
-#include "OptimizerExtensionTest.cpp"
+// #include "GridOptimizerTest.cpp"
+// #include "IterativeOptimizerTest.cpp"
+// #include "OptimizerExtensionTest.cpp"
 // MESH test suites
-#include "MeshTest.cpp"
-#include "ElementTest.cpp"
-#include "SearchEngineTest.cpp"
-// NLA test suites
-#include "FSPAITest.cpp"
-#include "VectorSpaceTest.cpp"
-// FEM test suites
-#include "LagrangianBasisTest.cpp"
-#include "IntegratorTest.cpp"
+#include "core/MESH/MeshTest.cpp"
+#include "core/MESH/ElementTest.cpp"
+// #include "SearchEngineTest.cpp"
+// // NLA test suites
+// #include "FSPAITest.cpp"
+// #include "VectorSpaceTest.cpp"
+// // FEM test suites
+// #include "LagrangianBasisTest.cpp"
+// #include "IntegratorTest.cpp"
 // regression module test suites
-#include "SRPDETest.cpp"
+// #include "SRPDETest.cpp"
 
 int main(int argc, char **argv){
   // start testing
