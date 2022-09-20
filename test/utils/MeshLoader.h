@@ -2,6 +2,8 @@
 #define __MESH_LOADER_H__
 
 #include <gtest/gtest.h> // testing framework
+#include <random>
+
 #include "../../fdaPDE/core/utils/Symbols.h"
 #include "../../fdaPDE/core/MESH/Mesh.h"
 using fdaPDE::core::MESH::NetworkMesh;
@@ -9,6 +11,7 @@ using fdaPDE::core::MESH::Mesh2D;
 using fdaPDE::core::MESH::Mesh3D;
 using fdaPDE::core::MESH::SurfaceMesh;
 using fdaPDE::core::MESH::is_linear_network;
+using fdaPDE::core::MESH::is_manifold;
 #include "../../fdaPDE/core/MESH/Element.h"
 using fdaPDE::core::MESH::Element;
 #include "../../fdaPDE/core/utils/IO/CSVReader.h"
@@ -35,11 +38,12 @@ namespace testing{
   // An utility class to help in the import of sample test meshes from files 
   template <typename E>
   struct MeshLoader {
-    E mesh_;
+    E mesh;
     // expose the dimensionality of the mesh
     static constexpr unsigned int M = E::local_dimension;
     static constexpr unsigned int N = E::embedding_dimension;
-  
+    static constexpr bool manifold = is_manifold<M, N>::value;
+    
     CSVReader reader{}; // csv parser
     // raw files
     CSVFile<double> pointsCSV;
@@ -51,10 +55,11 @@ namespace testing{
       !is_linear_network<M, N>::value, CSVFile<int>, CSVSparseFile<int>
       >::type neighCSV;
 
-    // RNG
+    // RNG for generation of random elements and points in mesh
     uint32_t seed = time(NULL);
     std::default_random_engine rng;
 
+    // constructors
     MeshLoader(const std::string& meshID){
       std::string point    = MESH_PATH + meshID + "/points.csv";
       std::string edges    = MESH_PATH + meshID + "/edges.csv";
@@ -62,7 +67,7 @@ namespace testing{
       std::string neigh    = MESH_PATH + meshID + "/neigh.csv";
       std::string boundary = MESH_PATH + meshID + "/boundary.csv";
       // initialize test objects
-      mesh_ = E(point, edges, elements, neigh, boundary);
+      mesh = E(point, edges, elements, neigh, boundary);
 
       // load raw data
       pointsCSV   = reader.parseFile<double>(point);
@@ -75,7 +80,9 @@ namespace testing{
       else
 	neighCSV = reader.parseSparseFile<int>(neigh);
     }
-
+    // load default mesh according to dimensionality
+    MeshLoader() : MeshLoader(standard_mesh_selector(E::local_dimension, E::embedding_dimension)) {};
+    
     // some usefull utilities for testing
     
     // generate element at random inside mesh m
@@ -83,14 +90,17 @@ namespace testing{
     // generate point at random inside element e
     SVector<E::embedding_dimension> generateRandomPoint(
 	const std::unique_ptr<Element<E::local_dimension, E::embedding_dimension>>& e);
+
+    // generate randomly n pairs <ID, point> on mesh, such that point is contained in the element with identifier ID
+    std::vector<std::pair<std::size_t, SVector<E::embedding_dimension>>> sample(std::size_t n);
   };
   
   template <typename E>
   std::unique_ptr<Element<E::local_dimension, E::embedding_dimension>>
   MeshLoader<E>::generateRandomElement() {
-    std::uniform_int_distribution<int> randomID(0, mesh_.elements()-1);
+    std::uniform_int_distribution<int> randomID(0, mesh.elements()-1);
     int ID = randomID(rng);  
-    return mesh_.element(ID);
+    return mesh.element(ID);
   }
 
   template <typename E>
@@ -111,6 +121,20 @@ namespace testing{
     }
     return p;
   }
+
+  template <typename E>
+  std::vector<std::pair<std::size_t, SVector<E::embedding_dimension>>> MeshLoader<E>::sample(std::size_t n) {
+    std::vector<std::pair<std::size_t, SVector<E::embedding_dimension>>> result{};
+    result.resize(n);
+
+    for(std::size_t i = 0; i < n; ++i){
+      auto e = generateRandomElement();
+      SVector<E::embedding_dimension> p = generateRandomPoint(e);
+      result[i] = std::make_pair(e->ID(), p);
+    }
+    return result;
+  }
+
   
 }}
 

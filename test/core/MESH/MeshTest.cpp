@@ -9,42 +9,40 @@
 using fdaPDE::core::MESH::Element;
 #include "../../utils/MeshLoader.h"
 using fdaPDE::testing::MeshLoader;
-using fdaPDE::testing::standard_mesh_selector;
 using fdaPDE::testing::MESH_TYPE_LIST;
 
 // test suite for testing both non-manifold meshes (2D/3D) and manifold mesh (2.5D/1.5D)
 template <typename E>
-class MeshTest : public ::testing::Test {
-public:
-  MeshLoader<E> meshWrapper;
+struct MeshTest : public ::testing::Test {
+  MeshLoader<E> meshLoader{}; // use default mesh
   static constexpr unsigned int M = MeshLoader<E>::M;
   static constexpr unsigned int N = MeshLoader<E>::N;
-  
-  MeshTest() : meshWrapper(standard_mesh_selector(E::local_dimension, E::embedding_dimension)) {};
 };
 TYPED_TEST_SUITE(MeshTest, MESH_TYPE_LIST);
 
 // check that mesh correctly load in memory the mesh information
-TYPED_TEST(MeshTest, DimensionsAreCorrect) {
+TYPED_TEST(MeshTest, CanLoadFromCSVFiles) {
   // check that at least dimensions are correct
-  std::size_t ne = this->meshWrapper.elementsCSV.rows();
-  std::size_t nn = this->meshWrapper.pointsCSV.rows();
+  std::size_t ne = this->meshLoader.elementsCSV.rows();
+  std::size_t nn = this->meshLoader.pointsCSV.rows();
   
-  EXPECT_EQ(this->meshWrapper.mesh_.elements(), ne);
-  EXPECT_EQ(this->meshWrapper.mesh_.nodes(),    nn);
+  ASSERT_EQ(this->meshLoader.mesh.elements(), ne);
+  ASSERT_EQ(this->meshLoader.mesh.nodes(),    nn);
+
+  // if this test fail most likely the mesh has not been loaded correctly, therefore any subsequent test cannot be trusted
 }
 
 // check points' coordinate embedded in an element are loaded correctly
 TYPED_TEST(MeshTest, PointCoordinatesAreLoadedCorrectly) {
-  for(std::size_t i = 0; i < this->meshWrapper.mesh_.elements(); ++i){
+  for(std::size_t i = 0; i < this->meshLoader.mesh.elements(); ++i){
     // request element with ID i
-    std::unique_ptr<Element<TestFixture::M, TestFixture::N>> e = this->meshWrapper.mesh_.element(i);
+    std::unique_ptr<Element<TestFixture::M, TestFixture::N>> e = this->meshLoader.mesh.element(i);
     
     // check coordinates stored in element built from Mesh object match raw informations
     int j = 0;
-    for(int nodeID : this->meshWrapper.elementsCSV.row(i)){
+    for(int nodeID : this->meshLoader.elementsCSV.row(i)){
       // recall that raw files haven't the index correction of one unit, need to subtract 1 from nodeID
-      std::vector<double> coords = this->meshWrapper.pointsCSV.row(nodeID-1);
+      std::vector<double> coords = this->meshLoader.pointsCSV.row(nodeID-1);
       SVector<TestFixture::N> ePoint = e->coords()[j];
       
       for(std::size_t idx = 0; idx < TestFixture::N; ++idx)
@@ -56,11 +54,11 @@ TYPED_TEST(MeshTest, PointCoordinatesAreLoadedCorrectly) {
 
 // check neighboring identifiers embedded in an element are loaded correctly
 TYPED_TEST(MeshTest, NeighboringStructureIsLoadedCorrectly) {
-  for(std::size_t i = 0; i < this->meshWrapper.mesh_.elements(); ++i){
+  for(std::size_t i = 0; i < this->meshLoader.mesh.elements(); ++i){
     // request element with ID i
-    std::unique_ptr<Element<TestFixture::M, TestFixture::N>> e = this->meshWrapper.mesh_.element(i);
+    std::unique_ptr<Element<TestFixture::M, TestFixture::N>> e = this->meshLoader.mesh.element(i);
     // request data from raw file
-    std::vector<int> neigh = this->meshWrapper.neighCSV.row(i);
+    std::vector<int> neigh = this->meshLoader.neighCSV.row(i);
     // take neighboring information packed inside the element built from Mesh
     auto eNeigh = e->neighbors();
 
@@ -79,15 +77,15 @@ TYPED_TEST(MeshTest, NeighboringStructureIsLoadedCorrectly) {
 // performs some checks on the mesh topology, e.g. checks that stated neighbors shares exactly M points
 TYPED_TEST(MeshTest, MeshTopologyChecks) {
   // cycle over all mesh elements
-  for(std::size_t i = 0; i < this->meshWrapper.mesh_.nodes(); ++i){
+  for(std::size_t i = 0; i < this->meshLoader.mesh.nodes(); ++i){
     // request the element with ID i
-    std::unique_ptr<Element<TestFixture::M, TestFixture::N>> e = this->meshWrapper.mesh_.element(i);
+    std::unique_ptr<Element<TestFixture::M, TestFixture::N>> e = this->meshLoader.mesh.element(i);
     // check that neighboing elements have always M points in common, so that if we consider two elements as
     // neighbors they are geometrically so (there is a face in common, which is what we expect from neighboring relation)
     for(int neighID : e->neighbors()){
       if(!e->isOnBoundary()){
 	// request neighboring element from mesh
-	std::unique_ptr<Element<TestFixture::M, TestFixture::N>> n = this->meshWrapper.mesh_.element(neighID);
+	std::unique_ptr<Element<TestFixture::M, TestFixture::N>> n = this->meshLoader.mesh.element(neighID);
 	// take nodes of both elements
 	std::array<SVector<TestFixture::N>, TestFixture::M + 1> eList = e->coords(), nList = n->coords();
 	// check that the points in common between the two are exactly M
@@ -102,7 +100,7 @@ TYPED_TEST(MeshTest, MeshTopologyChecks) {
 	bool element_on_boundary = false;
 	auto boundaryNodes = e->boundaryNodes();
 	for(auto it = boundaryNodes.begin(); it != boundaryNodes.end(); ++it){
-	  if(this->meshWrapper.mesh_.isOnBoundary(it->first)){ // mesh detects this point is a boundary point
+	  if(this->meshLoader.mesh.isOnBoundary(it->first)){ // mesh detects this point is a boundary point
 	    element_on_boundary = true;
 	  }
 	}
@@ -116,11 +114,11 @@ TYPED_TEST(MeshTest, MeshTopologyChecks) {
 TYPED_TEST(MeshTest, RangeForLoop) {
   // prepare set with all indexes of IDs to touch
   std::unordered_set<int> meshIDs{};
-  for(int i = 0; i < this->meshWrapper.mesh_.elements(); ++i)
+  for(int i = 0; i < this->meshLoader.mesh.elements(); ++i)
     meshIDs.insert(i);
 
   // range-for over all elements removing the element's ID from the above set when the element is visited
-  for(const auto& e : this->meshWrapper.mesh_){
+  for(const auto& e : this->meshLoader.mesh){
     // check element ID still present in the IDs set (ID not visisted by means of a different element)
     EXPECT_TRUE(meshIDs.find(e->ID()) != meshIDs.end());
     meshIDs.erase(e->ID());

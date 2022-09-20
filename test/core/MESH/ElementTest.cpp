@@ -1,36 +1,35 @@
+#include <cstddef>
 #include <gtest/gtest.h> // testing framework
 #include <memory>
 
-#include "../fdaPDE/core/utils/Symbols.h"
-#include "../fdaPDE/core/MESH/Element.h"
+#include "../../../fdaPDE/core/utils/Symbols.h"
+#include "../../../fdaPDE/core/MESH/Element.h"
+#include "core/MESH/Mesh.h"
 using fdaPDE::core::MESH::Element;
-#include "../fdaPDE/core/NLA/VectorSpace.h"
+#include "../../../fdaPDE/core/NLA/VectorSpace.h"
 using fdaPDE::core::NLA::VectorSpace;
 
-#include "utils/MeshLoader.h"
-using fdaPDE::testing::MeshLoader;
-using fdaPDE::testing::standard_mesh_selector;
+#include "../../utils/MeshLoader.h"
 using fdaPDE::testing::MESH_TYPE_LIST;
-#include "utils/Constants.h"
+using fdaPDE::testing::MeshLoader;
+#include "../../utils/Constants.h"
 using fdaPDE::testing::DOUBLE_TOLERANCE;
+using fdaPDE::testing::MACHINE_EPSILON;
 
 // test fixture
 template <typename E>
-class ElementTest : public ::testing::Test {
-public:
-  MeshLoader<E> meshWrapper;
+struct ElementTest : public ::testing::Test {
+  MeshLoader<E> meshLoader{}; // use default mesh
   static constexpr unsigned int M = MeshLoader<E>::M;
   static constexpr unsigned int N = MeshLoader<E>::N;
-  
-  ElementTest() : meshWrapper(standard_mesh_selector(E::local_dimension, E::embedding_dimension)) {};
 };
 TYPED_TEST_SUITE(ElementTest, MESH_TYPE_LIST);
 
 // check computation of barycentric coordinates is coherent with well known properties
 TYPED_TEST(ElementTest, BarycentricCoordinates) {
   // generate a random element, a random point inside it and compute its barycentric coordinates
-  auto e = this->meshWrapper.generateRandomElement();
-  SVector<TestFixture::N> p = this->meshWrapper.generateRandomPoint(e);
+  auto e = this->meshLoader.generateRandomElement();
+  SVector<TestFixture::N> p = this->meshLoader.generateRandomPoint(e);
   SVector<TestFixture::M + 1> q = e->toBarycentricCoords(p); // compute barycentric coordinates of point p
 
   // the barycentric coordinates of a point inside the element sums to 1
@@ -39,8 +38,8 @@ TYPED_TEST(ElementTest, BarycentricCoordinates) {
   EXPECT_TRUE((q.array() >= 0).all());
 
   // a point outside the element has at least one negative barycentric coordinate
-  auto f = this->meshWrapper.generateRandomElement();
-  while(e->ID() == f->ID()) f = this->meshWrapper.generateRandomElement();
+  auto f = this->meshLoader.generateRandomElement();
+  while(e->ID() == f->ID()) f = this->meshLoader.generateRandomElement();
   
   if constexpr(TestFixture::N == TestFixture::M){
     EXPECT_FALSE((e->toBarycentricCoords(f->midPoint()).array() > 0).all());
@@ -67,7 +66,7 @@ TYPED_TEST(ElementTest, BarycentricCoordinates) {
 // test midpoint is correctly computed
 TYPED_TEST(ElementTest, MidPoint) {
   // generate random element
-  auto e = this->meshWrapper.generateRandomElement();
+  auto e = this->meshLoader.generateRandomElement();
   SVector<TestFixture::N> m = e->midPoint();
   SVector<TestFixture::M + 1> b = e->toBarycentricCoords(m);
   // the midpoint of an element is strictly inside it <-> its barycentric coordinates are all strictly positive
@@ -85,18 +84,55 @@ TYPED_TEST(ElementTest, MidPoint) {
 // chcek .contains is able to correctly evaluate when a point is contained or not in an element
 TYPED_TEST(ElementTest, CanAssertIfPointIsInside) {
   // draw some element at random
-  auto e = this->meshWrapper.generateRandomElement();
+  auto e = this->meshLoader.generateRandomElement();
   // expect the mid point of the element is contained in the element itself
   EXPECT_TRUE(e->contains(e->midPoint()));
   
   // generate random points inside the element and check they are all contained into it
   for(std::size_t i = 0; i < 100; ++i){
-    SVector<TestFixture::N> p = this->meshWrapper.generateRandomPoint(e);
+    SVector<TestFixture::N> p = this->meshLoader.generateRandomPoint(e);
     EXPECT_TRUE(e->contains(p));
   }
 
   // expect the midpoint of a different element is not contained in e
-  auto f = this->meshWrapper.generateRandomElement();
-  while(e->ID() == f->ID()) f = this->meshWrapper.generateRandomElement();
+  auto f = this->meshLoader.generateRandomElement();
+  while(e->ID() == f->ID()) f = this->meshLoader.generateRandomElement();
   EXPECT_FALSE(e->contains(f->midPoint()));
+}
+
+TEST(ElementTest, ElementMeasureIsWithinMachineEpsilon){
+  // load mesh
+  MeshLoader<Mesh2D<>> CShaped("c_shaped");
+  // consider element with ID 175 and check its measure equals expected one
+  double measure = 0.0173913024287495;
+  EXPECT_NEAR(CShaped.mesh.element(175)->measure(), measure, MACHINE_EPSILON);
+}
+
+// test barycentric matrix and its inverse is computed correctly
+TEST(ElementTest, BarycentricMatrixAndItsInverseAreWithinMachineEpsilon){
+  // load mesh
+  MeshLoader<Mesh2D<>> CShaped("c_shaped");
+  auto e = CShaped.mesh.element(175);
+  
+  // set expected barycentric matrix for element with ID 175
+  Eigen::Matrix<double, 2,2> barycentricMatrix;
+  barycentricMatrix <<
+    0.1666666666666650, 0.0418368195713161,
+    0.0345649283581886, 0.2173721491722987;
+  Eigen::Matrix<double, 2,2> M = e->barycentricMatrix();
+  // check equality within a tolerance of machine epsilon
+  for(std::size_t i = 0; i < 2; ++i)
+    for(std::size_t j = 0; j < 2; ++j)
+      ASSERT_NEAR(barycentricMatrix(i,j), M(i,j), MACHINE_EPSILON);
+
+  // set expected inverse of the barycentric matrix for element with ID 175
+  Eigen::Matrix<double, 2,2> invBarycentricMatrix;
+  invBarycentricMatrix <<
+    6.2494499783110298, -1.2028086954015513,
+   -0.9937417999542519,  4.7916671954122458;
+  Eigen::Matrix<double, 2,2> invM = e->invBarycentricMatrix();
+  // check equality within a tolerance of machine epsilon
+  for(std::size_t i = 0; i < 2; ++i)
+    for(std::size_t j = 0; j < 2; ++j)
+      ASSERT_NEAR(invBarycentricMatrix(i,j), invM(i,j), MACHINE_EPSILON);
 }

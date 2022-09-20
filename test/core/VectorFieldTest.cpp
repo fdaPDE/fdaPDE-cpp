@@ -58,7 +58,7 @@ TEST(VectorFieldTest, ConstSubscript) {
   ScalarField<2> x_extracted = field1[0];
   // evaluation point
   SVector<2> p(1,1);
-  EXPECT_EQ(x_comp(p), x_extracted(p));
+  EXPECT_DOUBLE_EQ(x_comp(p), x_extracted(p));
 }
 
 // check if a vector field can be assigned using the subscript operator and any FieldExpr on the rhs
@@ -77,9 +77,9 @@ TEST(VectorFieldTest, AssingBySubscript) {
   // evaluation point
   SVector<2> p(1,1);
   // evaluation of field at p: (ln(2) + 4, 2ln(2) + 9)
-  SVector<2> trueEvaluation(std::log(2) + 4, 2*std::log(2) + 9);
+  SVector<2> eval(std::log(2) + 4, 2*std::log(2) + 9);
   for(std::size_t i = 0; i < 2; ++i){
-    EXPECT_DOUBLE_EQ(v_field(p)[i], trueEvaluation[i]);
+    EXPECT_DOUBLE_EQ(v_field(p)[i], eval[i]);
   }
 }
 
@@ -137,9 +137,9 @@ TEST(VectorFieldTest, MatrixProduct) {
   VectorField<2> productField = M*field; // (e^{xy} + 2 + 2*(x^2 + y)/y; 3*e^{xy} + 6 + 4*(x^2 + y)/y)
   // evaluation point
   SVector<2> p(1,1);
-  SVector<2> trueEvaluation(std::exp(1) + 6, 3*std::exp(1) + 14);
+  SVector<2> eval(std::exp(1) + 6, 3*std::exp(1) + 14);
   for(std::size_t i = 0; i < 2; ++i){
-    EXPECT_DOUBLE_EQ(productField(p)[i], trueEvaluation[i]);
+    EXPECT_DOUBLE_EQ(productField(p)[i], eval[i]);
   }
 }
 
@@ -177,7 +177,7 @@ TEST(VectorFieldTest, FieldExpr) {
 
   // the following are ScalarField expressions coming from VectorField operations
   auto vf6 = vf1.dot(vf2) + vf3[0];
-  EXPECT_DOUBLE_EQ(vf6(p), vf1_eval[0]*vf2_eval[0] + vf1_eval[1]*vf2_eval[1] + (vf1_eval[0] + vf2_eval[0]));
+  EXPECT_DOUBLE_EQ(vf6(p), 5*std::exp(1) + 8);
 }
 
 // check a vectorial expression can be wrapped in a VectorField
@@ -226,7 +226,7 @@ TEST(VectorFieldTest, Divergence) {
 }
 
 // check definition of field with unequal sizes for domain and codomain space dimensions
-TEST(VectorFieldTest, RectangularField) {
+TEST(VectorFieldTest, DomainDimensionDifferentFromCodomainDimension) {
   // define a field from a 2D space to a 3D space
   VectorField<2,3> vf1;
   vf1[0] = [](SVector<2> x) -> double { return std::pow(x[0], 2) + 1; }; // x^2 + 1

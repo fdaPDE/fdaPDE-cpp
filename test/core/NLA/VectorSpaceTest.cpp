@@ -1,9 +1,11 @@
 #include <gtest/gtest.h> // testing framework
 #include <limits>
 
-#include "../fdaPDE/core/NLA/VectorSpace.h"
-#include "core/utils/Symbols.h"
+#include "../../../fdaPDE/core/NLA/VectorSpace.h"
+#include "../../../fdaPDE/core/utils/Symbols.h"
 using fdaPDE::core::NLA::VectorSpace;
+#include "../../utils/Constants.h"
+using fdaPDE::testing::DOUBLE_TOLERANCE;
 
 TEST(VectorSpaceTest, projection1D) {
   // define a vector space by defining its direction
@@ -19,10 +21,8 @@ TEST(VectorSpaceTest, projection1D) {
      projection onto i instead is equal to
          Q_i(p) = \frac{\tilde i \dot p}{\norm{\tilde i}} = 5,30330085889910643301
    */
-  EXPECT_TRUE((vs.projectInto(p) - SVector<2>(3.75,
-					      3.75)).norm()
-	      < 10*std::numeric_limits<double>::epsilon());
-  EXPECT_TRUE((vs.projectOnto(p) - SVector<1>(5.30330085889910643301)).norm() < 10*std::numeric_limits<double>::epsilon());
+  EXPECT_TRUE((vs.projectInto(p) - SVector<2>(3.75, 3.75)).norm() < DOUBLE_TOLERANCE);
+  EXPECT_TRUE((vs.projectOnto(p) - SVector<1>(5.30330085889910643301)).norm() < DOUBLE_TOLERANCE);
 }
 
 TEST(VectorSpaceTest, projection2D) {
@@ -43,13 +43,9 @@ TEST(VectorSpaceTest, projection2D) {
          Q_i(p) = {\frac{\tilde i \dot p}{\norm{\tilde i}}, \frac{\tilde j \dot p}{\norm{\tilde j}}} =
 	        = {7,42462120245874900621, 0,12247448713915890491}
    */
-  EXPECT_TRUE((vs.projectInto(p) - SVector<3>(5.20,
-					      5.3,
-					      0.1)).norm()
-	      < 10*std::numeric_limits<double>::epsilon()) << vs.projectInto(p);
+  EXPECT_TRUE((vs.projectInto(p) - SVector<3>(5.20, 5.3, 0.1)).norm() < DOUBLE_TOLERANCE);
   EXPECT_TRUE((vs.projectOnto(p) - SVector<2>(7.42462120245874900621,
-					      0.12247448713915890491)).norm()
-	      < 10*std::numeric_limits<double>::epsilon()) << vs.projectOnto(p);
+					      0.12247448713915890491)).norm() < DOUBLE_TOLERANCE);
 }
 
 TEST(VectorSpaceTest, L2Distance1D) {
@@ -58,12 +54,12 @@ TEST(VectorSpaceTest, L2Distance1D) {
   VectorSpace<1, 2> vs({i}); // a line embedded in a 2D plane
   
   // the distance between a point in the space and the space itself should be zero
-  EXPECT_NEAR(vs.distance(vs({1})), 0, 10*std::numeric_limits<double>::epsilon());
+  EXPECT_NEAR(vs.distance(vs({1})), 0, DOUBLE_TOLERANCE);
   // the distance between a point projected into the space and the space itself should be zero
   SVector<2> p(7,9);
-  EXPECT_NEAR(vs.distance(vs.projectInto(p)), 0, 10*std::numeric_limits<double>::epsilon());
+  EXPECT_NEAR(vs.distance(vs.projectInto(p)), 0, DOUBLE_TOLERANCE);
   // expect .distance() to compute correct distance between q and its projection
-  EXPECT_NEAR(vs.distance(p), (p - vs.projectInto(p)).squaredNorm(), 10*std::numeric_limits<double>::epsilon());
+  EXPECT_NEAR(vs.distance(p), (p - vs.projectInto(p)).squaredNorm(), DOUBLE_TOLERANCE);
 }
 
 TEST(VectorSpaceTest, L2Distance2D) {
@@ -72,12 +68,12 @@ TEST(VectorSpaceTest, L2Distance2D) {
   VectorSpace<2, 3> vs({i,j}); // a place embedded in a 3D space
   
   // the distance between a point in the space and the space itself should be zero
-  EXPECT_NEAR(vs.distance(vs({1})), 0, 10*std::numeric_limits<double>::epsilon());
+  EXPECT_NEAR(vs.distance(vs({1})), 0, DOUBLE_TOLERANCE);
   // the distance between a point projected into the space and the space itself should be zero
   SVector<3> p(3,9,2);
-  EXPECT_NEAR(vs.distance(vs.projectInto(p)), 0, 10*std::numeric_limits<double>::epsilon());
+  EXPECT_NEAR(vs.distance(vs.projectInto(p)), 0, DOUBLE_TOLERANCE);
   // expect .distance() to compute correct distance between q and its projection
-  EXPECT_NEAR(vs.distance(p), (p - vs.projectInto(p)).squaredNorm(), 10*std::numeric_limits<double>::epsilon());
+  EXPECT_NEAR(vs.distance(p), (p - vs.projectInto(p)).squaredNorm(), DOUBLE_TOLERANCE);
 }
 
 
@@ -107,17 +103,15 @@ TEST(VectorSpaceTest, AffineSpace) {
    */
   EXPECT_TRUE((vs.projectInto(p) - (SVector<3>(6.86666666666666666667,
 					       3.63333333333333333333,
-					       -3.23333333333333333334) + offset)).norm()
-	      < 10*std::numeric_limits<double>::epsilon()) << vs.projectInto(p);
+					       -3.23333333333333333334) + offset)).norm() < DOUBLE_TOLERANCE);
   EXPECT_TRUE((vs.projectOnto(p) - SVector<2>(7.42462120245874900621,
-					      -3.96000841749947125875)).norm()
-	      < 10*std::numeric_limits<double>::epsilon()) << vs.projectOnto(p);
+					      -3.96000841749947125875)).norm() < DOUBLE_TOLERANCE);
 
   // the distance between a point in the space and the space itself should be zero
-  EXPECT_NEAR(vs.distance(vs({1,2})), 0, 10*std::numeric_limits<double>::epsilon());
+  EXPECT_NEAR(vs.distance(vs({1,2})), 0, DOUBLE_TOLERANCE);
   // the distance between a point projected into the space and the space itself should be zero
   SVector<3> q(3,9,2);
-  EXPECT_NEAR(vs.distance(vs.projectInto(q)), 0, 10*std::numeric_limits<double>::epsilon());
+  EXPECT_NEAR(vs.distance(vs.projectInto(q)), 0, DOUBLE_TOLERANCE);
   // expect .distance() to compute correct distance between q and its projection
-  EXPECT_NEAR(vs.distance(q), (q - vs.projectInto(q)).squaredNorm(), 10*std::numeric_limits<double>::epsilon());
+  EXPECT_NEAR(vs.distance(q), (q - vs.projectInto(q)).squaredNorm(), DOUBLE_TOLERANCE);
 }

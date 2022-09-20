@@ -56,6 +56,10 @@
 !test/core/*
 !test/core/MESH/
 !test/core/MESH/*
+!test/core/NLA/
+!test/core/NLA/*
+!test/core/FEM/
+!test/core/FEM/*
 !.github/
 !.github/*
 !.github/workflows/
