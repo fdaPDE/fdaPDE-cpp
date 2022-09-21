@@ -2,7 +2,7 @@
 
 <h5> Testing framework </h5> </div>
 
-<div align="center">
+</div>
 
 This folder containes the testing framework of the fdaPDE project.
 
