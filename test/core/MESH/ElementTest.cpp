@@ -4,7 +4,6 @@
 
 #include "../../../fdaPDE/core/utils/Symbols.h"
 #include "../../../fdaPDE/core/MESH/Element.h"
-#include "core/MESH/Mesh.h"
 using fdaPDE::core::MESH::Element;
 #include "../../../fdaPDE/core/NLA/VectorSpace.h"
 using fdaPDE::core::NLA::VectorSpace;

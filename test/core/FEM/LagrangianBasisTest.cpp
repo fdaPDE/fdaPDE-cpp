@@ -121,11 +121,11 @@ TYPED_TEST(LagrangianBasisMeshTest, DefineOverMeshElement) {
     std::size_t num_ones = 0, num_zeros = 0;
     for(std::size_t i = 0; i < TestFixture::n_basis; ++i){ // there are as many nodes as basis functions
       SVector<TestFixture::M> p;
-      if constexpr(!TestFixture::is_manifold){
+      if constexpr(!TestFixture::is_manifold)
 	p = e->coords()[i];
-      }else{ // in case of manifolds we must consider the projection of basis nodes onto the space spanned by the element
+      else // in case of manifolds we must consider the projection of basis nodes onto the space spanned by the element
 	p = e->spannedSpace().projectOnto(e->coords()[i]);
-      }
+      
       if(std::abs(b(p) - 1) < DOUBLE_TOLERANCE){
 	num_ones++;
       }else if(b(p) < DOUBLE_TOLERANCE){

@@ -19,7 +19,7 @@
 #include "core/NLA/VectorSpaceTest.cpp"
 // // FEM test suites
 #include "core/FEM/LagrangianBasisTest.cpp"
-// #include "IntegratorTest.cpp"
+#include "core/FEM/IntegratorTest.cpp"
 // regression module test suites
 // #include "SRPDETest.cpp"
 
