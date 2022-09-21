@@ -70,6 +70,8 @@
 !test/data/mesh/unit_sphere/*.csv
 !test/data/mesh/surface/*.csv
 !test/data/mesh/network/*.csv
+!test/data/mesh/c_shaped/*.csv
+!test/data/mesh/unit_square/*.csv
 !test/data/*.mtx
 *.txt
 *.json

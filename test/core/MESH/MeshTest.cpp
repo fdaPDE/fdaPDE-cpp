@@ -77,7 +77,7 @@ TYPED_TEST(MeshTest, NeighboringStructureIsLoadedCorrectly) {
 // performs some checks on the mesh topology, e.g. checks that stated neighbors shares exactly M points
 TYPED_TEST(MeshTest, MeshTopologyChecks) {
   // cycle over all mesh elements
-  for(std::size_t i = 0; i < this->meshLoader.mesh.nodes(); ++i){
+  for(std::size_t i = 0; i < this->meshLoader.mesh.elements(); ++i){
     // request the element with ID i
     std::unique_ptr<Element<TestFixture::M, TestFixture::N>> e = this->meshLoader.mesh.element(i);
     // check that neighboing elements have always M points in common, so that if we consider two elements as
@@ -93,14 +93,14 @@ TYPED_TEST(MeshTest, MeshTopologyChecks) {
 	for(SVector<TestFixture::N> p : eList){
 	  if(std::find(nList.begin(), nList.end(), p) != nList.end())
 	    matches++;
-	  }
+	}
 	EXPECT_TRUE(matches == TestFixture::M);
       }else{
 	// check that Mesh is choerent with the fact that e is on bonudary, i.e. at least one vertex of e is detected as boundary point
 	bool element_on_boundary = false;
-	auto boundaryNodes = e->boundaryNodes();
-	for(auto it = boundaryNodes.begin(); it != boundaryNodes.end(); ++it){
-	  if(this->meshLoader.mesh.isOnBoundary(it->first)){ // mesh detects this point is a boundary point
+	auto nodeIDs = e->nodeIDs();
+	for(std::size_t n : nodeIDs){
+	  if(this->meshLoader.mesh.isOnBoundary(n)){ // mesh detects this point as boundary point
 	    element_on_boundary = true;
 	  }
 	}

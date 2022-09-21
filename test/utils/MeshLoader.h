@@ -23,13 +23,13 @@ namespace testing{
   using MESH_TYPE_LIST = ::testing::Types<Mesh2D<>, SurfaceMesh<>, Mesh3D<>, NetworkMesh<>>;
 
   // selects sample mesh depending on the dimensionality of the problem
-  //     * 1.5D: 204 2D points, 559  elements, 559  edges. /test/data/mesh/linear_newtwork/*.csv
-  //     * 2D:   441 2D points, 780  elements, 1220 edges. /test/data/mesh/unit_circle/*.csv
-  //     * 2.5D: 340 3D points, 616  elements, 956  edges. /test/data/mesh/surface/*.csv
-  //     * 3D:   587 3D points, 2775 elements, 5795 faces. /test/data/mesh/unit_sphere/*.csv
+  //     * 1.5D: 204  2D points, 559   elements, 559   edges. /test/data/mesh/linear_newtwork/*.csv
+  //     * 2D:   3600 2D points, 6962  elements, 10561 edges. /test/data/mesh/unit_square/*.csv
+  //     * 2.5D: 340  3D points, 616   elements, 956   edges. /test/data/mesh/surface/*.csv
+  //     * 3D:   587  3D points, 2775  elements, 5795  faces. /test/data/mesh/unit_sphere/*.csv
   constexpr const auto standard_mesh_selector(unsigned int M, unsigned int N) {
     if(M == 1 && N == 2) return "network";     // 1.5D
-    if(M == 2 && N == 2) return "unit_circle"; // 2D
+    if(M == 2 && N == 2) return "unit_square"; // 2D
     if(M == 2 && N == 3) return "surface";     // 2.5D
     if(M == 3 && N == 3) return "unit_sphere"; // 3D
     return ""; // error case
@@ -56,8 +56,7 @@ namespace testing{
       >::type neighCSV;
 
     // RNG for generation of random elements and points in mesh
-    uint32_t seed = time(NULL);
-    std::default_random_engine rng;
+    std::random_device rng;
 
     // constructors
     MeshLoader(const std::string& meshID){
@@ -66,6 +65,7 @@ namespace testing{
       std::string elements = MESH_PATH + meshID + "/elements.csv";
       std::string neigh    = MESH_PATH + meshID + "/neigh.csv";
       std::string boundary = MESH_PATH + meshID + "/boundary.csv";
+      
       // initialize test objects
       mesh = E(point, edges, elements, neigh, boundary);
 
@@ -124,9 +124,10 @@ namespace testing{
 
   template <typename E>
   std::vector<std::pair<std::size_t, SVector<E::embedding_dimension>>> MeshLoader<E>::sample(std::size_t n) {
+    // preallocate memory
     std::vector<std::pair<std::size_t, SVector<E::embedding_dimension>>> result{};
     result.resize(n);
-
+    // generate sample
     for(std::size_t i = 0; i < n; ++i){
       auto e = generateRandomElement();
       SVector<E::embedding_dimension> p = generateRandomPoint(e);
@@ -134,7 +135,6 @@ namespace testing{
     }
     return result;
   }
-
   
 }}
 

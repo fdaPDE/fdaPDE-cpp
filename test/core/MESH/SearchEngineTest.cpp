@@ -32,10 +32,13 @@ TYPED_TEST(SearchEngineTest, BruteForce) {
   std::vector<std::pair<std::size_t, SVector<TestFixture::N>>> testSet
     = this->meshLoader.sample(100);
   // test all queries in test set
+  std::size_t matches = 0;
   for(auto query : testSet){
     auto e = engine.search(query.second);
-    EXPECT_TRUE(e->ID() == query.first);
+    if(e != nullptr && e->ID() == query.first)
+      matches++;
   }
+  EXPECT_EQ(matches, 100);
 }
 
 TYPED_TEST(SearchEngineTest, AlternatingDigitalTree) {
@@ -45,10 +48,14 @@ TYPED_TEST(SearchEngineTest, AlternatingDigitalTree) {
   std::vector<std::pair<std::size_t, SVector<TestFixture::N>>> testSet
     = this->meshLoader.sample(100);
   // test all queries in test set
+  std::size_t matches = 0;
   for(auto query : testSet){
     auto e = engine.search(query.second);
-    EXPECT_TRUE(e->ID() == query.first);
+    if(e != nullptr && e->ID() == query.first){
+      matches++;
+    }
   }
+  EXPECT_EQ(matches, 100);
 }
 
 // barycentric walk cannot be applied to manifold mesh, filter out manifold cases at compile time
@@ -59,10 +66,13 @@ TYPED_TEST(SearchEngineTest, BarycentricWalkTest) {
     std::vector<std::pair<std::size_t, SVector<TestFixture::N>>> testSet
       = this->meshLoader.sample(100);
     // test all queries in test set
+    std::size_t matches = 0;
     for(auto query : testSet){
       auto e = engine.search(query.second);
-      EXPECT_TRUE(e->ID() == query.first);
-    }    
+      if(e != nullptr && e->ID() == query.first)
+	matches++;
+    }
+    EXPECT_EQ(matches, 100);
   }else{
     // nothing to do in manifold cases here.
     SUCCEED();
