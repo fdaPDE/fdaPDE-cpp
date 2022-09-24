@@ -73,6 +73,8 @@
 !test/data/mesh/c_shaped/*.csv
 !test/data/mesh/unit_square/*.csv
 !test/data/*.mtx
+!test/data/models/SRPDE_2Dnocov/
+!test/data/models/SRPDE_2Dnocov/*
 *.txt
 *.json
 *.cmake

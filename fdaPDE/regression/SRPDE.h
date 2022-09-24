@@ -12,6 +12,7 @@ using fdaPDE::core::NLA::SMW;
 #include "Internals.h"
 using fdaPDE::regression::internal::psi;
 using fdaPDE::regression::internal::lmbQ;
+using fdaPDE::regression::internal::setDirichletBC;
 
 template <unsigned int M, unsigned int N, unsigned int R, typename E>
 class SRPDE{
@@ -43,7 +44,8 @@ private:
   // A = |                            |  
   //     | \lambda*R1    \lambda*R0   |
   std::shared_ptr<SpMatrix<double>> A_;
-
+  std::shared_ptr<DVector<double>> b_;
+  
   // design matrix
   std::shared_ptr<DMatrix<double>> W_;
   // hat matrix of the regression.
@@ -84,13 +86,13 @@ public:
     // compute transpose of W once here
     DMatrix<double> Wt = W.transpose();
     // compute q x q dense matrix
-    WTW_ = std::make_unique<DMatrix<double>>(Wt*W);
+    WTW_ = std::make_shared<DMatrix<double>>(Wt*W);
     // compute the factorization of the dense q x q W^T*W matrix
     invWTW_ = WTW_->partialPivLu();
     // compute hat matrix H = W*(W*W^T)^{-1}*W^T
-    H_ = std::make_unique<DMatrix<double>>(W*invWTW_.solve(Wt));
+    H_ = std::make_shared<DMatrix<double>>(W*invWTW_.solve(Wt));
     // compute Q = I - H_
-    Q_ = std::make_unique<DMatrix<double>>
+    Q_ = std::make_shared<DMatrix<double>>
       (DMatrix<double>::Identity(H_->rows(), H_->cols()) - *H_);
     return;
   }
@@ -105,7 +107,9 @@ public:
   std::shared_ptr<DMatrix<double>> Q() const { return Q_; }
   Eigen::PartialPivLU<DMatrix<double>> invWTW() const { return invWTW_; }
   std::shared_ptr<SpMatrix<double>> Psi() const { return Psi_; }
-
+  std::shared_ptr<SpMatrix<double>> A() const { return A_; }
+  std::shared_ptr<DVector<double>> b() const { return b_; }
+  
   std::shared_ptr<DMatrix<double>> T(double lambda) const;
   DVector<double> z() const { return z_; }
   
@@ -156,14 +160,16 @@ void SRPDE<M, N, R, E>::smooth() {
     b.resize(A.rows());
     b << -Psi_->transpose()*z_,
       lambda_ * pde_.force();
-
+    b_ = std::make_shared<DVector<double>>(b);
+    
     // define system solver. Use a sparse solver
     Eigen::SparseLU<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver{};
-    solver.analyzePattern(*A_);
-    solver.factorize(*A_);
-  
+    solver.compute(*A_);
     // solve linear system A_*x = b
     solution = solver.solve(b);
+    
+    // store result of smoothing
+    f_ = std::make_shared<DVector<double>>( (*Psi_)*solution.head(A_->rows()/2) );
   }else{ // parametric case
     // rhs of SR-PDE linear system
     DVector<double> b;
@@ -185,11 +191,10 @@ void SRPDE<M, N, R, E>::smooth() {
     // solve system Mx = b
     solution = solver.solve(U, *WTW_, V, b);
 
-    // store estimation of coefficient vector for the parametric part
+    // store result of smoothing 
+    f_    = std::make_shared<DVector<double>>( (*Psi_)*solution.head(A_->rows()/2) );
     beta_ = std::make_shared<DVector<double>>( invWTW_.solve(W_->transpose())*(z_ - *f_) );
   }
-  // store estimation of coefficient vector for the nonparametric part
-  f_ = std::make_shared<DVector<double>>( (*Psi_)*solution.head(A_->rows()/2) );
   return;
 }
 

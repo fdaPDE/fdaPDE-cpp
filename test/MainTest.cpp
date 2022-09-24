@@ -20,8 +20,9 @@
 // // FEM test suites
 #include "core/FEM/LagrangianBasisTest.cpp"
 #include "core/FEM/IntegratorTest.cpp"
+#include "core/FEM/PDESolutionsTest.cpp"
 // regression module test suites
-// #include "SRPDETest.cpp"
+#include "SRPDETest.cpp"
 
 int main(int argc, char **argv){
   // start testing

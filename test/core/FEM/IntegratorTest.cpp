@@ -46,9 +46,8 @@ TYPED_TEST(IntegratorTest, ElementMeasure){
   EXPECT_NEAR(e->measure(), integrator.integrate(*e, f), DOUBLE_TOLERANCE);
 }
 
-// the following test checks if it is possible to integrate a general scalar field over a mesh element. Because for linear elements
-// we have a closed formula for the true value of the integral we test only if the quadrature rule works on linear fields. In particular
-// the volume of a truncated prism defined over an element e having height h1, h2, ..., hm at the m vertices equals
+// test if linear fields can be integrated over mesh elements. In particular a closed formula for
+// the volume of a truncated prism defined over an element e having height h1, h2, ..., hm at the m vertices is known as
 //     e.measure()*(h1 + h2 + ... hm)/m
 TYPED_TEST(IntegratorTest, LinearFieldsAreIntegratedCorrectly){
     // generate random element from mesh
@@ -66,6 +65,23 @@ TYPED_TEST(IntegratorTest, LinearFieldsAreIntegratedCorrectly){
     // test for equality
     EXPECT_NEAR(measure, integrator.integrate(*e, f), DOUBLE_TOLERANCE);
 }
+
+// test if is possible to integrate a field over the entire mesh
+TEST(IntegratorTest, CanIntegrateFieldOverMesh) {
+  // load sample mesh
+  MeshLoader<Mesh2D<>> CShaped("unit_square");
+  Integrator<2> integrator{};
+  // define field to integrate
+  std::function<double(SVector<2>)> f = [](SVector<2> x) -> double { return 1; };
+  EXPECT_NEAR(1, integrator.integrate(CShaped.mesh, f), DOUBLE_TOLERANCE);
+}
+
+// test if all integrator tables produce the same result (this proves weights and quadrature nodes are correct)
+template <typename E>
+class IntegratorTablesTest : public ::testing::Test {};
+
+
+
 
 // TYPED_TEST(IntegratorTest, IdentityOperator) {
 //   // generate random element from mesh
@@ -133,14 +149,3 @@ TYPED_TEST(IntegratorTest, LinearFieldsAreIntegratedCorrectly){
 //     GTEST_SKIP();
 //   }
 // }
-
-// test if is possible to integrate a field over the entire mesh. Integrating the scalar field 1 over the mesh must return
-// its volume. Tested on the sample 2D mesh only (unit circle) for which we know pi to be the true value of the area
-TEST(IntegratorTest, CanIntegrateFieldOverMesh) {
-  // load sample mesh
-  MeshLoader<Mesh2D<>> CShaped("unit_square");
-  Integrator<2> integrator{};
-  // define field to integrate
-  std::function<double(SVector<2>)> f = [](SVector<2> x) -> double { return 1; };
-  EXPECT_NEAR(1, integrator.integrate(CShaped.mesh, f), DOUBLE_TOLERANCE);
-}
