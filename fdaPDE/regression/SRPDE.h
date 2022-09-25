@@ -103,14 +103,16 @@ public:
   // getters
   std::size_t q() const { return isAlloc(W_) ? W_->size() : 0; } // number of covariates
   std::size_t n() const { return pde_.domain().nodes(); } // number of observation locations (need to change if locations != nodes)
+  std::size_t obs() const { return z_.rows(); } // number of observations
   std::shared_ptr<DMatrix<double>> W() const { return W_; }
   std::shared_ptr<DMatrix<double>> Q() const { return Q_; }
   Eigen::PartialPivLU<DMatrix<double>> invWTW() const { return invWTW_; }
+  std::shared_ptr<DMatrix<double>> WTW() const { return WTW_; }
   std::shared_ptr<SpMatrix<double>> Psi() const { return Psi_; }
   std::shared_ptr<SpMatrix<double>> A() const { return A_; }
   std::shared_ptr<DVector<double>> b() const { return b_; }
   
-  std::shared_ptr<DMatrix<double>> T(double lambda) const;
+  std::shared_ptr<DMatrix<double>> T() const;
   DVector<double> z() const { return z_; }
   
   // solution of smoothing problem
@@ -176,7 +178,8 @@ void SRPDE<M, N, R, E>::smooth() {
     b.resize(A_->rows());
     b << -Psi_->transpose()*lmbQ(*this, z_),
       lambda_ * pde_.force();
-
+    b_ = std::make_shared<DVector<double>>(b);
+    
     std::size_t q_ = W_->cols(); // number of covariates
     // definition of matrices U and V 
     DMatrix<double> U = DMatrix<double>::Zero(A.rows(), q_);
@@ -213,7 +216,7 @@ DVector<double> SRPDE<M, N, R, E>::fitted() const {
 // required to support GCV based smoothing parameter selection
 // in case of an SRPDE model we have T = \Psi^T*Q*\Psi + \lambda*R1_^T*R0_^{-1}*R1_
 template <unsigned int M, unsigned int N, unsigned int R, typename E>
-std::shared_ptr<DMatrix<double>> SRPDE<M, N, R, E>::T(double lambda) const{
+std::shared_ptr<DMatrix<double>> SRPDE<M, N, R, E>::T() const{
   // compute value of R_ = R1_^T*R0_^{-1}*R1_
   Eigen::SparseLU<SpMatrix<double>> invR0{};
   invR0.analyzePattern(pde_.R0());
@@ -222,10 +225,10 @@ std::shared_ptr<DMatrix<double>> SRPDE<M, N, R, E>::T(double lambda) const{
 
   if(!isAlloc(W_)) // case without covariates, Q is the identity matrix
     return std::make_shared<DMatrix<double>>
-      (Psi_->transpose()*(*Psi_) + lambda*R_);
+      (Psi_->transpose()*(*Psi_) + lambda_*R_);
   else // general case with covariates
     return std::make_shared<DMatrix<double>>
-      (Psi_->transpose()*lmbQ(*this, *Psi_) + lambda*R_);
+      (Psi_->transpose()*lmbQ(*this, *Psi_) + lambda_*R_);
 }
 
 #endif // __SRPDE_H__

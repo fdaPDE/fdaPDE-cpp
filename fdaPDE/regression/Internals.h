@@ -43,7 +43,7 @@ namespace internal{
   template <typename M>
   DMatrix<double> lmbQ(const M& model, const DMatrix<double>& x){
     DMatrix<double> v = model.W()->transpose()*x; // W^T*x
-    DVector<double> z = model.invWTW().solve(v);  // (W^T*W)^{-1}*W^T*x
+    DMatrix<double> z = model.invWTW().solve(v);  // (W^T*W)^{-1}*W^T*x
     // compute x - W*z = x - (W*(W^T*W)^{-1}*W^T)*x = (I - H)*x = Q*x
     return x - (*model.W())*z;
   }
