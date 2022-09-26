@@ -101,7 +101,7 @@ public:
   void setLambda(double lambda) { lambda_ = lambda; }
   
   // getters
-  std::size_t q() const { return isAlloc(W_) ? W_->size() : 0; } // number of covariates
+  std::size_t q() const { return isAlloc(W_) ? W_->cols() : 0; } // number of covariates
   std::size_t n() const { return pde_.domain().nodes(); } // number of observation locations (need to change if locations != nodes)
   std::size_t obs() const { return z_.rows(); } // number of observations
   std::shared_ptr<DMatrix<double>> W() const { return W_; }
