@@ -3,8 +3,8 @@ template <unsigned int M, unsigned int N, unsigned int K, typename E>
 void SRPDE<M, N, K, E>::smooth() {
   // assemble system matrix for the nonparameteric part of the model
   SparseBlockMatrix<double,2,2>
-    A(-Psi_->transpose()*(*Psi_), lambda_ * pde_.R1().transpose(),
-      lambda_ * pde_.R1(),        lambda_ * pde_.R0()            );
+    A(-Psi_->transpose()*(*Psi_), lambda_ * pde_.R1()->transpose(),
+      lambda_ * (*pde_.R1()),     lambda_ * (*pde_.R0())          );
   // cache system matrix for reuse
   A_ = std::make_shared<SpMatrix<double>>(A.derived());
   DVector<double> solution; // where the system solution will be stored
@@ -14,7 +14,7 @@ void SRPDE<M, N, K, E>::smooth() {
     DVector<double> b;
     b.resize(A.rows());
     b << -Psi_->transpose()*(*z_),
-      lambda_ * pde_.force();
+      lambda_ * (*pde_.force());
     b_ = std::make_shared<DVector<double>>(b);
     
     // define system solver. Use a sparse solver
@@ -30,7 +30,7 @@ void SRPDE<M, N, K, E>::smooth() {
     DVector<double> b;
     b.resize(A_->rows());
     b << -Psi_->transpose()*lmbQ(*this, *z_),
-      lambda_ * pde_.force();
+      lambda_ * (*pde_.force());
     b_ = std::make_shared<DVector<double>>(b);
     
     std::size_t q_ = W_->cols(); // number of covariates
@@ -71,10 +71,9 @@ DVector<double> SRPDE<M, N, K, E>::fitted() const {
 template <unsigned int M, unsigned int N, unsigned int K, typename E>
 std::shared_ptr<DMatrix<double>> SRPDE<M, N, K, E>::T() {
   // compute value of R = R1^T*R0^{-1}*R1, cache for possible reuse
-  Eigen::SparseLU<SpMatrix<double>> invR0{};
-  invR0.analyzePattern(pde_.R0());
-  invR0.factorize(pde_.R0());
-  R_ = std::make_shared<DMatrix<double>>(pde_.R1().transpose()*invR0.solve(pde_.R1()));
+  invR0_.analyzePattern(*pde_.R0());
+  invR0_.factorize(*pde_.R0());
+  R_ = std::make_shared<DMatrix<double>>( pde_.R1()->transpose()*invR0_.solve(*pde_.R1()) );
 
   // compute and store matrix T for possible reuse
   if(!this->hasCovariates()) // case without covariates, Q is the identity matrix

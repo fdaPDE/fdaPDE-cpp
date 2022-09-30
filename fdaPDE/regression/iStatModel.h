@@ -91,6 +91,7 @@ public:
   // pointers to problem data
   std::shared_ptr<DVector<double>> z() const { return z_; } // observation vector
   std::shared_ptr<DMatrix<double>> W() const { return W_; } // design matrix
+  double lambda() const { return lambda_; } // smoothing parameter
   
   // pointer to projection matrix. Q is computed on demand only when it is needed (in general operations involving Q can be substituted
   // with the more efficient routine lmbQ())
@@ -117,8 +118,8 @@ public:
   std::shared_ptr<SpMatrix<double>> R1() const { return pde_.R1(); }
   std::shared_ptr<DMatrix<double>>  u()  const { return pde_.force(); }
   
-  std::shared_ptr<SpMatrix<double>> A()   const { return A_; } // pointer to non-parametric part of the problem
-  std::shared_ptr<DVector<double>>  b()   const { return b_; } // pointer to rhs of the problem
+  std::shared_ptr<SpMatrix<double>> A()   const { return A_; }   // pointer to non-parametric part of the problem
+  std::shared_ptr<DVector<double>>  b()   const { return b_; }   // pointer to rhs of the problem
   std::shared_ptr<SpMatrix<double>> Psi() const { return Psi_; } // pointer to N x N sparse matrix \Psi
 
   // pointers to problem solution

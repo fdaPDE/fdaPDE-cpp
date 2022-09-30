@@ -28,8 +28,8 @@
 !fdaPDE/core/FEM/*
 !fdaPDE/regression/
 !fdaPDE/regression/*
-!fdaPDE/validation/
-!fdaPDE/validation/*
+!fdaPDE/calibration/
+!fdaPDE/calibration/*
 !docs/
 !docs/*
 !docs/core/OPT/

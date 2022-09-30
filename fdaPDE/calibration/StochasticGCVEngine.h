@@ -1,5 +1,5 @@
-#ifndef __STOCHASTIC_TRACER_H__
-#define __STOCHASTIC_TRACER_H__
+#ifndef __STOCHASTIC_GCV_ENGINE_H__
+#define __STOCHASTIC_GCV_ENGINE_H__
 
 #include <memory>
 #include <random>
@@ -12,7 +12,7 @@ using fdaPDE::core::ScalarField;
 using fdaPDE::core::NLA::SMW;
 
 // computes an approximation of the trace of S = \Psi*T^{-1}*\Psi^T*Q using a monte carlo approximation.
-class StochasticTracer {
+class StochasticGCVEngine {
 private:
   std::size_t r_; // number of realizations
 
@@ -36,7 +36,7 @@ private:
   
 public:
   // constructor
-  StochasticTracer(std::size_t r) : r_(r) { }
+  StochasticGCVEngine(std::size_t r) : r_(r) { }
 
   // evaluate trace of S exploiting a monte carlo approximation
   template<typename M>
@@ -74,4 +74,4 @@ public:
   }
 };
 
-#endif // __STOCHASTIC_TRACER_H__
+#endif // __STOCHASTIC_GCV_ENGINE_H__

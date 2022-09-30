@@ -11,14 +11,14 @@ using fdaPDE::core::NLA::SparseBlockMatrix;
 #include "../core/NLA/SMW.h"
 using fdaPDE::core::NLA::SMW;
 // calibration module imports
-#include "../validation/iGCV.h"
+#include "../calibration/iGCV.h"
 // regression module imports
 #include "iStatModel.h"
 #include "Internals.h"
 using fdaPDE::regression::internal::lmbQ;
 
 template <unsigned int M, unsigned int N, unsigned int K, typename E>
-class SRPDE : public iStatModel<M,N,K,E>, iGCV {
+class SRPDE : public iStatModel<M,N,K,E>, public iGCV {
 public:
   // constructor
   SRPDE() = default;
