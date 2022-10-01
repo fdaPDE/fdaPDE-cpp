@@ -12,24 +12,37 @@ namespace fdaPDE{
 namespace regression{
 namespace internal{
 
-  // compute Psi matrix assuming locations equal to mesh's nodes (there is 1 only at mesh nodes and 0 elsewhere due to support of lagrangian basis)
-  // in general it is not diagonal!
-  template <unsigned int M, unsigned int N, unsigned int R, typename E>
-  std::unique_ptr<SpMatrix<double>> psi(const PDE<M,N,R,E>& pde) {
+  // compute n x N \Psi matrix
+  template <typename M>
+  std::shared_ptr<SpMatrix<double>> psi(const M& model) {
     // preallocate space for Psi matrix
     std::unique_ptr<SpMatrix<double>> psi = std::make_unique<SpMatrix<double>>();
-    unsigned int locations = pde.domain().nodes();
-    unsigned int nbasis = pde.domain().nodes();
-    psi->resize(locations, nbasis);
-  
-    // fill matrix
+    // detect number of observations and number of nodes from model object
+    unsigned int n = model.obs();
+    unsigned int N = model.loc();
+    psi->resize(n, N);
+    // triplet list to fill sparse matrix
     std::list<Eigen::Triplet<double>> tripletList;  
-    for(std::size_t i = 0; i < locations; ++i){
-      tripletList.push_back(Eigen::Triplet<double>(i, i, 1.0));
+        
+    // if data locations are equal to mesh nodes then \Psi is the identity matrix
+    if(n == N){
+      // (\psi_i(p_i) = 1 and \psi_i(p_j) = 0 \forall i \neq j)
+      for(std::size_t i = 0; i < n; ++i){
+	tripletList.push_back(Eigen::Triplet<double>(i, i, 1.0));
+      }
+    } else { // if data locations are a subset of the mesh nodes then \Psi will have some of its columns set to zero
+      // (\psi_i(p_j) = 0 \forall j \in {1, ..., n} such that no data is observed at location i)
+      for(std::size_t i = 0; i < n; ++i){
+	tripletList.push_back(Eigen::Triplet<double>(i, model.z_idx()[i], 1.0));
+      }
     }
-  
+    // finalize construction
     psi->setFromTriplets(tripletList.begin(), tripletList.end());
     psi->makeCompressed();
+
+    // still need to cope with the following case
+    // if data locations are generic points within the mesh, then \Psi has no particular structure and must be computed explicitly
+    
     return psi;
   }
   

@@ -31,6 +31,8 @@ public:
   virtual DVector<double> fitted() const; // computes the fitted values \hat z
   // iGCV implementation
   virtual std::shared_ptr<DMatrix<double>> T(); // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
+
+  double predict(const DVector<double>& covs, const std::size_t loc) const;
   
   virtual ~SRPDE() = default;
 };

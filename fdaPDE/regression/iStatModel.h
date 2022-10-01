@@ -19,10 +19,11 @@ protected:
   bool isAlloc(const std::shared_ptr<T>& t) const { return t != nullptr && t->size() != 0; }
 
   // data of the problem
-  const PDE<M,N,K,E>& pde_;                 // regularizing term and domain information
-  double lambda_;                           // smoothing parameter
-  std::shared_ptr<DVector<double>> z_{};    // vector of observations
-  std::shared_ptr<DMatrix<double>> W_{};    // design matrix
+  std::shared_ptr<PDE<M,N,K,E>> pde_;     // regularizing term and domain information
+  double lambda_;                         // smoothing parameter
+  std::shared_ptr<DVector<double>> z_{};  // vector of observations
+  std::vector<std::size_t> z_idx_{};      // vector of data locations
+  std::shared_ptr<DMatrix<double>> W_{};  // design matrix
 
   // notation:
   //   * n: number of observations
@@ -62,10 +63,14 @@ protected:
 public:
   // constructor
   iStatModel() = default;
-  iStatModel(const PDE<M,N,K,E>& pde, double lambda) : pde_(pde), lambda_(lambda) {
-    Psi_ = psi(pde_);
-  };
+  iStatModel(const PDE<M,N,K,E>& pde, double lambda)
+    : pde_(std::make_shared<PDE<M,N,K,E>>(pde)), lambda_(lambda) {};
 
+  // copy constructor, copy only pde object
+  iStatModel(const iStatModel& rhs) {
+    pde_ = rhs.pde_;
+  }
+  
   // set problem design matrix and precomputes all related quantites
   void setCovariates(const DMatrix<double>& W) {
     // store design matrix
@@ -76,20 +81,29 @@ public:
     invWTW_ = WTW_->partialPivLu();
     return;
   }
-  // set observation vector
+  // set observation vector (assumes there is an observation for each mesh node)
   void setObservations(const DVector<double>& z) {
     z_ = std::make_shared<DVector<double>>(z);
     return;
   }
+  // set observation vector in case data are observed in a subset of mesh nodes. i-th element in z_idx denotes the mesh node p_i where
+  // the i-th datum in z is observed
+  void setObservations(const DVector<double>& z, const std::vector<std::size_t>& z_idx){
+    z_ = std::make_shared<DVector<double>>(z);
+    z_idx_ = z_idx;
+    return;
+  }
+  
   // set smoothing parameter
   void setLambda(double lambda) { lambda_ = lambda; }
 
   // getters
   std::size_t q() const { return isAlloc(W_) ? W_->cols() : 0; } // q, the number of covariates
-  std::size_t loc() const { return pde_.domain().nodes(); }      // N, the number of locations
+  std::size_t loc() const { return pde_->domain().nodes(); }     // N, the number of locations
   std::size_t obs() const { return z_->rows(); }                 // n, the number of observations
   // pointers to problem data
   std::shared_ptr<DVector<double>> z() const { return z_; } // observation vector
+  const std::vector<std::size_t>& z_idx() const { return z_idx_; } // data locations 
   std::shared_ptr<DMatrix<double>> W() const { return W_; } // design matrix
   double lambda() const { return lambda_; } // smoothing parameter
   
@@ -114,9 +128,9 @@ public:
   Eigen::PartialPivLU<DMatrix<double>> invWTW() const { return invWTW_; }
 
   // pointers to FEM related quantites
-  std::shared_ptr<SpMatrix<double>> R0() const { return pde_.R0(); }
-  std::shared_ptr<SpMatrix<double>> R1() const { return pde_.R1(); }
-  std::shared_ptr<DMatrix<double>>  u()  const { return pde_.force(); }
+  std::shared_ptr<SpMatrix<double>> R0() const { return pde_->R0(); }
+  std::shared_ptr<SpMatrix<double>> R1() const { return pde_->R1(); }
+  std::shared_ptr<DMatrix<double>>  u()  const { return pde_->force(); }
   
   std::shared_ptr<SpMatrix<double>> A()   const { return A_; }   // pointer to non-parametric part of the problem
   std::shared_ptr<DVector<double>>  b()   const { return b_; }   // pointer to rhs of the problem
