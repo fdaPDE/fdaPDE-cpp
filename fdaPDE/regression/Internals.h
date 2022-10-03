@@ -46,22 +46,6 @@ namespace internal{
     return psi;
   }
   
-  // an efficient way to perform a left multiplication by Q. The following method is an implementation of the algorithm
-  //  given the design matrix W and x
-  //    compute, factorize and store Y = W^T*W
-  //    compute v = W^T*x
-  //    solve Yz = v
-  //    return x - Wz = Qx
-  // it is required to having assigned a design matrix W to the model before calling this method
-  template <typename M>
-  DMatrix<double> lmbQ(const M& model, const DMatrix<double>& x){
-    DMatrix<double> v = model.W()->transpose()*x; // W^T*x
-    DMatrix<double> z = model.invWTW().solve(v);  // (W^T*W)^{-1}*W^T*x
-    // compute x - W*z = x - (W*(W^T*W)^{-1}*W^T)*x = (I - H)*x = Q*x
-    return x - (*model.W())*z;
-  }
-
-
   // an utility to set dirichlet boundary conditions to the regression problem system. Note that this is different from setting
   // dirichlet conditions in the FEM system
   template <unsigned int M, unsigned int N, unsigned int R, typename E>

@@ -15,7 +15,6 @@ using fdaPDE::core::NLA::SMW;
 // regression module imports
 #include "iStatModel.h"
 #include "Internals.h"
-using fdaPDE::regression::internal::lmbQ;
 
 template <unsigned int M, unsigned int N, unsigned int K, typename E>
 class SRPDE : public iStatModel<M,N,K,E>, public iGCV {

@@ -16,16 +16,15 @@ class StochasticGCVEngine {
 private:
   std::size_t r_; // number of realizations
 
-  // create a sample from a Rademacher distribution to be used for the approximation of Tr[S]
-  template <typename M>
-  std::shared_ptr<DMatrix<double>> Us(const M& model) const {
+  // create a sample from a Rademacher distribution to be used for the approximation of Tr[S] as an n x r_ matrix
+  std::shared_ptr<DMatrix<double>> Us(std::size_t n) const {
     // define bernulli distribution with parameter p = 0.5 to simulate Rademacher distribution
     std::random_device rng;
     std::bernoulli_distribution Be(0.5);
     // preallocate memory for matrix Us
-    std::shared_ptr<DMatrix<double>> Us = std::make_shared<DMatrix<double>>(model.n(), r_);
+    std::shared_ptr<DMatrix<double>> Us = std::make_shared<DMatrix<double>>(n, r_);
     // fill matrix
-    for(std::size_t i = 0; i < model.n(); ++i){
+    for(std::size_t i = 0; i < n; ++i){
       for(std::size_t j = 0; j < r_; ++j){
 	if(Be(rng)) Us->coeffRef(i,j) =  1.0;
 	else        Us->coeffRef(i,j) = -1.0;
@@ -57,15 +56,15 @@ public:
     
     // define matrix Bs
     DMatrix<double> Bs = DMatrix<double>::Zero(2*model.obs(), r_);
-    DMatrix<double> UU = *Us(model);
-    Bs.topRows(model.obs()) = model.Psi()->transpose() * lmbQ(model, UU);
+    std::shared_ptr<DMatrix<double>> L = Us(n);
+    Bs.topRows(model.obs()) = model.Psi()->transpose() * model.lmbQ(*L);
     
     // solve system Mx = b
     DMatrix<double> solution;
     solution = solver.solve(U, *(model.WTW()), V, Bs);
 
     // compute approximated Tr[S] using monte carlo mean
-    DMatrix<double> Y = UU.transpose() * (*model.Psi());
+    DMatrix<double> Y = L->transpose() * (*model.Psi());
     double MCmean = 0;
     for(std::size_t i = 0; i < r_; ++i){
       MCmean += Y.row(i).dot(solution.col(i).head(n));

@@ -31,7 +31,7 @@ void SRPDE<M, N, K, E>::smooth() {
     // rhs of SR-PDE linear system
     DVector<double> b;
     b.resize(A_->rows());
-    b << -Psi_->transpose()*lmbQ(*this, *z_),
+    b << -Psi_->transpose()*this->lmbQ(*z_),
       lambda_ * (*pde_->force());
     b_ = std::make_shared<DVector<double>>(b);
     
@@ -57,10 +57,10 @@ void SRPDE<M, N, K, E>::smooth() {
 }
 
 // it is asssumed that smooth has already been called on the model object
-// in general fitted values \hat z are equal to f_ + W * beta_, in case the parametric part is absent W * beta_ is omitted
+// in general fitted values \hat z are equal to \Psi*f_ + W*beta_, in case the parametric part is absent W * beta_ is omitted
 template <unsigned int M, unsigned int N, unsigned int K, typename E>
 DVector<double> SRPDE<M, N, K, E>::fitted() const {
-  DVector<double> hat_z = *f_;
+  DVector<double> hat_z = (*Psi_)*(*f_);
   // if the model has a parametric part, we need to sum its contribute
   if(this->hasCovariates())
     hat_z += (*W_)*(*beta_);
@@ -69,6 +69,7 @@ DVector<double> SRPDE<M, N, K, E>::fitted() const {
 }
 
 // compute prediction of model at new unseen data location (location equal to mesh node)
+// W_{n+1}^T * \beta + f_*\psi(p_{n+1})
 template <unsigned int M, unsigned int N, unsigned int K, typename E>
 double SRPDE<M, N, K, E>::predict(const DVector<double>& covs, const std::size_t loc) const {
   double result = (*f_)[loc];
@@ -93,7 +94,7 @@ std::shared_ptr<DMatrix<double>> SRPDE<M, N, K, E>::T() {
       ( Psi_->transpose()*(*Psi_) + lambda_*(*R_) );
   else // general case with covariates
     T_ = std::make_shared<DMatrix<double>>
-      ( Psi_->transpose()*lmbQ(*this, *Psi_) + lambda_*(*R_) );
+      ( Psi_->transpose()*this->lmbQ(*Psi_) + lambda_*(*R_) );
 
   // return pointer to T
   return T_;

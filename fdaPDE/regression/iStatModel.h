@@ -143,6 +143,21 @@ public:
   // methods
   bool hasCovariates() const { return q() != 0; }
 
+  // an efficient way to perform a left multiplication by Q. The following method is based on the following strategy
+  //  given the design matrix W and x
+  //    compute v = W^T*x
+  //    solve Yz = v
+  //    return x - Wz = Qx
+  // it is required to having assigned a design matrix W to the model before calling this method
+  DMatrix<double> lmbQ(const DMatrix<double>& x){
+    DMatrix<double> v = W_->transpose()*x; // W^T*x
+    DMatrix<double> z = invWTW_.solve(v);  // (W^T*W)^{-1}*W^T*x
+    // compute x - W*z = x - (W*(W^T*W)^{-1}*W^T)*x = (I - H)*x = Q*x
+    return x - (*W_)*z;
+  }
+
+  
+  
   // abstract part of the interface, must be implemented by concrete models
 
   // finds a solution to the smoothing problem.

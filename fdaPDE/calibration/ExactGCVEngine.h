@@ -5,8 +5,6 @@
 #include <Eigen/LU>
 
 #include "../core/utils/Symbols.h"
-#include "../regression/Internals.h"
-using fdaPDE::regression::internal::lmbQ;
 
 // Evaluates exactly the trace of matrix S = \Psi*T^{-1}*\Psi^T*Q. This is obtained by explicitly computing S and extracting its trace.
 // Exact optimization of GCV requires also additional quantites which are evaluated here for efficiency reasons (some costly computations performed
@@ -138,7 +136,7 @@ public:
 	D.row(it.row()) = C.row(it.col());
       }
     }
-    DVector<double> Qp_ = lmbQ(model, p_); // efficient computation of Q*p
+    DVector<double> Qp_ = model.lmbQ(p_); // efficient computation of Q*p
     // return b = p.dot(Q*p) + (-ddS*z - 2*\Psi*L*h).dot(z - \hat z) 
     return ( *model.z() - model.fitted() ).dot( -(*ddS_)*(*model.z()) - D ) + p_.dot(Qp_);
   }
