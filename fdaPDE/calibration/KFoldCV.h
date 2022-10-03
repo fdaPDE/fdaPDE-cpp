@@ -2,18 +2,13 @@
 #define __K_FOLD_CV__
 
 #include "../core/utils/Symbols.h"
+#include <Eigen/Core>
 #include <algorithm>
 #include <cmath>
-#include <cstddef>
-#include <Eigen/Core>
-#include <iterator>
-#include <numeric>
-#include <utility>
 #include <vector>
 #include <memory>
-#include <random>
 
-// temporary data structures. Need for a more general and well defined API for a DataFrame??
+// just a pair of values
 template <typename T>
 struct DataSet {
   std::shared_ptr<T> data;
@@ -70,31 +65,32 @@ public:
 
   // select best smoothing parameter according to a K-fold cross validation strategy using the output of functor F as model score
   template <typename F>
-  SVector<1> compute(const std::vector<SVector<1>>& lambdas, const F& scoreFunctor){
-    // reserve space
-    avg_scores_.reserve(lambdas.size());
-    std_scores_.reserve(lambdas.size());
+  SVector<1> compute(const std::vector<SVector<1>>& lambdas, const F& scoreFunctor){    
+    // reserve space for storing scores
     scores_.resize(K_, lambdas.size());
-    
-    // cycle over all lambdas
-    for(std::size_t j = 0; j < lambdas.size(); ++j){
-      M m(model_);  // create a copy of current model
-      m.setLambda(lambdas[j][0]);  // set current lambda
-      
-      // cycle over all folds
-      for(std::size_t fold = 0; fold < K_; ++fold){
-	// create train test partition
-	TrainTestSet<DMatrix<double>> W_ = split(*model_.W(), fold);
-	TrainTestSet<DVector<double>> z_ = split(*model_.z(), fold);
+    // cycle over all folds (execute just K_ splits of the data, very expensive operation)
+    for(std::size_t fold = 0; fold < K_; ++fold){
+      // create train test partition
+      TrainTestSet<DMatrix<double>> W_ = split(*model_.W(), fold);
+      TrainTestSet<DVector<double>> z_ = split(*model_.z(), fold);      
+      // fixed a data split, cycle over all lambda values
+      for(std::size_t j = 0; j < lambdas.size(); ++j){
+	M m(model_);  // create a fresh copy of current model (O(1) operation)
+	m.setLambda(lambdas[j][0]);  // set current lambda
 
 	// fit the model on training set
 	m.setObservations(*z_.first.data, z_.first.indices);
 	m.setCovariates(*W_.first.data);
 	m.smooth(); // fit the model
 
-	// evaluate model score on the fold left out
+	// evaluate model score on the fold left out (test set)
 	scores_.coeffRef(fold, j) = scoreFunctor(m, z_.second.data, W_.second.data, W_.second.indices);
       }
+    }
+    // reserve space for storing results
+    avg_scores_.reserve(lambdas.size());
+    std_scores_.reserve(lambdas.size());
+    for(std::size_t j = 0; j < lambdas.size(); ++j){
       // record the average score and its standard deviation computed among the K_ runs
       double avg_score = 0;
       for(std::size_t i = 0; i < K_; ++i) avg_score += scores_(i,j);
@@ -106,8 +102,8 @@ public:
       avg_scores_.push_back(avg_score);
       std_scores_.push_back(std_score);
     }
-    
-    // return optimal lambda according to KFoldCV
+
+    // return optimal lambda according to given metric F
     std::vector<double>::iterator opt_score = std::min_element(avg_scores_.begin(), avg_scores_.end());
     return lambdas[std::distance(avg_scores_.begin(), opt_score)];
   }
@@ -115,7 +111,7 @@ public:
   // getters
   std::vector<double> avg_scores() const { return avg_scores_; }
   std::vector<double> std_scores() const { return std_scores_; }
-  DMatrix<double> scores() const { return scores_; }
+  DMatrix<double> scores() const { return scores_; } // table of all scores (K_ x |lambdas| matrix)
   
 };
 
