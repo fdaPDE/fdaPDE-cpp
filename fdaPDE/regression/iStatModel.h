@@ -11,7 +11,7 @@ using fdaPDE::core::FEM::PDE;
 using fdaPDE::regression::internal::psi;
 
 // abstract base class for any fdaPDE statistical model
-template <unsigned int M, unsigned int N, unsigned int K, typename E>
+template <unsigned int M, unsigned int N, unsigned int K, typename E, typename B>
 class iStatModel {
 protected:
   // helper to check if data member contains valid data
@@ -19,7 +19,7 @@ protected:
   bool isAlloc(const std::shared_ptr<T>& t) const { return t != nullptr && t->size() != 0; }
 
   // data of the problem
-  std::shared_ptr<PDE<M,N,K,E>> pde_;     // regularizing term and domain information
+  std::shared_ptr<PDE<M,N,K,E,B>> pde_;   // regularizing term and domain information
   double lambda_;                         // smoothing parameter
   std::shared_ptr<DVector<double>> z_{};  // vector of observations
   std::vector<std::size_t> z_idx_{};      // vector of data locations
@@ -63,8 +63,8 @@ protected:
 public:
   // constructor
   iStatModel() = default;
-  iStatModel(const PDE<M,N,K,E>& pde, double lambda)
-    : pde_(std::make_shared<PDE<M,N,K,E>>(pde)), lambda_(lambda) {};
+  iStatModel(const PDE<M,N,K,E,B>& pde, double lambda)
+    : pde_(std::make_shared<PDE<M,N,K,E,B>>(pde)), lambda_(lambda) {};
 
   // copy constructor, copy only pde object
   iStatModel(const iStatModel& rhs) {
@@ -106,6 +106,7 @@ public:
   const std::vector<std::size_t>& z_idx() const { return z_idx_; } // data locations 
   std::shared_ptr<DMatrix<double>> W() const { return W_; } // design matrix
   double lambda() const { return lambda_; } // smoothing parameter
+  std::shared_ptr<PDE<M,N,K,E,B>> pde() const { return pde_; }
   
   // pointer to projection matrix. Q is computed on demand only when it is needed (in general operations involving Q can be substituted
   // with the more efficient routine lmbQ())
@@ -155,8 +156,6 @@ public:
     // compute x - W*z = x - (W*(W^T*W)^{-1}*W^T)*x = (I - H)*x = Q*x
     return x - (*W_)*z;
   }
-
-  
   
   // abstract part of the interface, must be implemented by concrete models
 
@@ -170,22 +169,22 @@ public:
 };
 
 // import all symbols from iStatModel interface in derived classes
-#define IMPORT_STAT_MODEL_SYMBOLS(M,N,K,E)		\
-  using iStatModel<M,N,K,E>::pde_;			\
-  using iStatModel<M,N,K,E>::lambda_;			\
-  using iStatModel<M,N,K,E>::z_;			\
-  using iStatModel<M,N,K,E>::W_;			\
-  using iStatModel<M,N,K,E>::R0_;			\
-  using iStatModel<M,N,K,E>::R1_;			\
-  using iStatModel<M,N,K,E>::u_;			\
-  using iStatModel<M,N,K,E>::Psi_;			\
-  using iStatModel<M,N,K,E>::A_;			\
-  using iStatModel<M,N,K,E>::b_;			\
-  using iStatModel<M,N,K,E>::H_;			\
-  using iStatModel<M,N,K,E>::WTW_;			\
-  using iStatModel<M,N,K,E>::Q_;			\
-  using iStatModel<M,N,K,E>::invWTW_;			\
-  using iStatModel<M,N,K,E>::f_;			\
-  using iStatModel<M,N,K,E>::beta_;			\
+#define IMPORT_STAT_MODEL_SYMBOLS(M,N,K,E,B)		\
+  using iStatModel<M,N,K,E,B>::pde_;			\
+  using iStatModel<M,N,K,E,B>::lambda_;			\
+  using iStatModel<M,N,K,E,B>::z_;			\
+  using iStatModel<M,N,K,E,B>::W_;			\
+  using iStatModel<M,N,K,E,B>::R0_;			\
+  using iStatModel<M,N,K,E,B>::R1_;			\
+  using iStatModel<M,N,K,E,B>::u_;			\
+  using iStatModel<M,N,K,E,B>::Psi_;			\
+  using iStatModel<M,N,K,E,B>::A_;			\
+  using iStatModel<M,N,K,E,B>::b_;			\
+  using iStatModel<M,N,K,E,B>::H_;			\
+  using iStatModel<M,N,K,E,B>::WTW_;			\
+  using iStatModel<M,N,K,E,B>::Q_;			\
+  using iStatModel<M,N,K,E,B>::invWTW_;			\
+  using iStatModel<M,N,K,E,B>::f_;			\
+  using iStatModel<M,N,K,E,B>::beta_;			\
 
 #endif // __I_STAT_MODEL__

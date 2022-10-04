@@ -16,14 +16,14 @@ using fdaPDE::core::NLA::SMW;
 #include "iStatModel.h"
 #include "Internals.h"
 
-template <unsigned int M, unsigned int N, unsigned int K, typename E>
-class SRPDE : public iStatModel<M,N,K,E>, public iGCV {
+template <unsigned int M, unsigned int N, unsigned int K, typename E, typename B>
+class SRPDE : public iStatModel<M,N,K,E,B>, public iGCV {
 public:
   // constructor
   SRPDE() = default;
-  SRPDE(const PDE<M,N,K,E>& pde, double lambda)
-    : iStatModel<M, N, K, E>(pde, lambda) {};
-  IMPORT_STAT_MODEL_SYMBOLS(M,N,K,E);
+  SRPDE(const PDE<M,N,K,E,B>& pde, double lambda)
+    : iStatModel<M,N,K,E,B>(pde, lambda) {};
+  IMPORT_STAT_MODEL_SYMBOLS(M,N,K,E,B);
 
   // iStatModel interface implementation
   virtual void smooth();                  // finds a solution to the smoothing problem
@@ -37,8 +37,8 @@ public:
 };
 
 // template argument deduction guide
-template <unsigned int M, unsigned int N, unsigned int K, typename E>
-SRPDE(const PDE<M,N,K,E>& pde_, double lambda_) -> SRPDE<M,N,K,E>;
+template <unsigned int M, unsigned int N, unsigned int K, typename E, typename B>
+SRPDE(const PDE<M,N,K,E,B>& pde_, double lambda_) -> SRPDE<M,N,K,E,B>;
 
 #include "SRPDE.tpp"
 

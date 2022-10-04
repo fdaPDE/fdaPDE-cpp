@@ -1,6 +1,6 @@
 // finds a solution to the SR-PDE smoothing problem
-template <unsigned int M, unsigned int N, unsigned int K, typename E>
-void SRPDE<M, N, K, E>::smooth() {
+template <unsigned int M, unsigned int N, unsigned int K, typename E, typename B>
+void SRPDE<M, N, K, E, B>::smooth() {
   Psi_ = psi(*this); // compute \Psi
   
   // assemble system matrix for the nonparameteric part of the model
@@ -58,8 +58,8 @@ void SRPDE<M, N, K, E>::smooth() {
 
 // it is asssumed that smooth has already been called on the model object
 // in general fitted values \hat z are equal to \Psi*f_ + W*beta_, in case the parametric part is absent W * beta_ is omitted
-template <unsigned int M, unsigned int N, unsigned int K, typename E>
-DVector<double> SRPDE<M, N, K, E>::fitted() const {
+template <unsigned int M, unsigned int N, unsigned int K, typename E, typename B>
+DVector<double> SRPDE<M, N, K, E, B>::fitted() const {
   DVector<double> hat_z = (*Psi_)*(*f_);
   // if the model has a parametric part, we need to sum its contribute
   if(this->hasCovariates())
@@ -70,8 +70,8 @@ DVector<double> SRPDE<M, N, K, E>::fitted() const {
 
 // compute prediction of model at new unseen data location (location equal to mesh node)
 // W_{n+1}^T * \beta + f_*\psi(p_{n+1})
-template <unsigned int M, unsigned int N, unsigned int K, typename E>
-double SRPDE<M, N, K, E>::predict(const DVector<double>& covs, const std::size_t loc) const {
+template <unsigned int M, unsigned int N, unsigned int K, typename E, typename B>
+double SRPDE<M, N, K, E, B>::predict(const DVector<double>& covs, const std::size_t loc) const {
   double result = (*f_)[loc];
   // parametetric contribute of the model, if any is present
   if(this->hasCovariates())
@@ -82,8 +82,8 @@ double SRPDE<M, N, K, E>::predict(const DVector<double>& covs, const std::size_t
 
 // required to support GCV based smoothing parameter selection
 // in case of an SRPDE model we have T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
-template <unsigned int M, unsigned int N, unsigned int K, typename E>
-std::shared_ptr<DMatrix<double>> SRPDE<M, N, K, E>::T() {
+template <unsigned int M, unsigned int N, unsigned int K, typename E, typename B>
+std::shared_ptr<DMatrix<double>> SRPDE<M, N, K, E, B>::T() {
   // compute value of R = R1^T*R0^{-1}*R1, cache for possible reuse
   invR0_->compute(*pde_->R0());
   R_ = std::make_shared<DMatrix<double>>( pde_->R1()->transpose()*invR0_->solve(*pde_->R1()) );
