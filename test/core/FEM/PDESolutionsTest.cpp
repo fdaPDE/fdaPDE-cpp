@@ -23,18 +23,18 @@ TEST(PDESolutionsTest, Identity) {
   auto L = Identity();
   DMatrix<double> u(UnitSquare.mesh.elements(), 1);
   u.fill(0);
-  PDE problem(UnitSquare.mesh, L, u); // definition of PDE
-  LagrangianBasis<2, 2, 1> basis{};   
+  LagrangianBasis<2, 2, 1> b{};   
+  PDE problem(UnitSquare.mesh, L, b, u); // definition of PDE
   Integrator<2, 3> integrator{};
 
   // compute discretization matrix 
-  problem.init(basis, integrator);
+  problem.init(integrator);
   // load expected result
   SpMatrix<double> expected_R0;
   Eigen::loadMarket(expected_R0, "data/models/SRPDE_2Dnocov/R0.mtx");
   
   // request R0 matrix from pde
-  SpMatrix<double> computed_R0 = problem.R1();
+  SpMatrix<double> computed_R0 = *problem.R1();
 
   // move SpMatrix to DMatrix (to compute infinity norm between two matrices)
   DMatrix<double> R0_1 = expected_R0;
@@ -50,18 +50,18 @@ TEST(PDESolutionsTest, Laplacian) {
   auto L = Laplacian();
   DMatrix<double> u(UnitSquare.mesh.elements(), 1);
   u.fill(0);
-  PDE problem(UnitSquare.mesh, L, u); // definition of PDE
-  LagrangianBasis<2, 2, 1> basis{};   
+  LagrangianBasis<2, 2, 1> b{};   
+  PDE problem(UnitSquare.mesh, L, b, u); // definition of PDE
   Integrator<2, 3> integrator{};
 
   // compute discretization matrix 
-  problem.init(basis, integrator);
+  problem.init(integrator);
   // load expected result
   SpMatrix<double> expected_R0;
   Eigen::loadMarket(expected_R0, "data/models/SRPDE_2Dnocov/R1.mtx");
   
   // request R0 matrix from pde
-  SpMatrix<double> computed_R0 = problem.R1();
+  SpMatrix<double> computed_R0 = *problem.R1();
 
   // move SpMatrix to DMatrix (to compute infinity norm between two matrices)
   DMatrix<double> R0_1 = expected_R0;

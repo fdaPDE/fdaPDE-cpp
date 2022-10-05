@@ -21,13 +21,14 @@ struct SearchEngineTest : public ::testing::Test {
   MeshLoader<E> meshLoader{}; // use default mesh
   static constexpr unsigned int M = MeshLoader<E>::M;
   static constexpr unsigned int N = MeshLoader<E>::N;
+  static constexpr unsigned int R = MeshLoader<E>::R;
 };
 TYPED_TEST_SUITE(SearchEngineTest, MESH_TYPE_LIST);
 
 // in the following a test is passed if **all** the queries are correctly satisfied
 TYPED_TEST(SearchEngineTest, BruteForce) {
   // build search engine
-  BruteForce<TestFixture::M, TestFixture::N> engine(this->meshLoader.mesh);
+  BruteForce<TestFixture::M, TestFixture::N, TestFixture::R> engine(this->meshLoader.mesh);
   // build test set
   std::vector<std::pair<std::size_t, SVector<TestFixture::N>>> testSet
     = this->meshLoader.sample(100);
@@ -43,7 +44,7 @@ TYPED_TEST(SearchEngineTest, BruteForce) {
 
 TYPED_TEST(SearchEngineTest, AlternatingDigitalTree) {
   // build search engine
-  ADT<TestFixture::M, TestFixture::N> engine(this->meshLoader.mesh);
+  ADT<TestFixture::M, TestFixture::N, TestFixture::R> engine(this->meshLoader.mesh);
   // build test set
   std::vector<std::pair<std::size_t, SVector<TestFixture::N>>> testSet
     = this->meshLoader.sample(100);
@@ -61,7 +62,7 @@ TYPED_TEST(SearchEngineTest, AlternatingDigitalTree) {
 // barycentric walk cannot be applied to manifold mesh, filter out manifold cases at compile time
 TYPED_TEST(SearchEngineTest, BarycentricWalkTest) {
   if constexpr(TestFixture::N == TestFixture::M){
-    BarycentricWalk<TestFixture::M, TestFixture::N> engine(this->meshLoader.mesh);
+    BarycentricWalk<TestFixture::M, TestFixture::N, TestFixture::R> engine(this->meshLoader.mesh);
     // build test set
     std::vector<std::pair<std::size_t, SVector<TestFixture::N>>> testSet
       = this->meshLoader.sample(100);

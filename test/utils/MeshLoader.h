@@ -42,6 +42,7 @@ namespace testing{
     // expose the dimensionality of the mesh
     static constexpr unsigned int M = E::local_dimension;
     static constexpr unsigned int N = E::embedding_dimension;
+    static constexpr unsigned int R = E::order;
     static constexpr bool manifold = is_manifold<M, N>::value;
     
     CSVReader reader{}; // csv parser
@@ -86,17 +87,17 @@ namespace testing{
     // some usefull utilities for testing
     
     // generate element at random inside mesh m
-    std::unique_ptr<Element<E::local_dimension, E::embedding_dimension>> generateRandomElement();
+    std::shared_ptr<Element<E::local_dimension, E::embedding_dimension>> generateRandomElement();
     // generate point at random inside element e
     SVector<E::embedding_dimension> generateRandomPoint(
-	const std::unique_ptr<Element<E::local_dimension, E::embedding_dimension>>& e);
+	const std::shared_ptr<Element<E::local_dimension, E::embedding_dimension>>& e);
 
     // generate randomly n pairs <ID, point> on mesh, such that point is contained in the element with identifier ID
     std::vector<std::pair<std::size_t, SVector<E::embedding_dimension>>> sample(std::size_t n);
   };
   
   template <typename E>
-  std::unique_ptr<Element<E::local_dimension, E::embedding_dimension>>
+  std::shared_ptr<Element<E::local_dimension, E::embedding_dimension>>
   MeshLoader<E>::generateRandomElement() {
     std::uniform_int_distribution<int> randomID(0, mesh.elements()-1);
     int ID = randomID(rng);  
@@ -105,7 +106,7 @@ namespace testing{
 
   template <typename E>
   SVector<E::embedding_dimension> MeshLoader<E>::generateRandomPoint(
-      const std::unique_ptr<Element<E::local_dimension, E::embedding_dimension>>& e) {
+      const std::shared_ptr<Element<E::local_dimension, E::embedding_dimension>>& e) {
     std::uniform_real_distribution<double> T(0,1);
     // let t, s, u ~ U(0,1) and P1, P2, P3, P4 a set of points, observe that:
     //     * if P1 and P2 are the vertices of a linear element, p = t*P1 + (1-t)*P2 lies into it for any t ~ U(0,1)
