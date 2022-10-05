@@ -3,16 +3,21 @@
 
 #include "../core/utils/Symbols.h"
 #include "../core/FEM/PDE.h"
-#include <Eigen/src/Core/Matrix.h>
-#include <memory>
-#include <tuple>
 using fdaPDE::core::FEM::PDE;
+#include "../core/MESH/engines/AlternatingDigitalTree/ADT.h"
+using fdaPDE::core::MESH::ADT;
+#include "../core/MESH/engines/BarycentricWalk/BarycentricWalk.h"
+using fdaPDE::core::MESH::BarycentricWalk;
+#include "../core/MESH/engines/BruteForce/BruteForce.h"
+using fdaPDE::core::MESH::BruteForce;
+
+#include <memory>
 
 namespace fdaPDE{
 namespace regression{
 namespace internal{
 
-  // compute n x N \Psi matrix
+  // compute n x N \Psi matrix. Overload for the case in which locations are a subset of the mesh nodes (possibly locations == nodes)
   template <typename M>
   std::shared_ptr<SpMatrix<double>> psi(const M& model) {
     // preallocate space for Psi matrix
@@ -40,10 +45,47 @@ namespace internal{
     psi->setFromTriplets(tripletList.begin(), tripletList.end());
     psi->makeCompressed();
 
-    // still need to cope with the following case
-    // if data locations are generic points within the mesh, then \Psi has no particular structure and must be computed explicitly
-    
     return psi;
+  }
+
+  // compute n x N \Psi matrix. Overload for the general case in which locations are given as plain coordinates
+  template <typename M>
+  std::shared_ptr<SpMatrix<double>> psi
+  (const M& model, const Eigen::Matrix<double, Eigen::Dynamic, M::embedding_dimension>& locations) {
+    BarycentricWalk<2,2,1> searchEngine(model.pde()->domain());
+    
+    // preallocate space for Psi matrix
+    std::unique_ptr<SpMatrix<double>> psi = std::make_unique<SpMatrix<double>>();
+    // detect number of observations and number of nodes from model object
+    unsigned int n = model.obs();
+    unsigned int N = model.loc(); // number of mesh nodes (number of basis functions)
+    psi->resize(n, N);
+    // triplet list to fill sparse matrix
+    std::list<Eigen::Triplet<double>> tripletList;
+    
+    // cycle over all locations
+    for(std::size_t i = 0; i < locations.rows(); ++i){
+      SVector<M::embedding_dimension> p_i(locations.row(i));
+      // search point containing element
+      std::cout << p_i << std::endl;
+      
+      auto e = searchEngine.search(p_i);
+      if(e == nullptr) std::cout << "non trovo un cazzo" << std::endl;
+      std::cout << "found" << e->ID() << std::endl;
+      // update \Psi matrix
+      for(std::size_t j = 0; j < model.pde()->basis()[e->ID()]->size(); ++j){
+	std::size_t h = model.pde()->basis()[e->ID()]->nodes()[j]; // column index of \Psi matrix
+        // extract \phi_h from basis
+	auto phi_h = (*model.pde()->basis()[e->ID()])[j];
+	// evaluate \phi_h(p_i) (value of the basis function centered in mesh node h and evaluated in point p_i)
+	tripletList.push_back(Eigen::Triplet<double>(i, h, phi_h(p_i)));
+      }
+    }
+    // finalize construction
+    psi->setFromTriplets(tripletList.begin(), tripletList.end());
+    psi->makeCompressed();
+
+    return psi;    
   }
   
   // an utility to set dirichlet boundary conditions to the regression problem system. Note that this is different from setting

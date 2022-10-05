@@ -140,6 +140,11 @@ public:
   // pointers to problem solution
   std::shared_ptr<DVector<double>> f_hat() const { return f_; }
   std::shared_ptr<DVector<double>> beta_hat() const { return beta_; }
+
+  // compile time informations
+  static constexpr unsigned int local_dimension = M;
+  static constexpr unsigned int embedding_dimension = N;
+  static constexpr unsigned int mesh_order = K;
   
   // methods
   bool hasCovariates() const { return q() != 0; }
