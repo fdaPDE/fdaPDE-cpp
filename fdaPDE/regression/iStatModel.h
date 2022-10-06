@@ -1,6 +1,7 @@
 #ifndef __I_STAT_MODEL__
 #define __I_STAT_MODEL__
 
+#include <cstddef>
 #include <memory>
 #include <Eigen/LU>
 
@@ -9,6 +10,14 @@
 using fdaPDE::core::FEM::PDE;
 #include "Internals.h"
 using fdaPDE::regression::internal::psi;
+#include "../core/MESH/engines/AlternatingDigitalTree/ADT.h"
+using fdaPDE::core::MESH::ADT;
+
+// trait to detect if a type is a specialization of iStatModel
+template <typename M> struct is_stat_model {
+  // query the type M for a flag which is owned only by iStatModel and its derived classes
+  static constexpr bool value = M::stat_model ? true : false;
+};
 
 // abstract base class for any fdaPDE statistical model
 template <unsigned int M, unsigned int N, unsigned int K, typename E, typename B>
@@ -22,13 +31,20 @@ protected:
   std::shared_ptr<PDE<M,N,K,E,B>> pde_;   // regularizing term and domain information
   double lambda_;                         // smoothing parameter
   std::shared_ptr<DVector<double>> z_{};  // vector of observations
-  std::vector<std::size_t> z_idx_{};      // vector of data locations
+  std::vector<std::size_t> z_idx_{};      // subset of locations where data are observed
   std::shared_ptr<DMatrix<double>> W_{};  // design matrix
+
+  // matrix of locations. If this matrix contains any data it is assumed that data are observed at general locations in space.
+  // Otherwise this information is not provided and data are assumed to be observed at mesh nodes.
+  std::shared_ptr<DMatrix<double>> locations_{};
 
   // notation:
   //   * n: number of observations
   //   * N: number of locations where data are observed
   //   * q: number of regressors
+
+  // algorithm used by MESH to solve search queries
+  std::shared_ptr<ADT<M,N,K>> searchEngine_;
   
   // data coming from FEM module
   std::shared_ptr<SpMatrix<double>> R0_{};  // mass matrix, result of the discretization of the identity operator (N x N matrix)
@@ -40,7 +56,7 @@ protected:
   
   // system matrix of non-parametric problem (2N x 2N matrix)
   //     | -\Psi^T*\Psi  \lambda*R1^T |
-  // A = |                            |  
+  // A = |                            |
   //     | \lambda*R1    \lambda*R0   |
   std::shared_ptr<SpMatrix<double>> A_{};
   // right hand side of problem's linear system (1 x 2N vector)
@@ -66,7 +82,7 @@ public:
   iStatModel(const PDE<M,N,K,E,B>& pde, double lambda)
     : pde_(std::make_shared<PDE<M,N,K,E,B>>(pde)), lambda_(lambda) {};
 
-  // copy constructor, copy only pde object
+  // copy constructor, copy only pde object (as a consequence also the problem domain)
   iStatModel(const iStatModel& rhs) {
     pde_ = rhs.pde_;
   }
@@ -86,10 +102,16 @@ public:
     z_ = std::make_shared<DVector<double>>(z);
     return;
   }
-  // set observation vector in case data are observed in a subset of mesh nodes. i-th element in z_idx denotes the mesh node p_i where
-  // the i-th datum in z is observed
-  void setObservations(const DVector<double>& z, const std::vector<std::size_t>& z_idx){
+  // set observation vector in case data are observed at general locations
+  void setObservations(const DVector<double>& z, const DMatrix<double>& locations){
     z_ = std::make_shared<DVector<double>>(z);
+    locations_ = std::make_shared<DMatrix<double>>(locations);
+    return;
+  }
+  
+  // set observation indexes: the i-th element in z_idx denotes the spatial point p_i where the i-th datum in z is observed
+  // this allows to set observation and locations and then filter out some of them (used e.g. in KFoldCV)
+  void setObsIndexes(const std::vector<std::size_t>& z_idx){
     z_idx_ = z_idx;
     return;
   }
@@ -107,6 +129,14 @@ public:
   std::shared_ptr<DMatrix<double>> W() const { return W_; } // design matrix
   double lambda() const { return lambda_; } // smoothing parameter
   std::shared_ptr<PDE<M,N,K,E,B>> pde() const { return pde_; }
+  std::shared_ptr<ADT<M,N,K>> searchEngine() {
+    // if still not available, initialize the search engine
+    if(searchEngine_ == nullptr){
+      searchEngine_ = std::make_shared<ADT<M,N,K>>(pde_->domain());
+    }
+    return searchEngine_;
+  }
+  std::shared_ptr<DMatrix<double>> locations() const { return locations_; }
   
   // pointer to projection matrix. Q is computed on demand only when it is needed (in general operations involving Q can be substituted
   // with the more efficient routine lmbQ())
@@ -133,9 +163,17 @@ public:
   std::shared_ptr<SpMatrix<double>> R1() const { return pde_->R1(); }
   std::shared_ptr<DMatrix<double>>  u()  const { return pde_->force(); }
   
-  std::shared_ptr<SpMatrix<double>> A()   const { return A_; }   // pointer to non-parametric part of the problem
-  std::shared_ptr<DVector<double>>  b()   const { return b_; }   // pointer to rhs of the problem
-  std::shared_ptr<SpMatrix<double>> Psi() const { return Psi_; } // pointer to N x N sparse matrix \Psi
+  std::shared_ptr<SpMatrix<double>> A() const { return A_; }   // pointer to non-parametric part of the problem
+  std::shared_ptr<DVector<double>>  b() const { return b_; }   // pointer to rhs of the problem
+
+  // pointer to n x N sparse matrix \Psi.
+  std::shared_ptr<SpMatrix<double>> Psi() {
+    if(!isAlloc(Psi_)){ // compute \Psi if not already available
+      // call to Internals::psi already takes into account of the sampling strategy of the model
+      Psi_ = psi(*this);
+    }
+    return Psi_;
+  } 
 
   // pointers to problem solution
   std::shared_ptr<DVector<double>> f_hat() const { return f_; }
@@ -145,9 +183,11 @@ public:
   static constexpr unsigned int local_dimension = M;
   static constexpr unsigned int embedding_dimension = N;
   static constexpr unsigned int mesh_order = K;
+  static constexpr bool stat_model = true; // used by trait is_stat_model to assert if a type is a statistical model
   
   // methods
-  bool hasCovariates() const { return q() != 0; }
+  bool hasCovariates() const { return q() != 0; } // true if the model has a parametric part
+  bool dataAtNodes() const { return !isAlloc(locations_); } // true if locations are subset of mesh nodes
 
   // an efficient way to perform a left multiplication by Q. The following method is based on the following strategy
   //  given the design matrix W and x
@@ -161,6 +201,29 @@ public:
     // compute x - W*z = x - (W*(W^T*W)^{-1}*W^T)*x = (I - H)*x = Q*x
     return x - (*W_)*z;
   }
+
+  // an efficient implementation of left multiplication by \Psi
+  std::shared_ptr<DMatrix<double>> lmbPsi(const DMatrix<double>& x){
+    // compute dimensions of resulting matrix
+    std::size_t n = Psi_->rows();
+    std::size_t m = x.cols();
+    // preallocate space for n x m result matrix
+    std::shared_ptr<DMatrix<double>> result = std::make_shared<DMatrix<double>>(n,m);
+
+    // if data are sampled at mesh nodes (or a subset of them) then \Psi is a permutation matrix
+    if(dataAtNodes()){
+      // just permute input matrix columns
+      for(std::size_t k = 0; k < Psi_->outerSize(); ++k){
+	for (SpMatrix<double>::InnerIterator it(*Psi_,k); it; ++it){
+	  result->row(it.row()) = x.row(it.col());
+	}
+      }
+    }else{
+      // in the general case no optimization can be put in place
+      *result = (*Psi_)*x;
+    }
+    return result;
+  }
   
   // abstract part of the interface, must be implemented by concrete models
 
@@ -169,6 +232,8 @@ public:
   virtual void smooth() = 0;
   // computes \hat z, the fitted values at the observations' locations
   virtual DVector<double> fitted() const = 0;
+  // compute prediction at new location
+  virtual double predict(const DVector<double>& covs, const std::size_t loc) const = 0;
   
   virtual ~iStatModel() = default;
 };

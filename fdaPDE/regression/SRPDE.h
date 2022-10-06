@@ -28,10 +28,10 @@ public:
   // iStatModel interface implementation
   virtual void smooth();                  // finds a solution to the smoothing problem
   virtual DVector<double> fitted() const; // computes the fitted values \hat z
-  // iGCV implementation
-  virtual std::shared_ptr<DMatrix<double>> T(); // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
+  virtual double predict(const DVector<double>& covs, const std::size_t loc) const;
 
-  double predict(const DVector<double>& covs, const std::size_t loc) const;
+  // iGCV interface implementation
+  virtual std::shared_ptr<DMatrix<double>> T(); // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
   
   virtual ~SRPDE() = default;
 };

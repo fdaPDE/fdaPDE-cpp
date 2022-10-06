@@ -13,15 +13,18 @@ using fdaPDE::core::TwiceDifferentiableScalarField;
 using fdaPDE::core::NLA::SMW;
 #include "ExactGCVEngine.h"
 #include "StochasticGCVEngine.h"
+
+// interfaces
 #include "iGCV.h"
+#include "../regression/iStatModel.h"
 
 // M: statistical model of which the GCV should be optimized
 // T: the trace evaluation strategy, defaulted to stochastic for efficiency reasons.
 template <typename M, typename T = StochasticGCVEngine>
 class GCV {
   // guarantees statistical model M is compatible with GCV computation
-  static_assert(std::is_base_of<iGCV, M>::value,
-		"can't apply GCV smoothing parameter selection on a model which doesn't extend iGCV interface");
+  static_assert(is_stat_model<M>::value && std::is_base_of<iGCV, M>::value,
+		"you are asking to calibrate something which cannot be handled by GCV");
 private:
   // analytical expression of gcv field
   std::function<double(SVector<1>)> gcv;

@@ -39,13 +39,7 @@ private:
     // factorize matrix T
     invT_ = model.T()->partialPivLu();
     V_ = invT_.solve(E_); // V = invT*E = T^{-1}*\Psi^T*Q
-    // perform efficient multiplication by permutation matrix Psi
-    S_ = std::make_shared<DMatrix<double>>(model.loc(), model.loc());
-    for(std::size_t k = 0; k < model.Psi()->outerSize(); ++k){
-      for (SpMatrix<double>::InnerIterator it(*model.Psi(),k); it; ++it){
-	S_->row(it.row()) = V_.row(it.col());
-      }
-    }
+    S_ = model.lmbPsi(V_); // this takes into account of sampling strategy
     return S_;
   };
 
@@ -57,13 +51,7 @@ private:
   std::shared_ptr<DMatrix<double>> dS(M& model) {
     L_ = invT_.solve(*model.R()); // T^{-1}*R
     F_ = L_*invT_.solve(E_);      // (T^{-1}*R)*(T^{-1}*E)
-    // perform efficient multiplication by permutation matrix Psi
-    dS_ = std::make_shared<DMatrix<double>>(model.loc(), model.loc());
-    for(std::size_t k = 0; k < model.Psi()->outerSize(); ++k){
-      for (SpMatrix<double>::InnerIterator it(*model.Psi(),k); it; ++it){
-	dS_->row(it.row()) = (-F_).row(it.col());
-      }
-    }
+    dS_ = model.lmbPsi(-F_); // this takes into account of sampling strategy
     return dS_;
   }
   
@@ -72,13 +60,7 @@ private:
   template <typename M>
   std::shared_ptr<DMatrix<double>> ddS(M& model){
     DMatrix<double> C = 2*L_*F_; // compute temporary 2*L*F
-    // perform efficient multiplication by permutation matrix Psi
-    ddS_ = std::make_shared<DMatrix<double>>(model.loc(), model.loc());
-    for(std::size_t k = 0; k < model.Psi()->outerSize(); ++k){
-      for (SpMatrix<double>::InnerIterator it(*model.Psi(),k); it; ++it){
-	ddS_->row(it.row()) = C.row(it.col());
-      }
-    }
+    ddS_ = model.lmbPsi(C); // this takes into account of sampling strategy
     return ddS_;
   }
 
