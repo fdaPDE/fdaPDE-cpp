@@ -35,7 +35,7 @@ private:
       E_ = model.Psi()->transpose()*(*model.Q());
     else
       E_ = model.Psi()->transpose();
-      
+    
     // factorize matrix T
     invT_ = model.T()->partialPivLu();
     V_ = invT_.solve(E_); // V = invT*E = T^{-1}*\Psi^T*Q
@@ -85,12 +85,12 @@ public:
   template <typename M>
   double a(M& model){
     // NB: dS_ must already contain valid data
-    DVector<double> g = model.R1()->transpose()*model.invR0().solve(*model.u());
+    DMatrix<double> g = model.R1()->transpose()*model.invR0().solve(*model.u());
     // cache h and p since needed for computation of second derivative
     h_ = (model.lambda()*L_ - DMatrix<double>::Identity(model.loc(), model.loc()))*invT_.solve(g);
-    p_ = (*model.Psi())*h_ - (*dS_)*(*model.z());
+    p_ = (*model.Psi())*h_ - (*dS_)*model.z();
     // return a = p.dot(z - \hat z)
-    return ( *model.z() - model.fitted() ).dot(p_);
+    return (( model.z() - model.fitted() ).transpose() * p_).coeff(0,0);
   }
 
   // computes Tr[dS]
@@ -119,8 +119,8 @@ public:
       }
     }
     DVector<double> Qp_ = model.lmbQ(p_); // efficient computation of Q*p
-    // return b = p.dot(Q*p) + (-ddS*z - 2*\Psi*L*h).dot(z - \hat z) 
-    return ( *model.z() - model.fitted() ).dot( -(*ddS_)*(*model.z()) - D ) + p_.dot(Qp_);
+    // return b = p.dot(Q*p) + (-ddS*z - 2*\Psi*L*h).dot(z - \hat z)
+    return (( model.z() - model.fitted() ).transpose() * ( -(*ddS_)*model.z() - D )).coeff(0,0) + p_.dot(Qp_);
   }
 
   // computes Tr[ddS]

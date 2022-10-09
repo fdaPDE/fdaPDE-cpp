@@ -52,7 +52,7 @@ private:
       std::size_t n = model_.loc(); // number of locations
       double edf = n - (q+trS);     // equivalent degrees of freedom
       // return gcv at point
-      return (n/std::pow(edf, 2))*( *model_.z() - model_.fitted() ).squaredNorm();
+      return (n/std::pow(edf, 2))*( model_.z() - model_.fitted() ).squaredNorm();
     };
 
     // analytical expression of gcv first derivative (called only by an exact-based GCV optimization)
@@ -73,7 +73,7 @@ private:
       std::size_t n = model_.loc(); // number of locations
       double edf = n - (q+trS);     // equivalent degrees of freedom
       // \sigma^2 = \frac{(z - \hat z).squaredNorm()}{n - (q + Tr[S])}
-      double sigma = ( *model_.z() - model_.fitted() ).squaredNorm()/edf;
+      double sigma = ( model_.z() - model_.fitted() ).squaredNorm()/edf;
 
       double a = trace.a(model_);   // a = p.dot(z - \hat z)
       // return gradient of GCV at point      
@@ -99,7 +99,7 @@ private:
       std::size_t n = model_.loc(); // number of locations
       double edf = n - (q+trS);     // equivalent degrees of freedom
       // \sigma^2 = \frac{norm(z - \hat z)^2}{n - (q + Tr[S])}
-      double sigma = ( *model_.z() - model_.fitted() ).squaredNorm()/edf;
+      double sigma = ( model_.z() - model_.fitted() ).squaredNorm()/edf;
 
       double a = trace.a(model_);   // a = p.dot(z - \hat z)
       double b = trace.b(model_);   // b = p.dot(Q*p) + (-ddS*z - 2*\Psi*L*h).dot(z - \hat z)

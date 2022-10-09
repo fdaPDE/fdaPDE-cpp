@@ -12,6 +12,7 @@ using fdaPDE::core::FEM::PDE;
 using fdaPDE::regression::internal::psi;
 #include "../core/MESH/engines/AlternatingDigitalTree/ADT.h"
 using fdaPDE::core::MESH::ADT;
+#include "../core/utils/DataStructures/BlockFrame.h"
 
 // trait to detect if a type is a specialization of iStatModel
 template <typename M> struct is_stat_model {
@@ -19,24 +20,29 @@ template <typename M> struct is_stat_model {
   static constexpr bool value = M::stat_model ? true : false;
 };
 
+// standardized definitions for stat model BlockFrame. layers below will make heavy assumptions on the layout of the BlockFrame,
+// use these instead of manually typing the block name when accessing df_
+#define STAT_MODEL_Z_BLK "z" // matrix of observations
+#define STAT_MODEL_W_BLK "W" // design matrix
+#define STAT_MODEL_I_BLK "i" // vector of observation indices
+#define STAT_MODEL_P_BLK "P" // matrix of spatial locations coordinates
+
 // abstract base class for any fdaPDE statistical model
 template <unsigned int M, unsigned int N, unsigned int K, typename E, typename B>
 class iStatModel {
-protected:
-  // helper to check if data member contains valid data
+private:
+  // helper to check if data member contains valid data, make private since users of models should never test for precence
+  // of data members directly
   template <typename T>
   bool isAlloc(const std::shared_ptr<T>& t) const { return t != nullptr && t->size() != 0; }
 
+protected:
   // data of the problem
   std::shared_ptr<PDE<M,N,K,E,B>> pde_;   // regularizing term and domain information
   double lambda_;                         // smoothing parameter
-  std::shared_ptr<DVector<double>> z_{};  // vector of observations
-  std::vector<std::size_t> z_idx_{};      // subset of locations where data are observed
-  std::shared_ptr<DMatrix<double>> W_{};  // design matrix
 
-  // matrix of locations. If this matrix contains any data it is assumed that data are observed at general locations in space.
-  // Otherwise this information is not provided and data are assumed to be observed at mesh nodes.
-  std::shared_ptr<DMatrix<double>> locations_{};
+  // blockframe for data storage
+  BlockFrame<double, int> df_;
 
   // notation:
   //   * n: number of observations
@@ -73,8 +79,8 @@ protected:
   Eigen::PartialPivLU<DMatrix<double>> invWTW_{};
 
   // problem solution
-  std::shared_ptr<DVector<double>> f_;      // estimate of the spatial field (1 x N vector)
-  std::shared_ptr<DVector<double>> beta_;   // estimate of the coefficient vector (1 x q vector)
+  std::shared_ptr<DMatrix<double>> f_;      // estimate of the spatial field (1 x N vector)
+  std::shared_ptr<DMatrix<double>> beta_;   // estimate of the coefficient vector (1 x q vector)
   
 public:
   // constructor
@@ -83,50 +89,40 @@ public:
     : pde_(std::make_shared<PDE<M,N,K,E,B>>(pde)), lambda_(lambda) {};
 
   // copy constructor, copy only pde object (as a consequence also the problem domain)
-  iStatModel(const iStatModel& rhs) {
-    pde_ = rhs.pde_;
-  }
-  
-  // set problem design matrix and precomputes all related quantites
-  void setCovariates(const DMatrix<double>& W) {
-    // store design matrix
-    W_ = std::make_shared<DMatrix<double>>(W);
-    // compute q x q dense matrix
-    WTW_ = std::make_shared<DMatrix<double>>(W.transpose()*W);
-    // compute the factorization of W^T*W
-    invWTW_ = WTW_->partialPivLu();
-    return;
-  }
-  // set observation vector (assumes there is an observation for each mesh node)
-  void setObservations(const DVector<double>& z) {
-    z_ = std::make_shared<DVector<double>>(z);
-    return;
-  }
-  // set observation vector in case data are observed at general locations
-  void setObservations(const DVector<double>& z, const DMatrix<double>& locations){
-    z_ = std::make_shared<DVector<double>>(z);
-    locations_ = std::make_shared<DMatrix<double>>(locations);
-    return;
-  }
-  
-  // set observation indexes: the i-th element in z_idx denotes the spatial point p_i where the i-th datum in z is observed
-  // this allows to set observation and locations and then filter out some of them (used e.g. in KFoldCV)
-  void setObsIndexes(const std::vector<std::size_t>& z_idx){
-    z_idx_ = z_idx;
-    return;
-  }
-  
-  // set smoothing parameter
-  void setLambda(double lambda) { lambda_ = lambda; }
+  iStatModel(const iStatModel& rhs) { pde_ = rhs.pde_; }
 
+  // initialize model's data directly from a BlockFrame object.
+  void setData(const BlockFrame<double, int>& df) {
+    df_ = df;
+    // precompute quantites related to covariates
+    if(df.hasBlock(STAT_MODEL_W_BLK)){
+      // compute q x q dense matrix
+      WTW_ = std::make_shared<DMatrix<double>>(W().transpose()*W());
+      // compute the factorization of W^T*W
+      invWTW_ = WTW_->partialPivLu();
+    }
+    // insert an index row (if not yet present)
+    if(!df_.hasBlock(STAT_MODEL_I_BLK)){
+      std::size_t n = df_.rows();
+      DMatrix<int> idx(n,1);
+      for(std::size_t i = 0; i < n; ++i) idx(i,0) = i;
+      df_.insert(STAT_MODEL_I_BLK, idx);
+    }
+    return;
+  }
+  void setLambda(double lambda) { lambda_ = lambda; }
+  
   // getters
-  std::size_t q() const { return isAlloc(W_) ? W_->cols() : 0; } // q, the number of covariates
-  std::size_t loc() const { return pde_->domain().nodes(); }     // N, the number of locations
-  std::size_t obs() const { return z_->rows(); }                 // n, the number of observations
+  const BlockFrame<double, int>& data() const { return df_; } // the whole set of data
+  std::size_t q() const { return df_.hasBlock(STAT_MODEL_W_BLK) ?
+      df_.get<double>(STAT_MODEL_W_BLK).cols() : 0; } // q, number of covariates
+  std::size_t loc() const { return pde_->domain().nodes();} // N, number of mesh nodes
+  std::size_t obs() const { return df_.get<double>(STAT_MODEL_Z_BLK).rows(); } // n, number of observations
+  
   // pointers to problem data
-  std::shared_ptr<DVector<double>> z() const { return z_; } // observation vector
-  const std::vector<std::size_t>& z_idx() const { return z_idx_; } // data locations 
-  std::shared_ptr<DMatrix<double>> W() const { return W_; } // design matrix
+  const DMatrix<double>& z() const { return df_.get<double>(STAT_MODEL_Z_BLK); } // observation vector
+  const DMatrix<double>& W() const { return df_.get<double>(STAT_MODEL_W_BLK); } // design matrix
+  const DMatrix<double>& locations() const { return df_.get<double>(STAT_MODEL_P_BLK); } // spatial locations
   double lambda() const { return lambda_; } // smoothing parameter
   std::shared_ptr<PDE<M,N,K,E,B>> pde() const { return pde_; }
   std::shared_ptr<ADT<M,N,K>> searchEngine() {
@@ -136,17 +132,18 @@ public:
     }
     return searchEngine_;
   }
-  std::shared_ptr<DMatrix<double>> locations() const { return locations_; }
-  
+
+  const DMatrix<int>& z_idx() const { return df_.get<int>(STAT_MODEL_I_BLK); } // data locations 
+
   // pointer to projection matrix. Q is computed on demand only when it is needed (in general operations involving Q can be substituted
   // with the more efficient routine lmbQ())
   std::shared_ptr<DMatrix<double>> Q() {
     if(!isAlloc(Q_)){ // Q is computed on request since not needed in general
       // compute transpose of W once here
-      DMatrix<double> Wt = W_->transpose();
+      DMatrix<double> Wt = W().transpose();
 
       // compute hat matrix H = W*(W*W^T)^{-1}*W^T
-      H_ = std::make_shared<DMatrix<double>>((*W_)*invWTW_.solve(Wt));
+      H_ = std::make_shared<DMatrix<double>>(W()*invWTW_.solve(Wt));
       // compute Q = I - H_
       Q_ = std::make_shared<DMatrix<double>>
 	(DMatrix<double>::Identity(H_->rows(), H_->cols()) - *H_);
@@ -156,7 +153,7 @@ public:
 
   // pointer to q x q dense matrix W^T*W and its inverse
   std::shared_ptr<DMatrix<double>>  WTW() const { return WTW_; }
-  Eigen::PartialPivLU<DMatrix<double>> invWTW() const { return invWTW_; }
+  const Eigen::PartialPivLU<DMatrix<double>>& invWTW() const { return invWTW_; }
 
   // pointers to FEM related quantites
   std::shared_ptr<SpMatrix<double>> R0() const { return pde_->R0(); }
@@ -176,8 +173,8 @@ public:
   } 
 
   // pointers to problem solution
-  std::shared_ptr<DVector<double>> f_hat() const { return f_; }
-  std::shared_ptr<DVector<double>> beta_hat() const { return beta_; }
+  std::shared_ptr<DMatrix<double>> f_hat() const { return f_; }
+  std::shared_ptr<DMatrix<double>> beta_hat() const { return beta_; }
 
   // compile time informations
   static constexpr unsigned int local_dimension = M;
@@ -187,7 +184,7 @@ public:
   
   // methods
   bool hasCovariates() const { return q() != 0; } // true if the model has a parametric part
-  bool dataAtNodes() const { return !isAlloc(locations_); } // true if locations are subset of mesh nodes
+  bool dataAtNodes() const { return !df_.hasBlock(STAT_MODEL_P_BLK); } // true if locations are subset of mesh nodes
 
   // an efficient way to perform a left multiplication by Q. The following method is based on the following strategy
   //  given the design matrix W and x
@@ -196,10 +193,10 @@ public:
   //    return x - Wz = Qx
   // it is required to having assigned a design matrix W to the model before calling this method
   DMatrix<double> lmbQ(const DMatrix<double>& x){
-    DMatrix<double> v = W_->transpose()*x; // W^T*x
+    DMatrix<double> v = W().transpose()*x; // W^T*x
     DMatrix<double> z = invWTW_.solve(v);  // (W^T*W)^{-1}*W^T*x
     // compute x - W*z = x - (W*(W^T*W)^{-1}*W^T)*x = (I - H)*x = Q*x
-    return x - (*W_)*z;
+    return x - W()*z;
   }
 
   // an efficient implementation of left multiplication by \Psi
@@ -231,7 +228,7 @@ public:
   // After a call to smooth() all quantites related to the solution of the problem must contain valid data
   virtual void smooth() = 0;
   // computes \hat z, the fitted values at the observations' locations
-  virtual DVector<double> fitted() const = 0;
+  virtual DMatrix<double> fitted() const = 0;
   // compute prediction at new location
   virtual double predict(const DVector<double>& covs, const std::size_t loc) const = 0;
   
@@ -242,8 +239,6 @@ public:
 #define IMPORT_STAT_MODEL_SYMBOLS(M,N,K,E,B)		\
   using iStatModel<M,N,K,E,B>::pde_;			\
   using iStatModel<M,N,K,E,B>::lambda_;			\
-  using iStatModel<M,N,K,E,B>::z_;			\
-  using iStatModel<M,N,K,E,B>::W_;			\
   using iStatModel<M,N,K,E,B>::R0_;			\
   using iStatModel<M,N,K,E,B>::R1_;			\
   using iStatModel<M,N,K,E,B>::u_;			\

@@ -33,13 +33,13 @@ namespace internal{
       }else{ // if data locations are a subset of the mesh nodes then \Psi will have some of its columns set to zero
 	// (\psi_i(p_j) = 0 \forall j \in {1, ..., n} such that no data is observed at location i)
 	for(std::size_t i = 0; i < n; ++i){
-	  tripletList.push_back(Eigen::Triplet<double>(i, model.z_idx()[i], 1.0));
+	  tripletList.push_back(Eigen::Triplet<double>(i, model.z_idx()(i,0), 1.0));
 	}
       }
     }else{ // general case in which locations are provided as plain coordinates to the model
       // cycle over all locations
-      for(std::size_t i = 0; i < model.locations()->rows(); ++i){
-	SVector<M::embedding_dimension> p_i(model.locations()->row(i));
+      for(std::size_t i = 0; i < model.locations().rows(); ++i){
+	SVector<M::embedding_dimension> p_i(model.locations().row(i));
 	// search element containing the point
 	auto e = model.searchEngine()->search(p_i);
 	// update \Psi matrix

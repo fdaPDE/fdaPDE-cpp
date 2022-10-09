@@ -4,21 +4,24 @@
 #include <vector>
 #include <memory>
 #include "../core/utils/Symbols.h"
+#include "../core/utils/DataStructures/BlockFrame.h"
 
 // functor implementing Root Mean Squared Error performance measure
 struct RMSE {
 
   // compute RMSE: \sqrt{\frac{norm(z - \hat z)^2/}{n}} 
   template <typename M>
-  double operator()(const M& model, std::shared_ptr<DVector<double>> z_test,
-		    std::shared_ptr<DMatrix<double>> W_test, const std::vector<std::size_t>& obs_indices) const {
+  double operator()(const M& model, const BlockFrame<double, int>& test) const {
     // compute predicted values \hat z
-    DVector<double> z_hat(z_test->rows());
-    for(std::size_t i = 0; i < z_hat.rows(); ++i){
-      z_hat[i] = model.predict(W_test->row(i), obs_indices[i]);
-    }
+    const DMatrix<double>& z_test = test.get<double>(STAT_MODEL_Z_BLK);
+    std::size_t n = z_test.rows();
 
-    return std::sqrt((*z_test - z_hat).squaredNorm()/z_test->rows());
+    DVector<double> z_hat(n);
+    for(std::size_t i = 0; i < n; ++i){
+      z_hat[i] = model.predict(test.get<double>(STAT_MODEL_W_BLK).row(i), test.get<int>(STAT_MODEL_I_BLK)(i,0));
+    }
+    // \sqrt{\frac{norm(z - \hat z)^2/}{n}} 
+    return std::sqrt((z_test - z_hat).squaredNorm()/n);
   }
   
 };

@@ -27,7 +27,7 @@ public:
 
   // iStatModel interface implementation
   virtual void smooth();                  // finds a solution to the smoothing problem
-  virtual DVector<double> fitted() const; // computes the fitted values \hat z
+  virtual DMatrix<double> fitted() const; // computes the fitted values \hat z
   virtual double predict(const DVector<double>& covs, const std::size_t loc) const;
 
   // iGCV interface implementation

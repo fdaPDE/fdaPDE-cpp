@@ -2,26 +2,22 @@
 #define __K_FOLD_CV__
 
 #include "../core/utils/Symbols.h"
+#include "../core/utils/DataStructures/BlockFrame.h"
+
+// interfaces
+#include "../regression/iStatModel.h"
+
 #include <Eigen/Core>
 #include <algorithm>
 #include <cmath>
 #include <vector>
 #include <memory>
 
-// just a pair of values
-template <typename T>
-struct DataSet {
-  std::shared_ptr<T> data;
-  std::vector<std::size_t> indices;
-
-  // constructor
-  DataSet() = default;
-  DataSet(const std::shared_ptr<T>& data_, const std::vector<std::size_t>& indices_)
-    : data(data_), indices(indices_) {};
-};
-
 template <typename M>
 class KFoldCV {
+  // guarantees statistical model M is compatible with KFoldCV
+  static_assert(is_stat_model<M>::value, 
+		"you are asking to calibrate something which is not a statistical model");
 private:  
   M& model_;      // model to validate
   std::size_t K_; // number of folds
@@ -30,14 +26,12 @@ private:
   std::vector<double> std_scores_{}; // vector recording the standard deviation of the recordered scores
   DMatrix<double> scores_{};         // matrix of scores (one column for each explored lambda value, one row for each fold)
   
-  template <typename T> using TrainTestSet = std::pair<DataSet<T>, DataSet<T>>;
-  
   // split data in K folds
-  template <typename T>
-  std::pair<DataSet<T>, DataSet<T>> split(const T& data, std::size_t i) {
+  std::pair<BlockView<Sparse, double, int>, BlockView<Sparse, double, int>>
+  split(const BlockFrame<double, int>& data, std::size_t i) {
     std::size_t n = data.rows();      // number of data points
     std::size_t m = std::floor(n/K_); // number of data per fold
-
+    
     // create test-train index sets, as function of test fold i
     std::vector<std::size_t> testIdx(m);
     std::vector<std::size_t> trainIdx(n-m);
@@ -48,14 +42,10 @@ private:
 	trainIdx[j >= m*(i+1) ? j-m : j] = j;
     }
 
-    // create train and test sets
-    DataSet<T> train
-      (std::make_shared<T>(data(trainIdx, Eigen::all)),
-       trainIdx);
-    DataSet<T> test
-      (std::make_shared<T>(data(testIdx,  Eigen::all)),
-       testIdx);
-
+    // create views of train and test sets
+    BlockView<Sparse, double, int> train = data(trainIdx);
+    BlockView<Sparse, double, int> test  = data(testIdx);
+    
     return std::make_pair(train, test);
   }
     
@@ -71,20 +61,21 @@ public:
     // cycle over all folds (execute just K_ splits of the data, very expensive operation)
     for(std::size_t fold = 0; fold < K_; ++fold){
       // create train test partition
-      TrainTestSet<DMatrix<double>> W_ = split(*model_.W(), fold);
-      TrainTestSet<DVector<double>> z_ = split(*model_.z(), fold);      
+      std::pair<BlockView<Sparse, double, int>, BlockView<Sparse, double, int>> train_test = split(model_.data(), fold);
+      // decouple training from testing
+      BlockFrame<double, int> train = train_test.first.extract();
+      BlockFrame<double, int> test = train_test.second.extract();
+
       // fixed a data split, cycle over all lambda values
       for(std::size_t j = 0; j < lambdas.size(); ++j){
 	M m(model_);  // create a fresh copy of current model (O(1) operation)
 	m.setLambda(lambdas[j][0]);  // set current lambda
-
+	
 	// fit the model on training set
-	m.setObservations(*z_.first.data, z_.first.indices);
-	m.setCovariates(*W_.first.data);
-	m.smooth(); // fit the model
-
+	m.setData(train);
+	m.smooth();
 	// evaluate model score on the fold left out (test set)
-	scores_.coeffRef(fold, j) = scoreFunctor(m, z_.second.data, W_.second.data, W_.second.indices);
+	scores_.coeffRef(fold, j) = scoreFunctor(m, test);
       }
     }
     // reserve space for storing results

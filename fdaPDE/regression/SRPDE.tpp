@@ -1,8 +1,8 @@
 // finds a solution to the SR-PDE smoothing problem
 template <unsigned int M, unsigned int N, unsigned int K, typename E, typename B>
 void SRPDE<M, N, K, E, B>::smooth() {
-  Psi_ = psi(*this); // compute \Psi
-  
+  this->Psi(); // compute \Psi if necessary
+
   // assemble system matrix for the nonparameteric part of the model
   SparseBlockMatrix<double,2,2>
     A(-Psi_->transpose()*(*Psi_), lambda_ * pde_->R1()->transpose(),
@@ -11,11 +11,11 @@ void SRPDE<M, N, K, E, B>::smooth() {
   A_ = std::make_shared<SpMatrix<double>>(A.derived());
   DVector<double> solution; // where the system solution will be stored
   
-  if(!this->isAlloc(W_)){ // nonparametric case
+  if(!this->hasCovariates()){ // nonparametric case
     // rhs of SR-PDE linear system
     DVector<double> b;
     b.resize(A.rows());
-    b << -Psi_->transpose()*(*z_),
+    b << -Psi_->transpose()*this->z(),
       lambda_ * (*pde_->force());
     b_ = std::make_shared<DVector<double>>(b);
     
@@ -26,22 +26,22 @@ void SRPDE<M, N, K, E, B>::smooth() {
     solution = solver.solve(b);
     
     // store result of smoothing
-    f_ = std::make_shared<DVector<double>>( solution.head(A_->rows()/2) );
+    f_ = std::make_shared<DMatrix<double>>( solution.head(A_->rows()/2) );
   }else{ // parametric case
     // rhs of SR-PDE linear system
     DVector<double> b;
     b.resize(A_->rows());
-    b << -Psi_->transpose()*this->lmbQ(*z_),
+    b << -Psi_->transpose()*this->lmbQ(this->z()),
       lambda_ * (*pde_->force());
     b_ = std::make_shared<DVector<double>>(b);
     
-    std::size_t q_ = W_->cols(); // number of covariates
+    std::size_t q_ = this->W().cols(); // number of covariates
     // definition of matrices U and V 
     DMatrix<double> U = DMatrix<double>::Zero(A.rows(), q_);
-    U.block(0,0, A.rows()/2, q_) = Psi_->transpose()*(*W_);
+    U.block(0,0, A.rows()/2, q_) = Psi_->transpose()*this->W();
   
     DMatrix<double> V = DMatrix<double>::Zero(q_, A.rows());
-    V.block(0,0, q_, A.rows()/2) = W_->transpose()*(*Psi_);
+    V.block(0,0, q_, A.rows()/2) = this->W().transpose()*(*Psi_);
 
     // Define system solver. Use SMW solver from NLA module
     SMW<> solver{};
@@ -50,8 +50,8 @@ void SRPDE<M, N, K, E, B>::smooth() {
     solution = solver.solve(U, *WTW_, V, b);
 
     // store result of smoothing 
-    f_    = std::make_shared<DVector<double>>( solution.head(A_->rows()/2) );
-    beta_ = std::make_shared<DVector<double>>( invWTW_.solve(W_->transpose())*(*z_ - (*Psi_)*(*f_)) );
+    f_    = std::make_shared<DMatrix<double>>( solution.head(A_->rows()/2) );
+    beta_ = std::make_shared<DMatrix<double>>( invWTW_.solve(this->W().transpose())*(this->z() - (*Psi_)*(*f_)) );
   }
   return;
 }
@@ -59,11 +59,11 @@ void SRPDE<M, N, K, E, B>::smooth() {
 // it is asssumed that smooth has already been called on the model object
 // in general fitted values \hat z are equal to \Psi*f_ + W*beta_, in case the parametric part is absent W * beta_ is omitted
 template <unsigned int M, unsigned int N, unsigned int K, typename E, typename B>
-DVector<double> SRPDE<M, N, K, E, B>::fitted() const {
-  DVector<double> hat_z = (*Psi_)*(*f_);
+DMatrix<double> SRPDE<M, N, K, E, B>::fitted() const {
+  DMatrix<double> hat_z = (*Psi_)*(*f_);
   // if the model has a parametric part, we need to sum its contribute
   if(this->hasCovariates())
-    hat_z += (*W_)*(*beta_);
+    hat_z += this->W()*(*beta_);
   
   return hat_z;
 }
@@ -71,11 +71,11 @@ DVector<double> SRPDE<M, N, K, E, B>::fitted() const {
 // compute prediction of model at new unseen data location (location equal to mesh node)
 // W_{n+1}^T * \beta + f_*\psi(p_{n+1})
 template <unsigned int M, unsigned int N, unsigned int K, typename E, typename B>
-double SRPDE<M, N, K, E, B>::predict(const DVector<double>& covs, const std::size_t loc) const {
-  double result = (*f_)[loc];
+double SRPDE<M, N, K, E, B>::predict(const DVector<double>& covs, std::size_t loc) const {
+  double result = (*f_).coeff(loc,0);
   // parametetric contribute of the model, if any is present
   if(this->hasCovariates())
-    result += covs.dot(*beta_);
+    result += (covs.transpose()*(*beta_)).coeff(0,0);
   
   return result;
 }
