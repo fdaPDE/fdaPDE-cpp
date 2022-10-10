@@ -12,6 +12,7 @@ using fdaPDE::core::NLA::SparseBlockMatrix;
 using fdaPDE::core::NLA::SMW;
 // calibration module imports
 #include "../calibration/iGCV.h"
+using fdaPDE::calibration::iGCV;
 // regression module imports
 #include "iStatModel.h"
 #include "Internals.h"
