@@ -21,7 +21,7 @@ TEST(PDESolutionsTest, Identity) {
   
   // define identity operator
   auto L = Identity();
-  DMatrix<double> u(UnitSquare.mesh.elements(), 1);
+  DMatrix<double> u(UnitSquare.mesh.elements()*3, 1);
   u.fill(0);
   LagrangianBasis<2, 2, 1> b{};   
   PDE problem(UnitSquare.mesh, L, b, u); // definition of PDE
@@ -48,7 +48,7 @@ TEST(PDESolutionsTest, Laplacian) {
   
   // define identity operator
   auto L = Laplacian();
-  DMatrix<double> u(UnitSquare.mesh.elements(), 1);
+  DMatrix<double> u(UnitSquare.mesh.elements()*3, 1);
   u.fill(0);
   LagrangianBasis<2, 2, 1> b{};   
   PDE problem(UnitSquare.mesh, L, b, u); // definition of PDE
