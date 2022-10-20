@@ -3,8 +3,8 @@
 
 #include <vector>
 #include <memory>
-#include "../core/utils/Symbols.h"
-#include "../core/utils/DataStructures/BlockFrame.h"
+#include "../../core/utils/Symbols.h"
+#include "../../core/utils/DataStructures/BlockFrame.h"
 
 namespace fdaPDE{
 namespace calibration{

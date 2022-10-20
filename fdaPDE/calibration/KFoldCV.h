@@ -56,13 +56,20 @@ namespace calibration{
 
     // select best smoothing parameter according to a K-fold cross validation strategy using the output of functor F as model score
     template <typename F>
-    SVector<1> compute(const std::vector<SVector<1>>& lambdas, const F& scoreFunctor){    
+    SVector<1> compute(const std::vector<SVector<1>>& lambdas, const F& scoreFunctor, bool randomize = true){
       // reserve space for storing scores
       scores_.resize(K_, lambdas.size());
+      
+      BlockFrame<double, int> data;
+      if(randomize)
+	// perform a first shuffling of the data if required
+	data = model_.data().shuffle();
+      else data = model_.data();
+
       // cycle over all folds (execute just K_ splits of the data, very expensive operation)
       for(std::size_t fold = 0; fold < K_; ++fold){
 	// create train test partition
-	std::pair<BlockView<Sparse, double, int>, BlockView<Sparse, double, int>> train_test = split(model_.data(), fold);
+	std::pair<BlockView<Sparse, double, int>, BlockView<Sparse, double, int>> train_test = split(data, fold);
 	// decouple training from testing
 	BlockFrame<double, int> train = train_test.first.extract();
 	BlockFrame<double, int> test = train_test.second.extract();
