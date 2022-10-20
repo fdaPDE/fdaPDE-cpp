@@ -23,12 +23,10 @@ TEST(PDESolutionsTest, Identity) {
   auto L = Identity();
   DMatrix<double> u(UnitSquare.mesh.elements()*3, 1);
   u.fill(0);
-  LagrangianBasis<2, 2, 1> b{};   
-  PDE problem(UnitSquare.mesh, L, b, u); // definition of PDE
-  Integrator<2, 3> integrator{};
+  PDE problem(UnitSquare.mesh, L, u); // definition of PDE
 
   // compute discretization matrix 
-  problem.init(integrator);
+  problem.init();
   // load expected result
   SpMatrix<double> expected_R0;
   Eigen::loadMarket(expected_R0, "data/models/SRPDE_2Dnocov/R0.mtx");
@@ -50,12 +48,10 @@ TEST(PDESolutionsTest, Laplacian) {
   auto L = Laplacian();
   DMatrix<double> u(UnitSquare.mesh.elements()*3, 1);
   u.fill(0);
-  LagrangianBasis<2, 2, 1> b{};   
-  PDE problem(UnitSquare.mesh, L, b, u); // definition of PDE
-  Integrator<2, 3> integrator{};
+  PDE problem(UnitSquare.mesh, L, u); // definition of PDE
 
   // compute discretization matrix 
-  problem.init(integrator);
+  problem.init();
   // load expected result
   SpMatrix<double> expected_R0;
   Eigen::loadMarket(expected_R0, "data/models/SRPDE_2Dnocov/R1.mtx");

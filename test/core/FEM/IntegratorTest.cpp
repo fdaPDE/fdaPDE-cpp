@@ -40,7 +40,7 @@ TYPED_TEST_SUITE(IntegratorTest, MESH_TYPE_LIST);
 TYPED_TEST(IntegratorTest, ElementMeasure){
   // generate random element from mesh
   auto e = this->meshLoader.generateRandomElement();
-  Integrator<TestFixture::M> integrator; // define integrator
+  Integrator<TestFixture::M, 1> integrator; // define integrator
   // the integral of the constant field 1 over the mesh element equals its measure
   std::function<double(SVector<TestFixture::N>)> f = [](SVector<TestFixture::N> x) -> double { return 1; };
   EXPECT_NEAR(e->measure(), integrator.integrate(*e, f), DOUBLE_TOLERANCE);
@@ -52,7 +52,7 @@ TYPED_TEST(IntegratorTest, ElementMeasure){
 TYPED_TEST(IntegratorTest, LinearFieldsAreIntegratedCorrectly){
     // generate random element from mesh
     auto e = this->meshLoader.generateRandomElement();
-    Integrator<TestFixture::M> integrator; // define integrator
+    Integrator<TestFixture::M, 1> integrator; // define integrator
     // a linear function over an element e defines a truncated prism over e
     std::function<double(SVector<TestFixture::N>)> f = [](SVector<TestFixture::N> x) -> double {
       return x[0] + x[1];
@@ -70,7 +70,7 @@ TYPED_TEST(IntegratorTest, LinearFieldsAreIntegratedCorrectly){
 TEST(IntegratorTest, CanIntegrateFieldOverMesh) {
   // load sample mesh
   MeshLoader<Mesh2D<>> CShaped("unit_square");
-  Integrator<2> integrator{};
+  Integrator<2,1> integrator{};
   // define field to integrate
   std::function<double(SVector<2>)> f = [](SVector<2> x) -> double { return 1; };
   EXPECT_NEAR(1, integrator.integrate(CShaped.mesh, f), DOUBLE_TOLERANCE);
