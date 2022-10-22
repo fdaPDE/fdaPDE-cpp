@@ -1,4 +1,8 @@
 ## set C++17 as standard
 CXX_STD=CXX17
 ## include fdaPDE library in PATH and set compiler flags
-PKG_CXXFLAGS=-Wno-ignored-attributes -I$(PWD)/../../../ -O3 -march=native -std=c++17
+PKG_CXXFLAGS=-Wno-ignored-attributes -I$(PWD)/../../../ -I$(PWD)/../../../libs/muparserx_4.0.11/ -O2 -march=native -std=c++17
+
+SOURCES_LIBS = $(wildcard $(PWD)/../../../libs/muparserx_4.0.11/*.cpp) #subfolders cpp files
+SOURCES = $(wildcard ./*.cpp)
+OBJECTS = $(SOURCES:.cpp=.o) $(SOURCES_LIBS:.cpp=.o)

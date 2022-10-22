@@ -14,11 +14,11 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 
 
 RcppExport SEXP _rcpp_module_boot_Mesh2D();
-RcppExport SEXP _rcpp_module_boot_model();
+RcppExport SEXP _rcpp_module_boot_pde();
 
 static const R_CallMethodDef CallEntries[] = {
     {"_rcpp_module_boot_Mesh2D", (DL_FUNC) &_rcpp_module_boot_Mesh2D, 0},
-    {"_rcpp_module_boot_model", (DL_FUNC) &_rcpp_module_boot_model, 0},
+    {"_rcpp_module_boot_pde", (DL_FUNC) &_rcpp_module_boot_pde, 0},
     {NULL, NULL, 0}
 };
 

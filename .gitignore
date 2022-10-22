@@ -12,6 +12,8 @@
 |fdaPDE/*
 !wrappers/
 !wrappers/**
+!libs/
+!libs/*
 !fdaPDE/core/
 !fdaPDE/core/*
 !fdaPDE/core/utils/
@@ -64,6 +66,7 @@
 !.github/*
 !.github/workflows/
 !.github/workflows/*
+!.gitattributes
 
 *.csv
 !test/data/mesh/unit_circle/*.csv
