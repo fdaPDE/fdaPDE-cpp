@@ -45,7 +45,7 @@ namespace testing{
     static constexpr unsigned int R = E::order;
     static constexpr bool manifold = is_manifold<M, N>::value;
     
-    CSVReader reader{}; // csv parser
+    CSVReader<double> Dreader{}; CSVReader<int> Ireader; // csv parser
     // raw files
     CSVFile<double> pointsCSV;
     CSVFile<int> elementsCSV;
@@ -71,15 +71,15 @@ namespace testing{
       mesh = E(point, edges, elements, neigh, boundary);
 
       // load raw data
-      pointsCSV   = reader.parseFile<double>(point);
-      elementsCSV = reader.parseFile<int>(elements);
-      edgesCSV    = reader.parseFile<int>(edges);
-      boundaryCSV = reader.parseFile<int>(boundary);
+      pointsCSV   = Dreader.parseFile(point);
+      elementsCSV = Ireader.parseFile(elements);
+      edgesCSV    = Ireader.parseFile(edges);
+      boundaryCSV = Ireader.parseFile(boundary);
       // proper parse the neighboring information in case of 1.5D meshes
       if constexpr(!is_linear_network<M, N>::value)  
-	neighCSV = reader.parseFile<int>(neigh);
+	neighCSV = Ireader.parseFile(neigh);
       else
-	neighCSV = reader.parseSparseFile<int>(neigh);
+	neighCSV = Ireader.parseSparseFile(neigh);
     }
     // load default mesh according to dimensionality
     MeshLoader() : MeshLoader(standard_mesh_selector(E::local_dimension, E::embedding_dimension)) {};
