@@ -12,21 +12,10 @@ using fdaPDE::core::VectorField;
 using fdaPDE::core::DotProduct;
 #include "../fdaPDE/core/utils/fields/Divergence.h"
 using fdaPDE::core::Divergence;
+#include "../fdaPDE/core/utils/fields/MatrixField.h"
 
 // test different constructors of VectorField
 TEST(VectorFieldTest, VectorFieldWrapsCorrectly) {
-  // define vector field using a vectorial lambda expression
-  std::function<SVector<2>(SVector<2>)> exprField = [](SVector<2> x) -> SVector<2> {
-    return SVector<2>(std::exp(x[0]*x[1]) + 2, (std::pow(x[0], 2) + x[1])/x[1]); // e^{xy} + 2; (x^2 + y)/y
-  };
-  // wrap it in a VectorField
-  VectorField<2> field1(exprField);
-  // define evaluation point
-  SVector<2> p(1,1);
-  // field evaluates in p: (e+2, 2)
-  SVector<2> trueEvaluation(std::exp(1)+2, 2);
-  for(std::size_t i = 0; i < 2; ++i) EXPECT_DOUBLE_EQ(field1(p)[i], trueEvaluation[i]);
-  
   // define vector field using list initialization
   std::function<double(SVector<2>)> x_comp = [](SVector<2> x) -> double {
     return std::exp(x[0]*x[1]) + 2;
@@ -34,13 +23,17 @@ TEST(VectorFieldTest, VectorFieldWrapsCorrectly) {
   std::function<double(SVector<2>)> y_comp = [](SVector<2> x) -> double {
     return (std::pow(x[0], 2) + x[1])/x[1];
   };
-  VectorField<2> field2({x_comp, y_comp});
-  for(std::size_t i = 0; i < 2; ++i) EXPECT_DOUBLE_EQ(field2(p)[i], trueEvaluation[i]);
+  VectorField<2> field1({x_comp, y_comp});
+  // define evaluation point
+  SVector<2> p(1,1);
+  // field evaluates in p: (e+2, 2)
+  SVector<2> trueEvaluation(std::exp(1)+2, 2);
+  for(std::size_t i = 0; i < 2; ++i) EXPECT_DOUBLE_EQ(field1(p)[i], trueEvaluation[i]);
   
   // define vector field explicitly declaring an array of lambdas
   std::array<std::function<double(SVector<2>)>, 2> comp_array = {x_comp, y_comp};
-  VectorField<2> field3(comp_array);
-  for(std::size_t i = 0; i < 2; ++i) EXPECT_DOUBLE_EQ(field3(p)[i], trueEvaluation[i]);
+  VectorField<2> field2(comp_array);
+  for(std::size_t i = 0; i < 2; ++i) EXPECT_DOUBLE_EQ(field2(p)[i], trueEvaluation[i]);
 
   // if all asserts are verified by transitivity all the definitions give origin to the same object
 }
@@ -116,7 +109,7 @@ TEST(VectorFieldTest, InnerProductSVector) {
   // define an SVector
   SVector<2> coeff(5,2);
   // perform dot product
-  ScalarField<2> dotProduct = field.dot(coeff); // 5*(x^2 + 1) + 2*e^{xy}
+  auto dotProduct = field.dot(coeff); // 5*(x^2 + 1) + 2*e^{xy}
   // evaluation point
   SVector<2> p(1,1);
   EXPECT_DOUBLE_EQ(10 + 2*std::exp(1), dotProduct(p));
@@ -124,17 +117,21 @@ TEST(VectorFieldTest, InnerProductSVector) {
 
 // checks if the matrix * VectorField product returns a valid VectorField
 TEST(VectorFieldTest, MatrixProduct) {
-  // vector field definition
-  std::function<SVector<2>(SVector<2>)> exprField = [](SVector<2> x) -> SVector<2> {
-    return SVector<2>(std::exp(x[0]*x[1]) + 2, (std::pow(x[0], 2) + x[1])/x[1]); // e^{xy} + 2; (x^2 + y)/y
+  // vector field definition from single componentes
+  std::function<double(SVector<2>)> x_comp = [](SVector<2> x) -> double {
+    return std::exp(x[0]*x[1]) + 2; // e^{xy} + 2
   };
-  VectorField<2> field(exprField);
+  std::function<double(SVector<2>)> y_comp = [](SVector<2> x) -> double {
+    return (std::pow(x[0], 2) + x[1])/x[1]; // (x^2 + y)/y
+  };
+
+  VectorField<2> field({x_comp, y_comp});
 
   // define a coefficient matrix M
   SMatrix<2> M;
   M << 1, 2, 3, 4;
   // obtain product field M*field
-  VectorField<2> productField = M*field; // (e^{xy} + 2 + 2*(x^2 + y)/y; 3*e^{xy} + 6 + 4*(x^2 + y)/y)
+  auto productField = M*field; // (e^{xy} + 2 + 2*(x^2 + y)/y; 3*e^{xy} + 6 + 4*(x^2 + y)/y)
   // evaluation point
   SVector<2> p(1,1);
   SVector<2> eval(std::exp(1) + 6, 3*std::exp(1) + 14);
@@ -150,11 +147,14 @@ TEST(VectorFieldTest, FieldExpr) {
   vf1[0] = [](SVector<2> x) -> double { return std::pow(x[0], 2) + 1; }; // x^2 + 1
   vf1[1] = [](SVector<2> x) -> double { return std::exp(x[0]*x[1]);   }; // e^{xy}
 
-  // define vector field using a vectorial lambda expression
-  std::function<SVector<2>(SVector<2>)> exprField = [](SVector<2> x) -> SVector<2> {
-    return SVector<2>(std::exp(x[0]*x[1]) + 2, (std::pow(x[0], 2) + x[1])/x[1]); // e^{xy} + 2; (x^2 + y)/y
+  // define vector field definying single components
+  std::function<double(SVector<2>)> x_comp = [](SVector<2> x) -> double {
+    return std::exp(x[0]*x[1]) + 2; // e^{xy} + 2
   };
-  VectorField<2> vf2(exprField);
+  std::function<double(SVector<2>)> y_comp = [](SVector<2> x) -> double {
+    return (std::pow(x[0], 2) + x[1])/x[1]; // (x^2 + y)/y
+  };
+  VectorField<2> vf2({x_comp, y_comp});
 
   // evaluation point
   SVector<2> p(1,1); 
@@ -187,10 +187,15 @@ TEST(VextorFieldTest, ExprToField) {
   vf1[0] = [](SVector<2> x) -> double { return std::pow(x[0], 2) + 1; }; // x^2 + 1
   vf1[1] = [](SVector<2> x) -> double { return std::exp(x[0]*x[1]);   }; // e^{xy}
 
-  std::function<SVector<2>(SVector<2>)> exprField = [](SVector<2> x) -> SVector<2> {
-    return SVector<2>(std::exp(x[0]*x[1]) + 2, (std::pow(x[0], 2) + x[1])/x[1]); // e^{xy} + 2; (x^2 + y)/y
+  // define vector field definying single components
+  std::function<double(SVector<2>)> x_comp = [](SVector<2> x) -> double {
+    return std::exp(x[0]*x[1]) + 2; // e^{xy} + 2
   };
-  VectorField<2> vf2(exprField);
+  std::function<double(SVector<2>)> y_comp = [](SVector<2> x) -> double {
+    return (std::pow(x[0], 2) + x[1])/x[1]; // (x^2 + y)/y
+  };
+  VectorField<2> vf2({x_comp, y_comp});
+
   auto vf3 = vf1 + vf2;
   // convert the expression in a valid vector field
   VectorField<2> vf4(vf3);
@@ -205,11 +210,15 @@ TEST(VextorFieldTest, ExprToField) {
 
 // check divergence of VectorField
 TEST(VectorFieldTest, Divergence) {
-  // define VectorField
-  std::function<SVector<2>(SVector<2>)> fieldExpr = [](SVector<2> x) -> SVector<2> {
-    return SVector<2>(std::pow(x[0], 3)*x[1], std::log(x[1])); // (x^3*y, ln(y))
+    // define vector field definying single components
+  std::function<double(SVector<2>)> x_comp = [](SVector<2> x) -> double {
+    return std::pow(x[0], 3)*x[1]; // x^3*y
   };
-  VectorField<2> field(fieldExpr);
+  std::function<double(SVector<2>)> y_comp = [](SVector<2> x) -> double {
+    return std::log(x[1]); // ln(y)
+  };
+  VectorField<2> field({x_comp, y_comp});
+
   // get divergence operator of the field
   Divergence fieldDivergece(field);
   // evaluation point
@@ -287,7 +296,7 @@ TEST(VectorFieldTest, DomainDimensionDifferentFromCodomainDimension) {
   //     x^3 + y^2 + e^{xy}
   //     2*(x^3 + y^2) + 2*e^{xy}
   //     3*(x^3 + y^2)
-  VectorField<2, 3> vf8 = K*vf7;
+  auto vf8 = K*vf7;
   SVector<3> vf8_eval(2 + std::exp(1), 4 + 2*std::exp(1), + 6);
   for(std::size_t i = 0; i < 3; ++i)
     EXPECT_DOUBLE_EQ(vf8[i](p), vf8_eval[i]);

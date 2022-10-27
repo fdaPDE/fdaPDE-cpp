@@ -222,30 +222,20 @@ TEST(ScalarFieldTest, DifferentiableField) {
   std::function<double(SVector<2>)> baseField = [](SVector<2> x) -> double { // x^3 + y
     return std::pow(x[0], 3) + x[1];
   };
-  std::function<SVector<2>(SVector<2>)> grad = [](SVector<2> x) -> SVector<2> {
-    return SVector<2>(3*std::pow(x[0], 2), 1);
-  };
-  // wrap all in a differentiable scalar field
+  // wrap baseField into a scalar field
   ScalarField sf(baseField);
-
-  // let DifferentiableScalarField to build the gradient VectorField (inefficient but more abstract)
-  DifferentiableScalarField df(baseField, grad);
-  // or build explicitly the gradient field using list initialization
+  // build explicitly the gradient field using list initialization
   std::function<double(SVector<2>)> dx = [](SVector<2> x) -> double { return 3*std::pow(x[0], 2); };
   std::function<double(SVector<2>)> dy = [](SVector<2> x) -> double { return 1; };
-  DifferentiableScalarField df_(baseField, {dx, dy});
+  DifferentiableScalarField<2> df_(baseField, {dx, dy});
     
   // define evaluation point
   SVector<2> p(1,1);
-
-  // check both initializations define the same object
-  EXPECT_DOUBLE_EQ(df(p), df_(p));
-  
   SVector<2> gradient = SVector<2>(3,1);
   // check derive() calls exact gradient
-  ASSERT_FALSE( (sf.derive()(p) - df.derive()(p)).norm() < DOUBLE_TOLERANCE );
+  ASSERT_FALSE( (sf.derive()(p) - df_.derive()(p)).norm() < DOUBLE_TOLERANCE );
   // check exact gradient is actually called (should be equal to analytical gradient)
-  ASSERT_TRUE( (df.derive()(p) - gradient).norm() < DOUBLE_TOLERANCE );
+  ASSERT_TRUE( (df_.derive()(p) - gradient).norm() < DOUBLE_TOLERANCE );
 }
 
 // checks TwiceDifferentiableScalarField calls analytical hessian on .deriveTwice() call
@@ -254,16 +244,15 @@ TEST(ScalarFieldTest, TwiceDifferentiableField) {
   std::function<double(SVector<2>)> baseField = [](SVector<2> x) -> double { // x^3 + y
     return std::pow(x[0], 3) + x[1];
   };
-  std::function<SVector<2>(SVector<2>)> grad  = [](SVector<2> x) -> SVector<2> {
-    return SVector<2>(3*std::pow(x[0], 2), 1);
-  };
+  std::function<double(SVector<2>)> dx = [](SVector<2> x) -> double { return 3*std::pow(x[0], 2); };
+  std::function<double(SVector<2>)> dy = [](SVector<2> x) -> double { return 1; };
   std::function<SMatrix<2>(SVector<2>)> hess  = [](SVector<2> x) -> SMatrix<2> {
     return SMatrix<2>{ {6*x[0], 0}, {0, 0} };
   };
   
   // wrap all in a twice differentiable scalar field
   ScalarField<2> sf(baseField);
-  TwiceDifferentiableScalarField<2> tdf(baseField, grad, hess);
+  TwiceDifferentiableScalarField<2> tdf(baseField, {dx, dy}, hess);
   // define evaluation point
   SVector<2> p(1,1);
   SMatrix<2> hessian = SMatrix<2>{ {6,0}, {0,0} };
