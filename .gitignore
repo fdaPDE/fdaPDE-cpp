@@ -12,8 +12,6 @@
 |fdaPDE/*
 !wrappers/
 !wrappers/**
-!libs/
-!libs/*
 !fdaPDE/core/
 !fdaPDE/core/*
 !fdaPDE/core/utils/
