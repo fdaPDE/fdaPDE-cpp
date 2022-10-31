@@ -3,7 +3,8 @@
 
 #include "../core/utils/Symbols.h"
 #include "../core/utils/DataStructures/BlockFrame.h"
-#include "../regression/iStatModel.h"
+#include "../models/iStatModel.h"
+using fdaPDE::models::is_stat_model;
 
 #include <Eigen/Core>
 #include <algorithm>
@@ -81,7 +82,7 @@ namespace calibration{
 	
 	  // fit the model on training set
 	  m.setData(train);
-	  m.smooth();
+	  m.solve();
 	  // evaluate model score on the fold left out (test set)
 	  scores_.coeffRef(fold, j) = scoreFunctor(m, test);
 	}

@@ -22,8 +22,8 @@ namespace calibration{
       // initialize pointer to SparseLU solver
       invR0_ = std::make_shared<Eigen::SparseLU<SpMatrix<double>>>();
     };
-    // performs computation of matrix T
-    virtual std::shared_ptr<DMatrix<double>> T() = 0;
+    virtual const DMatrix<double>& Q() = 0; // computes Q = I - H
+    virtual std::shared_ptr<DMatrix<double>> T() = 0; // computes T
     // getters
     std::shared_ptr<DMatrix<double>> R() const { return R_; }
     std::shared_ptr<DMatrix<double>> T() const { return T_; }

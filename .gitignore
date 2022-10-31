@@ -26,8 +26,8 @@
 !fdaPDE/core/MESH/engines/*
 !fdaPDE/core/FEM/
 !fdaPDE/core/FEM/*
-!fdaPDE/regression/
-!fdaPDE/regression/*
+!fdaPDE/models/
+!fdaPDE/models/*
 !fdaPDE/calibration/
 !fdaPDE/calibration/*
 !docs/

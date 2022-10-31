@@ -16,7 +16,8 @@ using fdaPDE::core::NLA::SMW;
 
 // interfaces
 #include "iGCV.h"
-#include "../regression/iStatModel.h"
+#include "../models/regression/iRegressionModel.h"
+using fdaPDE::models::is_regression_model;
 
 namespace fdaPDE{
 namespace calibration{
@@ -26,7 +27,7 @@ namespace calibration{
   template <typename M, typename T = StochasticGCVEngine>
   class GCV {
     // guarantees statistical model M is compatible with GCV computation
-    static_assert(is_stat_model<M>::value && std::is_base_of<iGCV, M>::value,
+    static_assert(is_regression_model<M>::value && std::is_base_of<iGCV, M>::value,
 		  "you are asking to calibrate something which cannot be handled by GCV");
   private:
     // analytical expression of gcv field
@@ -47,10 +48,10 @@ namespace calibration{
       gcv = [*this](SVector<1> lambda) mutable -> double {
 	// fit the model given current lambda
 	model_.setLambda(lambda[0]);
-	model_.smooth();
+	model_.solve();
 	// compute trace of matrix S given current lambda
 	double trS = trace.compute(model_);
-      
+
 	double q = model_.q();        // number of covariates
 	std::size_t n = model_.loc(); // number of locations
 	double edf = n - (q+trS);     // equivalent degrees of freedom
@@ -67,7 +68,7 @@ namespace calibration{
       dgcv = [*this](SVector<1> lambda) mutable -> SVector<1> {
 	// fit the model given current lambda
 	model_.setLambda(lambda[0]);
-	model_.smooth();
+	model_.solve();
 	// compute trace of matrix S and its firstderivative given current lambda
 	double trS  = trace.compute(model_);
 	double trdS = trace.derive(model_);
@@ -92,7 +93,7 @@ namespace calibration{
       ddgcv = [*this](SVector<1> lambda) mutable -> SMatrix<1> {
 	// fit the model given current lambda
 	model_.setLambda(lambda[0]);
-	model_.smooth();
+	model_.solve();
 	// compute trace of matrix S and its first and second derivative given current lambda
 	double trS   = trace.compute(model_);
 	double trdS  = trace.derive(model_);
