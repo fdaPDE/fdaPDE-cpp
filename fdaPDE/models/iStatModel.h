@@ -51,6 +51,9 @@ namespace models {
     // n x N matrix \Psi = [\psi_{ij}] = \psi_j(p_i) whose (i,j)-th entry is the
     // evaluation of the j-th basis function at the i-th spatial location
     SpMatrix<double> Psi_{};
+    // diagonal matrix of subdomains' measure, used only in case of areal sampling
+    Eigen::DiagonalMatrix<double, Eigen::Dynamic, Eigen::Dynamic> D_;
+    SpMatrix<double> PsiTD_{}; // matrix \Psi corrected for areal observations (stores \Psi^T*D if D \neq I)
   public:
     // constructor
     iStatModel() = default;
@@ -93,7 +96,9 @@ namespace models {
     bool hasCovariates() const { return q() != 0; } // true if the model has a parametric part
     // an efficient implementation of left multiplication by \Psi
     DMatrix<double> lmbPsi(const DMatrix<double>& x) const;
-
+    auto PsiTD() const { // returns the block \Psi^T*D as eigen expression, if D = I returns \Psi^T
+      return sampling() == SamplingStrategy::Areal ? PsiTD_ : Psi_.transpose(); }; 
+    
     // abstract part of the interface, must be implemented by concrete models
     virtual void solve() = 0; // finds a solution to the problem, whatever the problem is.
     // destructor
@@ -119,6 +124,7 @@ namespace models {
   using iStatModel<E>::u;			\
   using iStatModel<E>::isAlloc;			\
   using iStatModel<E>::hasCovariates;		\
+  using iStatModel<E>::PsiTD;			\
   
   // trait to detect if a type implements iStatModel
   template <typename T>

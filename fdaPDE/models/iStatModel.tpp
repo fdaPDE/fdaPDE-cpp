@@ -15,16 +15,15 @@ void iStatModel<E>::setData(const BlockFrame<double, int>& df) {
 // return the sampling strategy adopted for the model.
 template <typename E>
 SamplingStrategy iStatModel<E>::sampling() const {
-  if  (df_.hasBlock(STAT_MODEL_D_BLK)) // if subdomains are given as datum Areal sampling is assumed
+  if  (df_.hasBlock(STAT_MODEL_D_BLK)) // subdomains are given as datum
     return   SamplingStrategy::Areal;
-  else{ // fallback to a Geostatistical sampling strategy
+  else{ // fallback to a Geostatistical sampling
     if(df_.hasBlock(STAT_MODEL_P_BLK))
-      return SamplingStrategy::GeostatisticalAtLocations; // assume data sampled at given locations
-    else
-      return SamplingStrategy::GeostatisticalAtNodes; // assume data sampled at mesh nodes
+      return SamplingStrategy::GeostatisticalAtLocations;
+    else // if no information is provided at all, assume data sampled at mesh nodes
+      return SamplingStrategy::GeostatisticalAtNodes;
   }
 }
-
 // return a reference to the search engine over the problem's domain. Initializes it if still not available
 template <typename E>
 const ADT<iStatModel<E>::M, iStatModel<E>::N, iStatModel<E>::K>&
@@ -76,36 +75,43 @@ const SpMatrix<double>& iStatModel<E>::Psi() {
       }
       break;
     case SamplingStrategy::Areal:
+      DVector<double> D; // store measure of subdomains, this will be ported to a diagonal matrix at the end
+      D.resize(subdomains().rows());
+      
       // incidence matrix is a dxM sparse matrix (d number of subdomains, M number of elements) where D_{ij} = 1 \iff element j belongs
       // to subdomain i. In this case matrix \Psi is such that [\Psi]_{ij} = \int_{D_i} \psi_j = \sum_{e \in D_i} \int_{e} \psi_j
-      // std::size_t tail = 0;
-      // for(std::size_t k = 0; k < subdomains().rows(); ++k){
-      // 	std::size_t head = 0;
-      // 	double Di = 0; // measure of subdomain D_i
-      // 	for(std::size_t l = 0; l < subdomains().cols(); ++l){
-      // 	  // get element with this ID
-      // 	  auto e = pde_->domain().element(l);
-      // 	  // compute \int_e \phi_h \forall \phi_h defined on e
-      // 	  std::size_t j = 0;
-      // 	  for(const auto& phi : pde_->basis()[e->ID()]){
-      // 	    std::size_t h = pde_->basis().nodes()[j]; // node where \phi is centered
-      // 	    // evaluate \int_e \phi_h and insert in tripletList. summation is implicitly resolved by Eigen::setFromTriplets
-      // 	    tripletList.push_back(fdaPDE::Triplet<double>(k, h, pde_->integrator().integrate(*e, phi)));
-      // 	    head++, j++; // increment counters
-      // 	  }
-      // 	  Di += e->measure(); // update measure of subdomain D_i
-      // 	}
-      // 	// divide each \int_{D_i} \psi_j by the measure of subdomain D_i
-      // 	for(std::size_t j = 0; j < head; ++j){
-      // 	  tripletList[tail + j].value() /= Di;
-      // 	}
-      // 	tail += head;
-      // }
+      std::size_t tail = 0;
+      for(std::size_t k = 0; k < subdomains().rows(); ++k){
+	std::size_t head = 0;
+	double Di = 0; // measure of subdomain D_i
+	for(std::size_t l = 0; l < subdomains().cols(); ++l){
+	  // get element with this ID
+	  auto e = pde_->domain().element(l);
+	  // compute \int_e \phi_h \forall \phi_h defined on e
+	  std::size_t j = 0;
+	  for(const auto& phi : pde_->basis()[e->ID()]){
+	    std::size_t h = phi.node(); // if we write the finite element as \phi_h, this is h
+	    // evaluate \int_e \phi_h and insert in tripletList. summation is implicitly resolved by Eigen::setFromTriplets
+	    tripletList.push_back(fdaPDE::Triplet<double>(k, h, pde_->integrator().integrate(*e, phi)));
+	    head++, j++; // increment counters
+	  }
+	  Di += e->measure(); // update measure of subdomain D_i
+	}
+	// divide each \int_{D_i} \psi_j by the measure of subdomain D_i
+	for(std::size_t j = 0; j < head; ++j){
+	  tripletList[tail + j].value() /= Di;
+	}
+	D[k] = Di; // store measure of subdomain
+	tail += head;
+      }
+      // store diagonal matrix D_ = diag(D1, D2, ... ,Dd)
+      D_ = D.asDiagonal();
       break;
     }
     // finalize construction
     Psi_.setFromTriplets(tripletList.begin(), tripletList.end());
     Psi_.makeCompressed();
+    if(isAlloc(D_)) PsiTD_ = Psi_.transpose()*D_; // store \Psi^T*D in case of areal sampling
   }
   return Psi_;
 }
