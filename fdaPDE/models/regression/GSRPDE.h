@@ -21,6 +21,8 @@ using fdaPDE::models::iRegressionModel;
 #include "FPIRLS.h"
 using fdaPDE::models::FPIRLS;
 
+#include <chrono>
+
 namespace fdaPDE{
 namespace models{
   

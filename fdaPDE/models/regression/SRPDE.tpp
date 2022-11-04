@@ -33,7 +33,7 @@ void SRPDE<PDE>::solve() {
       lambda_*u();
     
     // define system solver. Use a sparse solver
-    Eigen::SparseLU<Eigen::SparseMatrix<double>> solver{};
+    Eigen::SparseLU<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver{};
     solver.compute(A_);
     // solve linear system A_*x = b_
     sol = solver.solve(b_);

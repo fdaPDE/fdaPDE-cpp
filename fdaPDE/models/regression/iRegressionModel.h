@@ -5,10 +5,13 @@
 #include "../../core/utils/Traits.h"
 #include "../iStatModel.h"
 using fdaPDE::models::iStatModel;
+#include "../../core/utils/DataStructures/BlockFrame.h"
 #include <memory>
 
 namespace fdaPDE {
 namespace models {
+
+#define STAT_MODEL_W_BLK "W" // design matrix
   
   // base class for any regression model
   template <typename PDE>
@@ -21,6 +24,14 @@ namespace models {
     // copy constructor, copy only pde object (as a consequence also the problem domain)
     iRegressionModel(const iRegressionModel& rhs) { pde_ = rhs.pde_; }
 
+    // getters
+    std::size_t q() const { return df_.hasBlock(STAT_MODEL_W_BLK) ?
+	df_.template get<double>(STAT_MODEL_W_BLK).cols() : 0; }
+    const DMatrix<double>& W() const { return df_.template get<double>(STAT_MODEL_W_BLK); } // covariates
+
+    // utilities
+    bool hasCovariates() const { return q() != 0; } // true if the model has a parametric part
+    
     // abstract part of the interface, must be implemented by concrete models   
     // getters to problem's solution
     virtual const DMatrix<double>& f() const = 0;
@@ -33,6 +44,9 @@ namespace models {
 
 #define IMPORT_REGRESSION_MODEL_SYMBOLS(E)	   \
   IMPORT_STAT_MODEL_SYMBOLS(E)			   \
+  using iRegressionModel<E>::q;			   \
+  using iRegressionModel<E>::W;			   \
+  using iRegressionModel<E>::hasCovariates;	   \
 
   // trait to detect if a type implements iRegressionModel
   template <typename T>

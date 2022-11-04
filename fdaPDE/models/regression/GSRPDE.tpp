@@ -20,8 +20,9 @@ void GSRPDE<PDE, Dist>::solve() {
   
   // call to FPIRLS for the minimization of
   // \norm{V^{-1/2}(y - \mu)}^2 + \lambda \int_D (Lf - u)^2
-  fpirls.compute(*this);
 
+  fpirls.compute(*this);
+  
   // at fpirls convergence we can get matrix P and solution estimates
   P_ = fpirls.weights().asDiagonal();
   f_ = fpirls.f();

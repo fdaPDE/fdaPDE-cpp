@@ -7,7 +7,11 @@ using fdaPDE::core::NLA::SparseBlockMatrix;
 #include "../../core/NLA/SMW.h"
 using fdaPDE::core::NLA::SMW;
 #include "Distributions.h"
+#include "iRegressionModel.h"
+using fdaPDE::models::is_regression_model;
 #include <cstddef>
+
+#include <chrono>
 
 namespace fdaPDE{
 namespace models{
@@ -42,60 +46,60 @@ namespace models{
     // in general observations are not known at construction time
     template <typename M>
     void compute(M& m_) {
-      static_assert(is_stat_model<M>::value);
+      static_assert(is_regression_model<M>::value);
       // get number of data and preallocate space
       std::size_t n = m_.z().rows();
       theta_.resize(n); G_.resize(n); py_.resize(n); V_.resize(n); W_.resize(n);
-      
+
       // algorithm initialization
       mu_ = m_.z();
       distribution_.preprocess(mu_);
       std::size_t k = 0; // current iteration
 
-      // assemble system matrix for the nonparameteric part of the model. Develop here once, the scheme will modifiy
-      // at each iteration only the nord-west block
+      // assemble system matrix for the nonparameteric part of the model. Develop here once,
+      // the scheme will modifiy at each iteration only the nord-west block
+      std::size_t N = m_.loc();
       SparseBlockMatrix<double,2,2>
-	A(SpMatrix<double>(n,n), m_.lambda() * m_.R1().transpose(),
+	A(SpMatrix<double>(N,N), m_.lambda() * m_.R1().transpose(),
 	  m_.lambda() * m_.R1(), m_.lambda() * m_.R0()            );
       SpMatrix<double> A_ = A.derived();
 
       DMatrix<double> b_(A_.rows(),1);
-      b_ << DMatrix<double>::Zero(n,1),
+      b_ << DMatrix<double>::Zero(N,1),
 	m_.lambda()*m_.u();
 
+      // algorithm stops when an enought small difference between two consecutive values of the functional to
+      // minimize are recordered
       double J_old = tolerance_+1; double J_new = 0;
 
       while(k < max_iter_ && std::abs(J_new - J_old) > tolerance_){
-	for(std::size_t i = 0; i < n; ++i){
-	  theta_[i] = distribution_.link(mu_[i]); // \theta^k = [ g(\mu^k_1), ..., g(\mu^k_n) ]
-	  G_[i] = distribution_.der_link(mu_[i]); // G^k = diag(g'(\mu^k_1), ..., g'(\mu^k_n))
-	  V_[i] = distribution_.variance(mu_[i]); // V^k = diag(v(\mu^k_1), ..., v(\mu^k_n))
-	  W_[i] = 1./(std::pow(G_[i],2)*V_[i]);	  // W^k = ((G^k)^{-2})*((V^k)^{-1})
-	}
-	// compute pseudo observations \tilde z^k = G^k(y-u^k) + \theta^k
+        theta_ = distribution_.link(mu_);
+	G_ = distribution_.der_link(mu_);
+	V_ = distribution_.variance(mu_);
+	W_ = ((G_.array().pow(2)*V_.array()).inverse()).matrix();
+	// compute pseudo observations
 	py_ = G_.asDiagonal()*(m_.z() - mu_) + theta_;
-	
+
 	// solve weighted least square problem
 	// \argmin_{\beta, f} [ \norm(W^{1/2}(y - X\beta - f_n))^2 + \lambda \int_D (Lf - u)^2 ]
 
-	// assemble system matrix for the nonparameteric part of the model, summing only the north-west block (the one
-	// function of the current weight matrix W_)
+	// assemble system matrix for the nonparameteric part of the model
 	SparseBlockMatrix<double,2,2>
-	  B_(-m_.PsiTD()*W_.asDiagonal()*m_.Psi(), SpMatrix<double>(n,n),
-	     SpMatrix<double>(n,n),                SpMatrix<double>(n,n));
+	  B_(-m_.PsiTD()*W_.asDiagonal()*m_.Psi(), SpMatrix<double>(N,N),
+	     SpMatrix<double>(N,N),                SpMatrix<double>(N,N));
 	SpMatrix<double> C_ = A_ + B_.derived();
-      
-	DVector<double> sol; // room for problem' solution
+	C_.makeCompressed();
+
+        DVector<double> sol; // room for problem' solution
   
 	if(!m_.hasCovariates()){ // nonparametric case
-	  // rhs of SR-PDE linear system
-	  b_.topRows(n) = -m_.PsiTD()*W_.asDiagonal()*py_;
+          // define rhs for this iteration
+          b_.topRows(N) = -m_.PsiTD()*W_.asDiagonal()*py_;
+	  Eigen::SparseLU<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver;
+	  solver.compute(C_); 
 	  
-	  // define system solver. Use a sparse solver
-	  Eigen::SparseLU<Eigen::SparseMatrix<double>> solver{};
-	  solver.compute(C_);
 	  // solve linear system C_*x = b_
-	  sol = solver.solve(b_);
+          sol = solver.solve(b_);
 	  f_ = sol.head(A_.rows()/2); // spatial-field estimate	
 	}else{ // semi-parametric case
 	  // compute q x q dense matrix X^T*W_*X and its factorization
@@ -107,7 +111,7 @@ namespace models{
 	  DMatrix<double> Qy = W_.asDiagonal()*(py_ - m_.W()*invXTX_.solve(m_.W().transpose()*W_.asDiagonal()*py_));
 
 	  // rhs of SR-PDE linear system
-	  b_.topRows(n) = -m_.PsiTD()*Qy; // -\Psi^T*D*Q*z
+	  b_.topRows(N) = -m_.PsiTD()*Qy; // -\Psi^T*D*Q*z
 
 	  // definition of matrices U and V for application of woodbury formula
 	  DMatrix<double> U = DMatrix<double>::Zero(A_.rows(), m_.q());
@@ -124,7 +128,6 @@ namespace models{
 	  f_ = sol.head(A_.rows()/2); // spatial-field estimate
 	  beta_ = invXTX_.solve(m_.W().transpose()*W_.asDiagonal())*(py_ - m_.Psi()*f_);
 	}
-	
 	// extract estimates for the non-parametric part of the model
 	g_ = sol.tail(A_.rows()/2); // PDE misfit
 	
@@ -134,12 +137,9 @@ namespace models{
 	for(std::size_t i = 0; i < n; ++i)
 	  mu_[i] = distribution_.inv_link(fitted[i]);
 	
-	// compute value of functional J for this pair (\beta, f)
-	double J = 0;
-	DVector<double> JJ(n);
-	for(std::size_t i = 0; i < n; ++i) 
-	  JJ[i] = std::sqrt(distribution_.variance(mu_[i]));
-	J += (JJ.asDiagonal()*(m_.z() - mu_)).squaredNorm() + m_.lambda()*g_.dot(m_.R0()*g_); // \int_D (Lf-u)^2
+	// compute value of functional J for this pair (\beta, f): \norm{V^{-1/2}(y - \mu)}^2 + \int_D (Lf-u)^2
+	DVector<double> V = distribution_.variance(mu_).array().sqrt().inverse().matrix();
+	double J = (V.asDiagonal()*(m_.z() - mu_)).squaredNorm() + m_.lambda()*g_.dot(m_.R0()*g_); // \int_D (Lf-u)^2
 
 	// prepare for next iteration
 	k++;

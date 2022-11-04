@@ -22,7 +22,6 @@ namespace models {
   // standardized definitions for stat model BlockFrame. layers below will make heavy assumptions on the layout of the BlockFrame,
   // use these instead of manually typing the block name when accessing df_
 #define STAT_MODEL_Z_BLK "z" // matrix of observations
-#define STAT_MODEL_W_BLK "W" // design matrix
 #define STAT_MODEL_I_BLK "i" // vector of observation indices
 #define STAT_MODEL_P_BLK "P" // matrix of spatial locations coordinates
 #define STAT_MODEL_D_BLK "D" // incidence matrix for areal observations
@@ -71,14 +70,11 @@ namespace models {
     const BlockFrame<double, int>& data() const { return df_; } 
     std::size_t loc() const { return pde_->domain().nodes();} // ???
     std::size_t obs() const { return df_.get<double>(STAT_MODEL_Z_BLK).rows(); } // number of observations
-    std::size_t q() const { return df_.hasBlock(STAT_MODEL_W_BLK) ?
-	df_.get<double>(STAT_MODEL_W_BLK).cols() : 0; }
     const PDE& pde() const { return *pde_; } // regularizing term Lf - u (defined on some domain \Omega)
     const DMatrix<double>& z() const { return df_.get<double>(STAT_MODEL_Z_BLK); } // observation vector z
     const DMatrix<int>& idx() const { return df_.get<int>(STAT_MODEL_I_BLK); } // data indices
     double lambda() const { return lambda_; } // smoothing parameter \lambda
     SamplingStrategy sampling() const; // sampling strategy adopted from the model.
-    const DMatrix<double>& W() const { return df_.get<double>(STAT_MODEL_W_BLK); } // covariates
     const ADT<M,N,K>& searchEngine(); // algorithm used to search element over the mesh
     // available if data are sampled at general locations inside the domain
     const DMatrix<double>& locations() const { return df_.get<double>(STAT_MODEL_P_BLK); }
@@ -93,7 +89,6 @@ namespace models {
     
     // utilities
     bool dataAtNodes() const { return !df_.hasBlock(STAT_MODEL_P_BLK); } // true if locations are a subset of mesh nodes
-    bool hasCovariates() const { return q() != 0; } // true if the model has a parametric part
     // an efficient implementation of left multiplication by \Psi
     DMatrix<double> lmbPsi(const DMatrix<double>& x) const;
     auto PsiTD() const { // returns the block \Psi^T*D as eigen expression, if D = I returns \Psi^T
@@ -115,15 +110,12 @@ namespace models {
   using iStatModel<E>::df_;			\
   using iStatModel<E>::loc;			\
   using iStatModel<E>::obs;			\
-  using iStatModel<E>::q;			\
   using iStatModel<E>::z;			\
   using iStatModel<E>::idx;			\
-  using iStatModel<E>::W;			\
   using iStatModel<E>::R0;			\
   using iStatModel<E>::R1;			\
   using iStatModel<E>::u;			\
   using iStatModel<E>::isAlloc;			\
-  using iStatModel<E>::hasCovariates;		\
   using iStatModel<E>::PsiTD;			\
   
   // trait to detect if a type implements iStatModel
