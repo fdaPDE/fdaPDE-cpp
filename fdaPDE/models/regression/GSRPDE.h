@@ -18,26 +18,21 @@ using fdaPDE::calibration::iGCV;
 #include "iRegressionModel.h"
 using fdaPDE::models::iRegressionModel;
 
+#include "FPIRLS.h"
+using fdaPDE::models::FPIRLS;
+
 namespace fdaPDE{
 namespace models{
   
   template <typename PDE, typename Dist>
-  class GSRPDE : public iRegressionModel<PDE>, public iGCV {
+  class GSRPDE : public iRegressionModel<PDE>/*, public iGCV*/ {
     // compile time checks
     static_assert(std::is_base_of<PDEBase, PDE>::value);
   private:
     // FPIRLS engine
-    FPIRLS<PDE, Dist> fpirls;
-    // system matrix of non-parametric problem (2N x 2N matrix)
-    //     | -\Psi^T*P*\Psi  \lambda*R1^T |
-    // A = |                              |
-    //     | \lambda*R1      \lambda*R0   |
-    SpMatrix<double> A_{};
-    // right hand side of problem's linear system (1 x 2N vector)
-    //     | -\Psi^T*Q*z |
-    // b = |             |
-    //     |  \lambda*u  |
-    DVector<double> b_{};
+    FPIRLS<Dist> fpirls;
+    // weight matrix obtained at FPIRLS convergence
+    DiagMatrix<double> P_;
     // q x q dense matrix W^T*P*W
     DMatrix<double> WTW_{};
     // n x n projection matrix onto the orthogonal space of Im(W), Q_ = I - H_ = I - W*(W*T*P*W)^{-1}*W^T*P
@@ -50,11 +45,12 @@ namespace models{
     DMatrix<double> beta_{}; // estimate of the coefficient vector (1 x q vector)
   public:
     IMPORT_REGRESSION_MODEL_SYMBOLS(PDE);
+    using Distribution = Dist;
     
     // constructor
     GSRPDE() = default;
-    GSRPDE(const PDE& pde, double lambda)
-      : iRegressionModel<PDE>(pde, lambda) {};
+    GSRPDE(const PDE& pde, double lambda, double tolerance, std::size_t max_iter)
+      : iRegressionModel<PDE>(pde, lambda), fpirls(tolerance, max_iter) {};
 
     // iStatModel interface implementation
     virtual void solve(); // finds a solution to the smoothing problem
@@ -73,7 +69,8 @@ namespace models{
     
     virtual ~GSRPDE() = default;
   };
-
+  
+  #include "GSRPDE.tpp"
 }}
 
 #endif // __GSRPDE_H__
