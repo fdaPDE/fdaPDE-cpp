@@ -20,8 +20,8 @@ void SRPDE<PDE>::solve() {
 
   // assemble system matrix for the nonparameteric part of the model
   SparseBlockMatrix<double,2,2>
-    A(-PsiTD()*Psi_, lambda_ * R1().transpose(),
-      lambda_ * R1(),         lambda_ * R0()   );
+    A(-PsiTD()*Psi_,  lambda_ * R1().transpose(),
+      lambda_ * R1(), lambda_ * R0()            );
   // cache system matrix for reuse
   A_ = A.derived();
   b_.resize(A_.rows());
@@ -29,7 +29,7 @@ void SRPDE<PDE>::solve() {
   
   if(!hasCovariates()){ // nonparametric case
     // rhs of SR-PDE linear system
-    b_ << -Psi_.transpose()*z(),
+    b_ << -PsiTD()*z(),
       lambda_*u();
     
     // define system solver. Use a sparse solver

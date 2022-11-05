@@ -85,17 +85,19 @@ const SpMatrix<double>& iStatModel<E>::Psi() {
 	std::size_t head = 0;
 	double Di = 0; // measure of subdomain D_i
 	for(std::size_t l = 0; l < subdomains().cols(); ++l){
-	  // get element with this ID
-	  auto e = pde_->domain().element(l);
-	  // compute \int_e \phi_h \forall \phi_h defined on e
-	  std::size_t j = 0;
-	  for(const auto& phi : pde_->basis()[e->ID()]){
-	    std::size_t h = phi.node(); // if we write the finite element as \phi_h, this is h
-	    // evaluate \int_e \phi_h and insert in tripletList. summation is implicitly resolved by Eigen::setFromTriplets
-	    tripletList.push_back(fdaPDE::Triplet<double>(k, h, pde_->integrator().integrate(*e, phi)));
-	    head++, j++; // increment counters
+	  if(subdomains()(k,l) == 1){ // element with ID l belongs to k-th subdomain
+	    // get element with this ID
+	    auto e = pde_->domain().element(l);
+	    // compute \int_e \phi_h \forall \phi_h defined on e
+	    std::size_t j = 0;
+	    for(const auto& phi : pde_->basis()[e->ID()]){
+	      std::size_t h = phi.node(); // if we write the finite element as \phi_h, this is h
+	      // evaluate \int_e \phi_h and insert in tripletList. summation is implicitly resolved by Eigen::setFromTriplets
+	      tripletList.push_back(fdaPDE::Triplet<double>(k, h, pde_->integrator().integrate(*e, phi)));
+	      head++, j++; // increment counters
+	    }
+	    Di += e->measure(); // update measure of subdomain D_i
 	  }
-	  Di += e->measure(); // update measure of subdomain D_i
 	}
 	// divide each \int_{D_i} \psi_j by the measure of subdomain D_i
 	for(std::size_t j = 0; j < head; ++j){
