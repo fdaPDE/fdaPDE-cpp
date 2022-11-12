@@ -16,6 +16,7 @@
 !fdaPDE/core/*
 !fdaPDE/core/utils/
 !fdaPDE/core/utils/*
+!fdaPDE/core/utils/fields/*
 !fdaPDE/core/OPT/extensions/
 !fdaPDE/core/OPT/extensions/*
 !fdaPDE/core/OPT/optimizers/
