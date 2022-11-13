@@ -56,7 +56,7 @@ namespace calibration{
 	std::size_t n = model_.loc(); // number of locations
 	double edf = n - (q+trS);     // equivalent degrees of freedom
 	// return gcv at point
-	return (n/std::pow(edf, 2))*( model_.z() - model_.fitted() ).squaredNorm();
+	return (n/std::pow(edf, 2))*( model_.norm(model_.z(), model_.fitted()) );
       };
 
       // analytical expression of gcv first derivative (called only by an exact-based GCV optimization)

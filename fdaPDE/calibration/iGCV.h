@@ -12,23 +12,27 @@ namespace calibration{
   class iGCV {
   protected:
     // SparseLU has a deleted copy construcor, need to wrap it in a movable object to allow copy construction of derived models
-    std::shared_ptr<Eigen::SparseLU<SpMatrix<double>>> invR0_{};
-    std::shared_ptr<DMatrix<double>> R_{}; // R = R1^T*R0^{-1}*R1
-    std::shared_ptr<DMatrix<double>> T_{}; // T = \Psi^T*Q*\Psi + \lambda*K
+    std::unique_ptr<Eigen::SparseLU<SpMatrix<double>>> invR0_{};
+    DMatrix<double> R_{}; // R = R1^T*R0^{-1}*R1
+    DMatrix<double> T_{}; // T = \Psi^T*Q*\Psi + \lambda*K
   
   public:
     // constructor
     iGCV() {
       // initialize pointer to SparseLU solver
-      invR0_ = std::make_shared<Eigen::SparseLU<SpMatrix<double>>>();
+      invR0_ = std::make_unique<Eigen::SparseLU<SpMatrix<double>>>();
     };
-    virtual const DMatrix<double>& Q() = 0; // computes Q = I - H
-    virtual std::shared_ptr<DMatrix<double>> T() = 0; // computes T
-    // getters
-    std::shared_ptr<DMatrix<double>> R() const { return R_; }
-    std::shared_ptr<DMatrix<double>> T() const { return T_; }
-    Eigen::SparseLU<SpMatrix<double>>& invR0() { return *invR0_; }
-  
+
+    // the following methods should compute matrices once and cache them for reuse.
+    // Subsequent calls should immediately return the cached result.
+    virtual const DMatrix<double>& Q() = 0; // returns matrix Q = I - H
+    virtual const DMatrix<double>& T() = 0; // returns matrix T = \Psi^T*Q*\Psi + \lambda*R, store also matrix R_
+    // computes the norm of y - \hat y, according to the choosen distribution
+    virtual double norm(const DMatrix<double>& obs, const DMatrix<double>& fitted) const = 0;
+
+    // utilities
+    Eigen::SparseLU<SpMatrix<double>>& invR0() { return *invR0_; };
+    const DMatrix<double>& R() { return R_; } 
     virtual ~iGCV() = default;
   };
 }}

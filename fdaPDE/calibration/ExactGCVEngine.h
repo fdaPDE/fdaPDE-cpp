@@ -25,9 +25,9 @@ namespace calibration{
     DVector<double> h_{}; // h = (\lambda*L - I)*T^{-1}*R1^T*R0^{-1}*u
     DVector<double> p_{}; // p = \Psi*h - dS*z
 
-    DMatrix<double> S_  {};
-    DMatrix<double> dS_ {};
-    DMatrix<double> ddS_{};
+    DMatrix<double> S_  {}; // S = \Psi*T^{-1}*\Psi^T*Q
+    DMatrix<double> dS_ {}; // dS = -\Psi*(T^{-1}*R)*(T^{-1}*E)
+    DMatrix<double> ddS_{}; // ddS = 2*\Psi*L*F
 
     // compute matrix S = \Psi*T^{-1}*\Psi^T*Q
     template <typename M>
@@ -39,7 +39,7 @@ namespace calibration{
 	E_ = model.Psi().transpose();
     
       // factorize matrix T
-      invT_ = model.T()->partialPivLu();
+      invT_ = model.T().partialPivLu();
       V_ = invT_.solve(E_); // V = invT*E = T^{-1}*\Psi^T*Q
       S_ = model.lmbPsi(V_);
       return;
@@ -51,7 +51,7 @@ namespace calibration{
     // compute first derivative of matrix S: dS = -\Psi*(T^{-1}*R)*(T^{-1}*E)
     template <typename M>
     void dS(M& model) {
-      L_ = invT_.solve(*model.R()); // T^{-1}*R
+      L_ = invT_.solve(model.R()); // T^{-1}*R
       F_ = L_*invT_.solve(E_);      // (T^{-1}*R)*(T^{-1}*E)
       dS_ = model.lmbPsi(-F_); // this takes into account of sampling strategy
       return;
