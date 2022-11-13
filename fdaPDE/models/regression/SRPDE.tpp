@@ -17,13 +17,13 @@ template <typename PDE>
 void SRPDE<PDE>::solve() {
   // ask to iStatModel to return \Psi matrix
   this->Psi();
-
   // assemble system matrix for the nonparameteric part of the model
   SparseBlockMatrix<double,2,2>
     A(-PsiTD()*Psi_,  lambda_ * R1().transpose(),
       lambda_ * R1(), lambda_ * R0()            );
   // cache system matrix for reuse
   A_ = A.derived();
+ 
   b_.resize(A_.rows());
   DVector<double> sol; // room for problem' solution
   
@@ -62,7 +62,6 @@ void SRPDE<PDE>::solve() {
     solver.compute(A_);
     // solve system Mx = b
     sol = solver.solve(U, WTW_, V, b_);
-
     // store result of smoothing 
     f_    = sol.head(A_.rows()/2);
     beta_ = invWTW_.solve(W().transpose())*(z() - Psi_*f_);
@@ -76,8 +75,7 @@ template <typename PDE>
 DMatrix<double> SRPDE<PDE>::fitted() const {
   DMatrix<double> hat_z = Psi_*f_;
   // if the model has a parametric part, we need to sum its contribute
-  if(hasCovariates())
-    hat_z += W()*beta_;
+  if(hasCovariates()) hat_z += W()*beta_;
   return hat_z;
 }
 
@@ -87,28 +85,25 @@ template <typename PDE>
 double SRPDE<PDE>::predict(const DVector<double>& covs, std::size_t loc) const {
   double prediction = f_.coeff(loc,0);
   // parametetric contribute of the model, if any is present
-  if(hasCovariates())
-    prediction += (covs.transpose()*beta_).coeff(0,0);
+  if(hasCovariates()) prediction += (covs.transpose()*beta_).coeff(0,0);
   return prediction;
 }
 
 // required to support GCV based smoothing parameter selection
 // in case of an SRPDE model we have T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
 template <typename PDE>
-std::shared_ptr<DMatrix<double>> SRPDE<PDE>::T() {
-  // compute value of R = R1^T*R0^{-1}*R1, cache for possible reuse
-  invR0_->compute(R0());
-  R_ = std::make_shared<DMatrix<double>>( R1().transpose()*invR0_->solve(R1()) );
+const DMatrix<double>& SRPDE<PDE>::T() {
+  if(!isAlloc(T_)){ // compute only at first time
+    // compute value of R = R1^T*R0^{-1}*R1, cache for possible reuse
+    invR0_->compute(R0());
+    R_ = R1().transpose()*invR0_->solve(R1());
 
-  // compute and store matrix T for possible reuse
-  if(!hasCovariates()) // case without covariates, Q is the identity matrix
-    T_ = std::make_shared<DMatrix<double>>
-      ( Psi_.transpose()*Psi_ + lambda_*(*R_) );
-  else // general case with covariates
-    T_ = std::make_shared<DMatrix<double>>
-      ( Psi_.transpose()*lmbQ(Psi_) + lambda_*(*R_) );
-
-  // return pointer to T
+    // compute and store matrix T for possible reuse
+    if(!hasCovariates()) // case without covariates, Q is the identity matrix
+      T_ = Psi_.transpose()*Psi_ + lambda_*R_;
+    else // general case with covariates
+      T_ = Psi_.transpose()*lmbQ(Psi_) + lambda_*R_;
+  }
   return T_;
 }
 
@@ -121,4 +116,10 @@ const DMatrix<double>& SRPDE<PDE>::Q() {
     Q_ = DMatrix<double>::Identity(obs(), obs()) - W()*invWTW_.solve(W().transpose());
   }
   return Q_;
+}
+
+// returns the euclidean norm of y - \hat y
+template <typename PDE>
+double SRPDE<PDE>::norm(const DMatrix<double>& obs, const DMatrix<double>& fitted) const {
+  return (obs - fitted).squaredNorm();
 }

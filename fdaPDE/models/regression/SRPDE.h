@@ -66,8 +66,10 @@ namespace models{
     virtual const DMatrix<double>& beta() const { return beta_; };
     
     // iGCV interface implementation
-    virtual std::shared_ptr<DMatrix<double>> T(); // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
+    virtual const DMatrix<double>& T(); // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
     virtual const DMatrix<double>& Q();
+    // returns the euclidian norm of y - \hat y
+    virtual double norm(const DMatrix<double>& obs, const DMatrix<double>& fitted) const;
     
     virtual ~SRPDE() = default;
   };
