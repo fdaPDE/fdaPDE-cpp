@@ -68,9 +68,9 @@ const SpMatrix<double>& iStatModel<E>::Psi() {
 	for(std::size_t j = 0; j < pde_->basis()[e->ID()].size(); ++j){
 	  std::size_t h = e->nodeIDs()[j]; // column index of \Psi matrix
 	  // extract \phi_h from basis
-	  auto phi_h = pde_->basis()[e->ID()][j];
+	  auto psi_h = pde_->basis()[e->ID()][j];
 	  // evaluate \phi_h(p_i) (value of the basis function centered in mesh node h and evaluated in point p_i)
-	  tripletList.push_back(fdaPDE::Triplet<double>(i, h, phi_h(p_i)));
+	  tripletList.push_back(fdaPDE::Triplet<double>(i, h, psi_h(p_i)));
 	}
       }
       break;

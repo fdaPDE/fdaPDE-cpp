@@ -17,11 +17,11 @@ namespace fdaPDE{
 namespace models{
 
   // a general implementation of the Functional Penalized Iterative Reweighted Least Square (FPIRLS) algorithm
-  template <typename Dist>
+  template <typename Distribution>
   class FPIRLS {
   private:
     // data characterizing the behaviour of the algorithm
-    Dist distribution_{};
+    Distribution distribution_{};
     
     double tolerance_;
     std::size_t max_iter_;

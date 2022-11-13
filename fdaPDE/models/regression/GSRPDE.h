@@ -26,13 +26,13 @@ using fdaPDE::models::FPIRLS;
 namespace fdaPDE{
 namespace models{
   
-  template <typename PDE, typename Dist>
+  template <typename PDE, typename Distribution>
   class GSRPDE : public iRegressionModel<PDE>/*, public iGCV*/ {
     // compile time checks
     static_assert(std::is_base_of<PDEBase, PDE>::value);
   private:
     // FPIRLS engine
-    FPIRLS<Dist> fpirls;
+    FPIRLS<Distribution> fpirls;
     // weight matrix obtained at FPIRLS convergence
     DiagMatrix<double> P_;
     // q x q dense matrix W^T*P*W
@@ -47,7 +47,6 @@ namespace models{
     DMatrix<double> beta_{}; // estimate of the coefficient vector (1 x q vector)
   public:
     IMPORT_REGRESSION_MODEL_SYMBOLS(PDE);
-    using Distribution = Dist;
     
     // constructor
     GSRPDE() = default;
@@ -66,9 +65,11 @@ namespace models{
     virtual const DMatrix<double>& beta() const { return beta_; };
     
     // iGCV interface implementation
-    // virtual std::shared_ptr<DMatrix<double>> T(); // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
-    // virtual const DMatrix<double>& Q();
-    
+    virtual const DMatrix<double>& T(); // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
+    virtual const DMatrix<double>& Q();
+    // returns the total deviance of the model as \sum dev(y - \hat \mu)
+    virtual double norm(const DMatrix<double>& obs, const DMatrix<double>& fitted) const;
+
     virtual ~GSRPDE() = default;
   };
   
