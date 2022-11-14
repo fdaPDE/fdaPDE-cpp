@@ -2,16 +2,16 @@
 #include <gtest/gtest.h> // testing framework
 #include <memory>
 
-#include "../../../fdaPDE/core/utils/Symbols.h"
-#include "../../../fdaPDE/core/MESH/Element.h"
+#include "../../fdaPDE/core/utils/Symbols.h"
+#include "../../fdaPDE/core/MESH/Element.h"
 using fdaPDE::core::MESH::Element;
-#include "../../../fdaPDE/core/NLA/VectorSpace.h"
+#include "../../fdaPDE/core/NLA/VectorSpace.h"
 using fdaPDE::core::NLA::VectorSpace;
 
-#include "../../utils/MeshLoader.h"
+#include "../utils/MeshLoader.h"
 using fdaPDE::testing::MESH_TYPE_LIST;
 using fdaPDE::testing::MeshLoader;
-#include "../../utils/Constants.h"
+#include "../utils/Constants.h"
 using fdaPDE::testing::DOUBLE_TOLERANCE;
 using fdaPDE::testing::MACHINE_EPSILON;
 

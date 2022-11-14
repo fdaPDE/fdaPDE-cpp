@@ -4,10 +4,10 @@
 #include <memory>
 #include <random>
 
-#include "../../../fdaPDE/core/utils/Symbols.h"
-#include "../../../fdaPDE/core/MESH/Element.h"
+#include "../../fdaPDE/core/utils/Symbols.h"
+#include "../../fdaPDE/core/MESH/Element.h"
 using fdaPDE::core::MESH::Element;
-#include "../../utils/MeshLoader.h"
+#include "../utils/MeshLoader.h"
 using fdaPDE::testing::MeshLoader;
 using fdaPDE::testing::MESH_TYPE_LIST;
 

@@ -4,16 +4,16 @@
 #include <string>
 #include <type_traits>
 
-#include "../../../fdaPDE/core/utils/Symbols.h"
-#include "../../../fdaPDE/core/utils/CompileTime.h"
-#include "../../../fdaPDE/core/FEM/basis/LagrangianBasis.h"
-#include "core/utils/fields/VectorField.h"
+#include "../../fdaPDE/core/utils/Symbols.h"
+#include "../../fdaPDE/core/utils/CompileTime.h"
+#include "../../fdaPDE/core/FEM/basis/LagrangianBasis.h"
+#include "../../fdaPDE/core/utils/fields/VectorField.h"
 using fdaPDE::core::FEM::LagrangianBasis;
 using fdaPDE::core::FEM::ReferenceNodes;
 using fdaPDE::core::FEM::point_list;
-#include "../../utils/Constants.h"
+#include "../utils/Constants.h"
 using fdaPDE::testing::DOUBLE_TOLERANCE;
-#include "../../utils/MeshLoader.h"
+#include "../utils/MeshLoader.h"
 using fdaPDE::testing::MeshLoader;
 using fdaPDE::testing::MESH_TYPE_LIST;
 

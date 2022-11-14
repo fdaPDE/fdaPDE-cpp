@@ -1,10 +1,10 @@
 #include <gtest/gtest.h> // testing framework
 #include <limits>
 
-#include "../../../fdaPDE/core/NLA/VectorSpace.h"
-#include "../../../fdaPDE/core/utils/Symbols.h"
+#include "../../fdaPDE/core/NLA/VectorSpace.h"
+#include "../../fdaPDE/core/utils/Symbols.h"
 using fdaPDE::core::NLA::VectorSpace;
-#include "../../utils/Constants.h"
+#include "../utils/Constants.h"
 using fdaPDE::testing::DOUBLE_TOLERANCE;
 
 TEST(VectorSpaceTest, projection1D) {

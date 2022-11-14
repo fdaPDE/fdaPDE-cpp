@@ -72,7 +72,7 @@
 !.gitattributes
 
 *.csv
-!test/data/mesh/unit_circle/*.csv
+!test/data/mesh/quasi_circle/*.csv
 !test/data/mesh/unit_sphere/*.csv
 !test/data/mesh/surface/*.csv
 !test/data/mesh/network/*.csv

@@ -1,17 +1,17 @@
 #include <gtest/gtest.h> // testing framework
 #include <memory>
 
-#include "../../../fdaPDE/core/utils/Symbols.h"
-#include "../../../fdaPDE/core/MESH/Element.h"
+#include "../../fdaPDE/core/utils/Symbols.h"
+#include "../../fdaPDE/core/MESH/Element.h"
 using fdaPDE::core::MESH::Element;
-#include "../../../fdaPDE/core/MESH/engines/BruteForce/BruteForce.h"
-#include "../../../fdaPDE/core/MESH/engines/BarycentricWalk/BarycentricWalk.h"
-#include "../../../fdaPDE/core/MESH/engines/AlternatingDigitalTree/ADT.h"
+#include "../../fdaPDE/core/MESH/engines/BruteForce/BruteForce.h"
+#include "../../fdaPDE/core/MESH/engines/BarycentricWalk/BarycentricWalk.h"
+#include "../../fdaPDE/core/MESH/engines/AlternatingDigitalTree/ADT.h"
 using fdaPDE::core::MESH::BruteForce;
 using fdaPDE::core::MESH::BarycentricWalk;
 using fdaPDE::core::MESH::ADT;
 
-#include "../../utils/MeshLoader.h"
+#include "../utils/MeshLoader.h"
 using fdaPDE::testing::MeshLoader;
 using fdaPDE::testing::MESH_TYPE_LIST;
 

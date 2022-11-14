@@ -13,9 +13,9 @@ using fdaPDE::core::FEM::SpaceVaryingAdvection;
 #include "../fdaPDE/models/regression/SRPDE.h"
 using fdaPDE::models::SRPDE;
 
-#include "utils/MeshLoader.h"
+#include "../utils/MeshLoader.h"
 using fdaPDE::testing::MeshLoader;
-#include "utils/Constants.h"
+#include "../utils/Constants.h"
 using fdaPDE::testing::DOUBLE_TOLERANCE;
 
 // compute infinity norms between two sparse matrices
@@ -49,7 +49,7 @@ TEST(SRPDE, Test1) {
   // load data from .csv files
   CSVReader<double> reader{};
   CSVFile<double> yFile; // observation file
-  yFile = reader.parseFile("../data/models/SRPDE/2D_test1/z.csv");
+  yFile = reader.parseFile("data/models/SRPDE/2D_test1/z.csv");
   DMatrix<double> y = yFile.toEigen();
 
   // set model data
@@ -64,25 +64,25 @@ TEST(SRPDE, Test1) {
   
   // \Psi matrix
   SpMatrix<double> expectedPsi;
-  Eigen::loadMarket(expectedPsi, "../data/models/SRPDE/2D_test1/Psi.mtx");
+  Eigen::loadMarket(expectedPsi, "data/models/SRPDE/2D_test1/Psi.mtx");
   SpMatrix<double> computedPsi = model.Psi();
   EXPECT_TRUE( spLInfinityNorm(expectedPsi, computedPsi) < DOUBLE_TOLERANCE);
 
   // R0 matrix (discretization of identity operator)
   SpMatrix<double> expectedR0;
-  Eigen::loadMarket(expectedR0,  "../data/models/SRPDE/2D_test1/R0.mtx");
+  Eigen::loadMarket(expectedR0,  "data/models/SRPDE/2D_test1/R0.mtx");
   SpMatrix<double> computedR0 = model.R0();
   EXPECT_TRUE( spLInfinityNorm(expectedR0, computedR0)   < DOUBLE_TOLERANCE);
   
   // R1 matrix (discretization of differential operator)
   SpMatrix<double> expectedR1;
-  Eigen::loadMarket(expectedR1,  "../data/models/SRPDE/2D_test1/R1.mtx");
+  Eigen::loadMarket(expectedR1,  "data/models/SRPDE/2D_test1/R1.mtx");
   SpMatrix<double> computedR1 = model.R1();
   EXPECT_TRUE( spLInfinityNorm(expectedR1, computedR1)   < DOUBLE_TOLERANCE);
     
   // estimate of spatial field \hat f
   SpMatrix<double> expectedSolution;
-  Eigen::loadMarket(expectedSolution,   "../data/models/SRPDE/2D_test1/sol.mtx");
+  Eigen::loadMarket(expectedSolution,   "data/models/SRPDE/2D_test1/sol.mtx");
   DMatrix<double> computedF = model.f();
   std::size_t N = computedF.rows();
   EXPECT_TRUE( (DMatrix<double>(expectedSolution).topRows(N) - computedF).lpNorm<Eigen::Infinity>()
@@ -113,13 +113,13 @@ TEST(SRPDE, Test2) {
   // load data from .csv files
   CSVReader<double> reader{};
   CSVFile<double> yFile; // observation file
-  yFile = reader.parseFile  ("../data/models/SRPDE/2D_test2/z.csv");
+  yFile = reader.parseFile  ("data/models/SRPDE/2D_test2/z.csv");
   DMatrix<double> y = yFile.toEigen();
   CSVFile<double> XFile; // design matrix
-  XFile = reader.parseFile  ("../data/models/SRPDE/2D_test2/X.csv");
+  XFile = reader.parseFile  ("data/models/SRPDE/2D_test2/X.csv");
   DMatrix<double> X = XFile.toEigen();
   CSVFile<double> locFile; // locations file
-  locFile = reader.parseFile("../data/models/SRPDE/2D_test2/locs.csv");
+  locFile = reader.parseFile("data/models/SRPDE/2D_test2/locs.csv");
   DMatrix<double> loc = locFile.toEigen();
 
   // set model data
@@ -136,25 +136,25 @@ TEST(SRPDE, Test2) {
   
   // \Psi matrix (sensible to locations != nodes)
   SpMatrix<double> expectedPsi;
-  Eigen::loadMarket(expectedPsi, "../data/models/SRPDE/2D_test2/Psi.mtx");
+  Eigen::loadMarket(expectedPsi, "data/models/SRPDE/2D_test2/Psi.mtx");
   SpMatrix<double> computedPsi = model.Psi();
   EXPECT_TRUE( spLInfinityNorm(expectedPsi, computedPsi) < DOUBLE_TOLERANCE);
 
   // R0 matrix (discretization of identity operator)
   SpMatrix<double> expectedR0;
-  Eigen::loadMarket(expectedR0,  "../data/models/SRPDE/2D_test2/R0.mtx");
+  Eigen::loadMarket(expectedR0,  "data/models/SRPDE/2D_test2/R0.mtx");
   SpMatrix<double> computedR0 = model.R0();
   EXPECT_TRUE( spLInfinityNorm(expectedR0, computedR0)   < DOUBLE_TOLERANCE);
 
   // R1 matrix (discretization of differential operator)
   SpMatrix<double> expectedR1;
-  Eigen::loadMarket(expectedR1,  "../data/models/SRPDE/2D_test2/R1.mtx");
+  Eigen::loadMarket(expectedR1,  "data/models/SRPDE/2D_test2/R1.mtx");
   SpMatrix<double> computedR1 = model.R1();
   EXPECT_TRUE( spLInfinityNorm(expectedR1, computedR1)   < DOUBLE_TOLERANCE);
 
   // estimate of spatial field \hat f
   SpMatrix<double> expectedSolution;
-  Eigen::loadMarket(expectedSolution, "../data/models/SRPDE/2D_test2/sol.mtx");
+  Eigen::loadMarket(expectedSolution, "data/models/SRPDE/2D_test2/sol.mtx");
   DMatrix<double> computedF = model.f();
   std::size_t N = computedF.rows();
   EXPECT_TRUE( (DMatrix<double>(expectedSolution).topRows(N) - computedF).lpNorm<Eigen::Infinity>()
@@ -162,7 +162,7 @@ TEST(SRPDE, Test2) {
 
   // estimate of coefficient vector \hat \beta
   SpMatrix<double> expectedBeta;
-  Eigen::loadMarket(expectedBeta, "../data/models/SRPDE/2D_test2/beta.mtx");
+  Eigen::loadMarket(expectedBeta, "data/models/SRPDE/2D_test2/beta.mtx");
   DVector<double> computedBeta = model.beta();
   EXPECT_TRUE( (DMatrix<double>(expectedBeta) - computedBeta).lpNorm<Eigen::Infinity>()
 	       < DOUBLE_TOLERANCE);
@@ -196,7 +196,7 @@ TEST(SRPDE, Test3) {
   // load data from .csv files
   CSVReader<double> reader{};
   CSVFile<double> yFile; // observation file
-  yFile = reader.parseFile("../data/models/SRPDE/2D_test3/z.csv");
+  yFile = reader.parseFile("data/models/SRPDE/2D_test3/z.csv");
   DMatrix<double> y = yFile.toEigen();
 
   // set model data
@@ -211,25 +211,25 @@ TEST(SRPDE, Test3) {
   
   // \Psi matrix
   SpMatrix<double> expectedPsi;
-  Eigen::loadMarket(expectedPsi, "../data/models/SRPDE/2D_test3/Psi.mtx");
+  Eigen::loadMarket(expectedPsi, "data/models/SRPDE/2D_test3/Psi.mtx");
   SpMatrix<double> computedPsi = model.Psi();
   EXPECT_TRUE( spLInfinityNorm(expectedPsi, computedPsi) < DOUBLE_TOLERANCE);
 
   // R0 matrix (discretization of identity operator)
   SpMatrix<double> expectedR0;
-  Eigen::loadMarket(expectedR0,  "../data/models/SRPDE/2D_test3/R0.mtx");
+  Eigen::loadMarket(expectedR0,  "data/models/SRPDE/2D_test3/R0.mtx");
   SpMatrix<double> computedR0 = model.R0();
   EXPECT_TRUE( spLInfinityNorm(expectedR0, computedR0)   < DOUBLE_TOLERANCE);
   
   // R1 matrix (discretization of differential operator)
   SpMatrix<double> expectedR1;
-  Eigen::loadMarket(expectedR1,  "../data/models/SRPDE/2D_test3/R1.mtx");
+  Eigen::loadMarket(expectedR1,  "data/models/SRPDE/2D_test3/R1.mtx");
   SpMatrix<double> computedR1 = model.R1();
   EXPECT_TRUE( spLInfinityNorm(expectedR1, computedR1)   < DOUBLE_TOLERANCE);
     
   // estimate of spatial field \hat f
   SpMatrix<double> expectedSolution;
-  Eigen::loadMarket(expectedSolution, "../data/models/SRPDE/2D_test3/sol.mtx");
+  Eigen::loadMarket(expectedSolution, "data/models/SRPDE/2D_test3/sol.mtx");
   DMatrix<double> computedF = model.f();
   std::size_t N = computedF.rows();
   EXPECT_TRUE( (DMatrix<double>(expectedSolution).topRows(N) - computedF).lpNorm<Eigen::Infinity>()
@@ -251,10 +251,10 @@ TEST(SRPDE, Test4) {
   // load PDE coefficients data
   CSVReader<double> reader{};
   CSVFile<double> diffFile; // diffusion tensor
-  diffFile = reader.parseFile("../data/models/SRPDE/2D_test4/K.csv");
+  diffFile = reader.parseFile("data/models/SRPDE/2D_test4/K.csv");
   DMatrix<double> diffData = diffFile.toEigen();
   CSVFile<double> adveFile; // transport vector
-  adveFile = reader.parseFile("../data/models/SRPDE/2D_test4/b.csv");
+  adveFile = reader.parseFile("data/models/SRPDE/2D_test4/b.csv");
   DMatrix<double> adveData = adveFile.toEigen();
   
   // define non-constant coefficients
@@ -267,7 +267,7 @@ TEST(SRPDE, Test4) {
   
   // load non-zero forcing term
   CSVFile<double> forceFile; // transport vector
-  forceFile = reader.parseFile("../data/models/SRPDE/2D_test4/force.csv");
+  forceFile = reader.parseFile("data/models/SRPDE/2D_test4/force.csv");
   DMatrix<double> u = forceFile.toEigen();
   
   PDE problem(domain.mesh, L, u); // definition of regularizing PDE
@@ -279,12 +279,12 @@ TEST(SRPDE, Test4) {
   
   // load data from .csv files
   CSVFile<double> yFile; // observation file
-  yFile = reader.parseFile("../data/models/SRPDE/2D_test4/z.csv");
+  yFile = reader.parseFile("data/models/SRPDE/2D_test4/z.csv");
   DMatrix<double> y = yFile.toEigen();
   
   CSVReader<int> int_reader{};
   CSVFile<int> arealFile; // incidence matrix for specification of subdomains
-  arealFile = int_reader.parseFile("../data/models/SRPDE/2D_test4/incidence_matrix.csv");
+  arealFile = int_reader.parseFile("data/models/SRPDE/2D_test4/incidence_matrix.csv");
   DMatrix<int> areal = arealFile.toEigen();
   
   // set model data
@@ -300,31 +300,31 @@ TEST(SRPDE, Test4) {
  
   // \Psi matrix (sensible to areal sampling)
   SpMatrix<double> expectedPsi;
-  Eigen::loadMarket(expectedPsi, "../data/models/SRPDE/2D_test4/Psi.mtx");
+  Eigen::loadMarket(expectedPsi, "data/models/SRPDE/2D_test4/Psi.mtx");
   SpMatrix<double> computedPsi = model.Psi();
   EXPECT_TRUE( spLInfinityNorm(expectedPsi, computedPsi) < DOUBLE_TOLERANCE);
   
   // R0 matrix (discretization of identity operator)
   SpMatrix<double> expectedR0;
-  Eigen::loadMarket(expectedR0,  "../data/models/SRPDE/2D_test4/R0.mtx");
+  Eigen::loadMarket(expectedR0,  "data/models/SRPDE/2D_test4/R0.mtx");
   SpMatrix<double> computedR0 = model.R0();
   EXPECT_TRUE( spLInfinityNorm(expectedR0, computedR0)   < DOUBLE_TOLERANCE);
   
   // R1 matrix (discretization of differential operator)
   SpMatrix<double> expectedR1;
-  Eigen::loadMarket(expectedR1,  "../data/models/SRPDE/2D_test4/R1.mtx");
+  Eigen::loadMarket(expectedR1,  "data/models/SRPDE/2D_test4/R1.mtx");
   SpMatrix<double> computedR1 = model.R1();
   EXPECT_TRUE( spLInfinityNorm(expectedR1, computedR1)   < DOUBLE_TOLERANCE);
   
   // u vector  (discretization of forcing term)
   SpMatrix<double> expectedU;
-  Eigen::loadMarket(expectedU,   "../data/models/SRPDE/2D_test4/u.mtx");
+  Eigen::loadMarket(expectedU,   "data/models/SRPDE/2D_test4/u.mtx");
   DMatrix<double> computedU = model.u();
   EXPECT_TRUE( (DMatrix<double>(expectedU) - computedU).lpNorm<Eigen::Infinity>() < DOUBLE_TOLERANCE);
  
   // estimate of spatial field \hat f
   SpMatrix<double> expectedSolution;
-  Eigen::loadMarket(expectedSolution, "../data/models/SRPDE/2D_test4/sol.mtx");
+  Eigen::loadMarket(expectedSolution, "data/models/SRPDE/2D_test4/sol.mtx");
   DMatrix<double> computedF = model.f();
   std::size_t N = computedF.rows();
   EXPECT_TRUE( (DMatrix<double>(expectedSolution).topRows(N) - computedF).lpNorm<Eigen::Infinity>()

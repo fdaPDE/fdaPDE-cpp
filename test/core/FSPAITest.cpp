@@ -1,7 +1,7 @@
 #include <gtest/gtest.h> // testing framework
 #include <unsupported/Eigen/SparseExtra>
 
-#include "../fdaPDE/core/NLA/FSPAI.h"
+#include "../../fdaPDE/core/NLA/FSPAI.h"
 using fdaPDE::core::NLA::FSPAI;    
 
 // test FSPAI implementation using different matrices taken from matrix market with respect to output coming from

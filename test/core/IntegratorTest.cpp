@@ -2,27 +2,27 @@
 #include <gtest/gtest-typed-test.h>
 #include <gtest/gtest.h> // testing framework
 
-#include "../../../fdaPDE/core/utils/Symbols.h"
-#include "../../../fdaPDE/core/MESH/Element.h"
+#include "../../fdaPDE/core/utils/Symbols.h"
+#include "../../fdaPDE/core/MESH/Element.h"
 using fdaPDE::core::MESH::Element;
-#include "../../../fdaPDE/core/NLA/VectorSpace.h"
+#include "../../fdaPDE/core/NLA/VectorSpace.h"
 using fdaPDE::core::NLA::VectorSpace;
 
-#include "../../utils/MeshLoader.h"
+#include "../utils/MeshLoader.h"
 using fdaPDE::testing::MESH_TYPE_LIST;
 using fdaPDE::testing::MeshLoader;
-#include "../../utils/Constants.h"
+#include "../utils/Constants.h"
 using fdaPDE::testing::DOUBLE_TOLERANCE;
 using fdaPDE::testing::MACHINE_EPSILON;
 
-#include "../../../fdaPDE/core/utils/CompileTime.h"
-#include "../../../fdaPDE/core/FEM/integration/Integrator.h"
+#include "../../fdaPDE/core/utils/CompileTime.h"
+#include "../../fdaPDE/core/FEM/integration/Integrator.h"
 using fdaPDE::core::FEM::Integrator;
-#include "../../../fdaPDE/core/FEM/basis/LagrangianBasis.h"
+#include "../../fdaPDE/core/FEM/basis/LagrangianBasis.h"
 using fdaPDE::core::FEM::LagrangianBasis;
-#include "../../../fdaPDE/core/FEM/operators/Identity.h"
-#include "../../../fdaPDE/core/FEM/operators/Gradient.h"
-#include "../../../fdaPDE/core/FEM/operators/Laplacian.h"
+#include "../../fdaPDE/core/FEM/operators/Identity.h"
+#include "../../fdaPDE/core/FEM/operators/Gradient.h"
+#include "../../fdaPDE/core/FEM/operators/Laplacian.h"
 using fdaPDE::core::FEM::Identity;
 using fdaPDE::core::FEM::Gradient;
 using fdaPDE::core::FEM::Laplacian;
