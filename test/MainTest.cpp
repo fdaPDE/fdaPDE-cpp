@@ -17,12 +17,12 @@
 // NLA test suites
 #include "core/NLA/FSPAITest.cpp"
 #include "core/NLA/VectorSpaceTest.cpp"
-// // FEM test suites
+// FEM test suites
 #include "core/FEM/LagrangianBasisTest.cpp"
 #include "core/FEM/IntegratorTest.cpp"
 #include "core/FEM/PDESolutionsTest.cpp"
 // regression module test suites
-//#include "SRPDETest.cpp"
+#include "models/SRPDETest.cpp"
 
 int main(int argc, char **argv){
   // start testing
