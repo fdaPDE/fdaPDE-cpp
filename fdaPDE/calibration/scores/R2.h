@@ -13,28 +13,28 @@ namespace calibration{
   struct R2 {
 
     // compute R^2: 1 - \frac{SSres}{SStot}
-    // SSres = \sum_{i=1}^n {z_i - \hat z_i}^2
-    // SStot = \sum_{i=1}^n {z_i - \frac{1}{n}*\sum_{j=1}^n z_j}^2
+    // SSres = \sum_{i=1}^n {y_i - \hat y_i}^2
+    // SStot = \sum_{i=1}^n {y_i - \frac{1}{n}*\sum_{j=1}^n y_j}^2
     template <typename M>
     double operator()(const M& model, const BlockFrame<double, int>& test) const {
-      // compute predicted values \hat z
-      const DMatrix<double>& z_test = test.get<double>(STAT_MODEL_Z_BLK);
-      std::size_t n = z_test.rows();
+      // compute predicted values \hat y
+      const DMatrix<double>& y_test = test.get<double>(STAT_MODEL_Y_BLK);
+      std::size_t n = y_test.rows();
     
-      DVector<double> z_hat(n);
+      DVector<double> y_hat(n);
       for(std::size_t i = 0; i < n; ++i){
-	z_hat[i] = model.predict(test.get<double>(STAT_MODEL_W_BLK).row(i), test.get<int>(STAT_MODEL_I_BLK)(i,0));
+	y_hat[i] = model.predict(test.get<double>(STAT_MODEL_W_BLK).row(i), test.get<int>(STAT_MODEL_I_BLK)(i,0));
       }
       // compute average of observed data
-      double z_avg = 0;
-      for(std::size_t i = 0; i < n; ++i) z_avg += z_test(i,0);
-      z_avg /= n;
+      double y_avg = 0;
+      for(std::size_t i = 0; i < n; ++i) y_avg += y_test(i,0);
+      y_avg /= n;
 
       // compute SSres
-      double SSres = (z_test - z_hat).squaredNorm();
+      double SSres = (y_test - y_hat).squaredNorm();
       // compute SStot
       double SStot = 0;
-      for(std::size_t i = 0; i < n; ++i) SStot += std::pow(z_test(i,0) - z_avg, 2);
+      for(std::size_t i = 0; i < n; ++i) SStot += std::pow(y_test(i,0) - y_avg, 2);
 
       // need to return a value such that the lower the better
       return SSres/SStot - 1;

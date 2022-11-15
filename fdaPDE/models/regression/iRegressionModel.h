@@ -11,7 +11,7 @@ using fdaPDE::models::iStatModel;
 namespace fdaPDE {
 namespace models {
 
-#define STAT_MODEL_W_BLK "W" // design matrix
+#define STAT_MODEL_X_BLK "X" // design matrix
   
   // base class for any regression model
   template <typename PDE>
@@ -25,27 +25,29 @@ namespace models {
     iRegressionModel(const iRegressionModel& rhs) { pde_ = rhs.pde_; }
 
     // getters
-    std::size_t q() const { return df_.hasBlock(STAT_MODEL_W_BLK) ?
-	df_.template get<double>(STAT_MODEL_W_BLK).cols() : 0; }
-    const DMatrix<double>& W() const { return df_.template get<double>(STAT_MODEL_W_BLK); } // covariates
+    std::size_t q() const { return df_.hasBlock(STAT_MODEL_X_BLK) ?
+	df_.template get<double>(STAT_MODEL_X_BLK).cols() : 0; }
+    const DMatrix<double>& X() const { return df_.template get<double>(STAT_MODEL_X_BLK); } // covariates
 
     // utilities
     bool hasCovariates() const { return q() != 0; } // true if the model has a parametric part
     
     // abstract part of the interface, must be implemented by concrete models   
-    // getters to problem's solution
+    // getters to problem's solution (estimate of spatial field, PDE misfit and parametric vector)
     virtual const DMatrix<double>& f() const = 0;
+    virtual const DMatrix<double>& g() const = 0;
     virtual const DMatrix<double>& beta() const = 0;
     // efficient multiplication by matrix Q
     virtual DMatrix<double> lmbQ(const DMatrix<double>& x) = 0;
-    virtual DMatrix<double> fitted() const = 0; // computes fitted values at observations' locations
+    virtual DMatrix<double> fitted() = 0; // computes fitted values at observations' locations
+    // compute prediction at new unseen datapoint
     virtual double predict(const DVector<double>& covs, const std::size_t loc) const = 0;    
   };
 
 #define IMPORT_REGRESSION_MODEL_SYMBOLS(E)	   \
   IMPORT_STAT_MODEL_SYMBOLS(E)			   \
   using iRegressionModel<E>::q;			   \
-  using iRegressionModel<E>::W;			   \
+  using iRegressionModel<E>::X;			   \
   using iRegressionModel<E>::hasCovariates;	   \
 
   // trait to detect if a type implements iRegressionModel

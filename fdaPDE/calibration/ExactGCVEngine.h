@@ -23,7 +23,7 @@ namespace calibration{
     DMatrix<double> L_{}; // T^{-1}*R
     DMatrix<double> F_{}; // (T^{-1}*R)*(T^{-1}*E)
     DVector<double> h_{}; // h = (\lambda*L - I)*T^{-1}*R1^T*R0^{-1}*u
-    DVector<double> p_{}; // p = \Psi*h - dS*z
+    DVector<double> p_{}; // p = \Psi*h - dS*y
 
     DMatrix<double> S_  {}; // S = \Psi*T^{-1}*\Psi^T*Q
     DMatrix<double> dS_ {}; // dS = -\Psi*(T^{-1}*R)*(T^{-1}*E)
@@ -52,7 +52,7 @@ namespace calibration{
     template <typename M>
     void dS(M& model) {
       L_ = invT_.solve(model.R()); // T^{-1}*R
-      F_ = L_*invT_.solve(E_);      // (T^{-1}*R)*(T^{-1}*E)
+      F_ = L_*invT_.solve(E_); // (T^{-1}*R)*(T^{-1}*E)
       dS_ = model.lmbPsi(-F_); // this takes into account of sampling strategy
       return;
     }
@@ -80,20 +80,20 @@ namespace calibration{
     // dGCV(\lambda) = \frac{2n}{(n - (q + Tr[S]))^2}[ \sigma^2 * Tr[dS] + a ]
 
     // computes the a term in the dGCV expression, given by
-    // a = p.dot(z - \hat z)
+    // a = p.dot(y - \hat y)
     //   p = \Psi*h - t
     //     h = (\lambda*L - I)*T^{-1}*g
     //       g = R1^T*R0^{-1}*u
-    //     t = dS*z
+    //     t = dS*y
     template <typename M>
     double a(M& model){
       // NB: dS_ must already contain valid data
       DMatrix<double> g = model.R1().transpose()*model.invR0().solve(model.u());
       // cache h and p since needed for computation of second derivative
       h_ = (model.lambda()*L_ - DMatrix<double>::Identity(model.loc(), model.loc()))*invT_.solve(g);
-      p_ = model.Psi()*h_ - dS_*model.z();
-      // return a = p.dot(z - \hat z)
-      return (( model.z() - model.fitted() ).transpose() * p_).coeff(0,0);
+      p_ = model.Psi()*h_ - dS_*model.y();
+      // return a = p.dot(y - \hat y)
+      return (( model.y() - model.fitted() ).transpose() * p_).coeff(0,0);
     }
 
     // computes Tr[dS]
@@ -106,11 +106,11 @@ namespace calibration{
     // ddGCV(\lambda) = \frac{2n}{edf^2}[ \frac{1}{edf}(3*\sigma^2*Tr[dS] + 4*a)*Tr[dS] + \sigma^2*Tr[ddS] + b ]
 
     // computes the b term in the ddGCV expression, given by
-    // b = p.dot(Q*p) + (-ddS*z - 2*\Psi*L*h).dot(z - \hat z) 
+    // b = p.dot(Q*p) + (-ddS*y - 2*\Psi*L*h).dot(y - \hat y) 
        //   p = \Psi*h - t
        //     h = (\lambda*L - I)*T^{-1}*g
        //       g = R1^T*R0^{-1}*u
-       //     t = dS*z
+       //     t = dS*y
     template <typename M>
     double b(M& model){
       // NB: ddS_ must already contain valid data
@@ -123,8 +123,8 @@ namespace calibration{
 	}
       }
       DVector<double> Qp_ = model.lmbQ(p_); // efficient computation of Q*p
-      // return b = p.dot(Q*p) + (-ddS*z - 2*\Psi*L*h).dot(z - \hat z)
-      return (( model.z() - model.fitted() ).transpose() * ( -ddS_*model.z() - D )).coeff(0,0) + p_.dot(Qp_);
+      // return b = p.dot(Q*p) + (-ddS*y - 2*\Psi*L*h).dot(y - \hat y)
+      return (( model.y() - model.fitted() ).transpose() * ( -ddS_*model.y() - D )).coeff(0,0) + p_.dot(Qp_);
     }
 
     // computes Tr[ddS]

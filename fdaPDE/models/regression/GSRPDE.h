@@ -27,23 +27,22 @@ namespace fdaPDE{
 namespace models{
   
   template <typename PDE, typename Distribution>
-  class GSRPDE : public iRegressionModel<PDE>/*, public iGCV*/ {
+  class GSRPDE : public iRegressionModel<PDE>, public iGCV {
     // compile time checks
     static_assert(std::is_base_of<PDEBase, PDE>::value);
   private:
     // FPIRLS engine
     FPIRLS<Distribution> fpirls;
     // weight matrix obtained at FPIRLS convergence
-    DiagMatrix<double> P_;
-    // q x q dense matrix W^T*P*W
-    DMatrix<double> WTW_{};
-    // n x n projection matrix onto the orthogonal space of Im(W), Q_ = I - H_ = I - W*(W*T*P*W)^{-1}*W^T*P
-    DMatrix<double> Q_{};
+    DiagMatrix<double> W_;
+    // q x q dense matrix X^T*W*X
+    DMatrix<double> XTX_{};
     // partial LU (with pivoting) factorization of the dense (square invertible) q x q matrix WTW_.
-    Eigen::PartialPivLU<DMatrix<double>> invWTW_{};
+    Eigen::PartialPivLU<DMatrix<double>> invXTX_{};
 
     // problem solution
     DMatrix<double> f_{};    // estimate of the spatial field (1 x N vector)
+    DMatrix<double> g_{};    // PDE misfit
     DMatrix<double> beta_{}; // estimate of the coefficient vector (1 x q vector)
   public:
     IMPORT_REGRESSION_MODEL_SYMBOLS(PDE);
@@ -58,10 +57,11 @@ namespace models{
 
     // iRegressionModel interface implementation
     virtual DMatrix<double> lmbQ(const DMatrix<double>& x);
-    virtual DMatrix<double> fitted() const;
+    virtual DMatrix<double> fitted();
     virtual double predict(const DVector<double>& covs, const std::size_t loc) const;
     // getters to problem solution
     virtual const DMatrix<double>& f() const { return f_; };
+    virtual const DMatrix<double>& g() const { return g_; };
     virtual const DMatrix<double>& beta() const { return beta_; };
     
     // iGCV interface implementation

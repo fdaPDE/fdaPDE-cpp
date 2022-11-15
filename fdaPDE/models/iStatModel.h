@@ -21,7 +21,7 @@ namespace models {
   
   // standardized definitions for stat model BlockFrame. layers below will make heavy assumptions on the layout of the BlockFrame,
   // use these instead of manually typing the block name when accessing df_
-#define STAT_MODEL_Z_BLK "z" // matrix of observations
+#define STAT_MODEL_Y_BLK "y" // matrix of observations
 #define STAT_MODEL_I_BLK "i" // vector of observation indices
 #define STAT_MODEL_P_BLK "P" // matrix of spatial locations coordinates
 #define STAT_MODEL_D_BLK "D" // incidence matrix for areal observations
@@ -69,9 +69,9 @@ namespace models {
     // getters
     const BlockFrame<double, int>& data() const { return df_; } 
     std::size_t loc() const { return pde_->domain().nodes();} // ???
-    std::size_t obs() const { return df_.get<double>(STAT_MODEL_Z_BLK).rows(); } // number of observations
+    std::size_t obs() const { return df_.get<double>(STAT_MODEL_Y_BLK).rows(); } // number of observations
     const PDE& pde() const { return *pde_; } // regularizing term Lf - u (defined on some domain \Omega)
-    const DMatrix<double>& z() const { return df_.get<double>(STAT_MODEL_Z_BLK); } // observation vector z
+    const DMatrix<double>& y() const { return df_.get<double>(STAT_MODEL_Y_BLK); } // observation vector z
     const DMatrix<int>& idx() const { return df_.get<int>(STAT_MODEL_I_BLK); } // data indices
     double lambda() const { return lambda_; } // smoothing parameter \lambda
     SamplingStrategy sampling() const; // sampling strategy adopted from the model.
@@ -103,20 +103,22 @@ namespace models {
 #include "iStatModel.tpp"
   
   // import all symbols from iStatModel interface in derived classes
-#define IMPORT_STAT_MODEL_SYMBOLS(E)		\
-  using iStatModel<E>::pde_;			\
-  using iStatModel<E>::lambda_;			\
-  using iStatModel<E>::Psi_;			\
-  using iStatModel<E>::df_;			\
-  using iStatModel<E>::loc;			\
-  using iStatModel<E>::obs;			\
-  using iStatModel<E>::z;			\
-  using iStatModel<E>::idx;			\
-  using iStatModel<E>::R0;			\
-  using iStatModel<E>::R1;			\
-  using iStatModel<E>::u;			\
-  using iStatModel<E>::isAlloc;			\
-  using iStatModel<E>::PsiTD;			\
+#define IMPORT_STAT_MODEL_SYMBOLS(E)		 \
+  /* direct accessible fields */		 \
+  using iStatModel<E>::pde_;			 \
+  using iStatModel<E>::df_;			 \
+  /* those info should be accessed by methods */ \
+  using iStatModel<E>::lambda;			 \
+  using iStatModel<E>::Psi;			 \
+  using iStatModel<E>::loc;			 \
+  using iStatModel<E>::obs;			 \
+  using iStatModel<E>::y;			 \
+  using iStatModel<E>::idx;			 \
+  using iStatModel<E>::R0;			 \
+  using iStatModel<E>::R1;			 \
+  using iStatModel<E>::u;			 \
+  using iStatModel<E>::isAlloc;			 \
+  using iStatModel<E>::PsiTD;			 \
   
   // trait to detect if a type implements iStatModel
   template <typename T>

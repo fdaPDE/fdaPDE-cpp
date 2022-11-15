@@ -44,7 +44,7 @@ namespace calibration{
       // analytical expression of gcv (called by any type of GCV optimization)
       //
       // edf      = n - (q + Tr[S])
-      // GCV(\lambda) = n/(edf^2)*norm(z - \hat z)^2
+      // GCV(\lambda) = n/(edf^2)*norm(y - \hat y)^2
       gcv = [*this](SVector<1> lambda) mutable -> double {
 	// fit the model given current lambda
 	model_.setLambda(lambda[0]);
@@ -56,14 +56,14 @@ namespace calibration{
 	std::size_t n = model_.loc(); // number of locations
 	double edf = n - (q+trS);     // equivalent degrees of freedom
 	// return gcv at point
-	return (n/std::pow(edf, 2))*( model_.norm(model_.z(), model_.fitted()) );
+	return (n/std::pow(edf, 2))*( model_.norm(model_.y(), model_.fitted()) );
       };
 
       // analytical expression of gcv first derivative (called only by an exact-based GCV optimization)
       //
       // edf      = n - (q + Tr[S])
-      // \sigma^2 = \frac{norm(z - \hat z)^2}{n - (q + Tr[S])}
-      // a        = p.dot(z - \hat z) (see ExactGCVEngine.h)
+      // \sigma^2 = \frac{norm(y - \hat y)^2}{n - (q + Tr[S])}
+      // a        = p.dot(y - \hat y) (see ExactGCVEngine.h)
       // dGCV(\lambda) = \frac{2n}{edf^2}[ \sigma^2 * Tr[dS] + a ]
       dgcv = [*this](SVector<1> lambda) mutable -> SVector<1> {
 	// fit the model given current lambda
@@ -76,10 +76,10 @@ namespace calibration{
 	double q = model_.q();        // number of covariates
 	std::size_t n = model_.loc(); // number of locations
 	double edf = n - (q+trS);     // equivalent degrees of freedom
-	// \sigma^2 = \frac{(z - \hat z).squaredNorm()}{n - (q + Tr[S])}
-	double sigma = ( model_.z() - model_.fitted() ).squaredNorm()/edf;
+	// \sigma^2 = \frac{(y - \hat y).squaredNorm()}{n - (q + Tr[S])}
+	double sigma = ( model_.y() - model_.fitted() ).squaredNorm()/edf;
 
-	double a = trace.a(model_);   // a = p.dot(z - \hat z)
+	double a = trace.a(model_);   // a = p.dot(y - \hat y)
 	// return gradient of GCV at point      
 	return SVector<1>( 2*n/std::pow(n - (q+trS), 2)*( sigma*trdS + a ) );
       };
@@ -87,8 +87,8 @@ namespace calibration{
       // analytical expression of gcv second derivative (called only by an exact-based GCV optimization)
       //
       // edf      = n - (q + Tr[S])
-      // \sigma^2 = \frac{norm(z - \hat z)^2}{n - (q + Tr[S])}
-      // b        = p.dot(Q*p) + (-ddS*z - 2*\Psi*L*h).dot(z - \hat z) (see ExactGCVEngine)
+      // \sigma^2 = \frac{norm(y - \hat y)^2}{n - (q + Tr[S])}
+      // b        = p.dot(Q*p) + (-ddS*y - 2*\Psi*L*h).dot(y - \hat y) (see ExactGCVEngine)
       // ddGCV(\lambda) = \frac{2n}{edf^2}[ \frac{1}{edf}(3*\sigma^2*Tr[dS] + 4*a)*Tr[dS] + \sigma^2*Tr[ddS] + b ]
       ddgcv = [*this](SVector<1> lambda) mutable -> SMatrix<1> {
 	// fit the model given current lambda
@@ -102,11 +102,11 @@ namespace calibration{
 	double q = model_.q();        // number of covariates
 	std::size_t n = model_.loc(); // number of locations
 	double edf = n - (q+trS);     // equivalent degrees of freedom
-	// \sigma^2 = \frac{norm(z - \hat z)^2}{n - (q + Tr[S])}
-	double sigma = ( model_.z() - model_.fitted() ).squaredNorm()/edf;
+	// \sigma^2 = \frac{norm(y - \hat y)^2}{n - (q + Tr[S])}
+	double sigma = ( model_.y() - model_.fitted() ).squaredNorm()/edf;
 
-	double a = trace.a(model_);   // a = p.dot(z - \hat z)
-	double b = trace.b(model_);   // b = p.dot(Q*p) + (-ddS*z - 2*\Psi*L*h).dot(z - \hat z)
+	double a = trace.a(model_);   // a = p.dot(y - \hat y)
+	double b = trace.b(model_);   // b = p.dot(Q*p) + (-ddS*y - 2*\Psi*L*h).dot(y - \hat y)
 	// return hessian of GCV at point
 	return SMatrix<1>( 2*n/std::pow(edf, 2)*( trdS/edf*(3*sigma*trdS + 4*a) + sigma*trddS + b ) );
       };
@@ -148,7 +148,7 @@ namespace calibration{
     // optimizes GCV field using finite differences to approximate first and second derivative
     // (doesn't require to evaluate dgcv and ddgcv)
     template <typename O, typename... Args>
-    SVector<1> FDApprox(O& optimizer, double gcvFDStep, Args&... args) {
+    SVector<1> approx(O& optimizer, double gcvFDStep, Args&... args) {
       // wrap gcv in a ScalarField object.
       // This forces optimizers to employ a finite difference approximation of gcv derivatives when it is required
       ScalarField<1> obj(gcv);

@@ -14,8 +14,8 @@ namespace calibration{
     // SparseLU has a deleted copy construcor, need to wrap it in a movable object to allow copy construction of derived models
     std::unique_ptr<Eigen::SparseLU<SpMatrix<double>>> invR0_{};
     DMatrix<double> R_{}; // R = R1^T*R0^{-1}*R1
-    DMatrix<double> T_{}; // T = \Psi^T*Q*\Psi + \lambda*K
-  
+    DMatrix<double> T_{}; // T = \Psi^T*Q*\Psi + \lambda*R
+    DMatrix<double> Q_{}; // Q_ = I - H, whatever H is for the model
   public:
     // constructor
     iGCV() {
@@ -23,10 +23,10 @@ namespace calibration{
       invR0_ = std::make_unique<Eigen::SparseLU<SpMatrix<double>>>();
     };
 
-    // the following methods should compute matrices once and cache them for reuse.
+    // the following methods should compute matrices once and cache them for reuse using the provided data members.
     // Subsequent calls should immediately return the cached result.
     virtual const DMatrix<double>& Q() = 0; // returns matrix Q = I - H
-    virtual const DMatrix<double>& T() = 0; // returns matrix T = \Psi^T*Q*\Psi + \lambda*R, store also matrix R_
+    virtual const DMatrix<double>& T() = 0; // returns matrix T = \Psi^T*Q*\Psi + \lambda*R, stores also matrix R_
     // computes the norm of y - \hat y, according to the choosen distribution
     virtual double norm(const DMatrix<double>& obs, const DMatrix<double>& fitted) const = 0;
 

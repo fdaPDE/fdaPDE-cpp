@@ -69,6 +69,7 @@ TEST(IntegratorTest, IntegrateFieldOverMesh) {
   EXPECT_NEAR(1, integrator.integrate(CShaped.mesh, f), DOUBLE_TOLERANCE);
 }
 
+// test correctness of integrator tables
 template <typename E>
 struct IntegratorTablesTest : public ::testing::Test {
   static constexpr unsigned int M = E::value;

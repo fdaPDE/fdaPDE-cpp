@@ -33,7 +33,7 @@ double spLInfinityNorm(const SpMatrix<double>& op1, const SpMatrix<double>& op2)
    BC:           no
    order FE:     1
  */
-TEST(SRPDE, Test1) {
+TEST(SRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes) {
   // define domain and regularizing PDE
   MeshLoader<Mesh2D<>> domain("unit_square");
   auto L = Laplacian();
@@ -54,7 +54,7 @@ TEST(SRPDE, Test1) {
 
   // set model data
   BlockFrame<double, int> df;
-  df.insert("z", y);
+  df.insert("y", y);
   model.setData(df);
 
   // solve smoothing problem
@@ -97,7 +97,7 @@ TEST(SRPDE, Test1) {
    BC:           no
    order FE:     1
  */
-TEST(SRPDE, Test2) {
+TEST(SRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations) {
   // define domain and regularizing PDE
   MeshLoader<Mesh2D<>> domain("c_shaped");
   auto L = Laplacian();
@@ -124,8 +124,8 @@ TEST(SRPDE, Test2) {
 
   // set model data
   BlockFrame<double, int> df;
-  df.insert("z", y);
-  df.insert("W", X);
+  df.insert("y", y);
+  df.insert("X", X);
   df.insert("P", loc);
   model.setData(df);
 
@@ -176,7 +176,7 @@ TEST(SRPDE, Test2) {
    BC:           no
    order FE:     1
  */
-TEST(SRPDE, Test3) {
+TEST(SRPDE, Test3_CostantCoefficientsPDE_NonParametric_GeostatisticalAtNodes) {
   // define domain and regularizing PDE
   MeshLoader<Mesh2D<>> domain("unit_square");
 
@@ -201,7 +201,7 @@ TEST(SRPDE, Test3) {
 
   // set model data
   BlockFrame<double, int> df;
-  df.insert("z", y);
+  df.insert("y", y);
   model.setData(df);
 
   // solve smoothing problem
@@ -244,7 +244,7 @@ TEST(SRPDE, Test3) {
    BC:           yes
    order FE:     1
  */
-TEST(SRPDE, Test4) {
+TEST(SRPDE, Test4_NonCostantCoefficientsPDE_NonParametric_Areal) {
   // define domain and regularizing PDE
   MeshLoader<Mesh2D<>> domain("quasi_circle");
 
@@ -289,7 +289,7 @@ TEST(SRPDE, Test4) {
   
   // set model data
   BlockFrame<double, int> df;
-  df.insert("z", y);
+  df.insert("y", y);
   df.insert("D", areal);
   model.setData(df);
 
@@ -329,6 +329,5 @@ TEST(SRPDE, Test4) {
   std::size_t N = computedF.rows();
   EXPECT_TRUE( (DMatrix<double>(expectedSolution).topRows(N) - computedF).lpNorm<Eigen::Infinity>()
 	       < MODEL_TOLERANCE);
-
 }
 
