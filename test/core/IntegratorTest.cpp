@@ -5,8 +5,6 @@
 #include "../../fdaPDE/core/utils/Symbols.h"
 #include "../../fdaPDE/core/MESH/Element.h"
 using fdaPDE::core::MESH::Element;
-#include "../../fdaPDE/core/NLA/VectorSpace.h"
-using fdaPDE::core::NLA::VectorSpace;
 
 #include "../utils/MeshLoader.h"
 using fdaPDE::testing::MESH_TYPE_LIST;
@@ -18,14 +16,9 @@ using fdaPDE::testing::MACHINE_EPSILON;
 #include "../../fdaPDE/core/utils/CompileTime.h"
 #include "../../fdaPDE/core/FEM/integration/Integrator.h"
 using fdaPDE::core::FEM::Integrator;
+#include "../../fdaPDE/core/FEM/integration/IntegratorTables.h"
 #include "../../fdaPDE/core/FEM/basis/LagrangianBasis.h"
 using fdaPDE::core::FEM::LagrangianBasis;
-#include "../../fdaPDE/core/FEM/operators/Identity.h"
-#include "../../fdaPDE/core/FEM/operators/Gradient.h"
-#include "../../fdaPDE/core/FEM/operators/Laplacian.h"
-using fdaPDE::core::FEM::Identity;
-using fdaPDE::core::FEM::Gradient;
-using fdaPDE::core::FEM::Laplacian;
 
 // test fixture
 template <typename E>
@@ -49,25 +42,25 @@ TYPED_TEST(IntegratorTest, ElementMeasure){
 // test if linear fields can be integrated over mesh elements. In particular a closed formula for
 // the volume of a truncated prism defined over an element e having height h1, h2, ..., hm at the m vertices is known as
 //     e.measure()*(h1 + h2 + ... hm)/m
-TYPED_TEST(IntegratorTest, LinearFieldsAreIntegratedCorrectly){
-    // generate random element from mesh
-    auto e = this->meshLoader.generateRandomElement();
-    Integrator<TestFixture::M, 1> integrator; // define integrator
-    // a linear function over an element e defines a truncated prism over e
-    std::function<double(SVector<TestFixture::N>)> f = [](SVector<TestFixture::N> x) -> double {
-      return x[0] + x[1];
-    };
-    // compute volume of truncated rectangular prism: 1/(M+1)*V*(h1 + h2 + ... + hM), where V is the element's measure
-    double h = 0;
-    for(auto p : *e)
-      h += f(p);
-    double measure = e->measure()*h/(TestFixture::M+1);
-    // test for equality
-    EXPECT_NEAR(measure, integrator.integrate(*e, f), DOUBLE_TOLERANCE);
+TYPED_TEST(IntegratorTest, LinearFieldsIntegratedCorrectly){
+  // generate random element from mesh
+  auto e = this->meshLoader.generateRandomElement();
+  Integrator<TestFixture::M, 1> integrator; // define integrator
+  // a linear function over an element e defines a truncated prism over e
+  std::function<double(SVector<TestFixture::N>)> f = [](SVector<TestFixture::N> x) -> double {
+    return x[0] + x[1];
+  };
+  // compute volume of truncated rectangular prism: 1/(M+1)*V*(h1 + h2 + ... + hM), where V is the element's measure
+  double h = 0;
+  for(auto p : *e)
+    h += f(p);
+  double measure = e->measure()*h/(TestFixture::M+1);
+  // test for equality
+  EXPECT_NEAR(measure, integrator.integrate(*e, f), DOUBLE_TOLERANCE);
 }
 
 // test if is possible to integrate a field over the entire mesh
-TEST(IntegratorTest, CanIntegrateFieldOverMesh) {
+TEST(IntegratorTest, IntegrateFieldOverMesh) {
   // load sample mesh
   MeshLoader<Mesh2D<>> CShaped("unit_square");
   Integrator<2,1> integrator{};
@@ -76,76 +69,50 @@ TEST(IntegratorTest, CanIntegrateFieldOverMesh) {
   EXPECT_NEAR(1, integrator.integrate(CShaped.mesh, f), DOUBLE_TOLERANCE);
 }
 
-// test if all integrator tables produce the same result (this proves weights and quadrature nodes are correct)
 template <typename E>
-class IntegratorTablesTest : public ::testing::Test {};
+struct IntegratorTablesTest : public ::testing::Test {
+  static constexpr unsigned int M = E::value;
+};
+using DIMENSIONS_TYPE_LIST = ::testing::Types<
+  std::integral_constant<unsigned int, 1>,
+  std::integral_constant<unsigned int, 2>,
+  std::integral_constant<unsigned int, 3>>;
+TYPED_TEST_SUITE(IntegratorTablesTest, DIMENSIONS_TYPE_LIST);
 
+// test if all integrator tables produce the same result (this proves weights and quadrature nodes are correct)
+using INTEGRATOR_TABLES_TYPE_LIST = std::tuple<
+  std::tuple<IntegratorTable<1,2>, IntegratorTable<1,3>>, // 1D integrators
+  std::tuple<IntegratorTable<2,3>, IntegratorTable<2,6>, IntegratorTable<2,7>, IntegratorTable<2,12>>, // 2D integrators
+  std::tuple<IntegratorTable<3,4>, IntegratorTable<3,5>, IntegratorTable<3,11>>  // 3D integrators 
+  >;
 
+template <unsigned int M, typename I, typename F>
+void compute_quadrature(const F& f, const I& integratorTable, std::vector<double>& result) {
+  // perform integration on reference element
+  double value = 0;
+  for(std::size_t iq = 0; iq < integratorTable.num_nodes; ++iq){
+    SVector<M> p = SVector<M>(integratorTable.nodes[iq].data());
+    value += f(p) * integratorTable.weights[iq];
+  }
+  result.push_back(value/M);
+  return;
+}
 
-
-// TYPED_TEST(IntegratorTest, IdentityOperator) {
-//   // generate random element from mesh
-//   auto e = this->generateRandomElement();
-//   Integrator<TestFixture::M> integrator;
-//   // define basis over the element
-//   LagrangianBasis<TestFixture::M, TestFixture::N, 1> elementBasis(*e);
-//   // define identity operator
-//   auto form = Identity();
-
-//   // wrap the M-dimesional function into an N-dimensional one
-//   std::function<double(SVector<TestFixture::N>)> f = [elementBasis, e](SVector<TestFixture::N> x) -> double {
-//     // project point on space spanned by the element
-//     SVector<TestFixture::M> p = e->spannedSpace().projectOnto(x);
-//     return (elementBasis[0]*elementBasis[0])(p);
-//   };
-//   // differential operators assume to be integrated over a basis defined on the reference element.
-//   LagrangianBasis<TestFixture::M, TestFixture::N, 1> referenceBasis;
-//   EXPECT_NEAR(integrator.integrate(referenceBasis, *e, 0, 0, form), integrator.integrate(*e, f), this->tolerance);
-// }
-
-// TYPED_TEST(IntegratorTest, LaplacianOperator) {
-//   // generate random element from mesh
-//   auto e = this->generateRandomElement();
-//   Integrator<TestFixture::M> integrator;
-//   // define basis over the element
-//   LagrangianBasis<TestFixture::M, TestFixture::N, 1> elementBasis(*e);
-//   // define laplacian operator
-//   auto form = Laplacian();
+// test if integration works on linear fields, expect all results equal
+TYPED_TEST(IntegratorTablesTest, TableDefinedCorrectly) {
+  // define lagrangian basis on reference element
+  LagrangianBasis<TestFixture::M, TestFixture::M, 1> b{};
+  // space where results will be stored
+  std::vector<double> results;
+  // perform integration
+  std::apply([&](auto... integrator) {
+    ((compute_quadrature<TestFixture::M>(b[0], integrator, results)), ...);
+  }, typename std::tuple_element<TestFixture::M-1, INTEGRATOR_TABLES_TYPE_LIST>::type());
   
-//   // wrap the M-dimesional function into an N-dimensional one
-//   std::function<double(SVector<TestFixture::N>)> f = [elementBasis, e](SVector<TestFixture::N> x) -> double {
-//     // project point on space spanned by the element
-//     SVector<TestFixture::M> p = e->spannedSpace().projectOnto(x);
-//     return (elementBasis[1].derive().dot(elementBasis[0].derive()))(p);
-//   };
-//   // differential operators assume to be integrated over a basis defined on the reference element.
-//   LagrangianBasis<TestFixture::M, TestFixture::N, 1> referenceBasis{};
-//   EXPECT_NEAR(integrator.integrate(referenceBasis, *e, 1, 0, form), integrator.integrate(*e, f), this->tolerance);
-// }
-
-// TYPED_TEST(IntegratorTest, GradientOperator) {
-//   if constexpr(TestFixture::M == TestFixture::N){ // tested only for non-manifold
-//     // generate random element from mesh
-//     auto e = this->generateRandomElement();
-//     Integrator<TestFixture::M> integrator;
-//     // define basis over the element
-//     LagrangianBasis<TestFixture::M, TestFixture::N, 1> elementBasis(*e);
-//     // define gradient operator
-//     SVector<TestFixture::N> b = SVector<TestFixture::N>::Ones();
-//     auto form = dot(b, Gradient());
-
-//     // wrap the M-dimesional function into an N-dimensional one (this is useless in the non manifold case)
-//     std::function<double(SVector<TestFixture::N>)> f = [elementBasis, e](SVector<TestFixture::N> x) -> double {
-//       // project point on space spanned by the element
-//       SVector<TestFixture::M> p = e->spannedSpace().projectOnto(x);
-//       return (elementBasis[0]*elementBasis[0].derive().dot(SVector<TestFixture::M>::Ones()))(p);
-//     };
-    
-//     // differential operators assume to be integrated over a basis defined on the reference element.
-//     LagrangianBasis<TestFixture::M, TestFixture::N, 1> referenceBasis{};
-//     EXPECT_NEAR(integrator.integrate(referenceBasis, *e, 0, 0, form), integrator.integrate(*e, f), this->tolerance);
-//   }else{
-//     // skip test for manifold case: NEED FIX!
-//     GTEST_SKIP();
-//   }
-// }
+  // check all computed integrals are within double tolerance
+  for(std::size_t i = 0; i < results.size(); ++i){
+    for(std::size_t j = i+1; j < results.size(); ++j){
+      EXPECT_NEAR(results[i], results[j], DOUBLE_TOLERANCE);
+    }
+  }
+}
