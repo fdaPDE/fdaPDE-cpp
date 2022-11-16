@@ -78,6 +78,9 @@
 !test/data/mesh/network/*.csv
 !test/data/mesh/c_shaped/*.csv
 !test/data/mesh/unit_square/*.csv
+!test/data/mesh/unit_interval/*.csv
+!test/data/mesh/unit_interval_o2/*.csv
+!test/data/mesh/unit_square_o2/*.csv
 !test/data/*.mtx
 !test/data/models/SRPDE/
 !test/data/models/SRPDE/*
