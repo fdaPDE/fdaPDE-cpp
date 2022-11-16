@@ -1,35 +1,44 @@
 // an efficient way to perform a left multiplication by Q implementing the following
-//  given the design matrix W and x
-//    compute v = X^T*x
+//  given the design matrix X, the weight matrix W and x
+//    compute v = X^T*W*x
 //    solve Yz = v
-//    return x - Xz = Qx
+//    return Wx - WXz = W(I-H)x = Qx
 // it is required to having assigned a design matrix X to the model before calling this method
 template <typename PDE>
 DMatrix<double> SRPDE<PDE>::lmbQ(const DMatrix<double>& x){
-  DMatrix<double> v = X().transpose()*x; // X^T*x
-  DMatrix<double> z = invXTX_.solve(v);  // (X^T*X)^{-1}*X^T*x
-  // compute x - X*z = x - (X*(X^T*X)^{-1}*X^T)*x = (I - H)*x = Q*x
-  return x - X()*z;
+  DMatrix<double> v = X().transpose()*W_*x; // X^T*W*x
+  DMatrix<double> z = invXTX_.solve(v);  // (X^T*W*X)^{-1}*X^T*W*x
+  // compute W*x - W*X*z = W*x - (W*X*(X^T*W*X)^{-1}*X^T*W)*x = W(I - H)*x = Q*x
+  return W_*x - W_*X()*z;
+}
+
+// perform proper initialization of model
+template <typename PDE>
+void SRPDE<PDE>::init() {
+  Psi(); // ask to iStatModel to compute \Psi matrix
+
+  // if heteroscedastic observations are provided as datum, prepare weights matrix
+  if(hasWeights()) W_ = W().asDiagonal();
+  else W_ = DVector<double>::Ones(obs()).asDiagonal(); // homoscedastic observations
 }
 
 // finds a solution to the SR-PDE smoothing problem
 template <typename PDE>
 void SRPDE<PDE>::solve() {
-  // ask to iStatModel to return \Psi matrix
-  Psi();
+  init(); // initialize the model, analyze input data
+  
   // assemble system matrix for the nonparameteric part of the model
   SparseBlockMatrix<double,2,2>
-    A(-PsiTD() * Psi(), lambda() * R1().transpose(),
-      lambda() * R1(),  lambda() * R0()            );
+    A(-PsiTD() * W_ * Psi(), lambda() * R1().transpose(),
+      lambda() * R1(),       lambda() * R0()            );
   // cache system matrix for reuse
   A_ = A.derived();
- 
   b_.resize(A_.rows());
   DVector<double> sol; // room for problem' solution
   
   if(!hasCovariates()){ // nonparametric case
     // rhs of SR-PDE linear system
-    b_ << -PsiTD()*y(),
+    b_ << -PsiTD()*W_*y(),
       lambda()*u();
     
     // define system solver. Use a sparse solver
@@ -43,7 +52,7 @@ void SRPDE<PDE>::solve() {
   }else{ // parametric case
     if(!isAlloc(XTX_)){
       // compute q x q dense matrix W^T*W and its factorization
-      XTX_ = X().transpose()*X();
+      XTX_ = X().transpose()*W_*X();
       invXTX_ = XTX_.partialPivLu();
     }
     // rhs of SR-PDE linear system
@@ -53,9 +62,9 @@ void SRPDE<PDE>::solve() {
     std::size_t q_ = X().cols(); // number of covariates
     // definition of matrices U and V  for application of woodbury formula
     DMatrix<double> U = DMatrix<double>::Zero(A_.rows(), q_);
-    U.block(0,0, A_.rows()/2, q_) = PsiTD()*X();
+    U.block(0,0, A_.rows()/2, q_) = PsiTD()*W_*X();
     DMatrix<double> V = DMatrix<double>::Zero(q_, A_.rows());
-    V.block(0,0, q_, A_.rows()/2) = X().transpose()*Psi();
+    V.block(0,0, q_, A_.rows()/2) = X().transpose()*W_*Psi();
 
     // Define system solver. Use SMW solver from NLA module
     SMW<> solver{};
@@ -64,7 +73,7 @@ void SRPDE<PDE>::solve() {
     sol = solver.solve(U, XTX_, V, b_);
     // store result of smoothing 
     f_    = sol.head(A_.rows()/2);
-    beta_ = invXTX_.solve(X().transpose())*(y() - Psi()*f_);
+    beta_ = invXTX_.solve(X().transpose()*W_)*(y() - Psi()*f_);
   }
   // store PDE misfit
   g_ = sol.tail(A_.rows()/2);
@@ -102,7 +111,7 @@ const DMatrix<double>& SRPDE<PDE>::T() {
 
     // compute and store matrix T for possible reuse
     if(!hasCovariates()) // case without covariates, Q is the identity matrix
-      T_ = Psi().transpose()*Psi() + lambda()*R_;
+      T_ = Psi().transpose()*W_*Psi() + lambda()*R_;
     else // general case with covariates
       T_ = Psi().transpose()*lmbQ(Psi()) + lambda()*R_;
   }
@@ -114,8 +123,8 @@ const DMatrix<double>& SRPDE<PDE>::T() {
 template <typename PDE>
 const DMatrix<double>& SRPDE<PDE>::Q() {
   if(!isAlloc(Q_)){ // Q is computed on request since not needed in general
-    // compute Q = I - H = I - X*(X*X^T)^{-1}*X^T
-    Q_ = DMatrix<double>::Identity(obs(), obs()) - X()*invXTX_.solve(X().transpose());
+    // compute Q = W(I - H) = W - W*X*(X*W*X^T)^{-1}*X^T*W
+    Q_ = W_*(DMatrix<double>::Identity(obs(), obs()) - X()*invXTX_.solve(X().transpose()*W_));
   }
   return Q_;
 }

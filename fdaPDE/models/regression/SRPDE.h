@@ -26,17 +26,19 @@ namespace models{
     // compile time checks
     static_assert(std::is_base_of<PDEBase, PDE>::value);
   private:
+    // diagonal matrix of weights (implements possible heteroscedasticity)
+    DiagMatrix<double> W_;
     // system matrix of non-parametric problem (2N x 2N matrix)
-    //     | -\Psi^T*D*\Psi  \lambda*R1^T |
-    // A = |                              |
-    //     |   \lambda*R1    \lambda*R0   |
+    //     | -\Psi^T*D*W*\Psi  \lambda*R1^T |
+    // A = |                                |
+    //     |    \lambda*R1     \lambda*R0   |
     SpMatrix<double> A_{};
     // right hand side of problem's linear system (1 x 2N vector)
     //     | -\Psi^T*D*Q*y |
-    // b = |               |
+    // b = |               |, Q = W(I-H), H = X*(X^T*W*X)^{-1}*X^T*W
     //     |   \lambda*u   |
     DVector<double> b_{};
-    // q x q dense matrix X^T*X
+    // q x q dense matrix X^T*W*X
     DMatrix<double> XTX_{};
     // partial LU (with pivoting) factorization of the dense (square invertible) q x q matrix XTX_.
     Eigen::PartialPivLU<DMatrix<double>> invXTX_{};
@@ -45,6 +47,9 @@ namespace models{
     DMatrix<double> f_{};    // estimate of the spatial field (1 x N vector)
     DMatrix<double> g_{};    // PDE misfit
     DMatrix<double> beta_{}; // estimate of the coefficient vector (1 x q vector)
+
+    // perform proper initialization of model
+    void init();
   public:
     IMPORT_REGRESSION_MODEL_SYMBOLS(PDE);
     
@@ -52,7 +57,7 @@ namespace models{
     SRPDE() = default;
     SRPDE(const PDE& pde, double lambda)
       : iRegressionModel<PDE>(pde, lambda) {};
-
+    
     // iStatModel interface implementation
     virtual void solve(); // finds a solution to the smoothing problem
 
@@ -67,7 +72,7 @@ namespace models{
     
     // iGCV interface implementation
     virtual const DMatrix<double>& T(); // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
-    virtual const DMatrix<double>& Q(); // Q = I - H = I - X*(X^T*X)^{-1}X^T
+    virtual const DMatrix<double>& Q(); // Q = W(I - H) = W - W*X*(X^T*W*X)^{-1}X^T*W
     // returns the euclidian norm of y - \hat y
     virtual double norm(const DMatrix<double>& obs, const DMatrix<double>& fitted) const;
     
