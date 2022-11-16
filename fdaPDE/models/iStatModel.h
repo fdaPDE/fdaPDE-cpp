@@ -21,10 +21,10 @@ namespace models {
   
   // standardized definitions for stat model BlockFrame. layers below will make heavy assumptions on the layout of the BlockFrame,
   // use these instead of manually typing the block name when accessing df_
-#define STAT_MODEL_Y_BLK "y" // matrix of observations
-#define STAT_MODEL_I_BLK "i" // vector of observation indices
-#define STAT_MODEL_P_BLK "P" // matrix of spatial locations coordinates
-#define STAT_MODEL_D_BLK "D" // incidence matrix for areal observations
+#define OBSERVATIONS_BLK "y" // matrix of observations
+#define INDEXES_BLK "i"      // vector of observation indices
+#define LOCATIONS_BLK "P"    // matrix of spatial locations coordinates
+#define AREAL_BLK "D"        // incidence matrix for areal observations
   
   // abstract base interface for any fdaPDE statistical model.
   //   * n: the number of observations
@@ -69,17 +69,17 @@ namespace models {
     // getters
     const BlockFrame<double, int>& data() const { return df_; } 
     std::size_t loc() const { return pde_->domain().nodes();} // ???
-    std::size_t obs() const { return df_.get<double>(STAT_MODEL_Y_BLK).rows(); } // number of observations
+    std::size_t obs() const { return df_.get<double>(OBSERVATIONS_BLK).rows(); } // number of observations
     const PDE& pde() const { return *pde_; } // regularizing term Lf - u (defined on some domain \Omega)
-    const DMatrix<double>& y() const { return df_.get<double>(STAT_MODEL_Y_BLK); } // observation vector z
-    const DMatrix<int>& idx() const { return df_.get<int>(STAT_MODEL_I_BLK); } // data indices
+    const DMatrix<double>& y() const { return df_.get<double>(OBSERVATIONS_BLK); } // observation vector z
+    const DMatrix<int>& idx() const { return df_.get<int>(INDEXES_BLK); } // data indices
     double lambda() const { return lambda_; } // smoothing parameter \lambda
     SamplingStrategy sampling() const; // sampling strategy adopted from the model.
     const ADT<M,N,K>& searchEngine(); // algorithm used to search element over the mesh
     // available if data are sampled at general locations inside the domain
-    const DMatrix<double>& locations() const { return df_.get<double>(STAT_MODEL_P_BLK); }
+    const DMatrix<double>& locations() const { return df_.get<double>(LOCATIONS_BLK); }
     // available if data are sampled at subdomains (areal observations)
-    const DMatrix<int>& subdomains() const { return df_.get<int>(STAT_MODEL_D_BLK); }
+    const DMatrix<int>& subdomains() const { return df_.get<int>(AREAL_BLK); }
 
     // pointers to FEM related quantites
     const SpMatrix<double>& R0() const { return *(pde_->R0()); }
@@ -88,7 +88,7 @@ namespace models {
     const SpMatrix<double>& Psi(); // pointer to n x N sparse matrix \Psi. This computes \Psi if not available
     
     // utilities
-    bool dataAtNodes() const { return !df_.hasBlock(STAT_MODEL_P_BLK); } // true if locations are a subset of mesh nodes
+    bool dataAtNodes() const { return !df_.hasBlock(LOCATIONS_BLK); } // true if locations are a subset of mesh nodes
     // an efficient implementation of left multiplication by \Psi
     DMatrix<double> lmbPsi(const DMatrix<double>& x) const;
     auto PsiTD() const { // returns the block \Psi^T*D as eigen expression, if D = I returns \Psi^T

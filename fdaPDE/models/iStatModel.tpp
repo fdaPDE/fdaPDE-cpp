@@ -3,11 +3,11 @@ template <typename E>
 void iStatModel<E>::setData(const BlockFrame<double, int>& df) {
   df_ = df;
   // insert an index row (if not yet present)
-  if(!df_.hasBlock(STAT_MODEL_I_BLK)){
+  if(!df_.hasBlock(INDEXES_BLK)){
     std::size_t n = df_.rows();
     DMatrix<int> idx(n,1);
     for(std::size_t i = 0; i < n; ++i) idx(i,0) = i;
-    df_.insert(STAT_MODEL_I_BLK, idx);
+    df_.insert(INDEXES_BLK, idx);
   }
   return;
 }
@@ -15,10 +15,10 @@ void iStatModel<E>::setData(const BlockFrame<double, int>& df) {
 // return the sampling strategy adopted for the model.
 template <typename E>
 SamplingStrategy iStatModel<E>::sampling() const {
-  if  (df_.hasBlock(STAT_MODEL_D_BLK)) // subdomains are given as datum
+  if  (df_.hasBlock(AREAL_BLK)) // subdomains are given as datum
     return   SamplingStrategy::Areal;
   else{ // fallback to a Geostatistical sampling
-    if(df_.hasBlock(STAT_MODEL_P_BLK))
+    if(df_.hasBlock(LOCATIONS_BLK))
       return SamplingStrategy::GeostatisticalAtLocations;
     else // if no information is provided at all, assume data sampled at mesh nodes
       return SamplingStrategy::GeostatisticalAtNodes;
