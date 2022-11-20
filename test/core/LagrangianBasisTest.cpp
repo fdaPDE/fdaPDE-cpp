@@ -8,8 +8,8 @@
 #include "../../fdaPDE/core/utils/CompileTime.h"
 #include "../../fdaPDE/core/FEM/basis/LagrangianBasis.h"
 using fdaPDE::core::FEM::LagrangianBasis;
-using fdaPDE::core::FEM::ReferenceNodes;
-using fdaPDE::core::FEM::point_list;
+#include "../../fdaPDE/core/MESH/ReferenceElement.h"
+using fdaPDE::core::MESH::point_list;
 #include "../../fdaPDE/core/FEM/integration/Integrator.h"
 using fdaPDE::core::FEM::Integrator;
 #include "../../fdaPDE/core/utils/fields/VectorField.h"
@@ -63,7 +63,7 @@ TYPED_TEST(LagrangianBasisTest, DefineOverReferenceElement) {
   for(const MultivariatePolynomial<TestFixture::N, TestFixture::R>& b : basis){
     std::size_t num_ones = 0, num_zeros = 0;
     for(std::size_t i = 0; i < TestFixture::n_basis; ++i){ // there are as many nodes as basis functions
-      SVector<TestFixture::N> p = this->toSVector(ReferenceNodes<TestFixture::N, TestFixture::R>::nodes, i);
+      SVector<TestFixture::N> p = this->toSVector(ReferenceElement<TestFixture::N, TestFixture::R>::nodes, i);
       if(std::abs(b(p) - 1) < DOUBLE_TOLERANCE){
 	num_ones++;
       }else if(b(p) < DOUBLE_TOLERANCE){
