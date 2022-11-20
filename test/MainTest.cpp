@@ -20,6 +20,7 @@
 // FEM test suites
 #include "core/LagrangianBasisTest.cpp"
 #include "core/IntegratorTest.cpp"
+#include "core/BilinearFormsTest.cpp"
 // regression module test suites
 #include "models/SRPDETest.cpp"
 

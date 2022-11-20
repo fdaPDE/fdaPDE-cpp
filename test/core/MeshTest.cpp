@@ -17,6 +17,7 @@ struct MeshTest : public ::testing::Test {
   MeshLoader<E> meshLoader{}; // use default mesh
   static constexpr unsigned int M = MeshLoader<E>::M;
   static constexpr unsigned int N = MeshLoader<E>::N;
+  static constexpr unsigned int R = MeshLoader<E>::R;
 };
 TYPED_TEST_SUITE(MeshTest, MESH_TYPE_LIST);
 
@@ -36,7 +37,7 @@ TYPED_TEST(MeshTest, CanLoadFromCSVFiles) {
 TYPED_TEST(MeshTest, PointCoordinatesAreLoadedCorrectly) {
   for(std::size_t i = 0; i < this->meshLoader.mesh.elements(); ++i){
     // request element with ID i
-    std::shared_ptr<Element<TestFixture::M, TestFixture::N>> e = this->meshLoader.mesh.element(i);
+    std::shared_ptr<Element<TestFixture::M, TestFixture::N, TestFixture::R>> e = this->meshLoader.mesh.element(i);
     
     // check coordinates stored in element built from Mesh object match raw informations
     int j = 0;
@@ -56,7 +57,7 @@ TYPED_TEST(MeshTest, PointCoordinatesAreLoadedCorrectly) {
 TYPED_TEST(MeshTest, NeighboringStructureIsLoadedCorrectly) {
   for(std::size_t i = 0; i < this->meshLoader.mesh.elements(); ++i){
     // request element with ID i
-    std::shared_ptr<Element<TestFixture::M, TestFixture::N>> e = this->meshLoader.mesh.element(i);
+    std::shared_ptr<Element<TestFixture::M, TestFixture::N, TestFixture::R>> e = this->meshLoader.mesh.element(i);
     // request data from raw file
     std::vector<int> neigh = this->meshLoader.neighCSV.row(i);
     // take neighboring information packed inside the element built from Mesh
@@ -79,15 +80,19 @@ TYPED_TEST(MeshTest, MeshTopologyChecks) {
   // cycle over all mesh elements
   for(std::size_t i = 0; i < this->meshLoader.mesh.elements(); ++i){
     // request the element with ID i
-    std::shared_ptr<Element<TestFixture::M, TestFixture::N>> e = this->meshLoader.mesh.element(i);
+    std::shared_ptr<Element<TestFixture::M, TestFixture::N, TestFixture::R>> e = this->meshLoader.mesh.element(i);
     // check that neighboing elements have always M points in common, so that if we consider two elements as
     // neighbors they are geometrically so (there is a face in common, which is what we expect from neighboring relation)
     for(int neighID : e->neighbors()){
       if(!e->isOnBoundary()){
 	// request neighboring element from mesh
-	std::shared_ptr<Element<TestFixture::M, TestFixture::N>> n = this->meshLoader.mesh.element(neighID);
+	std::shared_ptr<Element<TestFixture::M, TestFixture::N, TestFixture::R>> n = this->meshLoader.mesh.element(neighID);
 	// take nodes of both elements
-	std::array<SVector<TestFixture::N>, TestFixture::M + 1> eList = e->coords(), nList = n->coords();
+	std::array<SVector<TestFixture::N>, TestFixture::M + 1> eList, nList;
+	for(std::size_t j = 0; j < TestFixture::M+1; ++j){
+	  eList[j] = e->coords()[j];
+	  nList[j] = n->coords()[j];
+	}
 	// check that the points in common between the two are exactly M
         std:size_t matches = 0;
 	for(SVector<TestFixture::N> p : eList){
