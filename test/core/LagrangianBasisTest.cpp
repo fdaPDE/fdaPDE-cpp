@@ -166,8 +166,8 @@ TEST(LagrangianBasisTest, QuadraticPhysicalElement){
       SVector<2>( 2.9830765115928704,  2.0369927574935405),
       SVector<2>( 4.8982811692194259, -0.9427541948981384),
       SVector<2>(-0.7788888242446018,  3.7556798236502558),
-      SVector<2>(-9.8048064747509027, -4.3298093852388320),
       SVector<2>(-6.6727629051483941, -6.9218931297696376),
+      SVector<2>(-9.8048064747509027, -4.3298093852388320),
       SVector<2>( 9.3751005233316018,  6.4017841287628112)
     });
   // use the barycentric matrix of e and the basis defined over the reference element
