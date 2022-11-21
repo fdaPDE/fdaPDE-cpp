@@ -82,9 +82,9 @@ namespace models {
     const DMatrix<int>& subdomains() const { return df_.get<int>(AREAL_BLK); }
 
     // pointers to FEM related quantites
-    const SpMatrix<double>& R0() const { return *(pde_->R0()); }
-    const SpMatrix<double>& R1() const { return *(pde_->R1()); }
-    const DMatrix<double>&  u()  const { return *(pde_->force()); }
+    const SpMatrix<double>& R0() const { return pde_->R0(); }
+    const SpMatrix<double>& R1() const { return pde_->R1(); }
+    const DMatrix<double>&  u()  const { return pde_->force(); }
     const SpMatrix<double>& Psi(); // pointer to n x N sparse matrix \Psi. This computes \Psi if not available
     
     // utilities

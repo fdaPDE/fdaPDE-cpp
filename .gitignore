@@ -92,6 +92,7 @@
 !test/data/models/SRPDE/2D_test3/*
 !test/data/models/SRPDE/2D_test4/
 !test/data/models/SRPDE/2D_test4/*
+!test/data/PDEs/*.mtx
 *.txt
 *.json
 *.cmake

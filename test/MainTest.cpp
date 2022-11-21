@@ -21,6 +21,7 @@
 #include "core/LagrangianBasisTest.cpp"
 #include "core/IntegratorTest.cpp"
 #include "core/BilinearFormsTest.cpp"
+#include "core/PDESolutionsTest.cpp"
 // regression module test suites
 #include "models/SRPDETest.cpp"
 
