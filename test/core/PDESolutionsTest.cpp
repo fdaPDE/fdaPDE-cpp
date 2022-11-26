@@ -48,6 +48,7 @@ TEST(PDESolutionsTest, FiniteQuadraticElementsGlobalTest) {
   problem.setDirichletBC(b);
 
   // solve PDE
+  problem.init();
   problem.solve();
 
   // check expected solution
