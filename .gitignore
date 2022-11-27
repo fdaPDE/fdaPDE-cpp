@@ -29,6 +29,8 @@
 !fdaPDE/core/FEM/*
 !fdaPDE/models/
 !fdaPDE/models/*
+!fdaPDE/models/regression/
+!fdaPDE/models/regression/*
 !fdaPDE/calibration/
 !fdaPDE/calibration/*
 !docs/
