@@ -24,6 +24,7 @@
 #include "core/PDESolutionsTest.cpp"
 // regression module test suites
 #include "models/SRPDETest.cpp"
+#include "core/SplineTest.cpp"
 
 int main(int argc, char **argv){
   // start testing
