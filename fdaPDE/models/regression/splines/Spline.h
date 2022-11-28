@@ -27,14 +27,14 @@ namespace models{
   public:
     Spline(const DVector<double>& knots, std::size_t i) : knots_(knots), i_(i) {
       // avoid possible divisions by zero
-      a_ = knots_[i_+R] - knots_[i_] != 0 ? 1/(knots_[i_+R] - knots_[i_]) : 0;
-      b_ = knots_[i_+R+1] - knots_[i_+1] != 0 ? 1/(knots_[i_+R+1] - knots_[i_+1]) : 0;
+      a_ = knots_[i_+R] - knots_[i_] != 0 ? 1.0/(knots_[i_+R] - knots_[i_]) : 0.0;
+      b_ = knots_[i_+R+1] - knots_[i_+1] != 0 ? 1.0/(knots_[i_+R+1] - knots_[i_+1]) : 0.0;
     };
     
     // evaluates the spline at a given point
     inline double operator()(SVector<1> x) const {
       // exploit local support of splines
-      if(x[0] < knots_[i_] || knots_[i_+R+1] < x[0]) return 0;
+      if(x[0] < knots_[i_] || knots_[i_+R+1] < x[0]) return 0.0;
       // develop Cox-DeBoor recursion
       return a_*(x[0] - knots_[i_])*Spline<R-1>(knots_, i_)(x) + b_*(knots_[i_+R+1] - x[0])*Spline<R-1>(knots_, i_+1)(x);
     }
