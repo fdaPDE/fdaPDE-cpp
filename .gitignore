@@ -59,6 +59,8 @@
 !test/data/models/*
 !test/data/models/SRPDE/
 !test/data/models/SRPDE/*
+!test/data/misc/
+!test/data/misc/*
 !test/core/
 !test/core/*
 !test/core/MESH/
