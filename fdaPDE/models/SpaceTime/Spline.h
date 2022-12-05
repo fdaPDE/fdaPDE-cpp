@@ -2,7 +2,7 @@
 #define __SPLINE_H__
 
 #include <cstddef>
-#include "../../../core/utils/fields/ScalarField.h"
+#include "../../core/utils/fields/ScalarField.h"
 using fdaPDE::core::ScalarExpr;
 using fdaPDE::core::ZeroField;
 
@@ -59,9 +59,9 @@ namespace models{
   public:
     // constructor
     Spline(const DVector<double>& knots, std::size_t i) : knots_(knots), i_(i) {};
-    // implements the indicator function over the closed interval [u_i, u_{i+1}]
+    // implements the indicator function over the open interval [u_i, u_{i+1})
     inline double operator()(SVector<1> x) const {
-      return (knots_[i_] <= x[0] && x[0] <= knots_[i_+1]) ? 1 : 0;
+      return (knots_[i_] <= x[0] && x[0] < knots_[i_+1]) ? 1 : 0;
     }
     // return derivative as a zero callable field
     auto derive() const { return ZeroField<1>(); }

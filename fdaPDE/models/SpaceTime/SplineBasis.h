@@ -1,7 +1,7 @@
 #ifndef __SPLINE_BASIS_H__
 #define __SPLINE_BASIS_H__
 
-#include "../../../core/utils/Symbols.h"
+#include "../../core/utils/Symbols.h"
 #include "Spline.h"
 using fdaPDE::models::Spline;
 
@@ -43,6 +43,9 @@ namespace models {
     // allow range-for over basis elements
     const_iterator begin() const { return basis_.cbegin(); }
     const_iterator end() const { return basis_.cend(); }
+
+    // expose compile time informations
+    static constexpr std::size_t order = R;
   };
 
 }}

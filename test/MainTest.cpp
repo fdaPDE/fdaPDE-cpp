@@ -17,6 +17,7 @@
 // NLA test suites
 #include "core/FSPAITest.cpp"
 #include "core/VectorSpaceTest.cpp"
+#include "core/KroneckerProductTest.cpp"
 // FEM test suites
 #include "core/LagrangianBasisTest.cpp"
 #include "core/IntegratorTest.cpp"
