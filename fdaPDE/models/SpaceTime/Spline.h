@@ -25,11 +25,21 @@ namespace models{
     // store constants a_ = 1/(u_i+j - u_i), b_ = 1/(u_i+j+1 - u_i+1)
     double a_, b_;
   public:
+    // a spline built with this constructor has not an associated knot. This is for initialize a spline object which
+    // will later be assigned to a valid spline (see copy assignment below)
+    Spline(const DVector<double>& knots) : knots_(knots) {};
+    // full constructor (used by SplineBasis)
     Spline(const DVector<double>& knots, std::size_t i) : knots_(knots), i_(i) {
       // avoid possible divisions by zero
       a_ = knots_[i_+R] - knots_[i_] != 0 ? 1.0/(knots_[i_+R] - knots_[i_]) : 0.0;
       b_ = knots_[i_+R+1] - knots_[i_+1] != 0 ? 1.0/(knots_[i_+R+1] - knots_[i_+1]) : 0.0;
     };
+
+    // copy assignment
+    Spline<R>& operator=(const Spline<R>& rhs) {
+      i_ = rhs.i_; a_ = rhs.a_; b_ = rhs.b_;
+      return *this;
+    }
     
     // evaluates the spline at a given point
     inline double operator()(SVector<1> x) const {

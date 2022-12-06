@@ -43,9 +43,12 @@ namespace models {
     // allow range-for over basis elements
     const_iterator begin() const { return basis_.cbegin(); }
     const_iterator end() const { return basis_.cend(); }
-
+    // return the whole set of knots
+    const DVector<double>& knots() const { return knots_; }
+    
     // expose compile time informations
     static constexpr std::size_t order = R;
+    typedef Spline<R> element_type;
   };
 
 }}
