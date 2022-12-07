@@ -17,13 +17,8 @@ using fdaPDE::models::SRPDE;
 using fdaPDE::testing::MeshLoader;
 #include "../utils/Constants.h"
 using fdaPDE::testing::DOUBLE_TOLERANCE;
-
-// compute infinity norms between two sparse matrices
-double spLInfinityNorm(const SpMatrix<double>& op1, const SpMatrix<double>& op2){
-  // convert sparse operands into dense ones
-  DMatrix<double> d1 = op1, d2 = op2;
-  return (d1 - d2).lpNorm<Eigen::Infinity>();
-}
+#include "../utils/Utils.h"
+using fdaPDE::testing::spLInfinityNorm;
 
 /* test 1
    domain:       unit square [1,1] x [1,1]

@@ -4,7 +4,7 @@
 #include <unsupported/Eigen/SparseExtra>
 
 #include "../../fdaPDE/core/utils/Symbols.h"
-#include "../../fdaPDE/models/SpaceTime/SplineBasis.h"
+#include "../../fdaPDE/models/space_time/SplineBasis.h"
 using fdaPDE::models::SplineBasis;
 #include "../utils/Constants.h"
 using fdaPDE::testing::DOUBLE_TOLERANCE;

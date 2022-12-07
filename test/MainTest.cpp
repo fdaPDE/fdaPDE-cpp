@@ -6,10 +6,6 @@
 // fields test suites
 #include "core/ScalarFieldTest.cpp"
 #include "core/VectorFieldTest.cpp"
-// OPT test suites
-// #include "GridOptimizerTest.cpp"
-// #include "IterativeOptimizerTest.cpp"
-// #include "OptimizerExtensionTest.cpp"
 // MESH test suites
 #include "core/MeshTest.cpp"
 #include "core/ElementTest.cpp"
@@ -25,7 +21,9 @@
 #include "core/PDESolutionsTest.cpp"
 // regression module test suites
 #include "models/SRPDETest.cpp"
+// space-time module test suites
 #include "core/SplineTest.cpp"
+#include "models/SpaceTimeTest.cpp"
 
 int main(int argc, char **argv){
   // start testing
