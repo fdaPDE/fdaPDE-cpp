@@ -4,7 +4,8 @@
 #include "../../core/utils/Symbols.h"
 #include "../../core/utils/Traits.h"
 #include "../iStatModel.h"
-using fdaPDE::models::iStatModel;
+using fdaPDE::models::select_regularization_type;
+#include "../iSpaceOnlyModel.h"
 #include "../../core/utils/DataStructures/BlockFrame.h"
 #include <memory>
 
@@ -15,13 +16,13 @@ namespace models {
 #define WEIGHTS_BLK "W" // weights for heteroscedastic observations
   
   // base class for any regression model
-  template <typename PDE>
-  struct iRegressionModel : public iStatModel<PDE> {
-    IMPORT_STAT_MODEL_SYMBOLS(PDE);
-
+  template <typename Model>
+  struct iRegressionModel : public select_regularization_type<Model>::type {
+    IMPORT_STAT_MODEL_SYMBOLS(Model);
+    typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
+    
     iRegressionModel() = default;
-    iRegressionModel(const PDE& pde, double lambda)
-      : iStatModel<PDE>(pde, lambda) {};
+    iRegressionModel(const PDE& pde) : select_regularization_type<Model>::type(pde) {};
     // copy constructor, copy only pde object (as a consequence also the problem domain)
     iRegressionModel(const iRegressionModel& rhs) { pde_ = rhs.pde_; }
 
@@ -47,13 +48,13 @@ namespace models {
     virtual double predict(const DVector<double>& covs, const std::size_t loc) const = 0;    
   };
 
-#define IMPORT_REGRESSION_MODEL_SYMBOLS(E)	   \
-  IMPORT_STAT_MODEL_SYMBOLS(E)			   \
-  using iRegressionModel<E>::q;			   \
-  using iRegressionModel<E>::X;			   \
-  using iRegressionModel<E>::W;			   \
-  using iRegressionModel<E>::hasCovariates;	   \
-  using iRegressionModel<E>::hasWeights;	   \
+#define IMPORT_SPACE_ONLY_REGRESSION_MODEL_SYMBOLS(Model)	\
+  IMPORT_SPACE_ONLY_MODEL_SYMBOLS(Model)			\
+  using iRegressionModel<Model>::q;				\
+  using iRegressionModel<Model>::X;				\
+  using iRegressionModel<Model>::W;				\
+  using iRegressionModel<Model>::hasCovariates;			\
+  using iRegressionModel<Model>::hasWeights;			\
 
   // trait to detect if a type implements iRegressionModel
   template <typename T>

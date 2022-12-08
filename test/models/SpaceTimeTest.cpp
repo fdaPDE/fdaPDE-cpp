@@ -7,6 +7,7 @@
 #include "../fdaPDE/core/utils/Symbols.h"
 #include "../fdaPDE/models/space_time/SpaceTime.h"
 using fdaPDE::models::Phi;
+#include "../fdaPDE/models/space_time/TimeAssembler.h"
 using fdaPDE::models::TimeAssembler;
 using fdaPDE::models::TimeMass;
 using fdaPDE::models::TimePenalty;

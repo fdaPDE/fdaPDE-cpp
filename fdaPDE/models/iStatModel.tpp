@@ -24,6 +24,19 @@ SamplingStrategy iStatModel<E>::sampling() const {
       return SamplingStrategy::GeostatisticalAtNodes;
   }
 }
+// return the number of spatial locations where data are observed
+template <typename E>
+std::size_t iStatModel<E>::locs() const {
+  switch(sampling()){
+  case Areal: // return number of subdomains
+    return df_.get<double>(AREAL_BLK).rows();
+  case GeostatisticalAtLocations: // return number of locations given as datum
+    return df_.get<double>(LOCATIONS_BLK).rows();
+  default: // fallback to sampling at mesh nodes
+    return pde_->domain().nodes();
+  }
+}
+
 // return a reference to the search engine over the problem's domain. Initializes it if still not available
 template <typename E>
 const ADT<iStatModel<E>::M, iStatModel<E>::N, iStatModel<E>::K>&
@@ -37,12 +50,12 @@ iStatModel<E>::searchEngine() {
 
 // compute n x N \Psi matrix depending on sampling strategy
 template <typename E>
-const SpMatrix<double>& iStatModel<E>::Psi() {
+const SpMatrix<double>& iStatModel<E>::__Psi() {
   if(!isAlloc(Psi_)){ // compute \Psi if not already available
     // preallocate space for Psi matrix
     // detect number of observations and number of nodes from model object
     std::size_t n = obs();
-    std::size_t N = loc();    
+    std::size_t N = nbasis();    
     Psi_.resize(n, N);    
     // triplet list to fill sparse matrix
     std::vector<fdaPDE::Triplet<double>> tripletList;
@@ -117,29 +130,6 @@ const SpMatrix<double>& iStatModel<E>::Psi() {
   }
   return Psi_;
 }
-
-template <typename E>
-DMatrix<double> iStatModel<E>::lmbPsi(const DMatrix<double>& x) const {
-  // compute dimensions of resulting matrix
-  std::size_t n = Psi_.rows();
-  std::size_t m = x.cols();
-  // preallocate space for n x m result matrix
-  DMatrix<double> result(n,m);
-  // if data are sampled at mesh nodes (or a subset of them) then \Psi is a permutation matrix
-  if(dataAtNodes()){
-    // just permute input matrix columns
-    for(std::size_t k = 0; k < Psi_.outerSize(); ++k){
-      for (SpMatrix<double>::InnerIterator it(Psi_, k); it; ++it){
-	result.row(it.row()) = x.row(it.col());
-      }
-    }
-  }else{
-    // in the general case no optimization can be put in place
-    result = Psi_*x;
-  }
-  return result;
-}
-
 
 // set boundary conditions on problem's linear system
 template <typename E>

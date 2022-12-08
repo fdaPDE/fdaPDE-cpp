@@ -39,7 +39,8 @@ TEST(SRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes) {
   // define statistical model
   // use optimal lambda to avoid possible numerical issues
   double lambda = 5.623413 * std::pow(0.1, 5); 
-  SRPDE model(problem, lambda);
+  SRPDE model(problem);
+  model.setLambda(lambda);
 
   // load data from .csv files
   CSVReader<double> reader{};
@@ -102,8 +103,9 @@ TEST(SRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations) {
   // define statistical model
   // use optimal lambda to avoid possible numerical issues
   double lambda = 0.2201047;
-  SRPDE model(problem, lambda);
-
+  SRPDE model(problem);
+  model.setLambda(lambda);
+  
   // load data from .csv files
   CSVReader<double> reader{};
   CSVFile<double> yFile; // observation file
@@ -183,8 +185,9 @@ TEST(SRPDE, Test3_CostantCoefficientsPDE_NonParametric_GeostatisticalAtNodes) {
 
   // define statistical model
   double lambda = 10;
-  SRPDE model(problem, lambda);
-
+  SRPDE model(problem);
+  model.setLambda(lambda);
+  
   // load data from .csv files
   CSVReader<double> reader{};
   CSVFile<double> yFile; // observation file
@@ -266,7 +269,8 @@ TEST(SRPDE, Test4_NonCostantCoefficientsPDE_NonParametric_Areal) {
   
   // define statistical model
   double lambda = std::pow(0.1, 3);
-  SRPDE model(problem, lambda);
+  SRPDE model(problem);
+  model.setLambda(lambda);
   
   // load data from .csv files
   CSVFile<double> yFile; // observation file

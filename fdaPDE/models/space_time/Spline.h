@@ -48,9 +48,9 @@ namespace models{
     template <unsigned int K>
     auto derive() const {
       if constexpr(K == 1) // end of recursion
-	return R*a_*Spline<R-1,M>(knots_, i_) - R*b_*Spline<R-1,M>(knots_, i_+1);
+	return (R*a_)*Spline<R-1,M>(knots_, i_) - (R*b_)*Spline<R-1,M>(knots_, i_+1);
       else // exploit Cox-DeBoor recursive formula
-	return R*a_*Spline<R-1,M>(knots_, i_).template derive<K-1>() - R*b_*Spline<R-1,M>(knots_, i_+1).template derive<K-1>();
+	return (R*a_)*Spline<R-1,M>(knots_, i_).template derive<K-1>() - (R*b_)*Spline<R-1,M>(knots_, i_+1).template derive<K-1>();
     }
   };
 
@@ -68,7 +68,7 @@ namespace models{
     // implements the indicator function over the open interval [u_i, u_{i+1}). Returns 1 if at the end of the knot span.
     inline double operator()(SVector<1> x) const {
       return (knots_[i_] <= x[0] && x[0] < knots_[i_+1]) ||
-	(std::abs(x[0] - knots_[knots_.rows()-1]) < tol_ && i_ == knots_.rows()-M-2) ? 1 : 0;
+	(std::abs(x[0] - knots_[knots_.rows()-1]) < tol_ && i_ == knots_.rows()-M-2) ? 1.0 : 0.0;
     }
     // return derivative as a zero callable field
     auto derive() const { return ZeroField<1>(); }
