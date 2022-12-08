@@ -13,6 +13,8 @@ using fdaPDE::testing::MeshLoader;
 #include "../utils/Constants.h"
 using fdaPDE::testing::DOUBLE_TOLERANCE;
 using fdaPDE::testing::MACHINE_EPSILON;
+#include "../utils/Utils.h"
+using fdaPDE::testing::almost_equal;
 
 #include "../../fdaPDE/core/utils/CompileTime.h"
 #include "../../fdaPDE/core/FEM/integration/Integrator.h"
@@ -83,6 +85,6 @@ TEST(BilinearFormsTest, LaplacianQuadraticElement) {
 
   // check for double equality of all computed integrals
   for(std::size_t i = 0; i < expected.size(); ++i){
-    EXPECT_NEAR(integrals[i], expected[i], DOUBLE_TOLERANCE) << i;
+    EXPECT_TRUE( almost_equal(integrals[i], expected[i]) );
   }
 }

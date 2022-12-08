@@ -14,6 +14,8 @@ using fdaPDE::testing::MeshLoader;
 #include "../utils/Constants.h"
 using fdaPDE::testing::DOUBLE_TOLERANCE;
 using fdaPDE::testing::MACHINE_EPSILON;
+#include "../utils/Utils.h"
+using fdaPDE::testing::almost_equal;
 
 // test fixture
 template <typename E>
@@ -32,7 +34,7 @@ TYPED_TEST(ElementTest, BarycentricCoordinates) {
   SVector<TestFixture::M + 1> q = e->toBarycentricCoords(p); // compute barycentric coordinates of point p
 
   // the barycentric coordinates of a point inside the element sums to 1
-  EXPECT_DOUBLE_EQ(q.sum(), 1);
+  EXPECT_TRUE( almost_equal(q.sum(), 1.0) );
   // the barycentric coordinates of a point inside the element are all positive
   EXPECT_TRUE((q.array() >= 0).all());
 
@@ -75,7 +77,7 @@ TYPED_TEST(ElementTest, MidPoint) {
     double x = b[i];
     for(std::size_t j = i+1; j < TestFixture::M + 1; ++j){
       double y = b[j];
-      EXPECT_NEAR(x, y, DOUBLE_TOLERANCE);
+      EXPECT_TRUE( almost_equal(x, y) );
     }
   }
 }
@@ -104,7 +106,7 @@ TEST(ElementTest, ElementMeasureIsWithinMachineEpsilon){
   MeshLoader<Mesh2D<>> CShaped("c_shaped");
   // consider element with ID 175 and check its measure equals expected one
   double measure = 0.0173913024287495;
-  EXPECT_NEAR(CShaped.mesh.element(175)->measure(), measure, MACHINE_EPSILON);
+  EXPECT_TRUE( almost_equal(CShaped.mesh.element(175)->measure(), measure) );
 }
 
 // test barycentric matrix and its inverse is computed correctly
@@ -122,7 +124,7 @@ TEST(ElementTest, BarycentricMatrixAndItsInverseAreWithinMachineEpsilon){
   // check equality within a tolerance of machine epsilon
   for(std::size_t i = 0; i < 2; ++i)
     for(std::size_t j = 0; j < 2; ++j)
-      ASSERT_NEAR(barycentricMatrix(i,j), M(i,j), MACHINE_EPSILON);
+      EXPECT_TRUE( almost_equal(barycentricMatrix(i,j), M(i,j)) );
 
   // set expected inverse of the barycentric matrix for element with ID 175
   Eigen::Matrix<double, 2,2> invBarycentricMatrix;
@@ -133,5 +135,5 @@ TEST(ElementTest, BarycentricMatrixAndItsInverseAreWithinMachineEpsilon){
   // check equality within a tolerance of machine epsilon
   for(std::size_t i = 0; i < 2; ++i)
     for(std::size_t j = 0; j < 2; ++j)
-      ASSERT_NEAR(invBarycentricMatrix(i,j), invM(i,j), MACHINE_EPSILON);
+      EXPECT_TRUE( almost_equal(invBarycentricMatrix(i,j), invM(i,j)) );
 }

@@ -1,3 +1,4 @@
+#include <Eigen/src/Core/util/Constants.h>
 #include <complex>
 #include <cstddef>
 #include <gtest/gtest.h> // testing framework
@@ -11,7 +12,7 @@ using fdaPDE::models::TimeMass;
 using fdaPDE::models::TimePenalty;
 
 #include "../utils/Utils.h"
-using fdaPDE::testing::spLInfinityNorm;
+using fdaPDE::testing::almost_equal;
 #include "../utils/Constants.h"
 using fdaPDE::testing::DOUBLE_TOLERANCE;
 
@@ -34,7 +35,7 @@ TEST(SpaceTime, CubicSplineEvaluationMatrix) {
   Eigen::loadMarket(expectedPhi, "data/misc/Phi.mtx");
 
   // check for equality under DOUBLE_TOLERANCE
-  EXPECT_TRUE( spLInfinityNorm(expectedPhi, computedPhi) < DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(expectedPhi, computedPhi) );
 }
 
 TEST(SpaceTime, CubicSplineTimeMassMatrix) {
@@ -55,7 +56,7 @@ TEST(SpaceTime, CubicSplineTimeMassMatrix) {
   Eigen::loadMarket(expectedP0, "data/misc/P0.mtx");
 
   // check for equality under DOUBLE_TOLERANCE
-  EXPECT_TRUE( spLInfinityNorm(expectedP0, computedP0) < DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(expectedP0, computedP0) );
 }
 
 TEST(SpaceTime, CubicSplineTimePenaltyMatrix) {
@@ -76,5 +77,5 @@ TEST(SpaceTime, CubicSplineTimePenaltyMatrix) {
   Eigen::loadMarket(expectedPt, "data/misc/Pt.mtx");
 
   // check for equality under DOUBLE_TOLERANCE
-  EXPECT_TRUE( spLInfinityNorm(expectedPt, computedPt) < DOUBLE_TOLERANCE );
+  EXPECT_TRUE( almost_equal(expectedPt, computedPt) );
 }

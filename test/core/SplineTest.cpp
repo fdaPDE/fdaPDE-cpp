@@ -11,6 +11,8 @@ using fdaPDE::testing::DOUBLE_TOLERANCE;
 #include "../utils/MeshLoader.h"
 using fdaPDE::testing::MeshLoader;
 using fdaPDE::testing::MESH_TYPE_LIST;
+#include "../utils/Utils.h"
+using fdaPDE::testing::almost_equal;
 
 // test definition of spline basis over a closed interval [0,1]
 TEST(SplineBasisTest, Definition) {
@@ -36,7 +38,7 @@ TEST(SplineBasisTest, Definition) {
     }
     // check results within double tolerance
     for(std::size_t j = 0; j < result.size(); ++j){
-      EXPECT_NEAR(result[j], expected.coeff(j,i), DOUBLE_TOLERANCE);
+      EXPECT_TRUE(almost_equal(result[j], expected.coeff(j,i)));
     }    
   }  
 }
@@ -65,7 +67,7 @@ TEST(SplineBasisTest, SecondDerivative) {
     }
     // check results within double tolerance
     for(std::size_t j = 0; j < result.size(); ++j){
-      EXPECT_NEAR(result[j], expected.coeff(j,i), DOUBLE_TOLERANCE);
+      EXPECT_TRUE(almost_equal(result[j], expected.coeff(j,i)));
     }    
   }  
 }

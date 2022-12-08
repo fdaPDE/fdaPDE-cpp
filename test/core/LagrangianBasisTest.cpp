@@ -64,7 +64,7 @@ TYPED_TEST(LagrangianBasisTest, DefineOverReferenceElement) {
     std::size_t num_ones = 0, num_zeros = 0;
     for(std::size_t i = 0; i < TestFixture::n_basis; ++i){ // there are as many nodes as basis functions
       SVector<TestFixture::N> p = this->toSVector(ReferenceElement<TestFixture::N, TestFixture::R>::nodes, i);
-      if(std::abs(b(p) - 1) < DOUBLE_TOLERANCE){
+      if(std::abs(b(p) - 1.0) < DOUBLE_TOLERANCE){
 	num_ones++;
       }else if(b(p) < DOUBLE_TOLERANCE){
 	num_zeros++;
@@ -94,7 +94,7 @@ TEST(LagrangianBasisTest, LinearReferenceElement) {
     // extract gradient of basis function
     VectorField<2> grad = basis[i].derive();
     for(std::size_t j = 0; j < 2; ++j)
-      EXPECT_NEAR(grad(p)[j], gradients[i][j], DOUBLE_TOLERANCE);
+      EXPECT_TRUE( almost_equal(grad(p)[j], gradients[i][j]) );
   }
 }
 
@@ -122,7 +122,7 @@ TEST(LagrangianBasisTest, QuadraticReferenceElement) {
     // extract gradient of basis function
     VectorField<2> grad = basis[i].derive();
     for(std::size_t j = 0; j < 2; ++j)
-      EXPECT_NEAR(grad(p)[j], gradients(i,j), DOUBLE_TOLERANCE);
+      EXPECT_TRUE( almost_equal(grad(p)[j], gradients(i,j)) );
   }
 }
 
@@ -147,7 +147,7 @@ TEST(LagrangianBasisTest, LinearPhysicalElement){
   for(std::size_t i = 0; i < refBasis.size(); ++i){
     VectorField<2, 2> grad = invJ * refBasis[i].derive();
     for(std::size_t j = 0; j < 2; ++j)
-      EXPECT_NEAR(grad(p)[j], gradients[i][j], DOUBLE_TOLERANCE);
+      EXPECT_TRUE( almost_equal(grad(p)[j], gradients[i][j]) );
   }
 }
 
@@ -177,6 +177,6 @@ TEST(LagrangianBasisTest, QuadraticPhysicalElement){
   for(std::size_t i = 0; i < refBasis.size(); ++i){
     VectorField<2, 2> grad = invJ * refBasis[i].derive();
     for(std::size_t j = 0; j < 2; ++j)
-      EXPECT_NEAR(grad(p)[j], gradients[i][j], DOUBLE_TOLERANCE);
+      EXPECT_TRUE( almost_equal(grad(p)[j], gradients[i][j]) );
   }
 }

@@ -8,7 +8,7 @@ namespace fdaPDE{
 namespace testing{
 
   // the treshold under which two doubles are considered equal
-  const double DOUBLE_TOLERANCE = std::pow(0.1, 12);
+  const double DOUBLE_TOLERANCE = std::pow(0.1, 13);
   const double MACHINE_EPSILON  = std::numeric_limits<double>::epsilon();     // approx 2.22*10^-16
 
   // hardcoded value of pi

@@ -9,8 +9,8 @@ using fdaPDE::core::MESH::Element;
 
 #include "../utils/MeshLoader.h"
 using fdaPDE::testing::MeshLoader;
-#include "../utils/Constants.h"
-using fdaPDE::testing::DOUBLE_TOLERANCE;
+#include "../utils/Utils.h"
+using fdaPDE::testing::almost_equal;
 
 #include "../../fdaPDE/core/FEM/basis/LagrangianBasis.h"
 using fdaPDE::core::FEM::LagrangianBasis;
@@ -55,6 +55,5 @@ TEST(PDESolutionsTest, FiniteQuadraticElementsGlobalTest) {
   SpMatrix<double> expectedSolution;
   Eigen::loadMarket(expectedSolution,  "data/PDEs/FEMorder2_reference_solution.mtx"); 
   DMatrix<double> computedSolution = problem.solution();
-  EXPECT_TRUE( (DMatrix<double>(expectedSolution) - computedSolution).lpNorm<Eigen::Infinity>()
-	       < DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution), computedSolution) );
 }

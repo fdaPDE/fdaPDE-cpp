@@ -2,9 +2,8 @@
 #include <gtest/gtest-typed-test.h>
 #include <gtest/gtest.h> // testing framework
 
-#include "../utils/Constants.h"
-#include "core/utils/Symbols.h"
-using fdaPDE::testing::DOUBLE_TOLERANCE;
+#include "../utils/Utils.h"
+using fdaPDE::testing::almost_equal;
 #include "../../fdaPDE/core/NLA/KroneckerProduct.h"
 using fdaPDE::core::NLA::Kronecker;
 
@@ -28,7 +27,7 @@ TEST(KroneckerProductTest, DenseSquareOperands) {
   // check equality
   for(std::size_t i = 0; i < 4; ++i){
     for(std::size_t j = 0; j < 4; ++j){
-      EXPECT_NEAR(kron1(i,j), expected1(i,j), DOUBLE_TOLERANCE);
+      EXPECT_TRUE( almost_equal(kron1(i,j), expected1(i,j)) );
     }
   }
 }
@@ -55,7 +54,7 @@ TEST(KroneckerProductTest, DenseRectangularOperands){
   // check equality
   for(std::size_t i = 0; i < 4; ++i){
     for(std::size_t j = 0; j < 6; ++j){
-      EXPECT_NEAR(kron1(i,j), expected1(i,j), DOUBLE_TOLERANCE);
+      EXPECT_TRUE( almost_equal(kron1(i,j), expected1(i,j)) );
     }
   }
 }
@@ -91,7 +90,7 @@ TEST(KroneckerProductTest, SparseSquareOperands){
   // check equality
   for(int k = 0; k < kron1.outerSize(); ++k) {
     for(SpMatrix<double>::InnerIterator it(kron1,k); it; ++it){
-      EXPECT_NEAR(expected1(it.row(),it.col()), it.value(), DOUBLE_TOLERANCE);
+      EXPECT_TRUE( almost_equal(expected1(it.row(),it.col()), it.value()) );
     }
   }
 }
@@ -130,7 +129,7 @@ TEST(KroneckerProductTest, SparseRectangularOperands){
   // check equality
   for(int k = 0; k < kron1.outerSize(); ++k) {
     for(SpMatrix<double>::InnerIterator it(kron1,k); it; ++it){
-      EXPECT_NEAR(expected1(it.row(),it.col()), it.value(), DOUBLE_TOLERANCE);
+      EXPECT_TRUE( almost_equal(expected1(it.row(),it.col()), it.value()) );
     }
   }
 }

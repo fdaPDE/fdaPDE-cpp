@@ -9,9 +9,8 @@ using fdaPDE::core::MESH::Element;
 #include "../utils/MeshLoader.h"
 using fdaPDE::testing::MESH_TYPE_LIST;
 using fdaPDE::testing::MeshLoader;
-#include "../utils/Constants.h"
-using fdaPDE::testing::DOUBLE_TOLERANCE;
-using fdaPDE::testing::MACHINE_EPSILON;
+#include "../utils/Utils.h"
+using fdaPDE::testing::almost_equal;
 
 #include "../../fdaPDE/core/utils/CompileTime.h"
 #include "../../fdaPDE/core/FEM/integration/Integrator.h"
@@ -36,7 +35,7 @@ TYPED_TEST(IntegratorTest, ElementMeasure){
   Integrator<TestFixture::M, 1> integrator; // define integrator
   // the integral of the constant field 1 over the mesh element equals its measure
   std::function<double(SVector<TestFixture::N>)> f = [](SVector<TestFixture::N> x) -> double { return 1; };
-  EXPECT_NEAR(e->measure(), integrator.integrate(*e, f), DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(e->measure(), integrator.integrate(*e, f)) );
 }
 
 // test if linear fields can be integrated over mesh elements. In particular a closed formula for
@@ -56,7 +55,7 @@ TYPED_TEST(IntegratorTest, LinearFieldsIntegratedCorrectly){
     h += f(p);
   double measure = e->measure()*h/(TestFixture::M+1);
   // test for equality
-  EXPECT_NEAR(measure, integrator.integrate(*e, f), DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(measure, integrator.integrate(*e, f)) );
 }
 
 // test if is possible to integrate a field over the entire mesh
@@ -66,7 +65,7 @@ TEST(IntegratorTest, IntegrateFieldOverMesh) {
   Integrator<2,1> integrator{};
   // define field to integrate
   std::function<double(SVector<2>)> f = [](SVector<2> x) -> double { return 1; };
-  EXPECT_NEAR(1, integrator.integrate(CShaped.mesh, f), DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(1.0, integrator.integrate(CShaped.mesh, f)) );
 }
 
 // test correctness of integrator tables
@@ -113,7 +112,7 @@ TYPED_TEST(IntegratorTablesTest, TableDefinedCorrectly) {
   // check all computed integrals are within double tolerance
   for(std::size_t i = 0; i < results.size(); ++i){
     for(std::size_t j = i+1; j < results.size(); ++j){
-      EXPECT_NEAR(results[i], results[j], DOUBLE_TOLERANCE);
+      EXPECT_TRUE( almost_equal(results[i], results[j]) );
     }
   }
 }

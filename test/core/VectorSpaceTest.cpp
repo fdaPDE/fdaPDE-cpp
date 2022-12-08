@@ -4,7 +4,7 @@
 #include "../../fdaPDE/core/NLA/VectorSpace.h"
 #include "../../fdaPDE/core/utils/Symbols.h"
 using fdaPDE::core::NLA::VectorSpace;
-#include "../utils/Constants.h"
+#include "../utils/Utils.h"
 using fdaPDE::testing::DOUBLE_TOLERANCE;
 
 TEST(VectorSpaceTest, projection1D) {

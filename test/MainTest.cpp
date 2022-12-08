@@ -10,16 +10,16 @@
 #include "core/MeshTest.cpp"
 #include "core/ElementTest.cpp"
 #include "core/SearchEngineTest.cpp"
-// NLA test suites
+// // NLA test suites
 #include "core/FSPAITest.cpp"
 #include "core/VectorSpaceTest.cpp"
 #include "core/KroneckerProductTest.cpp"
-// FEM test suites
+// // FEM test suites
 #include "core/LagrangianBasisTest.cpp"
 #include "core/IntegratorTest.cpp"
 #include "core/BilinearFormsTest.cpp"
 #include "core/PDESolutionsTest.cpp"
-// regression module test suites
+// // regression module test suites
 #include "models/SRPDETest.cpp"
 // space-time module test suites
 #include "core/SplineTest.cpp"

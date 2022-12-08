@@ -10,6 +10,8 @@ using fdaPDE::core::MESH::Element;
 #include "../utils/MeshLoader.h"
 using fdaPDE::testing::MeshLoader;
 using fdaPDE::testing::MESH_TYPE_LIST;
+#include "../utils/Utils.h"
+using fdaPDE::testing::almost_equal;
 
 // test suite for testing both non-manifold meshes (2D/3D) and manifold mesh (2.5D/1.5D)
 template <typename E>
@@ -47,7 +49,7 @@ TYPED_TEST(MeshTest, PointCoordinatesAreLoadedCorrectly) {
       SVector<TestFixture::N> ePoint = e->coords()[j];
       
       for(std::size_t idx = 0; idx < TestFixture::N; ++idx)
-	EXPECT_DOUBLE_EQ(coords[idx], ePoint[idx]);
+	EXPECT_TRUE( almost_equal(coords[idx], ePoint[idx]) );
       j++;
     }
   }

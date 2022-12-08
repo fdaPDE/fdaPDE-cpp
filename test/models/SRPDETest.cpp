@@ -18,7 +18,7 @@ using fdaPDE::testing::MeshLoader;
 #include "../utils/Constants.h"
 using fdaPDE::testing::DOUBLE_TOLERANCE;
 #include "../utils/Utils.h"
-using fdaPDE::testing::spLInfinityNorm;
+using fdaPDE::testing::almost_equal;
 
 /* test 1
    domain:       unit square [1,1] x [1,1]
@@ -61,27 +61,26 @@ TEST(SRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes) {
   SpMatrix<double> expectedPsi;
   Eigen::loadMarket(expectedPsi, "data/models/SRPDE/2D_test1/Psi.mtx");
   SpMatrix<double> computedPsi = model.Psi();
-  EXPECT_TRUE( spLInfinityNorm(expectedPsi, computedPsi) < DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(expectedPsi, computedPsi) );
 
   // R0 matrix (discretization of identity operator)
   SpMatrix<double> expectedR0;
   Eigen::loadMarket(expectedR0,  "data/models/SRPDE/2D_test1/R0.mtx");
   SpMatrix<double> computedR0 = model.R0();
-  EXPECT_TRUE( spLInfinityNorm(expectedR0, computedR0)   < DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(expectedR0, computedR0) );
   
   // R1 matrix (discretization of differential operator)
   SpMatrix<double> expectedR1;
   Eigen::loadMarket(expectedR1,  "data/models/SRPDE/2D_test1/R1.mtx");
   SpMatrix<double> computedR1 = model.R1();
-  EXPECT_TRUE( spLInfinityNorm(expectedR1, computedR1)   < DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(expectedR1, computedR1) );
     
   // estimate of spatial field \hat f
   SpMatrix<double> expectedSolution;
   Eigen::loadMarket(expectedSolution,   "data/models/SRPDE/2D_test1/sol.mtx");
   DMatrix<double> computedF = model.f();
   std::size_t N = computedF.rows();
-  EXPECT_TRUE( (DMatrix<double>(expectedSolution).topRows(N) - computedF).lpNorm<Eigen::Infinity>()
-	       < DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );
 }
 
 /* test 2
@@ -133,34 +132,32 @@ TEST(SRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations) {
   SpMatrix<double> expectedPsi;
   Eigen::loadMarket(expectedPsi, "data/models/SRPDE/2D_test2/Psi.mtx");
   SpMatrix<double> computedPsi = model.Psi();
-  EXPECT_TRUE( spLInfinityNorm(expectedPsi, computedPsi) < DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(expectedPsi, computedPsi) );
 
   // R0 matrix (discretization of identity operator)
   SpMatrix<double> expectedR0;
   Eigen::loadMarket(expectedR0,  "data/models/SRPDE/2D_test2/R0.mtx");
   SpMatrix<double> computedR0 = model.R0();
-  EXPECT_TRUE( spLInfinityNorm(expectedR0, computedR0)   < DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(expectedR0, computedR0) );
 
   // R1 matrix (discretization of differential operator)
   SpMatrix<double> expectedR1;
   Eigen::loadMarket(expectedR1,  "data/models/SRPDE/2D_test2/R1.mtx");
   SpMatrix<double> computedR1 = model.R1();
-  EXPECT_TRUE( spLInfinityNorm(expectedR1, computedR1)   < DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(expectedR1, computedR1) );
 
   // estimate of spatial field \hat f
   SpMatrix<double> expectedSolution;
   Eigen::loadMarket(expectedSolution, "data/models/SRPDE/2D_test2/sol.mtx");
   DMatrix<double> computedF = model.f();
   std::size_t N = computedF.rows();
-  EXPECT_TRUE( (DMatrix<double>(expectedSolution).topRows(N) - computedF).lpNorm<Eigen::Infinity>()
-	       < DOUBLE_TOLERANCE) << (DMatrix<double>(expectedSolution).topRows(N) - computedF).lpNorm<Eigen::Infinity>();
+  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );
 
   // estimate of coefficient vector \hat \beta
   SpMatrix<double> expectedBeta;
   Eigen::loadMarket(expectedBeta, "data/models/SRPDE/2D_test2/beta.mtx");
   DVector<double> computedBeta = model.beta();
-  EXPECT_TRUE( (DMatrix<double>(expectedBeta) - computedBeta).lpNorm<Eigen::Infinity>()
-	       < DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedBeta), computedBeta) );
 }
 
 /* test 3
@@ -208,27 +205,26 @@ TEST(SRPDE, Test3_CostantCoefficientsPDE_NonParametric_GeostatisticalAtNodes) {
   SpMatrix<double> expectedPsi;
   Eigen::loadMarket(expectedPsi, "data/models/SRPDE/2D_test3/Psi.mtx");
   SpMatrix<double> computedPsi = model.Psi();
-  EXPECT_TRUE( spLInfinityNorm(expectedPsi, computedPsi) < DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(expectedPsi, computedPsi) );
 
   // R0 matrix (discretization of identity operator)
   SpMatrix<double> expectedR0;
   Eigen::loadMarket(expectedR0,  "data/models/SRPDE/2D_test3/R0.mtx");
   SpMatrix<double> computedR0 = model.R0();
-  EXPECT_TRUE( spLInfinityNorm(expectedR0, computedR0)   < DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(expectedR0, computedR0) );
   
   // R1 matrix (discretization of differential operator)
   SpMatrix<double> expectedR1;
   Eigen::loadMarket(expectedR1,  "data/models/SRPDE/2D_test3/R1.mtx");
   SpMatrix<double> computedR1 = model.R1();
-  EXPECT_TRUE( spLInfinityNorm(expectedR1, computedR1)   < DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(expectedR1, computedR1) );
     
   // estimate of spatial field \hat f
   SpMatrix<double> expectedSolution;
   Eigen::loadMarket(expectedSolution, "data/models/SRPDE/2D_test3/sol.mtx");
   DMatrix<double> computedF = model.f();
   std::size_t N = computedF.rows();
-  EXPECT_TRUE( (DMatrix<double>(expectedSolution).topRows(N) - computedF).lpNorm<Eigen::Infinity>()
-	       < DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );
 }
 
 /* test 4
@@ -297,32 +293,31 @@ TEST(SRPDE, Test4_NonCostantCoefficientsPDE_NonParametric_Areal) {
   SpMatrix<double> expectedPsi;
   Eigen::loadMarket(expectedPsi, "data/models/SRPDE/2D_test4/Psi.mtx");
   SpMatrix<double> computedPsi = model.Psi();
-  EXPECT_TRUE( spLInfinityNorm(expectedPsi, computedPsi) < DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(expectedPsi, computedPsi) );
   
   // R0 matrix (discretization of identity operator)
   SpMatrix<double> expectedR0;
   Eigen::loadMarket(expectedR0,  "data/models/SRPDE/2D_test4/R0.mtx");
   SpMatrix<double> computedR0 = model.R0();
-  EXPECT_TRUE( spLInfinityNorm(expectedR0, computedR0)   < DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(expectedR0, computedR0) );
   
   // R1 matrix (discretization of differential operator)
   SpMatrix<double> expectedR1;
   Eigen::loadMarket(expectedR1,  "data/models/SRPDE/2D_test4/R1.mtx");
   SpMatrix<double> computedR1 = model.R1();
-  EXPECT_TRUE( spLInfinityNorm(expectedR1, computedR1)   < DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(expectedR1, computedR1) );
   
   // u vector  (discretization of forcing term)
   SpMatrix<double> expectedU;
   Eigen::loadMarket(expectedU,   "data/models/SRPDE/2D_test4/u.mtx");
   DMatrix<double> computedU = model.u();
-  EXPECT_TRUE( (DMatrix<double>(expectedU) - computedU).lpNorm<Eigen::Infinity>() < DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedU), computedU) );
  
   // estimate of spatial field \hat f
   SpMatrix<double> expectedSolution;
   Eigen::loadMarket(expectedSolution, "data/models/SRPDE/2D_test4/sol.mtx");
   DMatrix<double> computedF = model.f();
   std::size_t N = computedF.rows();
-  EXPECT_TRUE( (DMatrix<double>(expectedSolution).topRows(N) - computedF).lpNorm<Eigen::Infinity>()
-	       < DOUBLE_TOLERANCE);
+  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );
 }
 
