@@ -99,18 +99,18 @@ namespace models {
 #include "iStatModel.tpp"
   
   // import all symbols from iStatModel interface in derived classes
-#define IMPORT_STAT_MODEL_SYMBOLS(Model)		 \
-  /* direct accessible fields */			 \
-  using iStatModel<Model>::pde_;			 \
-  using iStatModel<Model>::df_;				 \
-  /* those info should be accessed by methods */	 \
-  using iStatModel<Model>::locs;			 \
-  using iStatModel<Model>::obs;				 \
-  using iStatModel<Model>::y;				 \
-  using iStatModel<Model>::idx;				 \
-  using iStatModel<Model>::isAlloc;			 \
-  using iStatModel<Model>::sampling;			 \
-  using iStatModel<Model>::dataAtNodes;			 \
+#define IMPORT_STAT_MODEL_SYMBOLS( ... )			 \
+  /* direct accessible fields */				 \
+  using iStatModel<__VA_ARGS__>::pde_;				 \
+  using iStatModel<__VA_ARGS__>::df_;				 \
+  /* those info should be accessed by methods */		 \
+  using iStatModel<__VA_ARGS__>::locs;				 \
+  using iStatModel<__VA_ARGS__>::obs;				 \
+  using iStatModel<__VA_ARGS__>::y;				 \
+  using iStatModel<__VA_ARGS__>::idx;				 \
+  using iStatModel<__VA_ARGS__>::isAlloc;			 \
+  using iStatModel<__VA_ARGS__>::sampling;			 \
+  using iStatModel<__VA_ARGS__>::dataAtNodes;			 \
   
   // trait to detect if a type implements iStatModel
   template <typename T>
@@ -120,14 +120,19 @@ namespace models {
 
   // forward declarations
   template <typename Model> class iSpaceOnlyModel;
-  template <typename Model> class iSpaceTimeModel;
+  template <typename Model> class iSpaceTimeSeparableModel;
+  template <typename Model> class iSpaceTimeParabolicModel;
   // trait for the selection of the type of regularization on the base of the property of a model
   template <typename Model>
   struct select_regularization_type {
     using type = typename std::conditional<
       std::is_same<typename model_traits<Model>::RegularizationType, SpaceOnly>::value,
       iSpaceOnlyModel<Model>,
-      iSpaceTimeModel<Model>>::type;
+      typename std::conditional<
+        std::is_same<typename model_traits<Model>::RegularizationType, SpaceTimeSeparable>::value,
+        iSpaceTimeSeparableModel<Model>,
+        iSpaceTimeParabolicModel<Model>>::type
+      >::type;
   };
   
   

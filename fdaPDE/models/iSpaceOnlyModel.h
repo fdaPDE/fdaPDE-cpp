@@ -72,15 +72,15 @@ DMatrix<double> iSpaceOnlyModel<E>::lmbPsi(const DMatrix<double>& x) const {
 }
   
   // import all symbols from iStatModel interface in derived classes
-#define IMPORT_SPACE_ONLY_MODEL_SYMBOLS(Model)			 \
-  /* first import general stat model symbols */			 \
-  IMPORT_STAT_MODEL_SYMBOLS(Model)				 \
-  using iSpaceOnlyModel<Model>::lambda;				 \
-  using iSpaceOnlyModel<Model>::Psi;				 \
-  using iSpaceOnlyModel<Model>::R0;				 \
-  using iSpaceOnlyModel<Model>::R1;				 \
-  using iSpaceOnlyModel<Model>::u;				 \
-  using iSpaceOnlyModel<Model>::PsiTD;				 \
+#define IMPORT_SPACE_ONLY_MODEL_SYMBOLS( ... )				\
+  /* first import general stat model symbols */				\
+  IMPORT_STAT_MODEL_SYMBOLS(__VA_ARGS__)				\
+  using iSpaceOnlyModel<__VA_ARGS__>::lambda;				\
+  using iSpaceOnlyModel<__VA_ARGS__>::Psi;				\
+  using iSpaceOnlyModel<__VA_ARGS__>::R0;				\
+  using iSpaceOnlyModel<__VA_ARGS__>::R1;				\
+  using iSpaceOnlyModel<__VA_ARGS__>::u;				\
+  using iSpaceOnlyModel<__VA_ARGS__>::PsiTD;				\
   
 }}
 

@@ -1,6 +1,12 @@
 #ifndef __TIME_ASSEMBLER_H__
 #define __TIME_ASSEMBLER_H__
 
+#include "SplineBasis.h"
+using fdaPDE::models::SplineBasis;
+#include "../../core/FEM/integration/IntegratorTables.h"
+using fdaPDE::core::FEM::IntegratorTable;
+using fdaPDE::core::FEM::GaussLegendre;
+
 namespace fdaPDE {
 namespace models {
 

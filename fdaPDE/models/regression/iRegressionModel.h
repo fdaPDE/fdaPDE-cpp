@@ -22,7 +22,19 @@ namespace models {
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
     
     iRegressionModel() = default;
+    // space-only constructor
+    template <typename U = Model, // fake type to enable substitution
+	      typename std::enable_if<
+		std::is_same<typename model_traits<U>::RegularizationType, SpaceOnly>::value,
+		int>::type = 0> 
     iRegressionModel(const PDE& pde) : select_regularization_type<Model>::type(pde) {};
+    // space-time constructor
+    template <typename U = Model, // fake type to enable substitution
+	      typename std::enable_if<!
+		std::is_same<typename model_traits<U>::RegularizationType, SpaceOnly>::value,
+		int>::type = 0> 
+    iRegressionModel(const PDE& pde, const DVector<double>& time) : select_regularization_type<Model>::type(pde, time) {};
+    
     // copy constructor, copy only pde object (as a consequence also the problem domain)
     iRegressionModel(const iRegressionModel& rhs) { pde_ = rhs.pde_; }
 
@@ -48,14 +60,21 @@ namespace models {
     virtual double predict(const DVector<double>& covs, const std::size_t loc) const = 0;    
   };
 
-#define IMPORT_SPACE_ONLY_REGRESSION_MODEL_SYMBOLS(Model)	\
-  IMPORT_SPACE_ONLY_MODEL_SYMBOLS(Model)			\
-  using iRegressionModel<Model>::q;				\
-  using iRegressionModel<Model>::X;				\
-  using iRegressionModel<Model>::W;				\
-  using iRegressionModel<Model>::hasCovariates;			\
-  using iRegressionModel<Model>::hasWeights;			\
+#define IMPORT_REGRESSION_MODEL_SYMBOLS( ... )				\
+  using iRegressionModel<__VA_ARGS__>::q;				\
+  using iRegressionModel<__VA_ARGS__>::X;				\
+  using iRegressionModel<__VA_ARGS__>::W;				\
+  using iRegressionModel<__VA_ARGS__>::hasCovariates;			\
+  using iRegressionModel<__VA_ARGS__>::hasWeights;			\
+  
+#define IMPORT_SPACE_ONLY_REGRESSION_MODEL_SYMBOLS( ... )	\
+  IMPORT_SPACE_ONLY_MODEL_SYMBOLS(__VA_ARGS__)			\
+  IMPORT_REGRESSION_MODEL_SYMBOLS(__VA_ARGS__)			\
 
+#define IMPORT_SPACE_TIME_REGRESSION_MODEL_SYMBOLS( ... )	\
+  IMPORT_SPACE_TIME_MODEL_SYMBOLS(__VA_ARGS__)			\
+  IMPORT_REGRESSION_MODEL_SYMBOLS(__VA_ARGS__)			\
+  
   // trait to detect if a type implements iRegressionModel
   template <typename T>
   struct is_regression_model {
