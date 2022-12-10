@@ -19,13 +19,14 @@ namespace models {
   class iSpaceOnlyModel : public iStatModel<Model> {
   protected:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
+    typedef iStatModel<Model> Base;
+    using Base::pde_; // regularizing PDE
+    using Base::Psi_; // matrix of space basis evaluation 
+    using Base::PsiTD_; // \Psi^T*D
+    using Base::sampling; // sampling strategy
+
     double lambda_; // smoothing parameter
-  public:
-    // import symbols from general stat model base
-    IMPORT_STAT_MODEL_SYMBOLS(Model);
-    using iStatModel<Model>::Psi_;
-    using iStatModel<Model>::PsiTD_;
-    
+  public:  
     // constructor
     iSpaceOnlyModel() = default;
     iSpaceOnlyModel(const PDE& pde)
@@ -57,7 +58,7 @@ DMatrix<double> iSpaceOnlyModel<E>::lmbPsi(const DMatrix<double>& x) const {
   // preallocate space for n x m result matrix
   DMatrix<double> result(n,m);
   // if data are sampled at mesh nodes (or a subset of them) then \Psi is a permutation matrix
-  if(dataAtNodes()){
+  if(Base::dataAtNodes()){
     // just permute input matrix columns
     for(std::size_t k = 0; k < Psi_.outerSize(); ++k){
       for (SpMatrix<double>::InnerIterator it(Psi_, k); it; ++it){
@@ -70,17 +71,6 @@ DMatrix<double> iSpaceOnlyModel<E>::lmbPsi(const DMatrix<double>& x) const {
   }
   return result;
 }
-  
-  // import all symbols from iStatModel interface in derived classes
-#define IMPORT_SPACE_ONLY_MODEL_SYMBOLS( ... )				\
-  /* first import general stat model symbols */				\
-  IMPORT_STAT_MODEL_SYMBOLS(__VA_ARGS__)				\
-  using iSpaceOnlyModel<__VA_ARGS__>::lambda;				\
-  using iSpaceOnlyModel<__VA_ARGS__>::Psi;				\
-  using iSpaceOnlyModel<__VA_ARGS__>::R0;				\
-  using iSpaceOnlyModel<__VA_ARGS__>::R1;				\
-  using iSpaceOnlyModel<__VA_ARGS__>::u;				\
-  using iSpaceOnlyModel<__VA_ARGS__>::PsiTD;				\
   
 }}
 

@@ -59,6 +59,8 @@
 !test/data/models/*
 !test/data/models/SRPDE/
 !test/data/models/SRPDE/*
+!test/data/models/STRPDE/
+!test/data/models/STRPDE/*
 !test/data/misc/
 !test/data/misc/*
 !test/core/
@@ -84,7 +86,7 @@
 !test/data/mesh/unit_square/*.csv
 !test/data/mesh/unit_interval/*.csv
 !test/data/mesh/unit_interval_o2/*.csv
-!test/data/mesh/unit_square_o2/*.csv
+!test/data/mesh/unit_square_coarse/*.csv
 !test/data/*.mtx
 !test/data/models/SRPDE/
 !test/data/models/SRPDE/*
@@ -96,6 +98,10 @@
 !test/data/models/SRPDE/2D_test3/*
 !test/data/models/SRPDE/2D_test4/
 !test/data/models/SRPDE/2D_test4/*
+!test/data/models/STRPDE/
+!test/data/models/STRPDE/*
+!test/data/models/STRPDE/2D_test1/
+!test/data/models/STRPDE/2D_test1/*
 !test/data/PDEs/*.mtx
 *.txt
 *.json

@@ -29,7 +29,7 @@ template <typename E>
 std::size_t iStatModel<E>::locs() const {
   switch(sampling()){
   case Areal: // return number of subdomains
-    return df_.get<double>(AREAL_BLK).rows();
+    return df_.get<int>(AREAL_BLK).rows();
   case GeostatisticalAtLocations: // return number of locations given as datum
     return df_.get<double>(LOCATIONS_BLK).rows();
   default: // fallback to sampling at mesh nodes
@@ -54,7 +54,7 @@ const SpMatrix<double>& iStatModel<E>::__Psi() {
   if(!isAlloc(Psi_)){ // compute \Psi if not already available
     // preallocate space for Psi matrix
     // detect number of observations and number of nodes from model object
-    std::size_t n = obs();
+    std::size_t n = locs();
     std::size_t N = nbasis();    
     Psi_.resize(n, N);    
     // triplet list to fill sparse matrix

@@ -18,8 +18,9 @@ namespace models {
   // base class for any regression model
   template <typename Model>
   struct iRegressionModel : public select_regularization_type<Model>::type {
-    IMPORT_STAT_MODEL_SYMBOLS(Model);
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
+    typedef typename select_regularization_type<Model>::type Base;
+    IMPORT_STAT_MODEL_SYMBOLS;
     
     iRegressionModel() = default;
     // space-only constructor
@@ -60,20 +61,15 @@ namespace models {
     virtual double predict(const DVector<double>& covs, const std::size_t loc) const = 0;    
   };
 
-#define IMPORT_REGRESSION_MODEL_SYMBOLS( ... )				\
-  using iRegressionModel<__VA_ARGS__>::q;				\
-  using iRegressionModel<__VA_ARGS__>::X;				\
-  using iRegressionModel<__VA_ARGS__>::W;				\
-  using iRegressionModel<__VA_ARGS__>::hasCovariates;			\
-  using iRegressionModel<__VA_ARGS__>::hasWeights;			\
-  
-#define IMPORT_SPACE_ONLY_REGRESSION_MODEL_SYMBOLS( ... )	\
-  IMPORT_SPACE_ONLY_MODEL_SYMBOLS(__VA_ARGS__)			\
-  IMPORT_REGRESSION_MODEL_SYMBOLS(__VA_ARGS__)			\
-
-#define IMPORT_SPACE_TIME_REGRESSION_MODEL_SYMBOLS( ... )	\
-  IMPORT_SPACE_TIME_MODEL_SYMBOLS(__VA_ARGS__)			\
-  IMPORT_REGRESSION_MODEL_SYMBOLS(__VA_ARGS__)			\
+  // this macro is intended to import all **common** symbols a model can expect from a Regression base
+  // symbols specific for the regularization type used need to be imported via explicit using declaration
+#define IMPORT_REGRESSION_SYMBOLS		\
+  IMPORT_STAT_MODEL_SYMBOLS;			\
+  using Base::q;				\
+  using Base::X;				\
+  using Base::W;				\
+  using Base::hasCovariates;			\
+  using Base::hasWeights;			\
   
   // trait to detect if a type implements iRegressionModel
   template <typename T>

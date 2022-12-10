@@ -32,15 +32,18 @@ namespace models {
   protected:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
     typedef typename model_traits<Model>::RegularizationType TimeRegularization; // type of time regularization
+    typedef iStatModel<Model> Base;
+
     double lambdaS_; // smoothing parameter in space
     double lambdaT_; // smoothing parameter in time
     DVector<double> time_; // time domain [0, T]
   public:
     // import symbols from general stat model base
-    IMPORT_STAT_MODEL_SYMBOLS(Model);
+    using Base::pde_;
     // constructor
     iSpaceTimeModel() = default;
-    iSpaceTimeModel(const PDE& pde, const DVector<double>& time) : iStatModel<Model>(pde), time_(time) {};
+    iSpaceTimeModel(const PDE& pde, const DVector<double>& time)
+      : iStatModel<Model>(pde), time_(time) {};
     // copy constructor, copy only pde object (as a consequence also the space domain) and time domain
     iSpaceTimeModel(const iSpaceTimeModel& rhs) { pde_ = rhs.pde_; time_ = rhs.time_;}
 
@@ -49,24 +52,12 @@ namespace models {
     inline double lambdaS() const { return lambdaS_; }
     void setLambdaT(double lambdaT) { lambdaT_ = lambdaT; }    
     inline double lambdaT() const { return lambdaT_; }
-
-    // an efficient implementation of left multiplication by \Psi
-    // DMatrix<double> lmbPsi(const DMatrix<double>& x) const;
-    // auto PsiTD() const { // returns the block \Psi^T*D as eigen expression, if D = I returns \Psi^T
-    //   return sampling() == SamplingStrategy::Areal ? PsiTD_ : Psi_.transpose(); }; 
     
     // destructor
     virtual ~iSpaceTimeModel() = default;  
   };
 
-  // import all symbols from iStatModel interface in derived classes
-#define IMPORT_SPACE_TIME_MODEL_SYMBOLS( ... )			 \
-  /* first import general stat model symbols */			 \
-  IMPORT_STAT_MODEL_SYMBOLS(__VA_ARGS__)			 \
-  using iSpaceTimeModel<__VA_ARGS__>::lambdaS;			 \
-  using iSpaceTimeModel<__VA_ARGS__>::lambdaT;			 \
-  using iSpaceTimeModel<__VA_ARGS__>::time_;			 \
-  
+  // base class for separable regularization
   template <typename Model>
   class iSpaceTimeSeparableModel : public iSpaceTimeModel<Model> {
   private:
@@ -77,23 +68,22 @@ namespace models {
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
     typedef typename model_traits<Model>::RegularizationType TimeRegularization; // type of time regularization
     typedef typename model_traits<Model>::TimeBasis TimeBasis; // basis used for discretization in time
-    IMPORT_SPACE_TIME_MODEL_SYMBOLS(Model);
-    using iStatModel<Model>::Psi_;
+    typedef iSpaceTimeModel<Model> Base;
+    using Base::Psi_; // matrix of spatial basis evaluations
+    using Base::pde_; // regularizing term in space
+    
     // constructor
     iSpaceTimeSeparableModel(const PDE& pde, const DVector<double>& time) : iSpaceTimeModel<Model>(pde, time) {
 	// compute space-time matrices for separable case
-	Phi_ = PhiAssembler<TimeBasis>().compute(time_);
-	TimeAssembler<TimeBasis> assembler(time_);
+	Phi_ = PhiAssembler<TimeBasis>().compute(time);
+	TimeAssembler<TimeBasis> assembler(time);
 	Rt_ = assembler.assemble(TimeMass<TimeBasis>());
 	Pt_ = assembler.assemble(TimePenalty<TimeBasis>());
     }
 
-    SparseKroneckerProduct<SpMatrix<double>, SpMatrix<double>> R0()  const { // \tilde R0 = Rt \kron R0
-      return Kronecker(Rt_, pde_->R0()); }
-    SparseKroneckerProduct<SpMatrix<double>, SpMatrix<double>> R1()  const { // \tilde R1 = Rt \kron R1
-      return Kronecker(Rt_, pde_->R1()); }
-    SparseKroneckerProduct<SpMatrix<double>, SpMatrix<double>> Psi() const { // \tilde \Psi = \Psi \kron \Phi 
-      return Kronecker(Psi_, Phi_); }
+    SparseKroneckerProduct<> R0()  const { return Kronecker(Rt_, pde_->R0()); }
+    SparseKroneckerProduct<> R1()  const { return Kronecker(Rt_, pde_->R1()); }
+    SparseKroneckerProduct<> Psi() { return Kronecker(Phi_, this->__Psi()); }
     // getters to raw matrices relative to separable time penalization
     const SpMatrix<double>& Rt()  const { return Rt_; }
     const SpMatrix<double>& Pt()  const { return Pt_; }
@@ -103,17 +93,6 @@ namespace models {
     // destructor
     virtual ~iSpaceTimeSeparableModel() = default;  
   };
-
-#define IMPORT_SPACE_TIME_SEPARABLE_MODEL_SYMBOLS( ... )	 \
-  /* first import general stat model symbols */			 \
-  IMPORT_SPACE_TIME_MODEL_SYMBOLS(__VA_ARGS__)			 \
-  using iSpaceTimeSeparableModel<__VA_ARGS__>::R0;		 \
-  using iSpaceTimeSeparableModel<__VA_ARGS__>::R1;		 \
-  using iSpaceTimeSeparableModel<__VA_ARGS__>::Psi;		 \
-  using iSpaceTimeSeparableModel<__VA_ARGS__>::Rt;		 \
-  using iSpaceTimeSeparableModel<__VA_ARGS__>::Pt;		 \
-  using iSpaceTimeSeparableModel<__VA_ARGS__>::Phi;		 \
-  using iSpaceTimeSeparableModel<__VA_ARGS__>::u;		 \
   
 }}
 

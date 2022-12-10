@@ -98,19 +98,24 @@ namespace models {
 
 #include "iStatModel.tpp"
   
-  // import all symbols from iStatModel interface in derived classes
-#define IMPORT_STAT_MODEL_SYMBOLS( ... )			 \
-  /* direct accessible fields */				 \
-  using iStatModel<__VA_ARGS__>::pde_;				 \
-  using iStatModel<__VA_ARGS__>::df_;				 \
-  /* those info should be accessed by methods */		 \
-  using iStatModel<__VA_ARGS__>::locs;				 \
-  using iStatModel<__VA_ARGS__>::obs;				 \
-  using iStatModel<__VA_ARGS__>::y;				 \
-  using iStatModel<__VA_ARGS__>::idx;				 \
-  using iStatModel<__VA_ARGS__>::isAlloc;			 \
-  using iStatModel<__VA_ARGS__>::sampling;			 \
-  using iStatModel<__VA_ARGS__>::dataAtNodes;			 \
+  // this macro is intended to import all **common** symbols a model can expect from its parent Base class
+  // a type Base must be in the scope of the macro
+#define IMPORT_STAT_MODEL_SYMBOLS	\
+  /* direct accessible fields */	\
+  using Base::pde_;			\
+  using Base::df_;			\
+  using Base::locs;			\
+  using Base::obs;			\
+  using Base::y;			\
+  using Base::Psi;			\
+  using Base::R0;			\
+  using Base::R1;			\
+  using Base::u;			\
+  /* utilities */			\
+  using Base::idx;			\
+  using Base::isAlloc;			\
+  using Base::sampling;			\
+  using Base::dataAtNodes;		\
   
   // trait to detect if a type implements iStatModel
   template <typename T>

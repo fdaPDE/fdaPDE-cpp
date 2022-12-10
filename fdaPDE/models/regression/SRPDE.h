@@ -27,6 +27,8 @@ namespace models{
     // compile time checks
     static_assert(std::is_base_of<PDEBase, PDE>::value);
   private:
+    typedef iRegressionModel<SRPDE<PDE>> Base;
+
     // diagonal matrix of weights (implements possible heteroscedasticity)
     DiagMatrix<double> W_;
     // system matrix of non-parametric problem (2N x 2N matrix)
@@ -52,7 +54,9 @@ namespace models{
     // perform proper initialization of model
     void init();
   public:
-    IMPORT_SPACE_ONLY_REGRESSION_MODEL_SYMBOLS(SRPDE<PDE>);
+    IMPORT_REGRESSION_SYMBOLS;
+    using Base::PsiTD;
+    using Base::lambda;
     // constructor
     SRPDE() = default;
     SRPDE(const PDE& pde) : iRegressionModel<SRPDE<PDE>>(pde) {};

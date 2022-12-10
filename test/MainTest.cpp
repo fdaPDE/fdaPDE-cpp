@@ -19,11 +19,12 @@
 #include "core/IntegratorTest.cpp"
 #include "core/BilinearFormsTest.cpp"
 #include "core/PDESolutionsTest.cpp"
-// // regression module test suites
+// regression module test suites
 #include "models/SRPDETest.cpp"
 // space-time module test suites
 #include "core/SplineTest.cpp"
 #include "models/SpaceTimeTest.cpp"
+#include "models/STRPDETest.cpp"
 
 int main(int argc, char **argv){
   // start testing
