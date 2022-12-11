@@ -5,8 +5,8 @@
 #include <unsupported/Eigen/SparseExtra>
 
 #include "../fdaPDE/core/utils/Symbols.h"
-#include "../fdaPDE/models/space_time/SpaceTime.h"
-using fdaPDE::models::Phi;
+#include "../fdaPDE/models/space_time/SplineBasis.h"
+using fdaPDE::models::SplineBasis;
 #include "../fdaPDE/models/space_time/TimeAssembler.h"
 using fdaPDE::models::TimeAssembler;
 using fdaPDE::models::TimeMass;
@@ -29,7 +29,8 @@ TEST(SpaceTime, CubicSplineEvaluationMatrix) {
   }
 
   // compute \Phi matrix: [\Phi]_{ij} = \phi_i(t_j) using a cubic spline basis
-  SpMatrix<double> computedPhi = Phi<SplineBasis<3>>(time);
+  SplineBasis<3> basis(time);
+  SpMatrix<double> computedPhi = basis.eval(time);
 
   // load expected data from file
   SpMatrix<double> expectedPhi;

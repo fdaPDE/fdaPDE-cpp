@@ -3,11 +3,9 @@
 
 #include <memory>
 #include <type_traits>
-#include <unsupported/Eigen/src/SparseExtra/MarketIO.h>
 // CORE imports
 #include "../../core/utils/Symbols.h"
 #include "../../core/FEM/PDE.h"
-#include "../space_time/SpaceTime.h"
 #include "../space_time/SplineBasis.h"
 #include "../iStatModel.h"
 using fdaPDE::core::FEM::PDEBase;
@@ -22,8 +20,6 @@ using fdaPDE::calibration::iGCV;
 #include "iRegressionModel.h"
 using fdaPDE::models::iRegressionModel;
 #include "../iSpaceTimeModel.h"
-#include "../space_time/SpaceTime.h"
-using fdaPDE::models::PhiAssembler;
 #include "../space_time/TimeAssembler.h"
 using fdaPDE::models::TimeAssembler;
 
@@ -77,6 +73,7 @@ namespace models{
     using Base::Pt; // time penalization matrix
     using Base::Rt; // time mass matrix
     using Base::time_;
+    using Base::PsiTD;
     
     // constructor
     STRPDE() = default;
@@ -133,24 +130,17 @@ namespace models{
     // assemble system matrix for the nonparameteric part of the model
     SparseKroneckerProduct<> P = Kronecker(Pt(), pde_->R0());
     SparseBlockMatrix<double,2,2>
-      A(-Psi().transpose()*Psi()-lambdaT()*P, lambdaS()*R1().transpose(),
-	lambdaS()*R1(),                       lambdaS()*R0()            );
+      A(-PsiTD()*Psi()-lambdaT()*P, lambdaS()*R1().transpose(),
+	lambdaS()*R1(),             lambdaS()*R0()            );
     // cache system matrix for reuse
     A_ = A.derived();
     b_.resize(A_.rows());
     DVector<double> sol; // room for problem' solution
-
-    // prepare input data
-    DVector<double> stacked_y(obs()*time_.rows());
-    DVector<double> u_bestiale = DVector<double>::Zero(A_.rows()/2);
-    for(std::size_t i = 0; i < time_.rows(); ++i){
-      stacked_y.segment(i*obs(), obs()) = y().col(i);
-    }
-
+    
     if(!Base::hasCovariates()){ // nonparametric case
       // rhs of STR-PDE linear system
-      b_ << -Psi().transpose()*stacked_y,
-	    lambdaS()*u_bestiale;
+      b_ << -PsiTD()*y(),
+	    lambdaS()*u();
     
       // define system solver. Use a sparse solver
       Eigen::SparseLU<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver{};

@@ -17,7 +17,7 @@ namespace models {
   public:
     using const_iterator = typename std::vector<Spline<R>>::const_iterator;
     // constructor
-    SplineBasis(const DVector<double>& knots) {
+    SplineBasis(const DVector<double>& knots) : knots_(knots) {
       //reserve space
       std::size_t n = knots.size();
       knots_.resize(n+2*R);
@@ -45,6 +45,31 @@ namespace models {
     const_iterator end() const { return basis_.cend(); }
     // return the whole set of knots
     const DVector<double>& knots() const { return knots_; }
+
+    // evaluate the basis over a given set of points. This computes \Phi = [\Phi]_{ij} = \phi_i(t_j)
+    SpMatrix<double> eval(const DVector<double>& points) {
+      // define Phi matrix dimensions
+      int m = points.rows();
+      int M = basis_.size();
+      // resize result matrix
+      SpMatrix<double> result;
+      result.resize(m, M);
+    
+      // triplet list to fill sparse result matrix
+      std::vector<fdaPDE::Triplet<double>> tripletList;
+      tripletList.reserve(m*M);
+
+      for(int i = 0; i < M; ++i){
+	// exploit local support of splines
+	for(int j = ((int)(i-R) > 0 ? (int)(i-R) : 0); j <= std::min(m-1, i+1); ++j){
+	  tripletList.emplace_back(j, i, basis_[i](SVector<1>(points[j])));
+	}
+      }
+      // finalize construction
+      result.setFromTriplets(tripletList.begin(), tripletList.end());
+      result.makeCompressed();    
+      return result;
+    }
     
     // expose compile time informations
     static constexpr std::size_t order = R;

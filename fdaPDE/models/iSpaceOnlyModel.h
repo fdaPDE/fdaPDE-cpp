@@ -50,27 +50,27 @@ namespace models {
     virtual ~iSpaceOnlyModel() = default;  
   };
 
-template <typename E>
-DMatrix<double> iSpaceOnlyModel<E>::lmbPsi(const DMatrix<double>& x) const {
-  // compute dimensions of resulting matrix
-  std::size_t n = Psi_.rows();
-  std::size_t m = x.cols();
-  // preallocate space for n x m result matrix
-  DMatrix<double> result(n,m);
+  template <typename E>
+  DMatrix<double> iSpaceOnlyModel<E>::lmbPsi(const DMatrix<double>& x) const {
+    // compute dimensions of resulting matrix
+    std::size_t n = Psi_.rows();
+    std::size_t m = x.cols();
+    // preallocate space for n x m result matrix
+    DMatrix<double> result(n,m);
   // if data are sampled at mesh nodes (or a subset of them) then \Psi is a permutation matrix
-  if(Base::dataAtNodes()){
-    // just permute input matrix columns
-    for(std::size_t k = 0; k < Psi_.outerSize(); ++k){
-      for (SpMatrix<double>::InnerIterator it(Psi_, k); it; ++it){
-	result.row(it.row()) = x.row(it.col());
+    if(Base::dataAtNodes()){
+      // just permute input matrix columns
+      for(std::size_t k = 0; k < Psi_.outerSize(); ++k){
+	for (SpMatrix<double>::InnerIterator it(Psi_, k); it; ++it){
+	  result.row(it.row()) = x.row(it.col());
+	}
       }
+    }else{
+      // in the general case no optimization can be put in place
+      result = Psi_*x;
     }
-  }else{
-    // in the general case no optimization can be put in place
-    result = Psi_*x;
+    return result;
   }
-  return result;
-}
   
 }}
 
