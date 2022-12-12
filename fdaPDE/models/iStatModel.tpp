@@ -29,9 +29,9 @@ template <typename E>
 std::size_t iStatModel<E>::locs() const {
   switch(sampling()){
   case Areal: // return number of subdomains
-    return df_.get<int>(AREAL_BLK).rows();
+    return subdomains().rows();
   case GeostatisticalAtLocations: // return number of locations given as datum
-    return df_.get<double>(LOCATIONS_BLK).rows();
+    return locations().rows();
   default: // fallback to sampling at mesh nodes
     return pde_->domain().nodes();
   }

@@ -73,6 +73,7 @@ namespace models {
     void setDirichletBC(SpMatrix<double>& A, DMatrix<double>& b); // set dirichlet boundary conditions. boundary data are passed by pde_ object
   
     // getters
+    const Model& get() const { return static_cast<const Model&>(*this); } // get underlying model object
     const BlockFrame<double, int>& data() const { return df_; }
     std::size_t obs() const { return df_.template get<double>(OBSERVATIONS_BLK).rows(); } // number of observations
     std::size_t locs() const; // number of geostatistical locations where data are observed
@@ -83,7 +84,11 @@ namespace models {
     SamplingStrategy sampling() const; // how data are sampled
     const ADT<M,N,K>& searchEngine(); // algorithm used to search element over the mesh
     // available if data are sampled at general locations inside the domain
-    const DMatrix<double>& locations() const { return df_.get<double>(LOCATIONS_BLK); }
+    DMatrix<double> locations() const {
+      if constexpr(std::is_same<typename model_traits<Model>::RegularizationType, SpaceOnly>::value)
+	return df_.get<double>(LOCATIONS_BLK);
+      else return df_(0, df_.rows()/get().time_domain().rows()-1).template get<double>(LOCATIONS_BLK);
+    }
     // available if data are sampled at subdomains (areal observations)
     const DMatrix<int>& subdomains() const { return df_.get<int>(AREAL_BLK); }
 

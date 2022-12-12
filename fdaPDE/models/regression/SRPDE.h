@@ -29,8 +29,6 @@ namespace models{
   private:
     typedef iRegressionModel<SRPDE<PDE>> Base;
 
-    // diagonal matrix of weights (implements possible heteroscedasticity)
-    DiagMatrix<double> W_;
     // system matrix of non-parametric problem (2N x 2N matrix)
     //     | -\Psi^T*D*W*\Psi  \lambda*R1^T |
     // A = |                                |
@@ -41,10 +39,6 @@ namespace models{
     // b = |               |, Q = W(I-H), H = X*(X^T*W*X)^{-1}*X^T*W
     //     |   \lambda*u   |
     DVector<double> b_{};
-    // q x q dense matrix X^T*W*X
-    DMatrix<double> XTX_{};
-    // partial LU (with pivoting) factorization of the dense (square invertible) q x q matrix XTX_.
-    Eigen::PartialPivLU<DMatrix<double>> invXTX_{};
 
     // problem solution
     DMatrix<double> f_{};    // estimate of the spatial field (1 x N vector)
@@ -65,7 +59,6 @@ namespace models{
     virtual void solve(); // finds a solution to the smoothing problem
 
     // iRegressionModel interface implementation
-    virtual DMatrix<double> lmbQ(const DMatrix<double>& x);
     virtual DMatrix<double> fitted();
     virtual double predict(const DVector<double>& covs, const std::size_t loc) const;
     // getters to problem solution

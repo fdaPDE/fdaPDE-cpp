@@ -1,17 +1,3 @@
-// an efficient way to perform a left multiplication by Q implementing the following
-//  given the design matrix X, the weight matrix W and x
-//    compute v = X^T*W*x
-//    solve Yz = v
-//    return Wx - WXz = W(I-H)x = Qx
-// it is required to having assigned a design matrix X to the model before calling this method
-template <typename PDE>
-DMatrix<double> SRPDE<PDE>::lmbQ(const DMatrix<double>& x){
-  DMatrix<double> v = X().transpose()*W_*x; // X^T*W*x
-  DMatrix<double> z = invXTX_.solve(v);  // (X^T*W*X)^{-1}*X^T*W*x
-  // compute W*x - W*X*z = W*x - (W*X*(X^T*W*X)^{-1}*X^T*W)*x = W(I - H)*x = Q*x
-  return W_*x - W_*X()*z;
-}
-
 // perform proper initialization of model
 template <typename PDE>
 void SRPDE<PDE>::init() {
@@ -39,7 +25,7 @@ void SRPDE<PDE>::solve() {
   if(!hasCovariates()){ // nonparametric case
     // rhs of SR-PDE linear system
     b_ << -PsiTD()*W_*y(),
-      lambda()*u();
+          lambda()*u();
     
     // define system solver. Use a sparse solver
     Eigen::SparseLU<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver{};
@@ -57,7 +43,7 @@ void SRPDE<PDE>::solve() {
     }
     // rhs of SR-PDE linear system
     b_ << -PsiTD()*lmbQ(y()), // -\Psi^T*D*Q*z
-      lambda()*u();
+          lambda()*u();
     
     std::size_t q_ = X().cols(); // number of covariates
     // definition of matrices U and V  for application of woodbury formula

@@ -68,7 +68,8 @@ namespace models {
     SpMatrix<double> PsiTD_; // matrix \Psi corrected for areal observations (stores \Psi^T*D if D \neq I)
     
     typedef typename model_traits<Model>::TimeBasis TimeBasis; // basis used for discretization in time
-    TimeBasis basis_; 
+    TimeBasis basis_;
+    DVector<double> time_; // interval [0,T]
   public:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
     typedef typename model_traits<Model>::RegularizationType TimeRegularization; // type of time regularization
@@ -79,7 +80,7 @@ namespace models {
     
     // constructor
     iSpaceTimeSeparableModel(const PDE& pde, const DVector<double>& time)
-      : iSpaceTimeModel<Model>(pde, time), basis_(time) {
+      : iSpaceTimeModel<Model>(pde, time), time_(time), basis_(time) {
       // compute \Phi = [\Phi]_{ij} = \phi_i(t_j) using the provided basis function
       Phi_ = basis_.eval(time);
       if(this->sampling() == SamplingStrategy::Areal){
@@ -91,8 +92,7 @@ namespace models {
 	for(std::size_t i = 0; i < m; ++i) D.segment(i*n, n) = this->D_.diagonal();
 	// compute and store result
 	PsiTD_ = Psi().transpose()*D.asDiagonal();
-      }
-      
+      }      
       // discretize operators in time
       TimeAssembler<TimeBasis> assembler(time);
       Rt_ = assembler.assemble(TimeMass<TimeBasis>()); // mass matrix in time
@@ -106,12 +106,12 @@ namespace models {
     const SpMatrix<double>& Rt()  const { return Rt_; }
     const SpMatrix<double>& Pt()  const { return Pt_; }
     const SpMatrix<double>& Phi() const { return Phi_; }
-    
+
     // overload of iStatModel::u to directly return a stacked version of the discretized forcing field
     const DVector<double>& u() {
       // compute result dimensions.
       std::size_t M = basis_.size();
-      std::size_t N = this->locs();
+      std::size_t N = this->nbasis();
       if(u_.size() == 0){ // first time this is computed
 	u_.resize(N*M);
 	// in separable case the PDE used for space penalization is not function of time.
@@ -121,22 +121,9 @@ namespace models {
       }
       return u_;
     }
-
-    // overload of iStatModel::y to directly return a stacked version of input observations, which come as an n x m matrix
-    const DVector<double>& y() {
-      // get number of spatial and temporal points
-      std::size_t n = this->obs();
-      std::size_t m = this->time_.rows();
-      if(y_.size() == 0){
-	y_.resize(n*m);
-	// stack i-th column of observation block 
-	for(std::size_t i = 0; i < m; ++i)
-	  y_.segment(i*n, n) = df_.template get<double>(OBSERVATIONS_BLK).col(i);
-      }
-      return y_;
-    }
     // returns the block (\Phi \kron \Psi)^T*(I_m \kron D) as eigen expression, if D = I returns (\Phi \kron \Psi)^T
     auto PsiTD() { return this->sampling() == SamplingStrategy::Areal ? PsiTD_ : Psi().transpose(); }; 
+    const DVector<double>& time_domain() const { return time_; } // time interval [0,T]
     
     // destructor
     virtual ~iSpaceTimeSeparableModel() = default;  

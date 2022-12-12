@@ -43,8 +43,8 @@ namespace models {
     const SpMatrix<double>& Psi() { return this->__Psi(); }; // pointer to n x N sparse matrix \Psi. This computes \Psi if not available
     // an efficient implementation of left multiplication by \Psi
     DMatrix<double> lmbPsi(const DMatrix<double>& x) const;
-    auto PsiTD() const { // returns the block \Psi^T*D as eigen expression, if D = I returns \Psi^T
-      return sampling() == SamplingStrategy::Areal ? PsiTD_ : Psi_.transpose(); }; 
+    // returns the block \Psi^T*D as eigen expression, if D = I returns \Psi^T
+    auto PsiTD() const { return sampling() == SamplingStrategy::Areal ? PsiTD_ : Psi_.transpose(); }; 
     
     // destructor
     virtual ~iSpaceOnlyModel() = default;  
