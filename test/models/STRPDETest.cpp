@@ -1,12 +1,10 @@
-#include <Eigen/src/Core/util/Constants.h>
-#include <cstddef>
 #include <gtest/gtest.h> // testing framework
 #include <unsupported/Eigen/SparseExtra>
 
 #include "../../fdaPDE/core/utils/Symbols.h"
 #include "../../fdaPDE/core/utils/IO/CSVReader.h"
 #include "../../fdaPDE/core/FEM/PDE.h"
-#include "models/iStatModel.h"
+#include "models/ModelBase.h"
 using fdaPDE::core::FEM::PDE;
 #include "../../fdaPDE/core/FEM/operators/SpaceVaryingFunctors.h"
 using fdaPDE::core::FEM::SpaceVaryingDiffusion;
@@ -14,6 +12,9 @@ using fdaPDE::core::FEM::SpaceVaryingAdvection;
 #include "core/MESH/Mesh.h"
 #include "../../fdaPDE/models/regression/STRPDE.h"
 using fdaPDE::models::STRPDE;
+#include "../../fdaPDE/models/ModelTraits.h"
+#include "../../fdaPDE/models/SamplingDesign.h"
+using fdaPDE::models::Sampling;
 
 #include "../utils/MeshLoader.h"
 using fdaPDE::testing::MeshLoader;
@@ -48,7 +49,7 @@ TEST(STRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_Separable) {
   // define statistical model
   double lambdaS = 0.01; // smoothing in space
   double lambdaT = 0.01; // smoothin in time
-  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparable> model(problem, time_mesh);
+  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparableTag, Sampling::GeoStatMeshNodes> model(problem, time_mesh);
   model.setLambdaS(lambdaS);
   model.setLambdaT(lambdaT);
 
@@ -121,27 +122,28 @@ TEST(STRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable)
   // define statistical model
   double lambdaS = 0.01; // smoothing in space
   double lambdaT = 0.01; // smoothin in time
-  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparable> model(problem, time_mesh);
+  // load sample position
+  CSVReader<double> reader{};
+  CSVFile<double> locFile; // locations file
+  locFile = reader.parseFile("data/models/STRPDE/2D_test2/locs.csv");
+  DMatrix<double> loc = locFile.toEigen();
+
+  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparableTag, Sampling::GeoStatLocations> model(problem, time_mesh, loc);
   model.setLambdaS(lambdaS);
   model.setLambdaT(lambdaT);
   
   // load data from .csv files
-  CSVReader<double> reader{};
   CSVFile<double> yFile; // observation file
   yFile = reader.parseFile  ("data/models/STRPDE/2D_test2/y.csv");
   DMatrix<double> y = yFile.toEigen();
   CSVFile<double> XFile; // design matrix
   XFile = reader.parseFile  ("data/models/STRPDE/2D_test2/X.csv");
   DMatrix<double> X = XFile.toEigen();
-  CSVFile<double> locFile; // locations file
-  locFile = reader.parseFile("data/models/STRPDE/2D_test2/locs.csv");
-  DMatrix<double> loc = locFile.toEigen();
 
   // set model data
   BlockFrame<double, int> df;
   df.stack ("y", y);
   df.stack ("X", X);
-  df.repeat("P", loc, time_mesh.rows(), 1);
   model.setData(df);
   
   // solve smoothing problem

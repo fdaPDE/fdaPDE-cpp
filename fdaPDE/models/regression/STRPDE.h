@@ -6,39 +6,36 @@
 // CORE imports
 #include "../../core/utils/Symbols.h"
 #include "../../core/FEM/PDE.h"
-#include "../space_time/SplineBasis.h"
-#include "../iStatModel.h"
 using fdaPDE::core::FEM::PDEBase;
+#include "../space_time/SplineBasis.h"
 #include "../../core/NLA/SparseBlockMatrix.h"
 using fdaPDE::core::NLA::SparseBlockMatrix;
 #include "../../core/NLA/SMW.h"
 using fdaPDE::core::NLA::SMW;
+#include "../../core/NLA/KroneckerProduct.h"
+using fdaPDE::core::NLA::SparseKroneckerProduct;
+using fdaPDE::core::NLA::Kronecker;
 // calibration module imports
 #include "../../calibration/iGCV.h"
 using fdaPDE::calibration::iGCV;
 // regression module imports
-#include "iRegressionModel.h"
-using fdaPDE::models::iRegressionModel;
-#include "../iSpaceTimeModel.h"
-#include "../space_time/TimeAssembler.h"
-using fdaPDE::models::TimeAssembler;
-
-#include "../../core/NLA/KroneckerProduct.h"
-using fdaPDE::core::NLA::Kronecker;
+#include "RegressionBase.h"
+using fdaPDE::models::RegressionBase;
 
 namespace fdaPDE{
 namespace models{
 
   // base class for STRPDE model
-  template <typename PDE, typename TimeRegularization> class STRPDE;
+  template <typename PDE, typename TimeRegularization, Sampling SamplingDesign> class STRPDE;
 
-  template <typename PDE>
-  class STRPDE<PDE, SpaceTimeSeparable> : public iRegressionModel<STRPDE<PDE, SpaceTimeSeparable>>/*, public iGCV*/ {
+  template <typename PDE, Sampling SamplingDesign>
+  class STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign>
+    : public RegressionBase<STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign>>/*, public iGCV*/ {
     // compile time checks
     static_assert(std::is_base_of<PDEBase, PDE>::value);
   private:
-    typedef SpaceTimeSeparable TimeRegularization;
-    typedef iRegressionModel<STRPDE<PDE, TimeRegularization>> Base;
+    typedef SpaceTimeSeparableTag TimeRegularization;
+    typedef RegressionBase<STRPDE<PDE, TimeRegularization, SamplingDesign>> Base;
     
     // system matrix of non-parametric problem (2N x 2N matrix)
     //     | -\Psi^T*D*W*\Psi  \lambda*R1^T |
@@ -55,23 +52,19 @@ namespace models{
     DMatrix<double> f_{};    // estimate of the spatial field (1 x N vector)
     DMatrix<double> g_{};    // PDE misfit
     DMatrix<double> beta_{}; // estimate of the coefficient vector (1 x q vector)
-
-    // perform proper initialization of model
-    void init();
   public:
     // import commonly defined symbols from base
     IMPORT_REGRESSION_SYMBOLS;
-    using Base::lambdaS;
-    using Base::lambdaT;
-    // import symbols needed for separable regularization
-    using Base::Pt; // time penalization matrix
-    using Base::Rt; // time mass matrix
-    using Base::PsiTD;
+    using Base::lambdaS; // smoothing parameter in space
+    using Base::lambdaT; // smoothing parameter in time
+    using Base::Pt;      // time penalization matrix: [Pt_]_{ij} = \int_{[0,T]} (\phi_i)_tt*(\phi_j)_tt
+    using Base::Rt;      // time mass matrix: [Rt_]_{ij} = \int_{[0,T]} \phi_i*\phi_j
     
     // constructor
     STRPDE() = default;
-    STRPDE(const PDE& pde, const DMatrix<double>& time)
-      : iRegressionModel<STRPDE<PDE, SpaceTimeSeparable>>(pde, time) {};
+    template <typename... SamplingData>
+    STRPDE(const PDE& pde, const DMatrix<double>& time, const SamplingData&... s)
+      : RegressionBase<STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign>>(pde, time, s...) {};
     
     // iStatModel interface implementation
     virtual void solve(); // finds a solution to the smoothing problem
@@ -94,13 +87,14 @@ namespace models{
   };
 
   // compile time informations related to the model
-  template <typename PDE_>
-  struct model_traits<STRPDE<PDE_, SpaceTimeSeparable>> {
+  template <typename PDE_, Sampling SamplingDesign>
+  struct model_traits<STRPDE<PDE_, SpaceTimeSeparableTag, SamplingDesign>> {
     typedef PDE_ PDE;
-    typedef SpaceTimeSeparable RegularizationType;
-    typedef SplineBasis<3> TimeBasis;
+    typedef SpaceTimeSeparableTag RegularizationType;
+    typedef SplineBasis<3> TimeBasis; // use cubic B-splines
+    static constexpr Sampling sampling = SamplingDesign;
   };
-  
+
 #include "STRPDE.tpp"
 }}
 

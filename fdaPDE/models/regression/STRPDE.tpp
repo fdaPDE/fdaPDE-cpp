@@ -1,22 +1,18 @@
-template<typename PDE>
-DMatrix<double> STRPDE<PDE, SpaceTimeSeparable>::fitted() {
+template<typename PDE, Sampling SamplingDesign>
+DMatrix<double> STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign>::fitted() {
   return DMatrix<double>::Zero(1,1);
 }
 
-template<typename PDE>
-double STRPDE<PDE, SpaceTimeSeparable>::predict(const DVector<double>& covs, const std::size_t loc) const {
+template<typename PDE, Sampling SamplingDesign>
+double STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign>::predict(const DVector<double>& covs, const std::size_t loc) const {
   return 0;
 }
 
 // finds a solution to the STR-PDE smoothing problem (separable penalization)
-template <typename PDE>
-void STRPDE<PDE, SpaceTimeSeparable>::solve() {
-  // if heteroscedastic observations are provided as datum, prepare weights matrix
-  if(hasWeights()) W_ = W().asDiagonal();
-  else W_ = DVector<double>::Ones(locs()*this->time_domain().rows()).asDiagonal(); // homoscedastic observations
-    
+template <typename PDE, Sampling SamplingDesign>
+void STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign>::solve() {
   // assemble system matrix for the nonparameteric part of the model
-  SparseKroneckerProduct<> P = Kronecker(Pt(), pde_->R0());
+  SparseKroneckerProduct<> P = Kronecker(Pt(), pde().R0());
   SparseBlockMatrix<double,2,2>
     A(-PsiTD()*Psi()-lambdaT()*P, lambdaS()*R1().transpose(),
       lambdaS()*R1(),             lambdaS()*R0()            );
@@ -28,7 +24,7 @@ void STRPDE<PDE, SpaceTimeSeparable>::solve() {
   if(!Base::hasCovariates()){ // nonparametric case
     // rhs of STR-PDE linear system
     b_ << -PsiTD()*y(),
-      lambdaS()*u();
+          lambdaS()*u();
       
     // define system solver. Use a sparse solver
     Eigen::SparseLU<SpMatrix<double>, Eigen::COLAMDOrdering<int>> solver{};
@@ -39,14 +35,9 @@ void STRPDE<PDE, SpaceTimeSeparable>::solve() {
     // store result of smoothing
     f_ = sol.head(A_.rows()/2);
   }else{ // parametric case
-    if(!isAlloc(XTX_)){
-      // compute q x q dense matrix X^T*W*X and its factorization
-      XTX_ = X().transpose()*X();
-      invXTX_ = XTX_.partialPivLu();
-    }
     // rhs of STR-PDE linear system
     b_ << -PsiTD()*lmbQ(y()), // -\Psi^T*D*Q*z
-      lambdaS()*u();
+          lambdaS()*u();
 
     std::size_t q_ = X().cols(); // number of covariates
     // definition of matrices U and V  for application of woodbury formula
@@ -59,10 +50,10 @@ void STRPDE<PDE, SpaceTimeSeparable>::solve() {
     SMW<> solver{};
     solver.compute(A_);
     // solve system Mx = b
-    sol = solver.solve(U, XTX_, V, b_);
+    sol = solver.solve(U, XtWX(), V, b_);
     // store result of smoothing
     f_    = sol.head(A_.rows()/2);
-    beta_ = invXTX_.solve(X().transpose())*(y() - Psi()*f_);
+    beta_ = invXtWX().solve(X().transpose())*(y() - Psi()*f_);
   }
   // store PDE misfit
   g_ = sol.tail(A_.rows()/2);

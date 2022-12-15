@@ -12,6 +12,8 @@ using fdaPDE::core::FEM::SpaceVaryingAdvection;
 #include "core/MESH/Mesh.h"
 #include "../fdaPDE/models/regression/SRPDE.h"
 using fdaPDE::models::SRPDE;
+#include "../fdaPDE/models/SamplingDesign.h"
+using fdaPDE::models::Sampling;
 
 #include "../utils/MeshLoader.h"
 using fdaPDE::testing::MeshLoader;
@@ -38,10 +40,10 @@ TEST(SRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes) {
 
   // define statistical model
   // use optimal lambda to avoid possible numerical issues
-  double lambda = 5.623413 * std::pow(0.1, 5); 
-  SRPDE model(problem);
+  double lambda = 5.623413 * std::pow(0.1, 5);
+  SRPDE<decltype(problem), fdaPDE::models::Sampling::GeoStatMeshNodes>  model(problem);
   model.setLambda(lambda);
-
+  
   // load data from .csv files
   CSVReader<double> reader{};
   CSVFile<double> yFile; // observation file
@@ -101,30 +103,31 @@ TEST(SRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations) {
   problem.init();
 
   // define statistical model
+  CSVReader<double> reader{};
+  // load locations where data are sampled
+  CSVFile<double> locFile;
+  locFile = reader.parseFile("data/models/SRPDE/2D_test2/locs.csv");
+  DMatrix<double> loc = locFile.toEigen();
+
   // use optimal lambda to avoid possible numerical issues
   double lambda = 0.2201047;
-  SRPDE model(problem);
+  SRPDE<decltype(problem), Sampling::GeoStatLocations> model(problem, loc);
   model.setLambda(lambda);
   
   // load data from .csv files
-  CSVReader<double> reader{};
   CSVFile<double> yFile; // observation file
   yFile = reader.parseFile  ("data/models/SRPDE/2D_test2/z.csv");
   DMatrix<double> y = yFile.toEigen();
   CSVFile<double> XFile; // design matrix
   XFile = reader.parseFile  ("data/models/SRPDE/2D_test2/X.csv");
   DMatrix<double> X = XFile.toEigen();
-  CSVFile<double> locFile; // locations file
-  locFile = reader.parseFile("data/models/SRPDE/2D_test2/locs.csv");
-  DMatrix<double> loc = locFile.toEigen();
 
   // set model data
   BlockFrame<double, int> df;
   df.insert("y", y);
   df.insert("X", X);
-  df.insert("P", loc);
   model.setData(df);
-
+  
   // solve smoothing problem
   model.solve();
 
@@ -185,7 +188,7 @@ TEST(SRPDE, Test3_CostantCoefficientsPDE_NonParametric_GeostatisticalAtNodes) {
 
   // define statistical model
   double lambda = 10;
-  SRPDE model(problem);
+  SRPDE<decltype(problem), Sampling::GeoStatMeshNodes> model(problem);
   model.setLambda(lambda);
   
   // load data from .csv files
@@ -268,8 +271,13 @@ TEST(SRPDE, Test4_NonCostantCoefficientsPDE_NonParametric_Areal) {
   problem.init();
   
   // define statistical model
+  CSVReader<int> int_reader{};
+  CSVFile<int> arealFile; // incidence matrix for specification of subdomains
+  arealFile = int_reader.parseFile("data/models/SRPDE/2D_test4/incidence_matrix.csv");
+  DMatrix<int> areal = arealFile.toEigen();
+
   double lambda = std::pow(0.1, 3);
-  SRPDE model(problem);
+  SRPDE<decltype(problem), Sampling::Areal> model(problem, areal);
   model.setLambda(lambda);
   
   // load data from .csv files
@@ -277,17 +285,11 @@ TEST(SRPDE, Test4_NonCostantCoefficientsPDE_NonParametric_Areal) {
   yFile = reader.parseFile("data/models/SRPDE/2D_test4/z.csv");
   DMatrix<double> y = yFile.toEigen();
   
-  CSVReader<int> int_reader{};
-  CSVFile<int> arealFile; // incidence matrix for specification of subdomains
-  arealFile = int_reader.parseFile("data/models/SRPDE/2D_test4/incidence_matrix.csv");
-  DMatrix<int> areal = arealFile.toEigen();
-  
   // set model data
   BlockFrame<double, int> df;
   df.insert("y", y);
-  df.insert("D", areal);
   model.setData(df);
-
+  
   // solve smoothing problem
   model.solve();
 
@@ -324,4 +326,3 @@ TEST(SRPDE, Test4_NonCostantCoefficientsPDE_NonParametric_Areal) {
   std::size_t N = computedF.rows();
   EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );
 }
-

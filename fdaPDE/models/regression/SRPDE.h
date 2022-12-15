@@ -6,8 +6,8 @@
 // CORE imports
 #include "../../core/utils/Symbols.h"
 #include "../../core/FEM/PDE.h"
-#include "../iStatModel.h"
 using fdaPDE::core::FEM::PDEBase;
+#include "../ModelBase.h"
 #include "../../core/NLA/SparseBlockMatrix.h"
 using fdaPDE::core::NLA::SparseBlockMatrix;
 #include "../../core/NLA/SMW.h"
@@ -16,18 +16,19 @@ using fdaPDE::core::NLA::SMW;
 #include "../../calibration/iGCV.h"
 using fdaPDE::calibration::iGCV;
 // regression module imports
-#include "iRegressionModel.h"
-using fdaPDE::models::iRegressionModel;
+#include "../SamplingDesign.h"
+#include "RegressionBase.h"
+using fdaPDE::models::RegressionBase;
 
 namespace fdaPDE{
 namespace models{
   
-  template <typename PDE>
-  class SRPDE : public iRegressionModel<SRPDE<PDE>>, public iGCV {
+  template <typename PDE, Sampling SamplingDesign>
+  class SRPDE : public RegressionBase<SRPDE<PDE, SamplingDesign>>, public iGCV {
     // compile time checks
     static_assert(std::is_base_of<PDEBase, PDE>::value);
   private:
-    typedef iRegressionModel<SRPDE<PDE>> Base;
+    typedef RegressionBase<SRPDE<PDE, SamplingDesign>> Base;
 
     // system matrix of non-parametric problem (2N x 2N matrix)
     //     | -\Psi^T*D*W*\Psi  \lambda*R1^T |
@@ -44,21 +45,18 @@ namespace models{
     DMatrix<double> f_{};    // estimate of the spatial field (1 x N vector)
     DMatrix<double> g_{};    // PDE misfit
     DMatrix<double> beta_{}; // estimate of the coefficient vector (1 x q vector)
-
-    // perform proper initialization of model
-    void init();
   public:
     IMPORT_REGRESSION_SYMBOLS;
-    using Base::PsiTD;
-    using Base::lambda;
+    using Base::lambda; // smoothing parameter in space
     // constructor
     SRPDE() = default;
-    SRPDE(const PDE& pde) : iRegressionModel<SRPDE<PDE>>(pde) {};
+    template <typename... SamplingData>
+    SRPDE(const PDE& pde, const SamplingData&... s) : RegressionBase<SRPDE<PDE, SamplingDesign>>(pde, s...) {};
     
     // iStatModel interface implementation
     virtual void solve(); // finds a solution to the smoothing problem
 
-    // iRegressionModel interface implementation
+    // RegressionBase interface implementation
     virtual DMatrix<double> fitted();
     virtual double predict(const DVector<double>& covs, const std::size_t loc) const;
     // getters to problem solution
@@ -76,12 +74,13 @@ namespace models{
   };
 
   // compile time informations related to the model
-  template <typename PDE_>
-  struct model_traits<SRPDE<PDE_>> {
+  template <typename PDE_, Sampling SamplingDesign>
+  struct model_traits<SRPDE<PDE_, SamplingDesign>> {
     typedef PDE_ PDE;
-    typedef SpaceOnly RegularizationType;
+    typedef SpaceOnlyTag RegularizationType;
+    static constexpr Sampling sampling = SamplingDesign;
   };
-  
+
 #include "SRPDE.tpp"
 }}
     
