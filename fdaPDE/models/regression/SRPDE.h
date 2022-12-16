@@ -28,23 +28,9 @@ namespace models{
     // compile time checks
     static_assert(std::is_base_of<PDEBase, PDE>::value);
   private:
-    typedef RegressionBase<SRPDE<PDE, SamplingDesign>> Base;
-
-    // system matrix of non-parametric problem (2N x 2N matrix)
-    //     | -\Psi^T*D*W*\Psi  \lambda*R1^T |
-    // A = |                                |
-    //     |    \lambda*R1     \lambda*R0   |
-    SpMatrix<double> A_{};
-    // right hand side of problem's linear system (1 x 2N vector)
-    //     | -\Psi^T*D*Q*y |
-    // b = |               |, Q = W(I-H), H = X*(X^T*W*X)^{-1}*X^T*W
-    //     |   \lambda*u   |
-    DVector<double> b_{};
-
-    // problem solution
-    DMatrix<double> f_{};    // estimate of the spatial field (1 x N vector)
-    DMatrix<double> g_{};    // PDE misfit
-    DMatrix<double> beta_{}; // estimate of the coefficient vector (1 x q vector)
+    typedef RegressionBase<SRPDE<PDE, SamplingDesign>> Base;   
+    SpMatrix<double> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
+    DVector<double> b_{};  // right hand side of problem's linear system (1 x 2N vector)
   public:
     IMPORT_REGRESSION_SYMBOLS;
     using Base::lambda; // smoothing parameter in space
@@ -55,14 +41,6 @@ namespace models{
     
     // iStatModel interface implementation
     virtual void solve(); // finds a solution to the smoothing problem
-
-    // RegressionBase interface implementation
-    virtual DMatrix<double> fitted();
-    virtual double predict(const DVector<double>& covs, const std::size_t loc) const;
-    // getters to problem solution
-    virtual const DMatrix<double>& f() const { return f_; };
-    virtual const DMatrix<double>& g() const { return g_; };
-    virtual const DMatrix<double>& beta() const { return beta_; };
     
     // iGCV interface implementation
     virtual const DMatrix<double>& T(); // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)

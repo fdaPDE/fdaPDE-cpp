@@ -15,14 +15,7 @@ using fdaPDE::models::model_traits;
 
 namespace fdaPDE {
 namespace models {
- 
-  // standardized definitions for stat model BlockFrame. layers below will make heavy assumptions on the layout of the BlockFrame,
-  // use these instead of manually typing the block name when accessing df_
-#define OBSERVATIONS_BLK "y" // matrix of observations
-#define INDEXES_BLK "i"      // vector of observation indices
-#define LOCATIONS_BLK "P"    // matrix of spatial locations coordinates
-#define AREAL_BLK "D"        // incidence matrix for areal observations
-  
+   
   // abstract base interface for any fdaPDE statistical model. Uses CRTP pattern
   template <typename Model>
   class ModelBase {

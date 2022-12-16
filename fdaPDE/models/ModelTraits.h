@@ -80,6 +80,18 @@ namespace models{
   using Base::hasCovariates; /* true if the model is semi-parametric */	                 \
   using Base::hasWeights;    /* true if heteroscedastic observations are assumed */      \
   using Base::lmbQ;	     /* efficient left multiplication by Q */	                 \
+  /* room for problem solution */					                 \
+  using Base::f_;            /* estimate of the nonparametric part of the model */       \
+  using Base::g_;            /* PDE misfit */				                 \
+  using Base::beta_;         /* estimate of coefficient vector for parametric part */    \
+
+  // standardized definitions for stat model BlockFrame. layers below will make heavy assumptions on
+  // the layout of the BlockFrame, use these instead of manually typing the block name when accessing df_
+#define OBSERVATIONS_BLK "y" // matrix of observations
+#define INDEXES_BLK "i"      // vector of observation indices
+#define LOCATIONS_BLK "P"    // matrix of spatial locations coordinates
+#define AREAL_BLK "D"        // incidence matrix for areal observations
+
   
 }}
 

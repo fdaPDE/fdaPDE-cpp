@@ -20,14 +20,20 @@ namespace models {
   template <typename Model>
   class RegressionBase : public select_regularization_type<Model>::type, public SamplingDesign<Model, model_traits<Model>::sampling> {
   protected:
-    DiagMatrix<double> W_; // diagonal matrix of weights (implements possible heteroscedasticity)
+    DiagMatrix<double> W_{}; // diagonal matrix of weights (implements possible heteroscedasticity)
     DMatrix<double> XtWX_{}; // q x q dense matrix X^T*W*X
     Eigen::PartialPivLU<DMatrix<double>> invXtWX_{}; // factorization of the dense q x q matrix XtWX_.
+
+    // room for problem solution
+    DMatrix<double> f_{};    // estimate of the spatial field (1 x N vector)
+    DMatrix<double> g_{};    // PDE misfit
+    DMatrix<double> beta_{}; // estimate of the coefficient vector (1 x q vector)
   public:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
     typedef typename select_regularization_type<Model>::type Base;
-    using Base::pde_;
-    using Base::df_;
+    using Base::pde_; // differential operator L 
+    using Base::df_;  // BlockFrame for problem's data storage
+    using Base::Psi;  // matrix of spatial basis evaluation at locations p_1 ... p_n
     
     RegressionBase() = default;
     // space-only constructor
@@ -92,11 +98,26 @@ namespace models {
 	invXtWX_ = XtWX_.partialPivLu();
       }
     }
+
+    // getters to problem solution
+    const DMatrix<double>& f() const    { return f_; };
+    const DMatrix<double>& g() const    { return g_; };
+    const DMatrix<double>& beta() const { return beta_; };
     
-    // abstract part of the interface, must be implemented by concrete models   
-    virtual DMatrix<double> fitted() = 0; // computes fitted values at observations' locations
-    // compute prediction at new unseen datapoint
-    virtual double predict(const DVector<double>& covs, const std::size_t loc) const = 0;    
+    // computes fitted values \hat y = \Psi*f_ + X*beta_
+    DMatrix<double> fitted() const {
+      DMatrix<double> hat_y = Psi()*f_;
+      if(hasCovariates()) hat_y += X()*beta_;
+      return hat_y;
+    }
+    
+    // compute prediction of model at new unseen data location: \hat y(p_{n+1}) = X_{n+1}^T*\beta + f_*\psi(p_{n+1})
+    // TODO: (location equal to mesh node), must be generalized to any spatial location
+    double predict(const DVector<double>& covs, const std::size_t loc) const{
+      double result = f_.coeff(loc,0);
+      if(hasCovariates()) result += (covs.transpose()*beta_).coeff(0,0);
+      return result;
+    }    
   };
   
   // trait to detect if a type is a regression model

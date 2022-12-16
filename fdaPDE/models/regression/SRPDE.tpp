@@ -49,26 +49,6 @@ void SRPDE<PDE, SamplingDesign>::solve() {
   return;
 }
 
-// it is asssumed that smooth has already been called on the model object
-// computes fitted values \hat y = \Psi*f_ + X*beta_
-template <typename PDE, Sampling SamplingDesign>
-DMatrix<double> SRPDE<PDE, SamplingDesign>::fitted() {
-  DMatrix<double> hat_y = Psi()*f_;
-  // if the model has a parametric part, we need to sum its contribute
-  if(hasCovariates()) hat_y += X()*beta_;
-  return hat_y;
-}
-
-// compute prediction of model at new unseen data location (location equal to mesh node)
-// W_{n+1}^T * \beta + f_*\psi(p_{n+1})
-template <typename PDE, Sampling SamplingDesign>
-double SRPDE<PDE, SamplingDesign>::predict(const DVector<double>& covs, std::size_t loc) const {
-  double prediction = f_.coeff(loc,0);
-  // parametetric contribute of the model, if any is present
-  if(hasCovariates()) prediction += (covs.transpose()*beta_).coeff(0,0);
-  return prediction;
-}
-
 // required to support GCV based smoothing parameter selection
 // in case of an SRPDE model we have T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
 template <typename PDE, Sampling SamplingDesign>

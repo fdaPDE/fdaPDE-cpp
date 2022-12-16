@@ -1,13 +1,3 @@
-template<typename PDE, Sampling SamplingDesign>
-DMatrix<double> STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign>::fitted() {
-  return DMatrix<double>::Zero(1,1);
-}
-
-template<typename PDE, Sampling SamplingDesign>
-double STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign>::predict(const DVector<double>& covs, const std::size_t loc) const {
-  return 0;
-}
-
 // finds a solution to the STR-PDE smoothing problem (separable penalization)
 template <typename PDE, Sampling SamplingDesign>
 void STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign>::solve() {
