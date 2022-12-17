@@ -4,7 +4,7 @@
 
 <div align="center">
 
-![GitHub Workflow Status](https://img.shields.io/github/workflow/status/AlePalu/fdaPDE/build-workflow?label=build&style=for-the-badge) ![GitHub Workflow Status](https://img.shields.io/github/workflow/status/AlePalu/fdaPDE/test-workflow?label=test-status&style=for-the-badge)
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/AlePalu/fdaPDE/test-workflow.yml?branch=develop&label=test-status&style=for-the-badge)
 
 </div>
 
