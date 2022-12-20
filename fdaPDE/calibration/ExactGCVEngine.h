@@ -34,14 +34,14 @@ namespace calibration{
     void S(M& model) {
       // compute \Psi^T*Q
       if(model.hasCovariates())
-	E_ = model.Psi().transpose()*model.Q();
+	E_ = model.PsiTD()*model.Q();
       else
-	E_ = model.Psi().transpose();
+	E_ = model.PsiTD();
     
       // factorize matrix T
       invT_ = model.T().partialPivLu();
       V_ = invT_.solve(E_); // V = invT*E = T^{-1}*\Psi^T*Q
-      S_ = model.lmbPsi(V_);
+      S_ = model.Psi()*V_;
       return;
     };
 
@@ -53,7 +53,7 @@ namespace calibration{
     void dS(M& model) {
       L_ = invT_.solve(model.R()); // T^{-1}*R
       F_ = L_*invT_.solve(E_); // (T^{-1}*R)*(T^{-1}*E)
-      dS_ = model.lmbPsi(-F_); // this takes into account of sampling strategy
+      dS_ = model.Psi()*(-F_); // this takes into account of sampling strategy
       return;
     }
   
@@ -62,7 +62,7 @@ namespace calibration{
     template <typename M>
     void ddS(M& model){
       DMatrix<double> C = 2*L_*F_; // compute temporary 2*L*F
-      ddS_ = model.lmbPsi(C); // this takes into account of sampling strategy
+      ddS_ = model.Psi()*C; // this takes into account of sampling strategy
       return;
     }
 
@@ -90,7 +90,7 @@ namespace calibration{
       // NB: dS_ must already contain valid data
       DMatrix<double> g = model.R1().transpose()*model.invR0().solve(model.u());
       // cache h and p since needed for computation of second derivative
-      h_ = (model.lambda()*L_ - DMatrix<double>::Identity(model.loc(), model.loc()))*invT_.solve(g);
+      h_ = (model.lambda()*L_ - DMatrix<double>::Identity(model.n_locs(), model.n_locs()))*invT_.solve(g);
       p_ = model.Psi()*h_ - dS_*model.y();
       // return a = p.dot(y - \hat y)
       return (( model.y() - model.fitted() ).transpose() * p_).coeff(0,0);
@@ -116,7 +116,7 @@ namespace calibration{
       // NB: ddS_ must already contain valid data
       DMatrix<double> C = 2*L_*h_;
       // perform efficient multiplication by permutation matrix Psi
-      DMatrix<double> D(model.loc(), 1); // 2*\Psi*L*h
+      DMatrix<double> D(model.n_locs(), 1); // 2*\Psi*L*h
       for(std::size_t k = 0; k < model.Psi().outerSize(); ++k){
 	for(SpMatrix<double>::InnerIterator it(model.Psi(),k); it; ++it){
 	  D.row(it.row()) = C.row(it.col());

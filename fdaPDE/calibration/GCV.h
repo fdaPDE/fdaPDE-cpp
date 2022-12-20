@@ -16,7 +16,7 @@ using fdaPDE::core::NLA::SMW;
 
 // interfaces
 #include "iGCV.h"
-#include "../models/regression/iRegressionModel.h"
+#include "../models/ModelTraits.h"
 using fdaPDE::models::is_regression_model;
 
 namespace fdaPDE{
@@ -52,9 +52,9 @@ namespace calibration{
 	// compute trace of matrix S given current lambda
 	double trS = trace.compute(model_);
 
-	double q = model_.q();        // number of covariates
-	std::size_t n = model_.loc(); // number of locations
-	double edf = n - (q+trS);     // equivalent degrees of freedom
+	double q = model_.q();           // number of covariates
+	std::size_t n = model_.n_locs(); // number of locations
+	double edf = n - (q+trS);        // equivalent degrees of freedom
 	// return gcv at point
 	return (n/std::pow(edf, 2))*( model_.norm(model_.y(), model_.fitted()) );
       };
@@ -73,9 +73,9 @@ namespace calibration{
 	double trS  = trace.compute(model_);
 	double trdS = trace.derive(model_);
       
-	double q = model_.q();        // number of covariates
-	std::size_t n = model_.loc(); // number of locations
-	double edf = n - (q+trS);     // equivalent degrees of freedom
+	double q = model_.q();           // number of covariates
+	std::size_t n = model_.n_locs(); // number of locations
+	double edf = n - (q+trS);        // equivalent degrees of freedom
 	// \sigma^2 = \frac{(y - \hat y).squaredNorm()}{n - (q + Tr[S])}
 	double sigma = ( model_.y() - model_.fitted() ).squaredNorm()/edf;
 
@@ -99,9 +99,9 @@ namespace calibration{
 	double trdS  = trace.derive(model_);
 	double trddS = trace.deriveTwice(model_);
       
-	double q = model_.q();        // number of covariates
-	std::size_t n = model_.loc(); // number of locations
-	double edf = n - (q+trS);     // equivalent degrees of freedom
+	double q = model_.q();           // number of covariates
+	std::size_t n = model_.n_locs(); // number of locations
+	double edf = n - (q+trS);        // equivalent degrees of freedom
 	// \sigma^2 = \frac{norm(y - \hat y)^2}{n - (q + Tr[S])}
 	double sigma = ( model_.y() - model_.fitted() ).squaredNorm()/edf;
 
@@ -162,7 +162,7 @@ namespace calibration{
 
   // expose some usefull symbols
   template <typename M> using ExactGCV = GCV<M, ExactGCVEngine>;
-  template <typename M> using StochsaticGCV = GCV<M, StochasticGCVEngine>;
+  template <typename M> using StochasticGCV = GCV<M, StochasticGCVEngine>;
 }}
   
 #endif // __GCV_H__
