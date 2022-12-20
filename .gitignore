@@ -33,6 +33,8 @@
 !fdaPDE/models/regression/*
 !fdaPDE/calibration/
 !fdaPDE/calibration/*
+!fdaPDE/preprocess/
+!fdaPDE/preprocess/*
 !docs/
 !docs/*
 !docs/core/OPT/
