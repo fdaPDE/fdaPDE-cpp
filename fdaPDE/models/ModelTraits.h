@@ -49,6 +49,22 @@ namespace models{
       typename model_traits<Model>::RegularizationType, SpaceOnlyTag>::value;
   };
 
+  // allowed sampling strategies
+  enum Sampling { GeoStatLocations, GeoStatMeshNodes, Areal };
+  // traits for sampling design in space  
+  template <typename Model>
+  struct is_sampling_areal { 
+    static constexpr bool value = model_traits<Model>::sampling == Sampling::Areal;
+  };
+  template <typename Model>
+  struct is_sampling_pointwise_at_mesh { 
+    static constexpr bool value = model_traits<Model>::sampling == Sampling::GeoStatMeshNodes;
+  };
+  template <typename Model>
+  struct is_sampling_pointwise_at_locs { 
+    static constexpr bool value = model_traits<Model>::sampling == Sampling::GeoStatLocations;
+  };
+  
   // macros for the import of common symbols to avoid long annoying lists of using declarations in model implemetations
 
   // this macro is intended to import all **common** symbols a model type can expect from its parent classes

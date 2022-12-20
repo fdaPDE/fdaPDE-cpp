@@ -10,6 +10,10 @@ struct requires_preprocess<
 // set model's data from blockframe
 template <typename Model>
 void ModelBase<Model>::setData(const BlockFrame<double, int>& df) {
+  // stop if incoming data has no observations
+  if(!df.hasBlock(OBSERVATIONS_BLK))
+    throw std::logic_error("model without observations is ill-formed");
+  
   df_ = df;
   // insert an index row (if not yet present)
   if(!df_.hasBlock(INDEXES_BLK)){

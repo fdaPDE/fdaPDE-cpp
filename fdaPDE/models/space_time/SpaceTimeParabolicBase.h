@@ -5,12 +5,11 @@
 #include "../../core/NLA/KroneckerProduct.h"
 #include "../../core/FEM/operators/BilinearFormTraits.h"
 using fdaPDE::core::FEM::is_parabolic;
-#include <cstddef>
+#include "../../core/FEM/PDE.h"
 using fdaPDE::core::NLA::SparseKroneckerProduct;
 using fdaPDE::core::NLA::Kronecker;
 #include "../SpaceTimeBase.h"
 using fdaPDE::models::SpaceTimeBase;
-#include "TimeAssembler.h"
 
 namespace fdaPDE{
 namespace models{
@@ -18,7 +17,7 @@ namespace models{
   // base class for parabolic regularization
   template <typename Model>
     class SpaceTimeParabolicBase : public SpaceTimeBase<Model> {
-    static_assert(is_parabolic<typename model_traits<Model>::PDE>::value,
+    static_assert(is_parabolic<typename model_traits<Model>::PDE::BilinearFormType>::value,
 		  "you have asked for parabolic smoothing but using a non-parabolic differential operator");
   private:
     // let m the number of time points
@@ -55,8 +54,10 @@ namespace models{
 	tripletList.emplace_back(i,   i,  invDeltaT);
 	tripletList.emplace_back(i, i-1, -invDeltaT);
       }
-      tripletList.emplace_back(m_,m_, invDeltaT);
+      tripletList.emplace_back(m_-1,m_-2, -invDeltaT);
+      tripletList.emplace_back(m_-1,m_-1,  invDeltaT);
       // finalize construction
+      L_.resize(m_,m_);
       L_.setFromTriplets(tripletList.begin(), tripletList.end());
       L_.makeCompressed();
     }

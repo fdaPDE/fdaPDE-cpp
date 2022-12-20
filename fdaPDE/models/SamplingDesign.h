@@ -12,8 +12,6 @@ namespace models{
   // base classes for the implenetation of the different sampling designs. Here is computed the matrix of spatial basis
   // evaluations \Psi = [\Psi]_{ij} = \psi_i(p_j) whose construction strongly depends on the type of sampling in space
 
-  // allowed sampling strategies
-  enum Sampling { GeoStatLocations, GeoStatMeshNodes, Areal };
   template <typename Model, Sampling S> class SamplingDesign {};
   
   // data sampled at mesh nodes
@@ -54,6 +52,7 @@ namespace models{
     SpMatrix<double> Psi_{}; // n x N matrix \Psi = [\psi_{ij}] = \psi_j(p_i) of spatial basis evaluation at data locations p_i
     auto PsiTD() const { return model().Psi().transpose(); }
     std::size_t n_locs() const { return model().domain().nodes(); }
+    void locs() const { return; }
   };
 
   // data sampled at general locations p_1, p_2, ... p_n
@@ -100,6 +99,7 @@ namespace models{
     SpMatrix<double> Psi_{}; // n x N matrix \Psi = [\psi_{ij}] = \psi_j(p_i) of spatial basis evaluation at data locations p_i
     auto PsiTD() const { return model().Psi().transpose(); }
     std::size_t n_locs() const { return locs_.rows(); }
+    const DMatrix<double>& locs() const { return locs_; }
   };
 
   // data sampled at subdomains D_1, D_2, ... D_d
@@ -174,6 +174,7 @@ namespace models{
     auto PsiTD() const { return model().Psi().transpose()*D_; }
     std::size_t n_locs() const { return subdomains_.rows(); }
     const DiagMatrix<double>& D() const { return D_; }
+    const DMatrix<int>& locs() const { return subdomains_; }
   };  
   
 }}

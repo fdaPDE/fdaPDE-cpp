@@ -9,6 +9,7 @@ using fdaPDE::models::select_regularization_type;
 #include "../SpaceOnlyBase.h"
 #include "../SpaceTimeBase.h"
 #include "../space_time/SpaceTimeSeparableBase.h"
+#include "../space_time/SpaceTimeParabolicBase.h"
 
 namespace fdaPDE {
 namespace models {
@@ -18,7 +19,8 @@ namespace models {
   
   // base class for any *regression* fdaPDE model
   template <typename Model>
-  class RegressionBase : public select_regularization_type<Model>::type, public SamplingDesign<Model, model_traits<Model>::sampling> {
+  class RegressionBase :
+    public select_regularization_type<Model>::type, public SamplingDesign<Model, model_traits<Model>::sampling> {
   protected:
     DiagMatrix<double> W_{}; // diagonal matrix of weights (implements possible heteroscedasticity)
     DMatrix<double> XtWX_{}; // q x q dense matrix X^T*W*X

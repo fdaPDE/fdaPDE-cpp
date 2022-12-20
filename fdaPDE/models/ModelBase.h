@@ -19,20 +19,12 @@ namespace models {
   // abstract base interface for any fdaPDE statistical model. Uses CRTP pattern
   template <typename Model>
   class ModelBase {
-  protected:
+  public:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
     static constexpr std::size_t M = PDE::local_dimension;
     static constexpr std::size_t N = PDE::embedding_dimension;
     static constexpr std::size_t K = PDE::basis_order;
-    
-    std::shared_ptr<PDE> pde_; // regularizing term Lf - u and domain definition D
-    std::unique_ptr<ADT<M,N,K>> gse_; // geometric search engine
-    BlockFrame<double, int> df_; // blockframe for data storage
 
-    // getter to underlying model object
-    inline Model& model() { return static_cast<Model&>(*this); }
-    inline const Model& model() const { return static_cast<const Model&>(*this); } // const version
-  public:
     // constructor
     ModelBase() = default;
     ModelBase(const PDE& pde) : pde_(std::make_shared<PDE>(pde)) {};
@@ -57,7 +49,15 @@ namespace models {
     // abstract part of the interface, must be implemented by concrete models
     virtual void solve() = 0; // finds a solution to the problem, whatever the problem is.
     // destructor
-    virtual ~ModelBase() = default;  
+    virtual ~ModelBase() = default;
+  protected:   
+    std::shared_ptr<PDE> pde_; // regularizing term Lf - u and domain definition D
+    std::unique_ptr<ADT<M,N,K>> gse_; // geometric search engine
+    BlockFrame<double, int> df_; // blockframe for data storage
+
+    // getter to underlying model object
+    inline Model& model() { return static_cast<Model&>(*this); }
+    inline const Model& model() const { return static_cast<const Model&>(*this); } // const version
   };
 
 #include "ModelBase.tpp"

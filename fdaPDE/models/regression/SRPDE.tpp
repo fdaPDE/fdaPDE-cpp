@@ -53,17 +53,16 @@ void SRPDE<PDE, SamplingDesign>::solve() {
 // in case of an SRPDE model we have T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
 template <typename PDE, Sampling SamplingDesign>
 const DMatrix<double>& SRPDE<PDE, SamplingDesign>::T() {
-  if(T_.size() == 0){ // compute only at first time
-    // compute value of R = R1^T*R0^{-1}*R1, cache for possible reuse
+  // compute value of R = R1^T*R0^{-1}*R1, cache for possible reuse
+  if(R_.size() == 0){
     invR0_->compute(R0());
     R_ = R1().transpose()*invR0_->solve(R1());
-
-    // compute and store matrix T for possible reuse
-    if(!hasCovariates()) // case without covariates, Q is the identity matrix
-      T_ = Psi().transpose()*W()*Psi() + lambda()*R_;
-    else // general case with covariates
-      T_ = Psi().transpose()*lmbQ(Psi()) + lambda()*R_;
   }
+  // compute and store matrix T for possible reuse
+  if(!hasCovariates()) // case without covariates, Q is the identity matrix
+    T_ = PsiTD()*W()*Psi()   + lambda()*R_;
+  else // general case with covariates
+    T_ = PsiTD()*lmbQ(Psi()) + lambda()*R_;
   return T_;
 }
 
@@ -78,8 +77,8 @@ const DMatrix<double>& SRPDE<PDE, SamplingDesign>::Q() {
   return Q_;
 }
 
-// returns the euclidean norm of y - \hat y
+// returns the euclidean norm of op1 - op2
 template <typename PDE, Sampling SamplingDesign>
-double SRPDE<PDE, SamplingDesign>::norm(const DMatrix<double>& obs, const DMatrix<double>& fitted) const {
-  return (obs - fitted).squaredNorm();
+double SRPDE<PDE, SamplingDesign>::norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {
+  return (op1 - op2).squaredNorm();
 }
