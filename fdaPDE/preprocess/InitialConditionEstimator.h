@@ -39,7 +39,7 @@ namespace preprocess {
       BlockFrame<double, int> df = model_.data()(0, n-1).extract();
 
       // cast space-time differential operator df/dt + Lf = u to space-only Lf = u
-      auto L = model_.pde().bilinearForm().remove_operator<dT>();
+      auto L = model_.pde().bilinearForm().template remove_operator<dT>();
       // prepare regularization term
       typedef PDE<Model::M, Model::N, Model::K, decltype(L), DMatrix<double>> PDE_;
       PDE_ problem(model_.domain());
