@@ -21,7 +21,7 @@ namespace models{
 		  "you have asked for parabolic smoothing but using a non-parabolic differential operator");
   private:
     // let m the number of time points
-    DVector<double> s_;   // N x 1 initial condition vector
+    DMatrix<double> s_;   // N x 1 initial condition vector
     DMatrix<double> u_;   // discretized forcing [1/DeltaT * (u_1 + R_0*s) \ldots u_n]
     SpMatrix<double> Im_; // m x m sparse identity matrix (assembled once and cached for reuse)
     SpMatrix<double> L_;  // m x m matrix associated with the derivation in time
@@ -67,20 +67,17 @@ namespace models{
     SparseKroneckerProduct<> Psi() const { return Kronecker(Im_, model().Psi_); }
     // matrices proper of separable regularization
     const SpMatrix<double>& L() const { return L_; }
-    
     // return discretized force corrected by initial conditions
     const DMatrix<double>& u() {
       u_ = pde_->force();
+      // correct first n rows of discretized force as (1/DeltaT * (u_1 + R0*s))
       u_.block(0,0, model().n_basis(),1) /= DeltaT_;
-      // in case of initial condition add R0*s/DeltaT to the first block
-      if(hasInitialCondition())
-	u_.block(0,0, model().n_basis(),1) += (1.0/DeltaT_)*(pde_->R0()*s_);
-      
+      u_.block(0,0, model().n_basis(),1) += (1.0/DeltaT_)*(pde_->R0()*s_);
       return u_;
     }
-
-    void setInitialCondition(const DVector<double>& s) { s_ = s; }
-    bool hasInitialCondition() const { return s_.size() != 0; }
+    const DMatrix<double>& s() { return s_; } // initial condition
+    // setters
+    void setInitialCondition(const DMatrix<double>& s) { s_ = s; }
     
     // destructor
     virtual ~SpaceTimeParabolicBase() = default;  

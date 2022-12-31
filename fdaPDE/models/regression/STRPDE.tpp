@@ -53,6 +53,10 @@ void STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign>::solve() {
 // finds a solution to the STR-PDE smoothing problem (parabolic penalization)
 template <typename PDE, Sampling SamplingDesign>
 void STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign>::solve() {
+  // set first n points of the estimation problem to the initial condition
+  f_.resize((n_time()+1)*n_basis(), 1);
+  f_.block(0,0, n_basis(),1) = s();
+  
   // assemble system matrix for the nonparameteric part of the model
   SparseKroneckerProduct<> L_ = Kronecker(L(), pde().R0());
   SparseBlockMatrix<double,2,2>
@@ -62,7 +66,7 @@ void STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign>::solve() {
   A_ = A.derived();
   b_.resize(A_.rows());
   DVector<double> sol; // room for problem' solution
-   
+
   if(!Base::hasCovariates()){ // nonparametric case
     // rhs of STR-PDE linear system
     b_ << -PsiTD()*y(),
@@ -73,9 +77,9 @@ void STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign>::solve() {
     solver.compute(A_);
     // solve linear system A_*x = b_
     sol = solver.solve(b_);
-
+    
     // store result of smoothing
-    f_ = sol.head(A_.rows()/2);
+    f_.block(n_basis(),0, n_time()*n_basis(),1) = sol.head(A_.rows()/2);
   }else{ // parametric case
     // rhs of STR-PDE linear system
     b_ << -PsiTD()*lmbQ(y()), // -\Psi^T*D*Q*z
@@ -94,7 +98,7 @@ void STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign>::solve() {
     // solve system Mx = b
     sol = solver.solve(U, XtWX(), V, b_);
     // store result of smoothing
-    f_    = sol.head(A_.rows()/2);
+    f_.block(n_basis(),0, n_time()*n_basis(),1) = sol.head(A_.rows()/2);
     beta_ = invXtWX().solve(X().transpose())*(y() - Psi()*f_);
   }
   // store PDE misfit

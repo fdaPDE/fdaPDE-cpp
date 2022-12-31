@@ -40,6 +40,7 @@ namespace models {
     inline double lambdaS() const { return lambdaS_; }
     inline double lambdaT() const { return lambdaT_; }
     inline const DVector<double>& time_domain() const { return time_; }
+    inline std::size_t n_time() const { return time_.rows(); } // number of time instants
     
     // destructor
     virtual ~SpaceTimeBase() = default;  
