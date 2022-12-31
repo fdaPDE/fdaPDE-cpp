@@ -159,7 +159,7 @@ namespace models{
 	DVector<double> IkronD(n*m);
 	for(std::size_t i = 0; i < m; ++i) IkronD.segment(i*n, n) = D;
 	// compute and store result
-	D_ = D.asDiagonal();
+	D_ = IkronD.asDiagonal();
       }else{
 	// for space-only problems store diagonal matrix D_ = diag(D_1, D_2, ... ,D_d) as it is
 	D_ = D.asDiagonal();
