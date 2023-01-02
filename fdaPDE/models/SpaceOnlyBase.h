@@ -25,7 +25,8 @@ namespace models {
     // constructor
     SpaceOnlyBase() = default;
     SpaceOnlyBase(const PDE& pde) : ModelBase<Model>(pde) {};
-
+    void init_regularization() { return; } // do nothing
+    
     // setters
     void setLambda(double lambda) { lambda_ = lambda; } 
     // getters

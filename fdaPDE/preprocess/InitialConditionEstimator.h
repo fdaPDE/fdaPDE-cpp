@@ -29,11 +29,12 @@ namespace preprocess {
 		  "Initial condition estimation is for parabolic regularization only");
   private:
     const Model& model_; // model to initialize
+    DMatrix<double> estimate_;
   public:
     // constructor
     InitialConditionEstimator(const Model& model) : model_(model) {};
     // builds the initial condition estimate
-    DMatrix<double> apply(const std::vector<SVector<1>>& lambdas){
+    void apply(const std::vector<SVector<1>>& lambdas){
       // extract data at time step 0
       std::size_t n = model_.n_locs();
       BlockFrame<double, int> df = model_.data()(0, n-1).extract();
@@ -43,13 +44,14 @@ namespace preprocess {
       // prepare regularization term
       typedef PDE<Model::M, Model::N, Model::K, decltype(L), DMatrix<double>> PDE_;
       PDE_ problem(model_.domain());
-      DMatrix<double> u = DMatrix<double>::Zero(problem.domain().elements()*problem.integrator().numNodes(), 1);
+      DMatrix<double> u = model_.pde().forcingData().col(0);
       problem.setBilinearForm(L);
       problem.setForcing(u);
       problem.init(); // init PDE object
       // define SRPDE model for initial condition estimation
       SRPDE<PDE_, model_traits<Model>::sampling> m(problem, model_.locs());
       m.setData(df); // impose data
+      m.init();
       
       // define GCV calibrator
       ExactGCV<decltype(m)> calibrator(m);
@@ -60,9 +62,13 @@ namespace preprocess {
       // fit model with optimal lambda
       m.setLambda(opt[0]);
       m.solve();
-      // return initial condition estimate
-      return m.f();
-    }    
+      // store initial condition estimate
+      estimate_ = m.f();
+      return;
+    }
+
+    // getters
+    const DMatrix<double>& get() const { return estimate_; }
   };
   
 }}

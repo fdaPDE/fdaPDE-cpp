@@ -32,12 +32,15 @@ namespace models{
     typedef SpaceTimeBase<Model> Base;
     using Base::pde_;  // regularizing term in space
     using Base::model; // underlying model object
+    using Base::time_; // time interval [0,T]
     
     // constructor
     SpaceTimeParabolicBase(const PDE& pde, const DVector<double>& time)
-      : SpaceTimeBase<Model>(pde, time) {
-      std::size_t m_ = time.rows(); // number of time points
-      DeltaT_ = time[1] - time[0]; // time step (assuming equidistant points)
+      : SpaceTimeBase<Model>(pde, time) {}
+    // init data structure related to parabolic regularization
+    void init_regularization() {
+      std::size_t m_ = time_.rows(); // number of time points
+      DeltaT_ = time_[1] - time_[0]; // time step (assuming equidistant points)
       
       // assemble once the m x m identity matrix and cache for fast access
       Im_.resize(m_,m_);
@@ -60,7 +63,8 @@ namespace models{
       L_.resize(m_,m_);
       L_.setFromTriplets(tripletList.begin(), tripletList.end());
       L_.makeCompressed();
-    }
+    } 
+    
     // getters
     SparseKroneckerProduct<> R0()  const { return Kronecker(Im_, pde_->R0()); }
     SparseKroneckerProduct<> R1()  const { return Kronecker(Im_, pde_->R1()); }
@@ -76,6 +80,7 @@ namespace models{
       return u_;
     }
     const DMatrix<double>& s() { return s_; } // initial condition
+
     // setters
     void setInitialCondition(const DMatrix<double>& s) { s_ = s; }
     

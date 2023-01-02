@@ -30,6 +30,7 @@ namespace models {
     ModelBase(const PDE& pde) : pde_(std::make_shared<PDE>(pde)) {};
     // copy constructor
     ModelBase(const ModelBase& rhs) { pde_ = rhs.pde_; }
+    void init(); // entry point for model initialization
     
     // setters
     void setDirichletBC(SpMatrix<double>& A, DMatrix<double>& b);

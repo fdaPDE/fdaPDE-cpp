@@ -41,6 +41,14 @@ namespace models {
     inline double lambdaT() const { return lambdaT_; }
     inline const DVector<double>& time_domain() const { return time_; }
     inline std::size_t n_time() const { return time_.rows(); } // number of time instants
+
+    // remove first n time instants from the problem
+    void shift_time(std::size_t n) {
+      std::size_t m = time_.rows(); // number of time instants
+      time_ = time_.bottomRows(m - n); // correct time interval [0,T]
+      // correct regularization PDE informations
+      pde_->setForcing(pde_->forcingData().rightCols(m - n));
+    }
     
     // destructor
     virtual ~SpaceTimeBase() = default;  

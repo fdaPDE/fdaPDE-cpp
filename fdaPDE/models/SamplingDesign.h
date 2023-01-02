@@ -22,7 +22,9 @@ namespace models{
     inline const Model& model() const { return static_cast<const Model&>(*this); }
   public:
     // constructor
-    SamplingDesign() {
+    SamplingDesign() = default;
+    // init sampling data structures
+    void init_sampling() {
       // preallocate space for Psi matrix
       std::size_t n = model().domain().nodes();
       std::size_t N = model().n_basis();    
@@ -46,8 +48,8 @@ namespace models{
       // finalize construction
       Psi_.setFromTriplets(tripletList.begin(), tripletList.end());
       Psi_.makeCompressed();
-    };
-
+    }
+    
     // getters
     SpMatrix<double> Psi_{}; // n x N matrix \Psi = [\psi_{ij}] = \psi_j(p_i) of spatial basis evaluation at data locations p_i
     auto PsiTD() const { return model().Psi().transpose(); }
@@ -66,7 +68,9 @@ namespace models{
     inline const Model& model() const { return static_cast<const Model&>(*this); }
   public:   
     // constructor
-    SamplingDesign(const DMatrix<double>& locs) : locs_(locs) {
+    SamplingDesign(const DMatrix<double>& locs) : locs_(locs) {};
+    // init sampling data structures
+    void init_sampling() {    
       // preallocate space for Psi matrix
       std::size_t n = locs_.rows();
       std::size_t N = model().n_basis();    
@@ -113,7 +117,9 @@ namespace models{
     inline const Model& model() const { return static_cast<const Model&>(*this); }
   public:   
     // constructor
-    SamplingDesign(const DMatrix<int>& subdomains) : subdomains_(subdomains) {
+    SamplingDesign(const DMatrix<int>& subdomains) : subdomains_(subdomains) {};
+    // init sampling data structures
+    void init_sampling() {
       // preallocate space for Psi matrix
       std::size_t n = subdomains_.rows();
       std::size_t N = model().n_basis();    

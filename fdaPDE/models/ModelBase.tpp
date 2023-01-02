@@ -1,3 +1,11 @@
+// perform initialization of model object, must be called before call to .solve()
+template <typename Model>
+void ModelBase<Model>::init(){
+  pde_->init(); // init pde object
+  model().init_regularization(); // init regularization
+  model().init_sampling(); // init sampling design
+}
+
 // a trait to detect if a model requires a preprocessing step
 template <typename Model, typename T = void>
 struct requires_preprocess : std::false_type {};

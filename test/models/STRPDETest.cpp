@@ -49,8 +49,6 @@ TEST(STRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_Separable) {
   auto L = Laplacian();
   DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements()*3*time_mesh.rows(), 1);
   PDE problem(domain.mesh, L, u); // definition of regularizing PDE
-  problem.init();
-
   // define statistical model
   double lambdaS = 0.01; // smoothing in space
   double lambdaT = 0.01; // smoothing in time
@@ -70,6 +68,7 @@ TEST(STRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_Separable) {
   model.setData(df);
   
   // // solve smoothing problem
+  model.init();
   model.solve();
 
   //    **  test correctness of computed results  **   
@@ -122,8 +121,6 @@ TEST(STRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable)
   auto L = Laplacian();
   DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements()*3, 1);
   PDE problem(domain.mesh, L, u); // definition of regularizing PDE
-  problem.init();
-
   // define statistical model
   double lambdaS = 0.01; // smoothing in space
   double lambdaT = 0.01; // smoothing in time
@@ -152,6 +149,7 @@ TEST(STRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable)
   model.setData(df);
   
   // solve smoothing problem
+  model.init();
   model.solve();
 
   //   **  test correctness of computed results  **   
@@ -202,8 +200,8 @@ TEST(STRPDE, Test3_NonCostantCoefficientsPDE_NonParametric_Areal_Parabolic_Estim
   // define time domain, we skip the first time instant because we are going to use the first block of data
   // for the estimation of the initial condition
   DVector<double> time_mesh;
-  time_mesh.resize(10);
-  for(std::size_t i = 1; i < 10; ++i) time_mesh[i] = 0.4*i;
+  time_mesh.resize(11);
+  for(std::size_t i = 0; i < 10; ++i) time_mesh[i] = 0.4*i;
 
   // define domain and regularizing PDE
   MeshLoader<Mesh2D<>> domain("quasi_circle");
@@ -227,7 +225,6 @@ TEST(STRPDE, Test3_NonCostantCoefficientsPDE_NonParametric_Areal_Parabolic_Estim
   DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements()*3, time_mesh.rows());
   
   PDE problem(domain.mesh, L, u); // definition of regularizing PDE
-  problem.init();
   // define statistical model
   double lambdaS = std::pow(0.1, 6); // smoothing in space
   double lambdaT = std::pow(0.1, 6); // smoothing in time
@@ -254,20 +251,24 @@ TEST(STRPDE, Test3_NonCostantCoefficientsPDE_NonParametric_Areal_Parabolic_Estim
   // define initial condition estimator over grid of lambdas
   InitialConditionEstimator ICestimator(model);
   std::vector<SVector<1>> lambdas;
-  for(double x = -9; x<=3; x += 0.1) lambdas.push_back(SVector<1>(std::pow(10,x))); 
+  for(double x = -9; x <= 3; x += 0.1) lambdas.push_back(SVector<1>(std::pow(10,x))); 
   // compute estimate
-  DMatrix<double> ICestimate = ICestimator.apply(lambdas);
+  ICestimator.apply(lambdas);
+  DMatrix<double> ICestimate = ICestimator.get();
   // test computation initial condition
   CSVFile<double> ICfile;
   ICfile = reader.parseFile("data/models/STRPDE/2D_test3/IC.csv");  
   DMatrix<double> expectedIC = ICfile.toEigen();
   EXPECT_TRUE( almost_equal(expectedIC, ICestimate) );
 
-  // set initial condition and solve smoothing problem
+  // set estimated initial condition
   model.setInitialCondition(ICestimate);
-  // shift data one time instant forward, we have used the first block of data for initial condition estimation
+  // shift data one time instant forward
   std::size_t n = y.rows();
   model.setData(df.tail(n).extract());
+  model.shift_time(1);
+  
+  model.init();
   model.solve();
   
   //   **  test correctness of computed results  **   

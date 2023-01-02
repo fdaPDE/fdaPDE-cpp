@@ -36,7 +36,6 @@ TEST(SRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes) {
   auto L = Laplacian();
   DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements()*3, 1);
   PDE problem(domain.mesh, L, u); // definition of regularizing PDE
-  problem.init();
 
   // define statistical model
   // use optimal lambda to avoid possible numerical issues
@@ -56,6 +55,7 @@ TEST(SRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes) {
   model.setData(df);
 
   // solve smoothing problem
+  model.init();
   model.solve();
 
   /*   **  test correctness of computed results  **   */
@@ -100,7 +100,6 @@ TEST(SRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations) {
   auto L = Laplacian();
   DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements()*3, 1);
   PDE problem(domain.mesh, L, u); // definition of regularizing PDE
-  problem.init();
 
   // define statistical model
   CSVReader<double> reader{};
@@ -129,6 +128,7 @@ TEST(SRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations) {
   model.setData(df);
   
   // solve smoothing problem
+  model.init();
   model.solve();
 
   /*   **  test correctness of computed results  **   */
@@ -184,7 +184,6 @@ TEST(SRPDE, Test3_CostantCoefficientsPDE_NonParametric_GeostatisticalAtNodes) {
   
   DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements()*3, 1);
   PDE problem(domain.mesh, L, u); // definition of regularizing PDE
-  problem.init();
 
   // define statistical model
   double lambda = 10;
@@ -203,6 +202,7 @@ TEST(SRPDE, Test3_CostantCoefficientsPDE_NonParametric_GeostatisticalAtNodes) {
   model.setData(df);
 
   // solve smoothing problem
+  model.init();
   model.solve();
 
   /*   **  test correctness of computed results  **   */
@@ -268,7 +268,6 @@ TEST(SRPDE, Test4_NonCostantCoefficientsPDE_NonParametric_Areal) {
   DMatrix<double> u = forceFile.toEigen();
   
   PDE problem(domain.mesh, L, u); // definition of regularizing PDE
-  problem.init();
   
   // define statistical model
   CSVReader<int> int_reader{};
@@ -291,6 +290,7 @@ TEST(SRPDE, Test4_NonCostantCoefficientsPDE_NonParametric_Areal) {
   model.setData(df);
   
   // solve smoothing problem
+  model.init();
   model.solve();
 
   /*   **  test correctness of computed results  **   */

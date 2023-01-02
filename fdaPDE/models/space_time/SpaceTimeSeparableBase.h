@@ -30,17 +30,20 @@ namespace models{
     typedef SpaceTimeBase<Model> Base;
     using Base::pde_;  // regularizing term in space
     using Base::model; // underlying model object
+    using Base::time_; // time interval [0,T]
     
     // constructor
     SpaceTimeSeparableBase(const PDE& pde, const DVector<double>& time)
-      : SpaceTimeBase<Model>(pde, time), basis_(time) {
+      : SpaceTimeBase<Model>(pde, time), basis_(time) {}
+    // init data structure related to separable regularization
+    void init_regularization() {
       // compute \Phi = [\Phi]_{ij} = \phi_i(t_j) using the provided basis function
-      Phi_ = basis_.eval(time);
+      Phi_ = basis_.eval(time_);
       // discretize operators in time
-      TimeAssembler<TimeBasis> assembler(time);
+      TimeAssembler<TimeBasis> assembler(time_);
       Rt_ = assembler.assemble(TimeMass<TimeBasis>());    // mass matrix in time
       Pt_ = assembler.assemble(TimePenalty<TimeBasis>()); // time penalty matrix
-    }
+    } 
     // getters
     SparseKroneckerProduct<> R0()  const { return Kronecker(Rt_, pde_->R0()); }
     SparseKroneckerProduct<> R1()  const { return Kronecker(Rt_, pde_->R1()); }
