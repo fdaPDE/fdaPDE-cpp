@@ -79,7 +79,7 @@ namespace models {
     //    solve Yz = v
     //    return Wx - WXz = W(I-H)x = Qx
     // it is required to having assigned a design matrix X to the model before calling this method
-    DMatrix<double> lmbQ(const DMatrix<double>& x) {
+    DMatrix<double> lmbQ(const DMatrix<double>& x) const {
       DMatrix<double> v = X().transpose()*W_*x; // X^T*W*x
       DMatrix<double> z = invXtWX_.solve(v);  // (X^T*W*X)^{-1}*X^T*W*x
       // compute W*x - W*X*z = W*x - (W*X*(X^T*W*X)^{-1}*X^T*W)*x = W(I - H)*x = Q*x

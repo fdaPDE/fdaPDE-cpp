@@ -47,6 +47,9 @@ namespace models{
     virtual const DMatrix<double>& Q(); // Q = W(I - H) = W - W*X*(X^T*W*X)^{-1}X^T*W
     // returns the euclidian norm of y - \hat y
     virtual double norm(const DMatrix<double>& obs, const DMatrix<double>& fitted) const;
+
+    // getters
+    const SpMatrix<double>& A() const { return A_; }
     
     virtual ~SRPDE() = default;
   };

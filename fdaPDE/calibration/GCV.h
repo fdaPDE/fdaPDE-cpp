@@ -35,7 +35,10 @@ namespace calibration{
     // analytical expression of first and second derivative of gcv
     std::function<SVector<1>(SVector<1>)> dgcv;
     std::function<SMatrix<1>(SVector<1>)> ddgcv;
-  
+
+    std::vector<double> edfs_;
+    std::vector<double> values_;
+    
     M& model_; // the model to which gcv have to be optimized
     T trace;   // Tr[S] evaluation strategy
 
@@ -45,18 +48,21 @@ namespace calibration{
       //
       // edf      = n - (q + Tr[S])
       // GCV(\lambda) = n/(edf^2)*norm(y - \hat y)^2
-      gcv = [*this](SVector<1> lambda) mutable -> double {
+      gcv = [this](SVector<1> lambda) mutable -> double {
 	// fit the model given current lambda
 	model_.setLambda(lambda[0]);
 	model_.solve();
 	// compute trace of matrix S given current lambda
 	double trS = trace.compute(model_);
+	double q = model_.q();          // number of covariates
+	std::size_t n = model_.n_obs(); // number of observations
+	double edf = n - (q+trS);       // equivalent degrees of freedom
+	edfs_.emplace_back(q+trS);
 
-	double q = model_.q();           // number of covariates
-	std::size_t n = model_.n_locs(); // number of locations
-	double edf = n - (q+trS);        // equivalent degrees of freedom
 	// return gcv at point
-	return (n/std::pow(edf, 2))*( model_.norm(model_.y(), model_.fitted()) );
+	double gcv_value = (n/std::pow(edf, 2))*( model_.norm(model_.y(), model_.fitted()) ) ;
+	values_.emplace_back(gcv_value);
+	return gcv_value;
       };
 
       // analytical expression of gcv first derivative (called only by an exact-based GCV optimization)
@@ -65,7 +71,7 @@ namespace calibration{
       // \sigma^2 = \frac{norm(y - \hat y)^2}{n - (q + Tr[S])}
       // a        = p.dot(y - \hat y) (see ExactGCVEngine.h)
       // dGCV(\lambda) = \frac{2n}{edf^2}[ \sigma^2 * Tr[dS] + a ]
-      dgcv = [*this](SVector<1> lambda) mutable -> SVector<1> {
+      /*dgcv = [*this](SVector<1> lambda) mutable -> SVector<1> {
 	// fit the model given current lambda
 	model_.setLambda(lambda[0]);
 	model_.solve();
@@ -109,7 +115,7 @@ namespace calibration{
 	double b = trace.b(model_);   // b = p.dot(Q*p) + (-ddS*y - 2*\Psi*L*h).dot(y - \hat y)
 	// return hessian of GCV at point
 	return SMatrix<1>( 2*n/std::pow(edf, 2)*( trdS/edf*(3*sigma*trdS + 4*a) + sigma*trddS + b ) );
-      };
+	};*/
     }
   
   public:
@@ -127,7 +133,15 @@ namespace calibration{
 		int>::type = 0>
     GCV(M& model, std::size_t r)
       : model_(model), trace(r) { init(); };
+
+    template <typename U = T,
+	      typename std::enable_if<
+		std::is_same<U, StochasticGCVEngine>::value,
+		int>::type = 0>
+    GCV(M& model, std::size_t r, std::size_t seed)
+      : model_(model), trace(r, seed) { init(); };
   
+    
     // optimizes GCV in an exact way. Requires analytical expression of first and second derivative
     // Because their stochastic estimates are too unreliable, an exact optimization of the GCV is avoided in case
     // a stochastic approximation of Tr[S] is adopted
@@ -158,6 +172,10 @@ namespace calibration{
       SVector<1> x = optimizer.getSolution();
       return x;
     };
+
+    // getters
+    const std::vector<double>& edfs() const { return edfs_; } // expected degrees of freedom q + Tr[S]
+    const std::vector<double>& values() const { return values_; } // computed values of gcv during optimization process
   };
 
   // expose some usefull symbols
