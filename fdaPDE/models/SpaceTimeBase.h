@@ -21,10 +21,9 @@ namespace models {
   protected:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
     typedef ModelBase<Model> Base;
-    using Base::pde_;
+    using Base::pde_; // regularizing PDE
+    using Base::lambda_; // vector of smoothing parameters
 
-    double lambdaS_; // smoothing parameter in space
-    double lambdaT_; // smoothing parameter in time
     DVector<double> time_; // time domain [0, T] 
   public:
     // constructor
@@ -34,11 +33,11 @@ namespace models {
     SpaceTimeBase(const SpaceTimeBase& rhs) { pde_ = rhs.pde_; time_ = rhs.time_; }
 
     // setters
-    void setLambdaS(double lambdaS) { lambdaS_ = lambdaS; }
-    void setLambdaT(double lambdaT) { lambdaT_ = lambdaT; }    
+    void setLambdaS(double lambdaS) { lambda_[0] = lambdaS; }
+    void setLambdaT(double lambdaT) { lambda_[1] = lambdaT; }    
     // getters
-    inline double lambdaS() const { return lambdaS_; }
-    inline double lambdaT() const { return lambdaT_; }
+    inline double lambdaS() const { return lambda_[0]; }
+    inline double lambdaT() const { return lambda_[1]; }
     inline const DVector<double>& time_domain() const { return time_; }
     inline std::size_t n_time() const { return time_.rows(); } // number of time instants
 

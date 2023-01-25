@@ -11,176 +11,210 @@ using fdaPDE::core::ScalarField;
 using fdaPDE::core::TwiceDifferentiableScalarField;
 #include "../core/NLA/SMW.h"
 using fdaPDE::core::NLA::SMW;
-#include "ExactGCVEngine.h"
-#include "StochasticGCVEngine.h"
+#include "ExactEDF.h"
+#include "StochasticEDF.h"
 
 // interfaces
 #include "iGCV.h"
 #include "../models/ModelTraits.h"
 using fdaPDE::models::is_regression_model;
+using fdaPDE::models::n_smoothing_parameters;
 
 namespace fdaPDE{
 namespace calibration{
 
-  // M: statistical model of which the GCV should be optimized
-  // T: the trace evaluation strategy, defaulted to stochastic for efficiency reasons.
-  template <typename M, typename T = StochasticGCVEngine>
+  // base functor implementing the expression of GCV index for model M. Use type T for evaluation of the expected degrees of freedoms
+  template <typename M, typename trS_evaluation_strategy = StochasticEDF<M>>
   class GCV {
     // guarantees statistical model M is compatible with GCV computation
     static_assert(is_regression_model<M>::value && std::is_base_of<iGCV, M>::value,
 		  "you are asking to calibrate something which cannot be handled by GCV");
-  private:
-    // analytical expression of gcv field
-    std::function<double(SVector<1>)> gcv;
-    // analytical expression of first and second derivative of gcv
-    std::function<SVector<1>(SVector<1>)> dgcv;
-    std::function<SMatrix<1>(SVector<1>)> ddgcv;
+  protected:
+    // cache computed values, use pointers to let shallow-copy (optimizers need to access those members)
+    typedef std::shared_ptr<std::vector<double>> vect_ptr;
+    vect_ptr edfs_   = std::make_shared<std::vector<double>>();
+    vect_ptr values_ = std::make_shared<std::vector<double>>();
 
-    std::vector<double> edfs_;
-    std::vector<double> values_;
+    M& model_; // model to calibrate
+    trS_evaluation_strategy trS_; // strategy used to evaluate the trace of smoothing matrix S
     
-    M& model_; // the model to which gcv have to be optimized
-    T trace;   // Tr[S] evaluation strategy
+  public:
+    // SFINAE selection of constructor depending on trace evaluation strategy
+    template <typename U = trS_evaluation_strategy, // fake type to enable substitution
+	      typename std::enable_if<!std::is_same<U, StochasticEDF<M>>::value,int>::type = 0> 
+    GCV(M& model) : model_(model), trS_(model_) {};
 
-    // initialize gcv functors
-    void init() {
-      // analytical expression of gcv (called by any type of GCV optimization)
-      //
-      // edf      = n - (q + Tr[S])
-      // GCV(\lambda) = n/(edf^2)*norm(y - \hat y)^2
-      gcv = [this](SVector<1> lambda) mutable -> double {
-	// fit the model given current lambda
-	model_.setLambda(lambda[0]);
-	model_.solve();
-	// compute trace of matrix S given current lambda
-	double trS = trace.compute(model_);
-	double q = model_.q();          // number of covariates
-	std::size_t n = model_.n_obs(); // number of observations
-	double edf = n - (q+trS);       // equivalent degrees of freedom
-	edfs_.emplace_back(q+trS);
+    // constructor overloads for stochastic trace approximation
+    template <typename U = trS_evaluation_strategy,
+	      typename std::enable_if<std::is_same<U, StochasticEDF<M>>::value,int>::type = 0>
+    GCV(M& model, std::size_t r) : model_(model), trS_(model_, r) {};
+    template <typename U = trS_evaluation_strategy,
+	      typename std::enable_if<std::is_same<U, StochasticEDF<M>>::value,int>::type = 0>
+    GCV(M& model, std::size_t r, std::size_t seed) : model_(model), trS_(model_, r, seed) {};
 
-	// return gcv at point
-	double gcv_value = (n/std::pow(edf, 2))*( model_.norm(model_.y(), model_.fitted()) ) ;
-	values_.emplace_back(gcv_value);
-	return gcv_value;
-      };
-
-      // analytical expression of gcv first derivative (called only by an exact-based GCV optimization)
-      //
-      // edf      = n - (q + Tr[S])
-      // \sigma^2 = \frac{norm(y - \hat y)^2}{n - (q + Tr[S])}
-      // a        = p.dot(y - \hat y) (see ExactGCVEngine.h)
-      // dGCV(\lambda) = \frac{2n}{edf^2}[ \sigma^2 * Tr[dS] + a ]
-      /*dgcv = [*this](SVector<1> lambda) mutable -> SVector<1> {
-	// fit the model given current lambda
-	model_.setLambda(lambda[0]);
-	model_.solve();
-	// compute trace of matrix S and its firstderivative given current lambda
-	double trS  = trace.compute(model_);
-	double trdS = trace.derive(model_);
+    // analytical expression of gcv (called by any type of GCV optimization)
+    //
+    // edf = n - (q + Tr[S])
+    // GCV(\lambda) = n/(edf^2)*norm(y - \hat y)^2
+    double operator()(const SVector<n_smoothing_parameters<M>::value>& lambda) {
+      // fit the model given current lambda
+      model_.setLambda(lambda);
+      model_.solve();
+      // compute equivalent degrees of freedom given current lambda
+      double trS = trS_.compute(); 
+      double q = model_.q();          // number of covariates
+      std::size_t n = model_.n_obs(); // number of observations      
+      double dor = n - (q + trS);     // residual degrees of freedom
+      edfs_->emplace_back(q + trS);   // store equivalent degrees of freedom
       
+      // return gcv at point
+      double gcv_value = (n/std::pow(dor, 2))*( model_.norm(model_.y(), model_.fitted()) ) ; 
+      values_->emplace_back(gcv_value);
+      return gcv_value;
+    }
+    // getters
+    const std::vector<double>& edfs() const { return *edfs_; } // equivalent degrees of freedom q + Tr[S]
+    const std::vector<double>& values() const { return *values_; } // computed values of GCV index
+  };
+
+  // for the optimization of GCV using finite differences we just need the definition of the GCV functional. 
+  template <typename M, typename trS_evaluation_strategy = StochasticEDF<M>>
+  using FiniteDifferenceGCV = GCV<M, trS_evaluation_strategy>;
+
+  // an optimization of GCV using its exact expression requires the analitycal expression of gradient and hessian matrix.
+  // this depends on the type of regularization used by the statistical model M
+  template <typename M, typename RegularizationType> class ExactGCV;
+  
+  // space only specialization of GCV exact derivatives
+  // expression of GCV derivatives:
+  //    edf = n - (q + Tr[S])
+  //    dGCV(\lambda)  = \frac{2n}{edf^2}[ \sigma^2 * Tr[dS] + a ]
+  //    ddGCV(\lambda) = \frac{2n}{edf^2}[ \frac{1}{edf}(3*\sigma^2*Tr[dS] + 4*a)*Tr[dS] + \sigma^2*Tr[ddS] + b ]    
+  template <typename M>
+  class ExactGCV<M, fdaPDE::models::SpaceOnlyTag> : public GCV<M, ExactEDF<M>> {
+  private:
+    // import symbols from base
+    typedef GCV<M, ExactEDF<M>> Base;
+    using Base::trS_;
+    using Base::model_;
+    
+    DMatrix<double> L_{}; // T^{-1}*R
+    DMatrix<double> F_{}; // (T^{-1}*R)*(T^{-1}*E)
+    DVector<double> h_{}; // h = (\lambda*L - I)*T^{-1}*R1^T*R0^{-1}*u
+    DVector<double> p_{}; // p = \Psi*h - dS*y
+
+    DMatrix<double> S_  {}; // S = \Psi*T^{-1}*\Psi^T*Q
+    DMatrix<double> dS_ {}; // dS = -\Psi*(T^{-1}*R)*(T^{-1}*E)
+    DMatrix<double> ddS_{}; // ddS = 2*\Psi*L*F
+
+    // compute first derivative of matrix S: dS = -\Psi*(T^{-1}*R)*(T^{-1}*E)
+    const DMatrix<double>& dS() {
+      L_ = (trS_.invT_).solve(model_.R()); // T^{-1}*R
+      F_ = L_*(trS_.invT_).solve(trS_.E_); // (T^{-1}*R)*(T^{-1}*E)
+      dS_ = model_.Psi()*(-F_); 
+      return dS_;
+    }  
+    // compute second derivative of matrix S: ddS = 2*\Psi*L*F
+    const DMatrix<double>& ddS(){
+      ddS_ = model_.Psi()*2*L_*F_; 
+      return ddS_;
+    }
+    
+    // computes the a term in the dGCV expression, given by
+    // a = p.dot(y - \hat y)
+    //   p = \Psi*h - t
+    //     h = (\lambda*L - I)*T^{-1}*g
+    //       g = R1^T*R0^{-1}*u
+    //     t = dS*y
+    double a(){
+      DMatrix<double> g = model_.R1().transpose()*model_.invR0().solve(model_.u());
+      // cache h and p since needed for computation of second derivative
+      h_ = (model_.lambda()*L_ - DMatrix<double>::Identity(model_.n_locs(), model_.n_locs()))*(trS_.invT_).solve(g);
+      p_ = model_.Psi()*h_ - dS_*model_.y();
+      // return a = p.dot(y - \hat y)
+      return (( model_.y() - model_.fitted() ).transpose() * p_).coeff(0,0);
+    }
+  
+    // computes the b term in the ddGCV expression, given by
+    // b = p.dot(Q*p) + (-ddS*y - 2*\Psi*L*h).dot(y - \hat y) 
+    //   p = \Psi*h - t
+    //     h = (\lambda*L - I)*T^{-1}*g
+    //       g = R1^T*R0^{-1}*u
+    //     t = dS*y
+    double b(){
+      // NB: ddS_ must already contain valid data
+      DMatrix<double> C = 2*L_*h_;
+      // perform efficient multiplication by permutation matrix Psi
+      DMatrix<double> D(model_.n_locs(), 1); // 2*\Psi*L*h
+      for(std::size_t k = 0; k < model_.Psi().outerSize(); ++k){
+	for(SpMatrix<double>::InnerIterator it(model_.Psi(),k); it; ++it){
+	  D.row(it.row()) = C.row(it.col());
+	}
+      }
+      DVector<double> Qp_ = model_.lmbQ(p_); // efficient computation of Q*p
+      // return b = p.dot(Q*p) + (-ddS*y - 2*\Psi*L*h).dot(y - \hat y)
+      return (( model_.y() - model_.fitted() ).transpose() * ( -ddS_*model_.y() - D )).coeff(0,0) + p_.dot(Qp_);
+    }
+    
+  public:
+    // constructor
+    ExactGCV(M& model) : GCV<M, ExactEDF<M>>(model) {};
+    
+    // analytical expression of gcv first derivative (called only by an exact-based GCV optimization)
+    //
+    // edf      = n - (q + Tr[S])
+    // \sigma^2 = \frac{norm(y - \hat y)^2}{n - (q + Tr[S])}
+    // a        = p.dot(y - \hat y)
+    // dGCV(\lambda) = \frac{2n}{edf^2}[ \sigma^2 * Tr[dS] + a ]
+    std::function<SVector<1>(SVector<1>)> derive() const {
+      return [*this](SVector<1> lambda) mutable -> SVector<1> {
+	// fit the model given current lambda
+	model_.setLambda(lambda);
+	model_.solve();
+	// compute trace of matrix S and its first derivative given current lambda
+	double trS  = trS_.compute();
+	double trdS = dS().trace();
+	
 	double q = model_.q();           // number of covariates
 	std::size_t n = model_.n_locs(); // number of locations
 	double edf = n - (q+trS);        // equivalent degrees of freedom
 	// \sigma^2 = \frac{(y - \hat y).squaredNorm()}{n - (q + Tr[S])}
 	double sigma = ( model_.y() - model_.fitted() ).squaredNorm()/edf;
-
-	double a = trace.a(model_);   // a = p.dot(y - \hat y)
 	// return gradient of GCV at point      
-	return SVector<1>( 2*n/std::pow(n - (q+trS), 2)*( sigma*trdS + a ) );
+	return SVector<1>( 2*n/std::pow(n - (q+trS), 2)*( sigma*trdS + a() ) );
       };
+    };
 
-      // analytical expression of gcv second derivative (called only by an exact-based GCV optimization)
-      //
-      // edf      = n - (q + Tr[S])
-      // \sigma^2 = \frac{norm(y - \hat y)^2}{n - (q + Tr[S])}
-      // b        = p.dot(Q*p) + (-ddS*y - 2*\Psi*L*h).dot(y - \hat y) (see ExactGCVEngine)
-      // ddGCV(\lambda) = \frac{2n}{edf^2}[ \frac{1}{edf}(3*\sigma^2*Tr[dS] + 4*a)*Tr[dS] + \sigma^2*Tr[ddS] + b ]
-      ddgcv = [*this](SVector<1> lambda) mutable -> SMatrix<1> {
+    // analytical expression of gcv second derivative (called only by an exact-based GCV optimization)
+    //
+    // edf      = n - (q + Tr[S])
+    // \sigma^2 = \frac{norm(y - \hat y)^2}{n - (q + Tr[S])}
+    // b        = p.dot(Q*p) + (-ddS*y - 2*\Psi*L*h).dot(y - \hat y)
+    // ddGCV(\lambda) = \frac{2n}{edf^2}[ \frac{1}{edf}(3*\sigma^2*Tr[dS] + 4*a)*Tr[dS] + \sigma^2*Tr[ddS] + b ]
+    std::function<SMatrix<1>(SVector<1>)> deriveTwice() const {
+      return [*this](SVector<1> lambda) mutable -> SMatrix<1> {
 	// fit the model given current lambda
 	model_.setLambda(lambda[0]);
 	model_.solve();
 	// compute trace of matrix S and its first and second derivative given current lambda
-	double trS   = trace.compute(model_);
-	double trdS  = trace.derive(model_);
-	double trddS = trace.deriveTwice(model_);
+	double trS   = trS_.compute();
+	double trdS  = dS().trace();
+	double trddS = ddS().trace();
       
 	double q = model_.q();           // number of covariates
 	std::size_t n = model_.n_locs(); // number of locations
 	double edf = n - (q+trS);        // equivalent degrees of freedom
 	// \sigma^2 = \frac{norm(y - \hat y)^2}{n - (q + Tr[S])}
 	double sigma = ( model_.y() - model_.fitted() ).squaredNorm()/edf;
-
-	double a = trace.a(model_);   // a = p.dot(y - \hat y)
-	double b = trace.b(model_);   // b = p.dot(Q*p) + (-ddS*y - 2*\Psi*L*h).dot(y - \hat y)
 	// return hessian of GCV at point
-	return SMatrix<1>( 2*n/std::pow(edf, 2)*( trdS/edf*(3*sigma*trdS + 4*a) + sigma*trddS + b ) );
-	};*/
+	return SMatrix<1>( 2*n/std::pow(edf, 2)*( trdS/edf*( 3*sigma*trdS + 4*a() ) + sigma*trddS + b() ) );      
+      };
     }
-  
-  public:
-    // SFINAE selection of constructor depending on trace evaluation strategy
-    template <typename U = T, // fake type to enable substitution
-	      typename std::enable_if<
-		!std::is_same<U, StochasticGCVEngine>::value,
-		int>::type = 0> 
-    GCV(M& model)
-      : model_(model) { init(); };
-
-    template <typename U = T,
-	      typename std::enable_if<
-		std::is_same<U, StochasticGCVEngine>::value,
-		int>::type = 0>
-    GCV(M& model, std::size_t r)
-      : model_(model), trace(r) { init(); };
-
-    template <typename U = T,
-	      typename std::enable_if<
-		std::is_same<U, StochasticGCVEngine>::value,
-		int>::type = 0>
-    GCV(M& model, std::size_t r, std::size_t seed)
-      : model_(model), trace(r, seed) { init(); };
-  
-    
-    // optimizes GCV in an exact way. Requires analytical expression of first and second derivative
-    // Because their stochastic estimates are too unreliable, an exact optimization of the GCV is avoided in case
-    // a stochastic approximation of Tr[S] is adopted
-    template <typename U = T,
-	      typename std::enable_if<
-		!std::is_same<U, StochasticGCVEngine>::value, int>::type = 0,
-	      typename O, typename... Args>
-    SVector<1> exact(O& optimizer, Args&... args) {
-      // wrap gcv and its derivatives in a TwiceDifferentiableScalarField object.
-      // This forces optimizers to employ the analytical expression of gcv's derivatives when it is required
-      TwiceDifferentiableScalarField<1> obj(gcv, dgcv, ddgcv);
-      // optimize gcv field
-      optimizer.findMinimum(obj, args...);
-      SVector<1> x = optimizer.getSolution();
-      return x;
-    }
-  
-    // optimizes GCV field using finite differences to approximate first and second derivative
-    // (doesn't require to evaluate dgcv and ddgcv)
-    template <typename O, typename... Args>
-    SVector<1> approx(O& optimizer, double gcvFDStep, Args&... args) {
-      // wrap gcv in a ScalarField object.
-      // This forces optimizers to employ a finite difference approximation of gcv derivatives when it is required
-      ScalarField<1> obj(gcv);
-      obj.setStep(gcvFDStep);
-      // optimize gcv field
-      optimizer.findMinimum(obj, args...);
-      SVector<1> x = optimizer.getSolution();
-      return x;
-    };
-
-    // getters
-    const std::vector<double>& edfs() const { return edfs_; } // expected degrees of freedom q + Tr[S]
-    const std::vector<double>& values() const { return values_; } // computed values of gcv during optimization process
   };
-
+  
   // expose some usefull symbols
-  template <typename M> using ExactGCV = GCV<M, ExactGCVEngine>;
-  template <typename M> using StochasticGCV = GCV<M, StochasticGCVEngine>;
+  //template <typename M> using ExactGCV = GCV<M, ExactEDF<M>>;
+  //template <typename M> using StochasticGCV = GCV<M, StochasticEDF<M>>;
 }}
   
 #endif // __GCV_H__

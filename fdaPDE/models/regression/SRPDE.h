@@ -30,7 +30,13 @@ namespace models{
   private:
     typedef RegressionBase<SRPDE<PDE, SamplingDesign>> Base;   
     SpMatrix<double> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
-    DVector<double> b_{};  // right hand side of problem's linear system (1 x 2N vector)
+    Eigen::SparseLU<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> invA_; // factorization of matrix A
+    DVector<double> b_{}; // right hand side of problem's linear system (1 x 2N vector)
+
+    // matrices related to woodbury decomposition
+    DMatrix<double> U_{};
+    DMatrix<double> V_{};
+    
   public:
     IMPORT_REGRESSION_SYMBOLS;
     using Base::lambda; // smoothing parameter in space
@@ -50,6 +56,9 @@ namespace models{
 
     // getters
     const SpMatrix<double>& A() const { return A_; }
+    const Eigen::SparseLU<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>>& invA() const { return invA_; }
+    const DMatrix<double>& U() const { return U_; }
+    const DMatrix<double>& V() const { return V_; }
     
     virtual ~SRPDE() = default;
   };

@@ -5,8 +5,9 @@ void SRPDE<PDE, SamplingDesign>::solve() {
   SparseBlockMatrix<double,2,2>
     A(-PsiTD()*W()*Psi(), lambda()*R1().transpose(),
       lambda()*R1(),      lambda()*R0()            );
-  // cache system matrix for reuse
+  // cache non-parametric matrix and its factorization for reuse
   A_ = A.derived();
+  invA_.compute(A_);
   b_.resize(A_.rows());
   DVector<double> sol; // room for problem' solution
   
@@ -14,13 +15,8 @@ void SRPDE<PDE, SamplingDesign>::solve() {
     // rhs of SR-PDE linear system
     b_ << -PsiTD()*W()*y(),
           lambda()*u();
-    
-    // define system solver. Use a sparse solver
-    Eigen::SparseLU<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver{};
-    solver.compute(A_);
-    // solve linear system A_*x = b_
-    sol = solver.solve(b_);
-    
+
+    sol = invA_.solve(b_); // solve linear system A_*x = b_
     // store result of smoothing
     f_ = sol.head(A_.rows()/2);
   }else{ // parametric case
@@ -28,18 +24,13 @@ void SRPDE<PDE, SamplingDesign>::solve() {
     b_ << -PsiTD()*lmbQ(y()), // -\Psi^T*D*Q*z
           lambda()*u();
     
-    std::size_t q_ = X().cols(); // number of covariates
     // definition of matrices U and V  for application of woodbury formula
-    DMatrix<double> U = DMatrix<double>::Zero(A_.rows(), q_);
-    U.block(0,0, A_.rows()/2, q_) = PsiTD()*W()*X();
-    DMatrix<double> V = DMatrix<double>::Zero(q_, A_.rows());
-    V.block(0,0, q_, A_.rows()/2) = X().transpose()*W()*Psi();
-
-    // Define system solver. Use SMW solver from NLA module
-    SMW<> solver{};
-    solver.compute(A_);
-    // solve system Mx = b
-    sol = solver.solve(U, XtWX(), V, b_);
+    U_ = DMatrix<double>::Zero(A_.rows(), q());
+    U_.block(0,0, A_.rows()/2, q()) = PsiTD()*W()*X();
+    V_ = DMatrix<double>::Zero(q(), A_.rows());
+    V_.block(0,0, q(), A_.rows()/2) = X().transpose()*W()*Psi();
+    // solve system (A_ + U_*(X^T*W_*X)*V_)x = b using woodbury formula from NLA module
+    sol = SMW<>().solve(invA_, U_, XtWX(), V_, b_);
     // store result of smoothing 
     f_    = sol.head(A_.rows()/2);
     beta_ = invXtWX().solve(X().transpose()*W())*(y() - Psi()*f_);

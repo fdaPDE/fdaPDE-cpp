@@ -35,6 +35,7 @@ namespace models {
     // setters
     void setDirichletBC(SpMatrix<double>& A, DMatrix<double>& b);
     void setData(const BlockFrame<double, int>& df); // initialize model's data
+    void setLambda(const SVector<n_smoothing_parameters<Model>::value>& lambda) { lambda_ = lambda; } 
     
     // getters
     const BlockFrame<double, int>& data() const { return df_; }
@@ -46,6 +47,7 @@ namespace models {
     std::size_t n_basis() const { return pde_->domain().dof(); }; // number of basis functions used in space discretization
     std::size_t n_obs() const { return df_.template get<double>(OBSERVATIONS_BLK).rows(); } // number of observations
     const ADT<M,N,K>& gse() { if(gse_ == nullptr){ gse_ = std::make_unique<ADT<M,N,K>>(domain()); } return *gse_; }
+    SVector<n_smoothing_parameters<Model>::value> lambda() const { return lambda_; }
     
     // abstract part of the interface, must be implemented by concrete models
     virtual void solve() = 0; // finds a solution to the problem, whatever the problem is.
@@ -55,7 +57,8 @@ namespace models {
     std::shared_ptr<PDE> pde_; // regularizing term Lf - u and domain definition D
     std::unique_ptr<ADT<M,N,K>> gse_; // geometric search engine
     BlockFrame<double, int> df_; // blockframe for data storage
-
+    SVector<n_smoothing_parameters<Model>::value> lambda_; // vector of smoothing parameters
+    
     // getter to underlying model object
     inline Model& model() { return static_cast<Model&>(*this); }
     inline const Model& model() const { return static_cast<const Model&>(*this); } // const version

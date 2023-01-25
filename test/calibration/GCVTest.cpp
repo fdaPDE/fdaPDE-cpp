@@ -15,10 +15,14 @@ using fdaPDE::models::SRPDE;
 #include "../fdaPDE/models/SamplingDesign.h"
 using fdaPDE::models::Sampling;
 #include "../fdaPDE/calibration/GCV.h"
+using fdaPDE::calibration::GCV;
 using fdaPDE::calibration::ExactGCV;
-using fdaPDE::calibration::StochasticGCV;
+using fdaPDE::calibration::ExactEDF;
+using fdaPDE::calibration::StochasticEDF;
 #include "../fdaPDE/core/OPT/optimizers/GridOptimizer.h"
 using fdaPDE::core::OPT::GridOptimizer;
+#include "../fdaPDE/core/OPT/optimizers/Newton.h"
+using fdaPDE::core::OPT::NewtonOptimizer;
 
 #include "../utils/MeshLoader.h"
 using fdaPDE::testing::MeshLoader;
@@ -62,11 +66,14 @@ TEST(GCV_SRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_GridExact) {
   std::vector<SVector<1>> lambdas;
   for(double x = -6.0; x <= -3.0; x +=0.25) lambdas.push_back(SVector<1>(std::pow(10,x)));
   
-  // define GCV calibrator
-  ExactGCV<decltype(model)> GCV(model);
+  // define GCV function and optimize
+  GCV<decltype(model), ExactEDF<decltype(model)>> GCV(model);
   GridOptimizer<1> opt;
-  SVector<1> best_lambda = GCV.approx(opt, 0.01, lambdas);
 
+  ScalarField<1, decltype(GCV)> obj(GCV);
+  opt.findMinimum(obj, lambdas); // optimize gcv field
+  SVector<1> best_lambda = opt.getSolution();
+  
   // expected values for q + Tr[S]
   std::vector<double> expected_edfs = {
     432.0526271699909557, 425.5738291798880368, 414.9490914902157783, 398.3650445980014752, 374.2000509470916541,
@@ -74,8 +81,8 @@ TEST(GCV_SRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_GridExact) {
     139.8641263839342344, 110.2252857831315538, 86.2049347912456341
   };
   for(std::size_t i = 0; i < expected_edfs.size(); ++i)
-    EXPECT_TRUE( almost_equal(expected_edfs[i], GCV.edfs()[i]) );  
-
+    EXPECT_TRUE( almost_equal(expected_edfs[i], GCV.edfs()[i]) );
+  
   // expected value of gcv(\lambda)
   std::vector<double> expected_gcvs = {
     0.0400234253534814, 0.0397604316008810, 0.0394198736081135, 0.0391060717299170, 0.0391008105529502,
@@ -126,9 +133,12 @@ TEST(GCV_SRPDE, Test2_Laplacian_NonParametric_GeostatisticalAtNodes_GridStochast
   
   // define GCV calibrator
   std::size_t seed = 476813;
-  StochasticGCV<decltype(model)> GCV(model, 1000, seed);
+  GCV<decltype(model), StochasticEDF<decltype(model)>> GCV(model, 1000, seed);
   GridOptimizer<1> opt;
-  SVector<1> best_lambda = GCV.approx(opt, 0.01, lambdas);
+
+  ScalarField<1, decltype(GCV)> obj(GCV);
+  opt.findMinimum(obj, lambdas); // optimize gcv field
+  SVector<1> best_lambda = opt.getSolution();
 
   // expected values for q + Tr[S]
   std::vector<double> expected_edfs = {
@@ -198,9 +208,12 @@ TEST(GCV_SRPDE, Test3_Laplacian_SemiParametric_GeostatisticalAtLocations_GridExa
   for(double x = -3.0; x <= 3.0; x +=0.25) lambdas.push_back(SVector<1>(std::pow(10,x)));
   
   // define GCV calibrator
-  ExactGCV<decltype(model)> GCV(model);
+  GCV<decltype(model), ExactEDF<decltype(model)>> GCV(model);
   GridOptimizer<1> opt;
-  SVector<1> best_lambda = GCV.approx(opt, 0.01, lambdas);
+  
+  ScalarField<1, decltype(GCV)> obj(GCV);
+  opt.findMinimum(obj, lambdas); // optimize gcv field
+  SVector<1> best_lambda = opt.getSolution();
 
   // expected values for q + Tr[S]
   std::vector<double> expected_edfs = {
@@ -274,9 +287,13 @@ TEST(GCV_SRPDE, Test4_Laplacian_SemiParametric_GeostatisticalAtLocations_GridSto
   for(double x = -3.0; x <= 3.0; x +=0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
   
   // define GCV calibrator
-  StochasticGCV<decltype(model)> GCV(model, 100, 66546513);
+  std::size_t seed = 66546513;
+  GCV<decltype(model), StochasticEDF<decltype(model)>> GCV(model, 100, seed);
   GridOptimizer<1> opt;
-  SVector<1> best_lambda = GCV.approx(opt, 0.01, lambdas);
+
+  ScalarField<1, decltype(GCV)> obj(GCV);
+  opt.findMinimum(obj, lambdas); // optimize gcv field
+  SVector<1> best_lambda = opt.getSolution();
 
   // expected values for q + Tr[S] (approximated)
   std::vector<double> expected_edfs = {
@@ -345,9 +362,12 @@ TEST(GCV_SRPDE, Test5_CostantCoefficientsPDE_NonParametric_GeostatisticalAtNodes
   for(double x = -6.0; x <= -3.0; x +=0.25) lambdas.push_back(SVector<1>(std::pow(10,x)));
   
   // define GCV calibrator
-  ExactGCV<decltype(model)> GCV(model);
+  GCV<decltype(model), ExactEDF<decltype(model)>> GCV(model);
   GridOptimizer<1> opt;
-  SVector<1> best_lambda = GCV.approx(opt, 0.01, lambdas);
+
+  ScalarField<1, decltype(GCV)> obj(GCV);
+  opt.findMinimum(obj, lambdas); // optimize gcv field
+  SVector<1> best_lambda = opt.getSolution();
 
   // expected values for q + Tr[S]
   std::vector<double> expected_edfs = {
@@ -412,11 +432,15 @@ TEST(GCV_SRPDE, Test6_CostantCoefficientsPDE_NonParametric_GeostatisticalAtNodes
   for(double x = -6.0; x <= -3.0; x +=0.25) lambdas.push_back(SVector<1>(std::pow(10,x)));
   
   // define GCV calibrator
-  StochasticGCV<decltype(model)> GCV(model, 100, 4564168);
+  std::size_t seed = 4564168;
+  GCV<decltype(model), StochasticEDF<decltype(model)>> GCV(model, 100, seed);
   GridOptimizer<1> opt;
-  SVector<1> best_lambda = GCV.approx(opt, 0.01, lambdas);
 
-// expected values for q + Tr[S]
+  ScalarField<1, decltype(GCV)> obj(GCV);
+  opt.findMinimum(obj, lambdas); // optimize gcv field
+  SVector<1> best_lambda = opt.getSolution();
+  
+  // expected values for q + Tr[S]
   std::vector<double> expected_edfs = {
     392.6398736612755442, 367.0053593585058707, 334.3960328473687582, 296.8543902422412657, 257.2935036770556962,
     218.3463104599331643, 181.8107241424921483, 148.7611248424874759, 119.8187842113097616,  95.2531545500184080,
@@ -483,7 +507,6 @@ TEST(GCV_SRPDE, Test7_NonCostantCoefficientsPDE_NonParametric_Areal_GridExact) {
 
   double lambda = std::pow(0.1, 3);
   SRPDE<decltype(problem), Sampling::Areal> model(problem, areal);
-  model.setLambda(lambda);
   
   // load data from .csv files
   CSVFile<double> yFile; // observation file
@@ -501,10 +524,13 @@ TEST(GCV_SRPDE, Test7_NonCostantCoefficientsPDE_NonParametric_Areal_GridExact) {
   for(double x = -6.0; x <= -3.0; x +=0.25) lambdas.push_back(SVector<1>(std::pow(10,x)));
   
   // define GCV calibrator
-  ExactGCV<decltype(model)> GCV(model);
+  GCV<decltype(model), ExactEDF<decltype(model)>> GCV(model);
   GridOptimizer<1> opt;
-  SVector<1> best_lambda = GCV.approx(opt, 0.01, lambdas);
 
+  ScalarField<1, decltype(GCV)> obj(GCV);
+  opt.findMinimum(obj, lambdas); // optimize gcv field
+  SVector<1> best_lambda = opt.getSolution();
+  
   // expected values for q + Tr[S]
   std::vector<double> expected_edfs = {
     6.8256470417592974, 6.7027363460970051, 6.5065235219756685, 6.2115932502007984, 5.8013394965992671,
@@ -571,7 +597,6 @@ TEST(GCV_SRPDE, Test8_NonCostantCoefficientsPDE_NonParametric_Areal_GridStochast
 
   double lambda = std::pow(0.1, 3);
   SRPDE<decltype(problem), Sampling::Areal> model(problem, areal);
-  model.setLambda(lambda);
   
   // load data from .csv files
   CSVFile<double> yFile; // observation file
@@ -590,9 +615,12 @@ TEST(GCV_SRPDE, Test8_NonCostantCoefficientsPDE_NonParametric_Areal_GridStochast
   
   // define GCV calibrator
   std::size_t seed = 438172;
-  StochasticGCV<decltype(model)> GCV(model, 100, seed);
+  GCV<decltype(model), StochasticEDF<decltype(model)>> GCV(model, 100, seed);
   GridOptimizer<1> opt;
-  SVector<1> best_lambda = GCV.approx(opt, 0.01, lambdas);
+
+  ScalarField<1, decltype(GCV)> obj(GCV);
+  opt.findMinimum(obj, lambdas); // optimize gcv field
+  SVector<1> best_lambda = opt.getSolution();
 
   std::vector<double> expected_edfs = {
     6.831047684097598, 6.712363557176861, 6.523569437275610, 6.241165650575311, 5.850412256000765,

@@ -27,8 +27,8 @@ namespace models{
   template <typename T>
   struct is_stat_model {
     static constexpr bool value = fdaPDE::is_base_of_template<ModelBase, T>::value;
-  };
-
+  };  
+  
   // trait for the selection of the type of regularization on the base of the property of a model
   template <typename Model>
   struct select_regularization_type {
@@ -49,6 +49,17 @@ namespace models{
       typename model_traits<Model>::RegularizationType, SpaceOnlyTag>::value;
   };
 
+  // trait to select the number of smoothing parameters
+  template <typename Model>
+  class n_smoothing_parameters {
+    static constexpr int compute() {
+      if constexpr(is_space_time<Model>::value) return 2;
+      else return 1;
+    }
+  public:
+    static constexpr int value = n_smoothing_parameters<Model>::compute();
+  };
+  
   // allowed sampling strategies
   enum Sampling { GeoStatLocations, GeoStatMeshNodes, Areal };
   // traits for sampling design in space  
