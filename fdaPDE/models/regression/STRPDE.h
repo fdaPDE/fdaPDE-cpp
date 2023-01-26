@@ -39,6 +39,7 @@ namespace models{
     typedef SpaceTimeSeparableTag TimeRegularization;
     typedef RegressionBase<STRPDE<PDE, TimeRegularization, SamplingDesign>> Base;
     SpMatrix<double> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
+    Eigen::SparseLU<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> invA_; // factorization of matrix A
     DVector<double> b_{};  // right hand side of problem's linear system (1 x 2N vector)
   public:
     // import commonly defined symbols from base
@@ -82,6 +83,7 @@ namespace models{
     typedef SpaceTimeParabolicTag TimeRegularization;
     typedef RegressionBase<STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign>> Base;
     SpMatrix<double> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
+    Eigen::SparseLU<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> invA_; // factorization of matrix A
     DVector<double> b_{};  // right hand side of problem's linear system (1 x 2N vector)
   public:
     // import commonly defined symbols from base

@@ -8,6 +8,7 @@ void STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign>::solve() {
       lambdaS()*R1(),             lambdaS()*R0()            );
   // cache system matrix for reuse
   A_ = A.derived();
+  invA_.compute(A_);
   b_.resize(A_.rows());
   DVector<double> sol; // room for problem' solution
    
@@ -38,9 +39,8 @@ void STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign>::solve() {
 
     // Define system solver. Use SMW solver from NLA module
     SMW<> solver{};
-    solver.compute(A_);
     // solve system Mx = b
-    sol = solver.solve(U, XtWX(), V, b_);
+    sol = solver.solve(invA_, U, XtWX(), V, b_);
     // store result of smoothing
     f_    = sol.head(A_.rows()/2);
     beta_ = invXtWX().solve(X().transpose())*(y() - Psi()*f_);
@@ -64,6 +64,7 @@ void STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign>::solve() {
       lambdaS()*(R1() + lambdaT()*L_), lambdaS()*R0()                             );
   // cache system matrix for reuse
   A_ = A.derived();
+  invA_.compute(A_);
   b_.resize(A_.rows());
   DVector<double> sol; // room for problem' solution
 
@@ -94,9 +95,8 @@ void STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign>::solve() {
 
     // Define system solver. Use SMW solver from NLA module
     SMW<> solver{};
-    solver.compute(A_);
     // solve system Mx = b
-    sol = solver.solve(U, XtWX(), V, b_);
+    sol = solver.solve(invA_, U, XtWX(), V, b_);
     // store result of smoothing
     f_.block(n_basis(),0, n_time()*n_basis(),1) = sol.head(A_.rows()/2);
     beta_ = invXtWX().solve(X().transpose())*(y() - Psi()*f_);
