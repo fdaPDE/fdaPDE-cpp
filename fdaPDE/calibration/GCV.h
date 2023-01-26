@@ -151,7 +151,10 @@ namespace calibration{
 	  D.row(it.row()) = C.row(it.col());
 	}
       }
-      DVector<double> Qp_ = model_.lmbQ(p_); // efficient computation of Q*p
+      DVector<double> Qp_;
+      if(model_.hasCovariates())
+	Qp_ = model_.lmbQ(p_); // efficient computation of Q*p
+      else Qp_ = model_.W()*p_;
       // return b = p.dot(Q*p) + (-ddS*y - 2*\Psi*L*h).dot(y - \hat y)
       return (( model_.y() - model_.fitted() ).transpose() * ( -ddS_*model_.y() - D )).coeff(0,0) + p_.dot(Qp_);
     }
@@ -166,7 +169,7 @@ namespace calibration{
     // \sigma^2 = \frac{norm(y - \hat y)^2}{n - (q + Tr[S])}
     // a        = p.dot(y - \hat y)
     // dGCV(\lambda) = \frac{2n}{edf^2}[ \sigma^2 * Tr[dS] + a ]
-    std::function<SVector<1>(SVector<1>)> derive() const {
+    std::function<SVector<1>(SVector<1>)> derive() {
       return [*this](SVector<1> lambda) mutable -> SVector<1> {
 	// fit the model given current lambda
 	model_.setLambda(lambda);
@@ -183,7 +186,7 @@ namespace calibration{
 	// return gradient of GCV at point      
 	return SVector<1>( 2*n/std::pow(n - (q+trS), 2)*( sigma*trdS + a() ) );
       };
-    };
+    }
 
     // analytical expression of gcv second derivative (called only by an exact-based GCV optimization)
     //
@@ -191,10 +194,10 @@ namespace calibration{
     // \sigma^2 = \frac{norm(y - \hat y)^2}{n - (q + Tr[S])}
     // b        = p.dot(Q*p) + (-ddS*y - 2*\Psi*L*h).dot(y - \hat y)
     // ddGCV(\lambda) = \frac{2n}{edf^2}[ \frac{1}{edf}(3*\sigma^2*Tr[dS] + 4*a)*Tr[dS] + \sigma^2*Tr[ddS] + b ]
-    std::function<SMatrix<1>(SVector<1>)> deriveTwice() const {
+    std::function<SMatrix<1>(SVector<1>)> deriveTwice() {
       return [*this](SVector<1> lambda) mutable -> SMatrix<1> {
 	// fit the model given current lambda
-	model_.setLambda(lambda[0]);
+	model_.setLambda(lambda);
 	model_.solve();
 	// compute trace of matrix S and its first and second derivative given current lambda
 	double trS   = trS_.compute();
