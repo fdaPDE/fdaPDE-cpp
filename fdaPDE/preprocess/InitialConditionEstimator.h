@@ -10,7 +10,8 @@ using fdaPDE::core::FEM::Laplacian;
 using fdaPDE::core::OPT::GridOptimizer;
 // calibration module imports
 #include "../calibration/GCV.h"
-using fdaPDE::calibration::ExactGCV;
+using fdaPDE::calibration::GCV;
+using fdaPDE::calibration::ExactEDF;
 // models module imports
 #include "../models/ModelTraits.h"
 using fdaPDE::models::is_sampling_pointwise_at_mesh;
@@ -53,14 +54,16 @@ namespace preprocess {
       m.setData(df); // impose data
       m.init();
       
-      // define GCV calibrator
-      ExactGCV<decltype(m)> calibrator(m);
-      GridOptimizer<1> gcv_optimizer;
       // find optimal smoothing parameter
-      SVector<1> opt = calibrator.approx(gcv_optimizer, 0.01, lambdas);
+      GCV<decltype(m), ExactEDF<decltype(m)>> GCV(m);
+      GridOptimizer<1> opt;
+
+      ScalarField<1, decltype(GCV)> obj(GCV);
+      opt.findMinimum(obj, lambdas); // optimize gcv field
+      SVector<1> best_lambda = opt.getSolution();
 
       // fit model with optimal lambda
-      m.setLambda(opt[0]);
+      m.setLambda(best_lambda);
       m.solve();
       // store initial condition estimate
       estimate_ = m.f();
