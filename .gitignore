@@ -112,6 +112,8 @@
 !test/data/models/STRPDE/2D_test2/*
 !test/data/models/STRPDE/2D_test3/
 !test/data/models/STRPDE/2D_test3/*
+!test/data/models/STRPDE/2D_test4/
+!test/data/models/STRPDE/2D_test4/*
 !test/data/PDEs/*.mtx
 *.txt
 *.json

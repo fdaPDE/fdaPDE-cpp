@@ -23,6 +23,7 @@ namespace models{
   public:
     // constructor
     SamplingDesign() = default;
+    SamplingDesign(const DMatrix<double>&) {};
     // init sampling data structures
     void init_sampling() {
       // preallocate space for Psi matrix
@@ -54,7 +55,7 @@ namespace models{
     SpMatrix<double> Psi_{}; // n x N matrix \Psi = [\psi_{ij}] = \psi_j(p_i) of spatial basis evaluation at data locations p_i
     auto PsiTD() const { return model().Psi().transpose(); }
     std::size_t n_locs() const { return model().domain().nodes(); }
-    void locs() const { return; }
+    DMatrix<double> locs() const { return DMatrix<double>(); }
   };
 
   // data sampled at general locations p_1, p_2, ... p_n

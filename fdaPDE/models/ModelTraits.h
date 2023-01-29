@@ -8,18 +8,21 @@ namespace fdaPDE{
 namespace models{
 
   // collection of traits used across the models module
+
+  // possible solution strategies for a model
+  enum SolverType { Monolithic, Iterative };
   
   template <typename Model> class ModelBase; // base class for any fdaPDE statistical model
   template <typename Model> class SpaceOnlyBase; // base class for any spatial model
   template <typename Model> class SpaceTimeBase; // base class for any spatio-temporal model
   template <typename Model> class SpaceTimeSeparableBase; // spatio-temporal model with separable regularization
-  template <typename Model> class SpaceTimeParabolicBase; // spatio-temporal model with parabolic regularization
+  template <typename Model, SolverType Solver> class SpaceTimeParabolicBase; // spatio-temporal model with parabolic regularization
   
   // empty classes for tagging regularization types
   struct SpaceOnlyTag {};
   struct SpaceTimeSeparableTag {};
   struct SpaceTimeParabolicTag {};
-
+  
   // base class for model traits
   template <typename B> struct model_traits;
   
@@ -38,7 +41,7 @@ namespace models{
       typename std::conditional<
         std::is_same<typename model_traits<Model>::RegularizationType, SpaceTimeSeparableTag>::value,
         SpaceTimeSeparableBase<Model>,
-        SpaceTimeParabolicBase<Model>>::type
+        SpaceTimeParabolicBase<Model, model_traits<Model>::solver>>::type
       >::type;
   };
 

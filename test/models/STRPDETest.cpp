@@ -15,6 +15,7 @@ using fdaPDE::core::FEM::SpaceVaryingAdvection;
 #include "../../fdaPDE/models/regression/STRPDE.h"
 using fdaPDE::models::STRPDE;
 #include "../../fdaPDE/models/ModelTraits.h"
+using fdaPDE::models::SolverType;
 #include "../../fdaPDE/models/SamplingDesign.h"
 using fdaPDE::models::Sampling;
 
@@ -52,7 +53,8 @@ TEST(STRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_Separable) {
   // define statistical model
   double lambdaS = 0.01; // smoothing in space
   double lambdaT = 0.01; // smoothing in time
-  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparableTag, Sampling::GeoStatMeshNodes> model(problem, time_mesh);
+  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparableTag,
+	 Sampling::GeoStatMeshNodes, SolverType::Monolithic> model(problem, time_mesh);
   model.setLambdaS(lambdaS);
   model.setLambdaT(lambdaT);
 
@@ -130,7 +132,8 @@ TEST(STRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable)
   locFile = reader.parseFile("data/models/STRPDE/2D_test2/locs.csv");
   DMatrix<double> loc = locFile.toEigen();
 
-  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparableTag, Sampling::GeoStatLocations> model(problem, time_mesh, loc);
+  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparableTag,
+	 Sampling::GeoStatLocations, SolverType::Monolithic> model(problem, time_mesh, loc);
   model.setLambdaS(lambdaS);
   model.setLambdaT(lambdaT);
   
@@ -194,7 +197,7 @@ TEST(STRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable)
    covariates:   no
    BC:           no
    order FE:     1
-   time penalization: parabolic
+   time penalization: parabolic (monolithic solution)
  */
 TEST(STRPDE, Test3_NonCostantCoefficientsPDE_NonParametric_Areal_Parabolic_EstimatedIC) {
   // define time domain, we skip the first time instant because we are going to use the first block of data
@@ -234,7 +237,8 @@ TEST(STRPDE, Test3_NonCostantCoefficientsPDE_NonParametric_Areal_Parabolic_Estim
   arealFile = int_reader.parseFile("data/models/STRPDE/2D_test3/incidence_matrix.csv");
   DMatrix<int> areal = arealFile.toEigen();
   
-  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeParabolicTag, Sampling::Areal> model(problem, time_mesh, areal);
+  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeParabolicTag, Sampling::Areal,
+	 SolverType::Monolithic> model(problem, time_mesh, areal);
   model.setLambdaS(lambdaS);
   model.setLambdaT(lambdaT);
 
@@ -280,3 +284,81 @@ TEST(STRPDE, Test3_NonCostantCoefficientsPDE_NonParametric_Areal_Parabolic_Estim
   std::size_t N = computedF.rows();
   EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );
 }
+
+/* test 4
+   domain:       unit square [1,1] x [1,1]
+   sampling:     locations = nodes
+   penalization: simple laplacian
+   covariates:   no
+   BC:           no
+   order FE:     1
+   time penalization: parabolic (iterative solver)
+ */
+TEST(STRPDE, Test4_Laplacian_NonParametric_GeostatisticalAtNodes_Parabolic_Iterative) {
+  // define time domain
+  DVector<double> time_mesh;
+  time_mesh.resize(11);
+  std::size_t i = 0;
+  for(double x = 0; x <= 2; x+=0.2, ++i) time_mesh[i] = x;
+  
+  // define spatial domain and regularizing PDE
+  MeshLoader<Mesh2D<>> domain("unit_square_coarse");
+  auto L = dT() + Laplacian();
+  DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements()*3, time_mesh.rows());
+  PDE problem(domain.mesh, L, u); // definition of regularizing PDE
+  // define statistical model
+  double lambdaS = 1;//0.01; // smoothing in space
+  double lambdaT = 1;//0.01; // smoothing in time
+  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeParabolicTag,
+	 Sampling::GeoStatMeshNodes, SolverType::Iterative> model(problem, time_mesh);
+  model.setLambdaS(lambdaS);
+  model.setLambdaT(lambdaT);
+
+  // load data from .csv files
+  CSVReader<double> reader{};
+  CSVFile<double> yFile; // observation file
+  yFile = reader.parseFile("data/models/STRPDE/2D_test4/y.csv");
+  DMatrix<double> y = yFile.toEigen();
+
+  // set model data
+  BlockFrame<double, int> df;
+  df.stack("y", y);
+  model.setData(df);
+
+  // define initial condition estimator over grid of lambdas
+  InitialConditionEstimator ICestimator(model);
+  std::vector<SVector<1>> lambdas;
+  for(double x = -9; x <= 3; x += 0.1) lambdas.push_back(SVector<1>(std::pow(10,x))); 
+  // compute estimate
+  ICestimator.apply(lambdas);
+
+  DMatrix<double> ICestimate = ICestimator.get();
+
+  // set estimated initial condition
+  model.setInitialCondition(ICestimate);
+  
+  // shift data one time instant forward
+  std::size_t n = y.rows();
+  model.setData(df.tail(n).extract());
+  model.shift_time(1);
+  // set parameters for iterative method
+  model.setTolerance(1e-4);
+  model.setMaxIterations(50);
+
+  // solve smoothing problem
+  model.init();
+  model.solve();
+
+  //   **  test correctness of computed results  **   
+  
+  // estimate of spatial field \hat f
+  SpMatrix<double> expectedSolution;
+  Eigen::loadMarket(expectedSolution, "data/models/STRPDE/2D_test4/sol.mtx");
+  DMatrix<double> computedF = model.f();
+  std::size_t N = computedF.rows();
+  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );
+}
+
+
+
+

@@ -14,9 +14,12 @@ using fdaPDE::models::SpaceTimeBase;
 namespace fdaPDE{
 namespace models{
 
-  // base class for parabolic regularization
+  // base class for parabolic regularization solved using either a moholitic or iterative solution strategy
+  template <typename Model, SolverType Solver> class SpaceTimeParabolicBase;
+
+  // base class for parabolic regularization, monholitic solver
   template <typename Model>
-    class SpaceTimeParabolicBase : public SpaceTimeBase<Model> {
+  class SpaceTimeParabolicBase<Model, SolverType::Monolithic> : public SpaceTimeBase<Model> {
     static_assert(is_parabolic<typename model_traits<Model>::PDE::BilinearFormType>::value,
 		  "you have asked for parabolic smoothing but using a non-parabolic differential operator");
   private:
@@ -80,9 +83,68 @@ namespace models{
       return u_;
     }
     const DMatrix<double>& s() { return s_; } // initial condition
-
+    double DeltaT() const { return DeltaT_; }
+    
     // setters
     void setInitialCondition(const DMatrix<double>& s) { s_ = s; }
+    
+    // destructor
+    virtual ~SpaceTimeParabolicBase() = default;  
+  };
+
+  // base class for parabolic regularization, iterative solver
+  template <typename Model>
+  class SpaceTimeParabolicBase<Model, SolverType::Iterative> : public SpaceTimeBase<Model> {
+    static_assert(is_parabolic<typename model_traits<Model>::PDE::BilinearFormType>::value,
+		  "you have asked for parabolic smoothing but using a non-parabolic differential operator");
+  protected:
+    typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
+    typedef typename model_traits<Model>::RegularizationType TimeRegularization; // regularization in time
+    typedef SpaceTimeBase<Model> Base;
+    using Base::pde_;  // regularizing term in space
+    using Base::model; // underlying model object
+    using Base::time_; // time interval [0,T]
+
+    DMatrix<double> s_; // N x 1 initial condition vector
+    DMatrix<double> u_; // discretized forcing [1/DeltaT * (u_1 + R_0*s) \ldots u_n]
+    double DeltaT_;     // time step (assumes equidistant points in time)
+
+    // quantities related to iterative scheme
+    double tol_ = 1e-4;         // tolerance used as stopping criterion
+    std::size_t max_iter_ = 50; // maximum number of allowed iterations
+  public:
+    // constructor
+    SpaceTimeParabolicBase() = default;
+    SpaceTimeParabolicBase(const PDE& pde, const DVector<double>& time)
+      : SpaceTimeBase<Model>(pde, time) {}
+    // init data required for iterative solution of parabolic regularization
+    void init_regularization() {
+      // compute time step (assuming equidistant points)
+      DeltaT_ = time_[1] - time_[0];
+
+      // compute forcing term corrected by initial condition (pde is initialized before the regularization term)
+      u_ = pde_->force();
+      // correct first n rows of discretized force as (1/DeltaT * (u_1 + R0*s))
+      u_.block(0,0, model().n_basis(),1) /= DeltaT_;
+      u_.block(0,0, model().n_basis(),1) -= (1.0/DeltaT_)*(pde_->R0()*s_);
+    }
+    
+    // getters
+    const SpMatrix<double>& R0()  const { return pde_->R0(); }    // mass matrix in space
+    const SpMatrix<double>& R1()  const { return pde_->R1(); }    // discretization of differential operator L
+    DMatrix<double> u(std::size_t k) const { // discretization of forcing term u at time k
+      return u_.block(model().n_basis()*k,0, model().n_basis(),1); }
+    DMatrix<double> y(std::size_t k) const { // vector of input data points at time k
+      return model().y().block(model().n_locs()*k, 0, model().n_locs(),1); }
+    const SpMatrix<double>& Psi() const { return model().Psi_; }  // matrix of spatial basis evaluation
+    double DeltaT() const { return DeltaT_; } 
+    using Base::y; // import y() method defined in ModelBase
+    const DMatrix<double>& s() const { return s_; }
+    
+    // setters
+    void setInitialCondition(const DMatrix<double>& s) { s_ = s; }
+    void setTolerance(double tol) { tol_ = tol; }
+    void setMaxIterations(std::size_t max_iter) { max_iter_ = max_iter; }
     
     // destructor
     virtual ~SpaceTimeParabolicBase() = default;  

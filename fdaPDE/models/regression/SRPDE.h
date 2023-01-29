@@ -69,6 +69,7 @@ namespace models{
     typedef PDE_ PDE;
     typedef SpaceOnlyTag RegularizationType;
     static constexpr Sampling sampling = SamplingDesign;
+    static constexpr SolverType solver = SolverType::Monolithic;
   };
 
 #include "SRPDE.tpp"

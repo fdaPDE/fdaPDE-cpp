@@ -4,7 +4,8 @@
 
 <div align="center">
 
-![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/AlePalu/fdaPDE/test-workflow.yml?branch=develop&label=test-status&style=for-the-badge)
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/AlePalu/fdaPDE/test-workflow.yml?branch=develop&label=test-status)
+[![Downloads](https://cranlogs.r-pkg.org/badges/fdaPDE)](https://cran.r-project.org/package=fdaPDE)
 
 </div>
 
@@ -43,6 +44,8 @@ install.packages(".", type="source", repos=NULL)
 ```
 
 Compilation under `RcppEigen` produces a lot of annoying warnings. Those are kept hidden by `-Wno-ignored-attributes` flag in `wrappers/R/Makevars` file. Recall that CRAN policies doesn't allow to hide such kind of warnings.
+
+> Compiling the package using roxigen2 or devtools causes any compiler optimization to be turned off. If you are compiling manually from source compile the package as described above to not incur in a huge performance loss. 
 
 ## C++ development
 The C++ core of fdaPDE is extremely modular, this means that you can focus on single modules during development and work in isolation with respect to other modules. This avoid the need to recompile the whole codebase, e.g. from the R layer, at each change in the C++ core library, opening for faster development, better debugging and a direct interaction with the C++ layer.
