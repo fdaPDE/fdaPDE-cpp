@@ -119,9 +119,6 @@ namespace models{
   // the layout of the BlockFrame, use these instead of manually typing the block name when accessing df_
 #define OBSERVATIONS_BLK "y" // matrix of observations
 #define INDEXES_BLK "i"      // vector of observation indices
-#define LOCATIONS_BLK "P"    // matrix of spatial locations coordinates
-#define AREAL_BLK "D"        // incidence matrix for areal observations
-
   
 }}
 

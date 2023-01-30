@@ -110,16 +110,14 @@ J(const DMatrix<double>& f, const DMatrix<double>& g) const {
   return SSE + lambdaS()*g.squaredNorm();
 }
 
-
 // finds a solution to the STR-PDE smoothing problem (parabolic penalization, iterative solution)
 template <typename PDE, Sampling SamplingDesign>
 void STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign, SolverType::Iterative>::solve() {  
   // compute starting point (f^(k,0), g^(k,0)) k = 1 ... m for iterative minimization of functional J(f,g)
-  // assemble system matrix for the nonparameteric part of the model
   SparseBlockMatrix<double,2,2>
-    A(-PsiTD()*Psi(), lambdaS()*R1().transpose(), 
-      lambdaS()*R1(), lambdaS()*R0()            );
-  // cache system matrix for reuse
+    A(PsiTD()*Psi(), lambdaS()*R1().transpose(), 
+      lambdaS()*R1(), -lambdaS()*R0()           );
+  // cache system matrix and its factorization for reuse
   A_ = A.derived();
   invA_.compute(A_);
   b_.resize(A_.rows());
@@ -132,7 +130,7 @@ void STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign, SolverType::Iterative>::
   // solve n_time() space only linear systems
   for(std::size_t t = 0; t < n_time(); ++t){
     // right hand side at time step t
-    b_ << -PsiTD()*y(t), // should put W()
+    b_ << PsiTD()*y(t), // should put W()
       lambdaS()*lambdaT()*u(t);
 
     // solve linear system Ax = b_(t) and store estimate of spatial field
