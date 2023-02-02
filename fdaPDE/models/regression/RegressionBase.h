@@ -36,6 +36,7 @@ namespace models {
     using Base::pde_; // differential operator L 
     using Base::df_;  // BlockFrame for problem's data storage
     using Base::Psi;  // matrix of spatial basis evaluation at locations p_1 ... p_n
+    using Base::n_basis; // number of basis function over domain D
     
     RegressionBase() = default;
     // space-only constructor
@@ -114,12 +115,26 @@ namespace models {
     }
     
     // compute prediction of model at new unseen data location: \hat y(p_{n+1}) = X_{n+1}^T*\beta + f_*\psi(p_{n+1})
-    // TODO: (location equal to mesh node), must be generalized to any spatial location
-    double predict(const DVector<double>& covs, const std::size_t loc) const{
-      double result = f_.coeff(loc,0);
-      if(hasCovariates()) result += (covs.transpose()*beta_).coeff(0,0);
+    // TODO: divide from space and space-time cases
+    double predict(const DVector<double>& p, std::size_t t, const DVector<double>& covs) {
+      // vector \psi(p_{n+1}) = (\psi_1(p_{n+1}), \ldots, \psi_N(p_{n+1}))
+      DVector<double> psi_new = DVector<double>::Zero(n_basis());
+
+      auto gse = this->gse(); // require pointer to geometric search engine
+      auto e = gse.search(p); // search element containing point
+      // fill entries in psi_new vector
+      for(std::size_t j = 0; j < pde_->basis()[e->ID()].size(); ++j){
+	// extract \phi_h from basis
+	std::size_t h = e->nodeIDs()[j]; // row index of psi_new vector
+	auto psi_h = pde_->basis()[e->ID()][j];
+	// store value of basis function \psi_h evaluated at query point p
+	psi_new[h] = psi_h(p);
+      }
+      
+      double result = DVector<double>(f_.block(n_basis()*t,0, n_basis(),1)).dot(psi_new);
+      if(hasCovariates()) result += covs.dot(DVector<double>(beta_));
       return result;
-    }    
+    }
   };
   
   // trait to detect if a type is a regression model

@@ -15,6 +15,8 @@ using fdaPDE::core::NLA::SMW;
 #include "../../core/NLA/KroneckerProduct.h"
 using fdaPDE::core::NLA::SparseKroneckerProduct;
 using fdaPDE::core::NLA::Kronecker;
+#include "../../core/utils/DataStructures/BlockVector.h"
+using fdaPDE::BlockVector;
 // calibration module imports
 #include "../../calibration/iGCV.h"
 using fdaPDE::calibration::iGCV;
@@ -118,7 +120,7 @@ namespace models{
     static constexpr Sampling sampling = SamplingDesign;
     static constexpr SolverType solver = SolverType::Monolithic;
   };
-
+  
   // implementation of STRPDE for parabolic space-time regularization, monolithic solver
   template <typename PDE, Sampling SamplingDesign>
   class STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign, SolverType::Iterative>
@@ -135,6 +137,8 @@ namespace models{
     // the functional minimized by the iterative scheme
     // J(f,g) = \sum_{k=1}^m (z^k - \Psi*f^k)^T*(z^k - \Psi*f^k) + \lambda_S*(g^k)^T*(g^k)
     double J(const DMatrix<double>& f, const DMatrix<double>& g) const;
+    // internal solve routine used by the iterative method
+    void solve(std::size_t t, BlockVector<double>& f_new, BlockVector<double>& g_new) const;
   public:
     // import commonly defined symbols from base
     IMPORT_REGRESSION_SYMBOLS;

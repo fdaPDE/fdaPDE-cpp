@@ -350,7 +350,7 @@ TEST(STRPDE, Test4_Laplacian_NonParametric_GeostatisticalAtNodes_Parabolic_Itera
   model.solve();
 
   //   **  test correctness of computed results  **   
-  
+
   // estimate of spatial field \hat f
   SpMatrix<double> expectedSolution;
   Eigen::loadMarket(expectedSolution, "data/models/STRPDE/2D_test4/sol.mtx");

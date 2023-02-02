@@ -110,94 +110,107 @@ J(const DMatrix<double>& f, const DMatrix<double>& g) const {
   return SSE + lambdaS()*g.squaredNorm();
 }
 
+// internal solve routine used by the iterative method
+template <typename PDE, Sampling SamplingDesign>
+void STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign, SolverType::Iterative>::solve
+(std::size_t t, BlockVector<double>& f_new, BlockVector<double>& g_new) const {
+  DVector<double> x = invA_.solve(b_);
+  f_new(t) = x.topRows(n_basis()); g_new(t) = x.bottomRows(n_basis());
+  return;
+}
+
 // finds a solution to the STR-PDE smoothing problem (parabolic penalization, iterative solution)
 template <typename PDE, Sampling SamplingDesign>
 void STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign, SolverType::Iterative>::solve() {  
   // compute starting point (f^(k,0), g^(k,0)) k = 1 ... m for iterative minimization of functional J(f,g)
   SparseBlockMatrix<double,2,2>
-    A(PsiTD()*Psi(), lambdaS()*R1().transpose(), 
+    A(PsiTD()*Psi(),   lambdaS()*R1().transpose(), 
       lambdaS()*R1(), -lambdaS()*R0()           );
-  // cache system matrix and its factorization for reuse
+  // cache system matrix and its factorization
   A_ = A.derived();
   invA_.compute(A_);
   b_.resize(A_.rows());
   
   // compute f^(k,0), k = 1 ... m as solution of Ax = b_(k)
-  DMatrix<double> f_hat;
-  f_hat.resize((n_time()+1)*n_basis(), 1);
-  f_hat.block(0,0, n_basis(),1) = DMatrix<double>::Zero(n_basis(),1); // ????
-  
+  BlockVector<double> f_old(n_time(), n_basis());
   // solve n_time() space only linear systems
   for(std::size_t t = 0; t < n_time(); ++t){
     // right hand side at time step t
     b_ << PsiTD()*y(t), // should put W()
       lambdaS()*lambdaT()*u(t);
-
     // solve linear system Ax = b_(t) and store estimate of spatial field
-    f_hat.block(n_basis()*(t+1),0, n_basis(),1) = invA_.solve(b_).head(A_.rows()/2);
+    f_old(t) = invA_.solve(b_).head(A_.rows()/2);
   }
   
   // compute g^(k,0), k = 1 ... m as solution of the system
-  // [(\lambda_S*\lambda_T)/DeltaT * R_0 + \lambda_S*R_1^T]g^(k,0) = \Psi^T*z^k + (\lambda_S*\lambda_T/DeltaT*R_0)*g^(k+1,0) - \Psi^T*\Psi*f^(k,0)
-  // need to evaluate R1().transpose() in a temporay to have compatible storage (see eigen docs)
+  //    G0 = [(\lambda_S*\lambda_T)/DeltaT * R_0 + \lambda_S*R_1^T]
+  //    G0*g^(k,0) = \Psi^T*y^k + (\lambda_S*\lambda_T/DeltaT*R_0)*g^(k+1,0) - \Psi^T*\Psi*f^(k,0)
   SpMatrix<double> G0 = (lambdaS()*lambdaT()/DeltaT())*R0() + SpMatrix<double>((lambdaS()*R1()).transpose());
   Eigen::SparseLU<SpMatrix<double>, Eigen::COLAMDOrdering<int>> invG0;
   invG0.compute(G0); // compute factorization of matrix G0
   
-  DMatrix<double> g_hat;
-  g_hat.resize((n_time()+1)*n_basis(), 1);
-  g_hat.block(n_basis()*n_time(),0, n_basis(),1) = DMatrix<double>::Zero(n_basis(),1); // final condition for g is g = 0
-  
-  // solve n_time() distinct problems (in backward order, g follows a backward PDE)
-  for(std::size_t t = n_time(); t > 0; --t){
-    // compute rhs at time t: \Psi^T*z^t + (\lambda_S*\lambda_T/DeltaT*R_0)*g^(t+1,0) - \Psi^T*\Psi*f^(t,0)
-    b_ = PsiTD()*(y(t-1) - Psi()*f_hat.block(n_basis()*t,0, n_basis(),1)) - // meno qui davanti a lambdaT() per problema R0_lambda
-      (lambdaS()*lambdaT()/DeltaT())*R0()*g_hat.block(n_basis()*t,0, n_basis(),1);
+  BlockVector<double> g_old(n_time(), n_basis());
+  // solve n_time() distinct problems (in backward order)
+  // at last step g^(t+1,0) is zero
+  b_ = PsiTD()*(y(n_time()-1) - Psi()*f_old(n_time()-1)); 
+  g_old(n_time()-1) = invG0.solve(b_);
+  // general step
+  for(int t = n_time()-2; t >= 0; --t){
+    // compute rhs at time t: \Psi^T*y^t + (\lambda_S*\lambda_T/DeltaT*R_0)*g^(t+1,0) - \Psi^T*\Psi*f^(t,0)
+    b_ = PsiTD()*(y(t) - Psi()*f_old(t)) + (lambdaS()*lambdaT()/DeltaT())*R0()*g_old(t+1);
     // solve linear system G0*g^(t,1) = b_t and store estimate of PDE misfit
-    g_hat.block(n_basis()*(t-1),0, n_basis(),1) = invG0.solve(b_);
+    g_old(t) = invG0.solve(b_);
   }
-
+  
   // initialize value of functional J to minimize
   double Jold = std::numeric_limits<double>::max();
-  double Jnew = J(f_hat.bottomRows(n_time()*n_basis()), g_hat.topRows(n_time()*n_basis()));
+  double Jnew = J(f_old.get(), g_old.get());
   std::size_t i = 1; // iteration number
 
   // build system matrix for the iterative scheme
+  std::size_t N = n_basis();
   SparseBlockMatrix<double,2,2>
-    M(PsiTD()*Psi(), SpMatrix<double>(lambdaS()*R1().transpose()) + (lambdaS()*lambdaT()/DeltaT())*R0()   ,
-      lambdaS()*R1()+(lambdaS()*lambdaT()/DeltaT())*R0(),   -lambdaS()*R0());
-  SpMatrix<double> M_ = M.derived();
-  Eigen::SparseLU<SpMatrix<double>> invM;
-  invM.compute(M_);
-  b_.resize(M_.rows());
-
-  DMatrix<double> f_new, g_new;
-  f_new = DMatrix<double>::Zero((n_time()+1)*n_basis(), 1);
-  g_new = DMatrix<double>::Zero((n_time()+1)*n_basis(), 1);
+    M(SpMatrix<double>(N, N),            lambdaS()*lambdaT()/DeltaT()*R0(),
+      lambdaS()*lambdaT()/DeltaT()*R0(), SpMatrix<double>(N, N)           );
+  A_ = A_ + M.derived();
+  invA_.compute(A_);
+  b_.resize(A_.rows());
   
+  // internal iteration variables
+  BlockVector<double> f_new(n_time(), n_basis()), g_new(n_time(), n_basis());
   // iterative scheme for minimization of functional J
   while(i < max_iter_ && std::abs((Jnew-Jold)/Jnew) > tol_){
-
-    for(std::size_t t = 1; t < n_time()+1; ++t){
-      // update rhs of linear system as
-      //    \Psi^T*y^k + (\lambdaS*\lambdaT/DeltaT)*R_0*g^(k+1)
-      //    (\lambdaS*\lambdaT/DeltaT)*R_0*f^(k-1) + \lambdaS*u^k
-      b_ << PsiTD()*y(t-1) + (lambdaS()*lambdaT()/DeltaT())*(-R0())*g_hat.block(n_basis()*t,0, n_basis(),1), // meno qui davanti a R0() per problema R0_lambda
-	lambdaS()*(-lambdaT()/DeltaT()*R0()*f_hat.block(n_basis()*(t-1),0, n_basis(),1) - u(t-1)); // meno qui davanti a lambdaT() per problema R0_lambda
-
+    // at step 0 f^(k-1,i-1) is zero    
+    b_ << PsiTD()*y(0) + (lambdaS()*lambdaT()/DeltaT())*R0()*g_old(1),
+      lambdaS()*u(0);
+    // solve linear system
+    solve(0, f_new, g_new);
+    
+    // general step
+    for(std::size_t t = 1; t < n_time()-1; ++t){
+      // \Psi^T*y^k   + (\lambdaS*\lambdaT/DeltaT)*R_0*g^(k+1,i-1),
+      // \lambdaS*u^k + (\lambdaS*\lambdaT/DeltaT)*R_0*f^(k-1,i-1)
+      b_ << PsiTD()*y(t) + (lambdaS()*lambdaT()/DeltaT())*R0()*g_old(t+1),
+	lambdaS()*(lambdaT()/DeltaT()*R0()*f_old(t-1) + u(t));
       // solve linear system
-      DVector<double> sol = invM.solve(b_);
-      f_new.block(n_basis()*t,0, n_basis(),1) = sol.topRows(n_basis());
-      g_new.block(n_basis()*(t-1),0, n_basis(),1) = sol.bottomRows(n_basis());
+      solve(t, f_new, g_new);
     }
-    // update value of functional J
+    
+    // at last step g^(k+1,i-1) is zero
+    b_ << PsiTD()*y(n_time()-1),
+      lambdaS()*(lambdaT()/DeltaT()*R0()*f_old(n_time()-2) + u(n_time()-1));
+    // solve linear system
+    solve(n_time()-1, f_new, g_new);
+
+    // prepare for next iteration
     Jold = Jnew;
-    f_hat = f_new; g_hat = g_new;
-    Jnew = J(f_hat.bottomRows(n_time()*n_basis()), g_hat.topRows(n_time()*n_basis()));
-    i++; // increase iteration count
+    f_old = f_new; g_old = g_new;
+    Jnew = J(f_old.get(), g_old.get()); 
+    i++;
   }
+  
   // store solution
-  f_ = f_hat.bottomRows(n_time()*n_basis());
-  g_ = g_hat.topRows(n_time()*n_basis());
+  f_ = f_old.get(); g_ = g_old.get();
   return;
 }
+

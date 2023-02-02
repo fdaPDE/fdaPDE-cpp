@@ -124,7 +124,8 @@ namespace models{
       // compute forcing term corrected by initial condition (pde is initialized before the regularization term)
       u_ = pde_->force();
       // correct first n rows of discretized force as (u_1 + R0*s/DeltaT)
-      u_.block(0,0, model().n_basis(),1) -= (1.0/DeltaT_)*(pde_->R0()*s_);
+      //u_.block(0,0, model().n_basis(),1) -= (1.0/DeltaT_)*(pde_->R0()*s_);
+      u_.block(0,0, model().n_basis(),1) += (1.0/DeltaT_)*(pde_->R0()*s_);
     }
     
     // getters
