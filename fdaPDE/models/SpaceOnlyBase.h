@@ -29,7 +29,7 @@ namespace models {
     // setters
     void setLambdaS(double lambda) { lambda_[0] = lambda; } 
     // getters
-    double lambda() const { return lambda_[0]; } // smoothing parameter
+    double lambdaS() const { return lambda_[0]; } // smoothing parameter
     const SpMatrix<double>& R0()  const { return pde_->R0(); }    // mass matrix in space
     const SpMatrix<double>& R1()  const { return pde_->R1(); }    // discretization of differential operator L
     const DMatrix<double>&  u()   const { return pde_->force(); } // discretization of forcing term u

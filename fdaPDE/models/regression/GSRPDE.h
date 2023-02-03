@@ -7,70 +7,62 @@
 #include "../../core/utils/Symbols.h"
 #include "../../core/FEM/PDE.h"
 using fdaPDE::core::FEM::PDEBase;
-#include "../../core/NLA/SparseBlockMatrix.h"
-using fdaPDE::core::NLA::SparseBlockMatrix;
-#include "../../core/NLA/SMW.h"
-using fdaPDE::core::NLA::SMW;
+#include "../ModelBase.h"
+#include "../ModelTraits.h"
 // calibration module imports
 #include "../../calibration/iGCV.h"
 using fdaPDE::calibration::iGCV;
-// regression module imports
-#include "iRegressionModel.h"
-using fdaPDE::models::iRegressionModel;
-
 #include "FPIRLS.h"
 using fdaPDE::models::FPIRLS;
 
-#include <chrono>
-
 namespace fdaPDE{
 namespace models{
-  
-  template <typename PDE, typename Distribution>
-  class GSRPDE : public iRegressionModel<PDE>, public iGCV {
+
+  // base class for GSRPDE model
+  template <typename PDE, typename RegularizationType, Sampling SamplingDesign,
+	    SolverType Solver, typename Distribution>
+  class GSRPDE : public RegressionBase<GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>>/*,
+    public iGCV*/ {
     // compile time checks
     static_assert(std::is_base_of<PDEBase, PDE>::value);
   private:
-    // FPIRLS engine
-    FPIRLS<Distribution> fpirls;
+    typedef RegressionBase<GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>> Base;   
     // weight matrix obtained at FPIRLS convergence
     DiagMatrix<double> W_;
-    // q x q dense matrix X^T*W*X
-    DMatrix<double> XTX_{};
-    // partial LU (with pivoting) factorization of the dense (square invertible) q x q matrix WTW_.
-    Eigen::PartialPivLU<DMatrix<double>> invXTX_{};
 
-    // problem solution
-    DMatrix<double> f_{};    // estimate of the spatial field (1 x N vector)
-    DMatrix<double> g_{};    // PDE misfit
-    DMatrix<double> beta_{}; // estimate of the coefficient vector (1 x q vector)
+    // FPIRLS parameters (set to default)
+    std::size_t max_iter_ = 15;
+    double tol_ = 0.0002020;
   public:
-    IMPORT_REGRESSION_MODEL_SYMBOLS(PDE);
-    
+    IMPORT_REGRESSION_SYMBOLS;
+    using Base::lambda; // smoothing parameter in space
     // constructor
     GSRPDE() = default;
-    GSRPDE(const PDE& pde, double lambda, double tolerance, std::size_t max_iter)
-      : iRegressionModel<PDE>(pde, lambda), fpirls(tolerance, max_iter) {};
+    template <typename... SamplingData>
+    GSRPDE(const PDE& pde, const SamplingData&... s) : Base(pde, s...) {};
 
-    // iStatModel interface implementation
-    virtual void solve(); // finds a solution to the smoothing problem
-
-    // iRegressionModel interface implementation
-    virtual DMatrix<double> lmbQ(const DMatrix<double>& x);
-    virtual DMatrix<double> fitted();
-    virtual double predict(const DVector<double>& covs, const std::size_t loc) const;
-    // getters to problem solution
-    virtual const DMatrix<double>& f() const { return f_; };
-    virtual const DMatrix<double>& g() const { return g_; };
-    virtual const DMatrix<double>& beta() const { return beta_; };
+    // setter
+    void setFPIRLSTolerance(double tol) { tol_ = tol; }
+    void setFPIRLSMaxIterations(std::size_t max_iter) { max_iter_ = max_iter; }
     
-    // iGCV interface implementation
-    virtual const DMatrix<double>& T(); // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
-    virtual const DMatrix<double>& Q();
-    // returns the total deviance of the model as \sum dev(y - \hat \mu)
-    virtual double norm(const DMatrix<double>& obs, const DMatrix<double>& fitted) const;
+    // ModelBase implementation
+    virtual void solve(); // finds a solution to the smoothing problem
+    
+    // // iGCV interface implementation
+    // virtual const DMatrix<double>& T(); // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
+    // virtual const DMatrix<double>& Q();
+    // // returns the total deviance of the model as \sum dev(y - \hat \mu)
+    // virtual double norm(const DMatrix<double>& obs, const DMatrix<double>& fitted) const;
 
     virtual ~GSRPDE() = default;
+  };
+  template <typename PDE_, typename RegularizationType_, Sampling SamplingDesign,
+	    SolverType Solver, typename Distribution>
+  struct model_traits<GSRPDE<PDE_, RegularizationType_, SamplingDesign, Solver, Distribution>> {
+    typedef PDE_ PDE;
+    typedef RegularizationType_ RegularizationType;
+    static constexpr Sampling sampling = SamplingDesign;
+    static constexpr SolverType solver = Solver;
   };
   
   #include "GSRPDE.tpp"

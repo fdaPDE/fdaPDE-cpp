@@ -19,58 +19,62 @@ namespace models{
 
   // trait to select model type to use in the internal loop of FPIRLS
   template <typename Model>
-  struct FPRILS_internal_solver {
+  struct FPIRLS_internal_solver {
+    typedef typename std::decay<Model>::type Model_;
     using type = typename std::conditional<
-      !is_space_time<Model>::value,
+      !is_space_time<Model_>::value,
       // space-only problem
-      SRPDE <typename model_traits<Model>::PDE, model_traits<Model>::sampling>,
+      SRPDE <typename model_traits<Model_>::PDE, model_traits<Model_>::sampling>,
       // space-time problem
-      STRPDE<typename model_traits<Model>::PDE, typename model_traits<Model>::RegularizationType,
-	     model_traits<Model>::sampling, model_traits<Model>::solver>
+      STRPDE<typename model_traits<Model_>::PDE, typename model_traits<Model_>::RegularizationType,
+	     model_traits<Model_>::sampling, model_traits<Model_>::solver>
       >::type;
   };
   
   // a general implementation of the Functional Penalized Iterative Reweighted Least Square (FPIRLS) algorithm
-  template <typename Distribution>
+  template <typename Model, typename Distribution>
   class FPIRLS {
   private:
     // data characterizing the behaviour of the algorithm
     Distribution distribution_{};
-    
-    double tolerance_;
+    Model& m_;
+    // algorithm's parameters 
+    double tolerance_; 
     std::size_t max_iter_;
     
     // let g() the link function of the considered distribution and y = (y_1, y_2, ..., y_n) the (1 x n) vector of observations
-    DVector<double> mu_{};     // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : mean vector at step k
-    DVector<double> theta_{};  // \theta^k = [ g(\mu^k_1), ..., g(\mu^k_n) ]
-    DVector<double> G_{};      // G^k = diag(g'(\mu^k_1), ..., g'(\mu^k_n))
-    DVector<double> py_{};     // \tilde z^k = G^k(y-u^k) + \theta^k : pseudo-observations vector at step k
-    DVector<double> V_{};      // V^k = diag(v(\mu^k_1), ..., v(\mu^k_n)) : variance matrix at step k
-    DVector<double> W_{};      // W^k = ((G^k)^{-2})*((V^k)^{-1})
-    
-    DVector<double> f_{};
-    DVector<double> g_{};
-    DVector<double> beta_{};
-    
+    DVector<double> mu_{};    // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : mean vector at step k
+    DVector<double> theta_{}; // \theta^k = [ g(\mu^k_1), ..., g(\mu^k_n) ]
+    DVector<double> G_{};     // G^k = diag(g'(\mu^k_1), ..., g'(\mu^k_n))
+    DVector<double> py_{};    // \tilde z^k = G^k(y-u^k) + \theta^k : pseudo-observations vector at step k
+    DVector<double> V_{};     // V^k = diag(v(\mu^k_1), ..., v(\mu^k_n)) : variance matrix at step k
+    DVector<double> W_{};     // W^k = ((G^k)^{-2})*((V^k)^{-1})
+    // parameters at convergece
+    DVector<double> f_{}; // estimate of non-parametric spatial field
+    DVector<double> g_{}; // PDE misfit
+    DVector<double> beta_{}; // estimate of coefficient vector    
   public:
     // constructor
-    FPIRLS(double tolerance, std::size_t max_iter)
-      : tolerance_(tolerance), max_iter_(max_iter) {};
+    FPIRLS(const Model& m, double tolerance, std::size_t max_iter)
+      : m_(m), tolerance_(tolerance), max_iter_(max_iter) {};
     
-    // in general observations are not known at construction time
-    template <typename M>
-    void compute(M& m_) {
-      static_assert(is_regression_model<M>::value);
+    // executes the FPIRLS algorithm
+    void compute() {
+      static_assert(is_regression_model<Model>::value);
       // get number of data and preallocate space
       std::size_t n = m_.n_obs();
       theta_.resize(n); G_.resize(n); py_.resize(n); V_.resize(n); W_.resize(n);
-
+      
       // algorithm initialization
       mu_ = m_.y();
       distribution_.preprocess(mu_);
       std::size_t k = 0; // FPIRLS iteration index
       // define internal problem solver and initialize it
-      typename FPRILS_internal_solver<M>::type solver(m_.pde(), m_.locs());
+      typename FPIRLS_internal_solver<Model>::type solver;
+      if constexpr(!is_space_time<Model>::value) // space-only
+	solver = typename FPIRLS_internal_solver<Model>::type(m_.pde(), m_.locs());
+      else // space-time0
+	solver = typename FPIRLS_internal_solver<Model>::type(m_.pde(), m_.time_domain(), m_.locs());
       solver.setLambda(m_.lambda());
       solver.init();
       
@@ -87,8 +91,8 @@ namespace models{
 	V_ = distribution_.variance(mu_);
 	W_ = ((G_.array().pow(2)*V_.array()).inverse()).matrix();
 	// compute pseudo observations
-	py_ = G_.asDiagonal()*(m_.z() - mu_) + theta_;
-
+	py_ = G_.asDiagonal()*(m_.y() - mu_) + theta_;
+	
 	// solve weighted least square problem
 	// \argmin_{\beta, f} [ \norm(W^{1/2}(y - X\beta - f_n))^2 + \lambda \int_D (Lf - u)^2 ]
 	df.insert<double>(OBSERVATIONS_BLK, py_); // insert should overwrite existing block, if any is present
@@ -102,24 +106,25 @@ namespace models{
 	
 	// update value of \mu_
 	DVector<double> fitted = solver.fitted(); // compute fitted values
-	for(std::size_t i = 0; i < n; ++i)
-	  mu_[i] = distribution_.inv_link(fitted[i]);
+	mu_ = distribution_.inv_link(fitted);
 	
 	// compute value of functional J for this pair (\beta, f): \norm{V^{-1/2}(y - \mu)}^2 + \int_D (Lf-u)^2
 	DVector<double> V = distribution_.variance(mu_).array().sqrt().inverse().matrix();
-	double J = (V.asDiagonal()*(m_.y() - mu_)).squaredNorm() + m_.lambda()*g_.dot(m_.R0()*g_); // \int_D (Lf-u)^2
+	double J = (V.asDiagonal()*(m_.y() - mu_)).squaredNorm() + m_.lambdaS()*g_.dot(m_.R0()*g_); // \int_D (Lf-u)^2
 
 	// prepare for next iteration
-	k++;
-	J_old = J_new; J_new = J;
+	k++; J_old = J_new; J_new = J;
       }
+
+      //std::cout << f_ << std::endl;
       return;
     }
 
-    // getters
-    DVector<double> weights() const { return W_; }
-    DVector<double> beta() const { return beta_; }
-    DVector<double> f() const { return f_; }
+    // getters 
+    const DVector<double>& weights() const { return W_; } // weights matrix W at convergence
+    const DVector<double>& beta() const { return beta_; } // estimate of coefficient vector 
+    const DVector<double>& f() const { return f_; } // estimate of spatial field 
+    const DVector<double>& g() const { return g_; } // PDE misfit
   };
   
 }}

@@ -38,7 +38,7 @@ using fdaPDE::preprocess::InitialConditionEstimator;
    order FE:     1
    time penalization: separable (mass penalization)
  */
-TEST(STRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_Separable) {
+TEST(STRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_Separable_Monolithic) {
   // define time domain
   DVector<double> time_mesh;
   time_mesh.resize(11);
@@ -111,7 +111,7 @@ TEST(STRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_Separable) {
    order FE:     1
    time penalization: separable (mass penalization)
  */
-TEST(STRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable) {
+TEST(STRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable_Monolithic) {
   // define time domain
   DVector<double> time_mesh;
   time_mesh.resize(5);
@@ -199,7 +199,7 @@ TEST(STRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable)
    order FE:     1
    time penalization: parabolic (monolithic solution)
  */
-TEST(STRPDE, Test3_NonCostantCoefficientsPDE_NonParametric_Areal_Parabolic_EstimatedIC) {
+TEST(STRPDE, Test3_NonCostantCoefficientsPDE_NonParametric_Areal_Parabolic_Monolithic_EstimatedIC) {
   // define time domain, we skip the first time instant because we are going to use the first block of data
   // for the estimation of the initial condition
   DVector<double> time_mesh;
@@ -294,7 +294,7 @@ TEST(STRPDE, Test3_NonCostantCoefficientsPDE_NonParametric_Areal_Parabolic_Estim
    order FE:     1
    time penalization: parabolic (iterative solver)
  */
-TEST(STRPDE, Test4_Laplacian_NonParametric_GeostatisticalAtNodes_Parabolic_Iterative) {
+TEST(STRPDE, Test4_Laplacian_NonParametric_GeostatisticalAtNodes_Parabolic_Iterative_EstimatedIC) {
   // define time domain
   DVector<double> time_mesh;
   time_mesh.resize(11);

@@ -12,7 +12,7 @@ namespace calibration{
   class iGCV {
   protected:
     // SparseLU has a deleted copy construcor, need to wrap it in a movable object to allow copy construction of derived models
-    std::unique_ptr<Eigen::SparseLU<SpMatrix<double>>> invR0_{};
+    std::shared_ptr<Eigen::SparseLU<SpMatrix<double>>> invR0_{};
     DMatrix<double> R_{}; // R = R1^T*R0^{-1}*R1
     DMatrix<double> T_{}; // T = \Psi^T*Q*\Psi + \lambda*R
     DMatrix<double> Q_{}; // Q_ = I - H, whatever H is for the model
@@ -20,7 +20,7 @@ namespace calibration{
     // constructor
     iGCV() {
       // initialize pointer to SparseLU solver
-      invR0_ = std::make_unique<Eigen::SparseLU<SpMatrix<double>>>();
+      invR0_ = std::make_shared<Eigen::SparseLU<SpMatrix<double>>>();
     };
 
     // the following methods should compute matrices once and cache them for reuse using the provided data members.

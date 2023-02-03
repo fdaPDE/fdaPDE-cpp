@@ -129,7 +129,7 @@ namespace calibration{
     double a(){
       DMatrix<double> g = model_.R1().transpose()*model_.invR0().solve(model_.u());
       // cache h and p since needed for computation of second derivative
-      h_ = (model_.lambda()*L_ - DMatrix<double>::Identity(model_.n_locs(), model_.n_locs()))*(trS_.invT_).solve(g);
+      h_ = (model_.lambdaS()*L_ - DMatrix<double>::Identity(model_.n_locs(), model_.n_locs()))*(trS_.invT_).solve(g);
       p_ = model_.Psi()*h_ - dS_*model_.y();
       // return a = p.dot(y - \hat y)
       return (( model_.y() - model_.fitted() ).transpose() * p_).coeff(0,0);
@@ -183,7 +183,7 @@ namespace calibration{
 	double edf = n - (q+trS);        // equivalent degrees of freedom
 	// \sigma^2 = \frac{(y - \hat y).squaredNorm()}{n - (q + Tr[S])}
 	double sigma = ( model_.y() - model_.fitted() ).squaredNorm()/edf;
-	// return gradient of GCV at point      
+	// return gradient of GCV at point
 	return SVector<1>( 2*n/std::pow(n - (q+trS), 2)*( sigma*trdS + a() ) );
       };
     }

@@ -69,6 +69,7 @@ namespace models{
     inline const Model& model() const { return static_cast<const Model&>(*this); }
   public:   
     // constructor
+    SamplingDesign() = default;
     SamplingDesign(const DMatrix<double>& locs) : locs_(locs) {};
     // init sampling data structures
     void init_sampling() {    
@@ -118,6 +119,7 @@ namespace models{
     inline const Model& model() const { return static_cast<const Model&>(*this); }
   public:   
     // constructor
+    SamplingDesign() = default;
     SamplingDesign(const DMatrix<int>& subdomains) : subdomains_(subdomains) {};
     // init sampling data structures
     void init_sampling() {

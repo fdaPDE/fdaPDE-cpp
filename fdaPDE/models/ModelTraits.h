@@ -49,7 +49,7 @@ namespace models{
   template <typename Model>
   struct is_space_time {
     static constexpr bool value = !std::is_same<
-      typename model_traits<Model>::RegularizationType, SpaceOnlyTag>::value;
+      typename model_traits<typename std::decay<Model>::type>::RegularizationType, SpaceOnlyTag>::value;
   };
 
   // trait to select the number of smoothing parameters

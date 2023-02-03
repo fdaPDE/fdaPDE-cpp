@@ -3,8 +3,8 @@ template <typename PDE, Sampling SamplingDesign>
 void SRPDE<PDE, SamplingDesign>::solve() {
   // assemble system matrix for the nonparameteric part of the model
   SparseBlockMatrix<double,2,2>
-    A(-PsiTD()*W()*Psi(), lambda()*R1().transpose(),
-      lambda()*R1(),      lambda()*R0()            );
+    A(-PsiTD()*W()*Psi(), lambdaS()*R1().transpose(),
+      lambdaS()*R1(),     lambdaS()*R0()            );
   // cache non-parametric matrix and its factorization for reuse
   A_ = A.derived();
   invA_.compute(A_);
@@ -14,15 +14,16 @@ void SRPDE<PDE, SamplingDesign>::solve() {
   if(!hasCovariates()){ // nonparametric case
     // rhs of SR-PDE linear system
     b_ << -PsiTD()*W()*y(),
-          lambda()*u();
-
-    sol = invA_.solve(b_); // solve linear system A_*x = b_
+          lambdaS()*u();
+    
+    // solve linear system A_*x = b_
+    sol = invA_.solve(b_);
     // store result of smoothing
     f_ = sol.head(A_.rows()/2);
   }else{ // parametric case
     // rhs of SR-PDE linear system
     b_ << -PsiTD()*lmbQ(y()), // -\Psi^T*D*Q*z
-          lambda()*u();
+          lambdaS()*u();
     
     // definition of matrices U and V  for application of woodbury formula
     U_ = DMatrix<double>::Zero(A_.rows(), q());
@@ -51,9 +52,9 @@ const DMatrix<double>& SRPDE<PDE, SamplingDesign>::T() {
   }
   // compute and store matrix T for possible reuse
   if(!hasCovariates()) // case without covariates, Q is the identity matrix
-    T_ = PsiTD()*W()*Psi()   + lambda()*R_;
+    T_ = PsiTD()*W()*Psi()   + lambdaS()*R_;
   else // general case with covariates
-    T_ = PsiTD()*lmbQ(Psi()) + lambda()*R_;
+    T_ = PsiTD()*lmbQ(Psi()) + lambdaS()*R_;
   return T_;
 }
 

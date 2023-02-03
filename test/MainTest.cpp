@@ -24,7 +24,8 @@
 // space-time module test suites
 #include "core/SplineTest.cpp"
 #include "models/SpaceTimeTest.cpp"
-#include "models/STRPDETest.cpp"
+// #include "models/STRPDETest.cpp"
+#include "models/GSRPDETest.cpp"
 // GCV test suites
 #include "calibration/GCVTest.cpp"
 #include "calibration/GCVNewtonTest.cpp"
