@@ -19,12 +19,12 @@
 #include "core/IntegratorTest.cpp"
 #include "core/BilinearFormsTest.cpp"
 #include "core/PDESolutionsTest.cpp"
-// regression module test suites
-#include "models/SRPDETest.cpp"
-// space-time module test suites
+// space-time test suites
 #include "core/SplineTest.cpp"
 #include "models/SpaceTimeTest.cpp"
-// #include "models/STRPDETest.cpp"
+// regression module test suites
+#include "models/SRPDETest.cpp"
+#include "models/STRPDETest.cpp"
 #include "models/GSRPDETest.cpp"
 // GCV test suites
 #include "calibration/GCVTest.cpp"

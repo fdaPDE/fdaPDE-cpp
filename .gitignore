@@ -89,6 +89,7 @@
 !test/data/mesh/unit_interval/*.csv
 !test/data/mesh/unit_interval_o2/*.csv
 !test/data/mesh/unit_square_coarse/*.csv
+!test/data/mesh/unit_square_medium/*.csv
 !test/data/*.mtx
 !test/data/models/SRPDE/
 !test/data/models/SRPDE/*
