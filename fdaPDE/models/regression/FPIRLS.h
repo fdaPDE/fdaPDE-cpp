@@ -111,12 +111,9 @@ namespace models{
 	// compute value of functional J for this pair (\beta, f): \norm{V^{-1/2}(y - \mu)}^2 + \int_D (Lf-u)^2
 	DVector<double> V = distribution_.variance(mu_).array().sqrt().inverse().matrix();
 	double J = (V.asDiagonal()*(m_.y() - mu_)).squaredNorm() + m_.lambdaS()*g_.dot(m_.R0()*g_); // \int_D (Lf-u)^2
-
 	// prepare for next iteration
 	k++; J_old = J_new; J_new = J;
       }
-
-      //std::cout << f_ << std::endl;
       return;
     }
 
