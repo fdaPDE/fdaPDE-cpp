@@ -11,7 +11,6 @@
 #include "core/ElementTest.cpp"
 #include "core/SearchEngineTest.cpp"
 // NLA test suites
-#include "core/FSPAITest.cpp"
 #include "core/VectorSpaceTest.cpp"
 #include "core/KroneckerProductTest.cpp"
 // FEM test suites

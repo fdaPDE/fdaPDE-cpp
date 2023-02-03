@@ -26,6 +26,10 @@ using fdaPDE::testing::DOUBLE_TOLERANCE;
 #include "../utils/Utils.h"
 using fdaPDE::testing::almost_equal;
 
+// PS: in the following tests the tolerance is set to 10^-10 since FPIRLS makes use of vectorized operations
+// the numerical precision of vectorized instructions depend on the specific architecture and compiler used, 10^-10
+// is a safety treshold which should work for any architecture and compiler setting.
+
 /* test 1
    domain:       unit square [1,1] x [1,1]
    sampling:     locations != nodes
@@ -75,10 +79,8 @@ TEST(GSRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_Poisson) {
   Eigen::loadMarket(expectedSolution,   "data/models/GSRPDE/2D_test1/sol.mtx");
   DMatrix<double> computedF = model.f();
   std::size_t N = computedF.rows();
-  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );
+  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF, std::pow(0.1, 10)) );
 }
-
-// << (DMatrix<double>(expectedSolution) - computedF).lpNorm<Eigen::Infinity>();
 
 /* test 2
    domain:       unit square [1,1] x [1,1]
@@ -129,7 +131,7 @@ TEST(GSRPDE, Test2_Laplacian_NonParametric_GeostatisticalAtNodes_Bernulli) {
   Eigen::loadMarket(expectedSolution,   "data/models/GSRPDE/2D_test2/sol.mtx");
   DMatrix<double> computedF = model.f();
   std::size_t N = computedF.rows();
-  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );
+  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF, std::pow(0.1, 10)) );
 }
 
 /* test 3
@@ -181,7 +183,7 @@ TEST(GSRPDE, Test3_Laplacian_NonParametric_GeostatisticalAtNodes_Exponential) {
   Eigen::loadMarket(expectedSolution,   "data/models/GSRPDE/2D_test3/sol.mtx");
   DMatrix<double> computedF = model.f();
   std::size_t N = computedF.rows();
-  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );
+  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF, std::pow(0.1, 10)) );
 }
 
 /* test 4
@@ -233,5 +235,5 @@ TEST(GSRPDE, Test4_Laplacian_NonParametric_GeostatisticalAtNodes_Gamma) {
   Eigen::loadMarket(expectedSolution,   "data/models/GSRPDE/2D_test4/sol.mtx");
   DMatrix<double> computedF = model.f();
   std::size_t N = computedF.rows();
-  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );
+  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF, std::pow(0.1, 10)) );
 }
