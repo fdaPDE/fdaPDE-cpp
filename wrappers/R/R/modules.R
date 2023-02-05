@@ -1,3 +1,3 @@
 ## load all required modules
-loadModule("pde", TRUE)
-loadModule("Mesh2D", TRUE)
+loadModule("Laplacian_2D_Order1", TRUE)
+loadModule("SRPDE_Laplacian_2D_GeoStatNodes", TRUE)

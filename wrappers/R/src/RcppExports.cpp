@@ -13,12 +13,12 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 
-RcppExport SEXP _rcpp_module_boot_Mesh2D();
-RcppExport SEXP _rcpp_module_boot_pde();
+RcppExport SEXP _rcpp_module_boot_Laplacian_2D_Order1();
+RcppExport SEXP _rcpp_module_boot_SRPDE_Laplacian_2D_GeoStatNodes();
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_rcpp_module_boot_Mesh2D", (DL_FUNC) &_rcpp_module_boot_Mesh2D, 0},
-    {"_rcpp_module_boot_pde", (DL_FUNC) &_rcpp_module_boot_pde, 0},
+    {"_rcpp_module_boot_Laplacian_2D_Order1", (DL_FUNC) &_rcpp_module_boot_Laplacian_2D_Order1, 0},
+    {"_rcpp_module_boot_SRPDE_Laplacian_2D_GeoStatNodes", (DL_FUNC) &_rcpp_module_boot_SRPDE_Laplacian_2D_GeoStatNodes, 0},
     {NULL, NULL, 0}
 };
 

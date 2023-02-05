@@ -1,7 +1,7 @@
 ## set C++17 as standard
 CXX_STD=CXX17
 ## include fdaPDE library in PATH and set compiler flags
-PKG_CXXFLAGS=-Wno-ignored-attributes -I$(PWD)/../../../ -O2 -march=native -std=c++17
+PKG_CXXFLAGS=-Wno-ignored-attributes -I$(PWD)/../../../ -O2 -DNDEBUG -ffast-math -fopenmp -std=c++17
 
 SOURCES = $(wildcard ./*.cpp)
 OBJECTS = $(SOURCES:.cpp=.o) $(SOURCES_LIBS:.cpp=.o)
