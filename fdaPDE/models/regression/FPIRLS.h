@@ -35,12 +35,14 @@ namespace models{
   template <typename Model, typename Distribution>
   class FPIRLS {
   private:
+    typedef typename std::decay<Model>::type Model_;
     // data characterizing the behaviour of the algorithm
     Distribution distribution_{};
     Model& m_;
     // algorithm's parameters 
     double tolerance_; 
     std::size_t max_iter_;
+    std::size_t k_ = 0; // FPIRLS iteration index
     
     // let g() the link function of the considered distribution and y = (y_1, y_2, ..., y_n) the (1 x n) vector of observations
     DVector<double> mu_{};    // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : mean vector at step k
@@ -68,24 +70,28 @@ namespace models{
       // algorithm initialization
       mu_ = m_.y();
       distribution_.preprocess(mu_);
-      std::size_t k = 0; // FPIRLS iteration index
       // define internal problem solver and initialize it
       typename FPIRLS_internal_solver<Model>::type solver;
       if constexpr(!is_space_time<Model>::value) // space-only
 	solver = typename FPIRLS_internal_solver<Model>::type(m_.pde(), m_.locs());
-      else // space-time0
+      else{ // space-time
 	solver = typename FPIRLS_internal_solver<Model>::type(m_.pde(), m_.time_domain(), m_.locs());
+	// in case of parabolic regularization derive initial condition from input model
+	if constexpr(std::is_same<typename model_traits<Model_>::RegularizationType,
+		     SpaceTimeParabolicTag>::value)
+	  solver.setInitialCondition(m_.s());
+      }
       solver.setLambda(m_.lambda());
       solver.init();
       
       // prepare data for solver, copy covariates if present
       BlockFrame<double, int> df = m_.data();
-      if(m_.hasCovariates()) df.insert<double>(DESIGN_MATRIX_BLK, m_.X());
+      if(m_.hasCovariates()) df.insert<double>(DESIGN_MATRIX_BLK, m_.X()); 
       
       // algorithm stops when an enought small difference between two consecutive values of the J is recordered
       double J_old = tolerance_+1; double J_new = 0;
       // start loop
-      while(k < max_iter_ && std::abs(J_new - J_old) > tolerance_){
+      while(k_ < max_iter_ && std::abs(J_new - J_old) > tolerance_){
         theta_ = distribution_.link(mu_);
 	G_ = distribution_.der_link(mu_);
 	V_ = distribution_.variance(mu_);
@@ -110,9 +116,9 @@ namespace models{
 	
 	// compute value of functional J for this pair (\beta, f): \norm{V^{-1/2}(y - \mu)}^2 + \int_D (Lf-u)^2
 	DVector<double> V = distribution_.variance(mu_).array().sqrt().inverse().matrix();
-	double J = (V.asDiagonal()*(m_.y() - mu_)).squaredNorm() + m_.lambdaS()*g_.dot(m_.R0()*g_); // \int_D (Lf-u)^2
+	double J = (V.asDiagonal()*(m_.y() - mu_)).squaredNorm() + g_.dot(m_.R0()*g_); // \int_D (Lf-u)^2
 	// prepare for next iteration
-	k++; J_old = J_new; J_new = J;
+	k_++; J_old = J_new; J_new = J;
       }
       return;
     }
@@ -122,6 +128,7 @@ namespace models{
     const DVector<double>& beta() const { return beta_; } // estimate of coefficient vector 
     const DVector<double>& f() const { return f_; } // estimate of spatial field 
     const DVector<double>& g() const { return g_; } // PDE misfit
+    std::size_t n_iter() const { return k_ - 1; } // number of iterations
   };
   
 }}

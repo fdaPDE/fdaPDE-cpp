@@ -4,8 +4,8 @@ void STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign, SolverType::Monolithic>:
   // assemble system matrix for the nonparameteric part of the model
   SparseKroneckerProduct<> P = Kronecker(Pt(), pde().R0());
   SparseBlockMatrix<double,2,2>
-    A(-PsiTD()*Psi()-lambdaT()*P, lambdaS()*R1().transpose(),
-      lambdaS()*R1(),             lambdaS()*R0()            );
+    A(-PsiTD()*W()*Psi()-lambdaT()*P, lambdaS()*R1().transpose(),
+      lambdaS()*R1(),                 lambdaS()*R0()            );
   // cache system matrix for reuse
   A_ = A.derived();
   invA_.compute(A_);
@@ -14,32 +14,28 @@ void STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign, SolverType::Monolithic>:
    
   if(!Base::hasCovariates()){ // nonparametric case
     // rhs of STR-PDE linear system
-    b_ << -PsiTD()*y(),
-          lambdaS()*u();
+    b_ << -PsiTD()*W()*y(),
+      lambdaS()*u();
       
     // solve linear system A_*x = b_
     sol = invA_.solve(b_);
-
     // store result of smoothing
     f_ = sol.head(A_.rows()/2);
   }else{ // parametric case
     // rhs of STR-PDE linear system
     b_ << -PsiTD()*lmbQ(y()), // -\Psi^T*D*Q*z
-          lambdaS()*u();
+      lambdaS()*u();
 
     // definition of matrices U and V  for application of woodbury formula
     DMatrix<double> U = DMatrix<double>::Zero(A_.rows(), q());
-    U.block(0,0, A_.rows()/2, q()) = PsiTD()*X();
+    U.block(0,0, A_.rows()/2, q()) = PsiTD()*W()*X();
     DMatrix<double> V = DMatrix<double>::Zero(q(), A_.rows());
-    V.block(0,0, q(), A_.rows()/2) = X().transpose()*Psi();
-
-    // Define system solver. Use SMW solver from NLA module
-    SMW<> solver{};
-    // solve system Mx = b
-    sol = solver.solve(invA_, U, XtWX(), V, b_);
+    V.block(0,0, q(), A_.rows()/2) = X().transpose()*W()*Psi();
+    // solve system (A_ + U_*(X^T*W_*X)*V_)x = b using woodbury formula from NLA module
+    sol = SMW<>().solve(invA_, U, XtWX(), V, b_);
     // store result of smoothing
     f_    = sol.head(A_.rows()/2);
-    beta_ = invXtWX().solve(X().transpose())*(y() - Psi()*f_);
+    beta_ = invXtWX().solve(X().transpose()*W())*(y() - Psi()*f_);
   }
   // store PDE misfit
   g_ = sol.tail(A_.rows()/2);
@@ -49,49 +45,41 @@ void STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign, SolverType::Monolithic>:
 // finds a solution to the STR-PDE smoothing problem (parabolic penalization, monolithic solution)
 template <typename PDE, Sampling SamplingDesign>
 void STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign, SolverType::Monolithic>::solve() {
-  // set first n points of the estimation problem to the initial condition
-  f_.resize((n_time()+1)*n_basis(), 1);
-  f_.block(0,0, n_basis(),1) = s();
-  
   // assemble system matrix for the nonparameteric part of the model
   SparseKroneckerProduct<> L_ = Kronecker(L(), pde().R0());
   SparseBlockMatrix<double,2,2>
-    A(-PsiTD()*Psi(),                  lambdaS()*(R1() + lambdaT()*L_).transpose(),
+    A(-PsiTD()*W()*Psi(),              lambdaS()*(R1() + lambdaT()*L_).transpose(),
       lambdaS()*(R1() + lambdaT()*L_), lambdaS()*R0()                             );
   // cache system matrix for reuse
   A_ = A.derived();
   invA_.compute(A_);
   b_.resize(A_.rows());
   DVector<double> sol; // room for problem' solution
-
+  
   if(!Base::hasCovariates()){ // nonparametric case
     // rhs of STR-PDE linear system
-    b_ << -PsiTD()*y(),
+    b_ << -PsiTD()*W()*y(),
           lambdaS()*u();
       
     // solve linear system A_*x = b_
     sol = invA_.solve(b_);
     // store result of smoothing
-    f_.block(n_basis(),0, n_time()*n_basis(),1) = sol.head(A_.rows()/2);
+    f_ = sol.head(A_.rows()/2);
   }else{ // parametric case
     // rhs of STR-PDE linear system
     b_ << -PsiTD()*lmbQ(y()), // -\Psi^T*D*Q*z
           lambdaS()*u();
 
-    std::size_t q_ = X().cols(); // number of covariates
     // definition of matrices U and V  for application of woodbury formula
-    DMatrix<double> U = DMatrix<double>::Zero(A_.rows(), q_);
-    U.block(0,0, A_.rows()/2, q_) = PsiTD()*X();
-    DMatrix<double> V = DMatrix<double>::Zero(q_, A_.rows());
-    V.block(0,0, q_, A_.rows()/2) = X().transpose()*Psi();
-
-    // Define system solver. Use SMW solver from NLA module
-    SMW<> solver{};
-    // solve system Mx = b
-    sol = solver.solve(invA_, U, XtWX(), V, b_);
+    DMatrix<double> U = DMatrix<double>::Zero(A_.rows(), q());
+    U.block(0,0, A_.rows()/2, q()) = PsiTD()*W()*X();
+    DMatrix<double> V = DMatrix<double>::Zero(q(), A_.rows());
+    V.block(0,0, q(), A_.rows()/2) = X().transpose()*W()*Psi();
+    // solve system (A_ + U_*(X^T*W_*X)*V_)x = b using woodbury formula from NLA module
+    sol = SMW<>().solve(invA_, U, XtWX(), V, b_);
     // store result of smoothing
-    f_.block(n_basis(),0, n_time()*n_basis(),1) = sol.head(A_.rows()/2);
-    beta_ = invXtWX().solve(X().transpose())*(y() - Psi()*f_);
+    f_ = sol.head(A_.rows()/2);
+    beta_ = invXtWX().solve(X().transpose()*W())*(y() - Psi()*f_);
   }
   // store PDE misfit
   g_ = sol.tail(A_.rows()/2);

@@ -33,6 +33,7 @@ namespace models{
     using Base::time_; // time interval [0,T]
     
     // constructor
+    SpaceTimeSeparableBase() = default;
     SpaceTimeSeparableBase(const PDE& pde, const DVector<double>& time)
       : SpaceTimeBase<Model>(pde, time), basis_(time) {}
     // init data structure related to separable regularization

@@ -21,25 +21,29 @@ namespace models{
   // base class for GSRPDE model
   template <typename PDE, typename RegularizationType, Sampling SamplingDesign,
 	    SolverType Solver, typename Distribution>
-  class GSRPDE : public RegressionBase<GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>>/*,
-    public iGCV*/ {
+  class GSRPDE : public RegressionBase<GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>>, public iGCV {
     // compile time checks
     static_assert(std::is_base_of<PDEBase, PDE>::value);
   private:
     typedef RegressionBase<GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>> Base;   
-    // weight matrix obtained at FPIRLS convergence
-    DiagMatrix<double> W_;
+    DiagMatrix<double> W_; // weight matrix obtained at FPIRLS convergence
 
     // FPIRLS parameters (set to default)
     std::size_t max_iter_ = 15;
     double tol_ = 0.0002020;
   public:
     IMPORT_REGRESSION_SYMBOLS;
-    using Base::lambda; // smoothing parameter in space
+    using Base::lambdaS; // smoothing parameter in space
     // constructor
     GSRPDE() = default;
-    template <typename... SamplingData>
+    // space-only constructor
+    template <typename... SamplingData, typename U = RegularizationType,
+	      typename std::enable_if< std::is_same<U, SpaceOnlyTag>::value, int>::type = 0> 
     GSRPDE(const PDE& pde, const SamplingData&... s) : Base(pde, s...) {};
+    // space-time constructor
+    template <typename... SamplingData, typename U = RegularizationType,
+	      typename std::enable_if<!std::is_same<U, SpaceOnlyTag>::value, int>::type = 0> 
+    GSRPDE(const PDE& pde, const DVector<double>& time, const SamplingData&... s) : Base(pde, time, s...) {};
 
     // setter
     void setFPIRLSTolerance(double tol) { tol_ = tol; }
@@ -48,21 +52,33 @@ namespace models{
     // ModelBase implementation
     virtual void solve(); // finds a solution to the smoothing problem
     
-    // // iGCV interface implementation
-    // virtual const DMatrix<double>& T(); // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
-    // virtual const DMatrix<double>& Q();
-    // // returns the total deviance of the model as \sum dev(y - \hat \mu)
-    // virtual double norm(const DMatrix<double>& obs, const DMatrix<double>& fitted) const;
+    // iGCV interface implementation
+    virtual const DMatrix<double>& T(); // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
+    virtual const DMatrix<double>& Q();
+    // returns the total deviance of the model as \sum dev(y - \hat \mu)
+    virtual double norm(const DMatrix<double>& obs, const DMatrix<double>& fitted) const;
 
     virtual ~GSRPDE() = default;
   };
   template <typename PDE_, typename RegularizationType_, Sampling SamplingDesign,
-	    SolverType Solver, typename Distribution>
-  struct model_traits<GSRPDE<PDE_, RegularizationType_, SamplingDesign, Solver, Distribution>> {
+	    SolverType Solver, typename DistributionType_>
+  struct model_traits<GSRPDE<PDE_, RegularizationType_, SamplingDesign, Solver, DistributionType_>> {
     typedef PDE_ PDE;
     typedef RegularizationType_ RegularizationType;
     static constexpr Sampling sampling = SamplingDesign;
     static constexpr SolverType solver = Solver;
+    typedef DistributionType_ DistributionType;
+  };
+
+  // specialization for separable regularization
+  template <typename PDE_, Sampling SamplingDesign, SolverType Solver, typename DistributionType_>
+  struct model_traits<GSRPDE<PDE_, fdaPDE::models::SpaceTimeSeparableTag, SamplingDesign, Solver, DistributionType_>> {
+    typedef PDE_ PDE;
+    typedef fdaPDE::models::SpaceTimeSeparableTag RegularizationType;
+    typedef SplineBasis<3> TimeBasis; // use cubic B-splines
+    static constexpr Sampling sampling = SamplingDesign;
+    static constexpr SolverType solver = Solver;
+    typedef DistributionType_ DistributionType;
   };
   
   #include "GSRPDE.tpp"

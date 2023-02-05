@@ -22,13 +22,14 @@ namespace models{
   template <unsigned int R, unsigned int M = R>
   class Spline : public ScalarExpr<Spline<R>> {
   private:
-    const DVector<double>& knots_;
+    DVector<double> knots_;
     std::size_t i_; // knot index where this basis is centered
 
     // store constants a_ = 1/(u_i+j - u_i), b_ = 1/(u_i+j+1 - u_i+1)
     double a_, b_;
   public:
     // full constructor (used by SplineBasis)
+    Spline() = default;
     Spline(const DVector<double>& knots, std::size_t i) : knots_(knots), i_(i) {
       // avoid possible divisions by zero
       a_ = knots_[i_+R] - knots_[i_] != 0 ? 1.0/(knots_[i_+R] - knots_[i_]) : 0.0;
@@ -58,12 +59,13 @@ namespace models{
   template <unsigned int M>
   class Spline<0,M> : public ScalarExpr<Spline<0>> {
   private:
-    const DVector<double>& knots_;
+    DVector<double> knots_;
     std::size_t i_; // knot index where this basis is centered
 
     static constexpr double tol_ = 10*std::numeric_limits<double>::epsilon();
   public:
     // constructor
+    Spline() = default;
     Spline(const DVector<double>& knots, std::size_t i) : knots_(knots), i_(i) {};
     // implements the indicator function over the open interval [u_i, u_{i+1}). Returns 1 if at the end of the knot span.
     inline double operator()(SVector<1> x) const {

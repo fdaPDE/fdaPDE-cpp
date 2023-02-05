@@ -276,11 +276,14 @@ TEST(STRPDE, Test3_NonCostantCoefficientsPDE_NonParametric_Areal_Parabolic_Monol
   model.solve();
   
   //   **  test correctness of computed results  **   
-	 
-  // estimate of spatial field \hat f
+
+  DMatrix<double> computedF;
+  computedF.resize((model.n_time()+1)*model.n_basis(), 1);
+  computedF << model.s(), model.f();
+  
+  // estimate of spatial field \hat f (with estimatate of initial condition)
   SpMatrix<double> expectedSolution;
   Eigen::loadMarket(expectedSolution, "data/models/STRPDE/2D_test3/sol.mtx");
-  DMatrix<double> computedF = model.f();
   std::size_t N = computedF.rows();
   EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );
 }
@@ -358,7 +361,3 @@ TEST(STRPDE, Test4_Laplacian_NonParametric_GeostatisticalAtNodes_Parabolic_Itera
   std::size_t N = computedF.rows();
   EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );
 }
-
-
-
-

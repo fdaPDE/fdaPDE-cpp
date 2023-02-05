@@ -14,14 +14,30 @@ using fdaPDE::calibration::GCV;
 using fdaPDE::calibration::ExactEDF;
 // models module imports
 #include "../models/ModelTraits.h"
-using fdaPDE::models::is_sampling_pointwise_at_mesh;
+using fdaPDE::models::is_generalized;
 #include "../models/regression/SRPDE.h"
+#include "../models/regression/GSRPDE.h"
 using fdaPDE::models::SpaceTimeParabolicTag;
 using fdaPDE::models::SRPDE;
+using fdaPDE::models::GSRPDE;
 
 namespace fdaPDE{
 namespace preprocess {
 
+  // trait to select the type of space-only model to use for estimation of initial condition
+  template <typename Model, typename PDE>
+  struct ICEstimator_internal_solver{
+    typedef typename std::decay<Model>::type Model_;
+    using type = typename std::conditional<
+      !is_generalized<Model_>::value,
+      // STRPDE model
+      SRPDE <PDE, model_traits<Model_>::sampling>,
+      // generalized STRPDE model
+      GSRPDE<PDE, typename fdaPDE::models::SpaceOnlyTag, model_traits<Model_>::sampling,
+	     model_traits<Model_>::solver, typename model_traits<Model_>::DistributionType>
+      >::type;
+  };
+  
   // for a space-time regression model builds an estimation of the initial condition from the data at time step 0
   // the estimation is obtained selecting the best spatial field estimate obtained from an SRPDE model via GCV optimization
   template <typename Model>
@@ -49,13 +65,14 @@ namespace preprocess {
       problem.setBilinearForm(L);
       problem.setForcing(u);
       problem.init(); // init PDE object
-      // define SRPDE model for initial condition estimation
-      SRPDE<PDE_, model_traits<Model>::sampling> m(problem, model_.locs());
-      m.setData(df); // impose data
-      m.init();
+      
+      // define solver for initial condition estimation
+      typename ICEstimator_internal_solver<Model, decltype(problem)>::type solver(problem, model_.locs());
+      solver.setData(df); // impose data
+      solver.init();
       
       // find optimal smoothing parameter
-      GCV<decltype(m), ExactEDF<decltype(m)>> GCV(m);
+      GCV<decltype(solver), ExactEDF<decltype(solver)>> GCV(solver);
       GridOptimizer<1> opt;
 
       ScalarField<1, decltype(GCV)> obj(GCV);
@@ -63,10 +80,10 @@ namespace preprocess {
       SVector<1> best_lambda = opt.getSolution();
 
       // fit model with optimal lambda
-      m.setLambda(best_lambda);
-      m.solve();
+      solver.setLambda(best_lambda);
+      solver.solve();
       // store initial condition estimate
-      estimate_ = m.f();
+      estimate_ = solver.f();
       return;
     }
 

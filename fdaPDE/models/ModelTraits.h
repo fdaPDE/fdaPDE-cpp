@@ -52,6 +52,14 @@ namespace models{
       typename model_traits<typename std::decay<Model>::type>::RegularizationType, SpaceOnlyTag>::value;
   };
 
+  // trait to detect if a model has a non-gaussian error distribution
+  class Gaussian; // tag used for distinguish a generalized model from a non-generalized one
+  template <typename Model>
+  struct is_generalized {
+    static constexpr bool value = !std::is_same<
+      typename model_traits<typename std::decay<Model>::type>::DistributionType, Gaussian>::value;
+  };
+  
   // trait to select the number of smoothing parameters
   template <typename Model>
   class n_smoothing_parameters {

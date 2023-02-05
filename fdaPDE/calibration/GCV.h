@@ -68,7 +68,7 @@ namespace calibration{
       edfs_->emplace_back(q + trS);   // store equivalent degrees of freedom
       
       // return gcv at point
-      double gcv_value = (n/std::pow(dor, 2))*( model_.norm(model_.y(), model_.fitted()) ) ; 
+      double gcv_value = (n/std::pow(dor, 2))*( model_.norm(model_.fitted(), model_.y()) ) ; 
       values_->emplace_back(gcv_value);
       return gcv_value;
     }

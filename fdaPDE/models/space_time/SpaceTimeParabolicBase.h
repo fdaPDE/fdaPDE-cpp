@@ -38,6 +38,7 @@ namespace models{
     using Base::time_; // time interval [0,T]
     
     // constructor
+    SpaceTimeParabolicBase() = default;
     SpaceTimeParabolicBase(const PDE& pde, const DVector<double>& time)
       : SpaceTimeBase<Model>(pde, time) {}
     // init data structure related to parabolic regularization

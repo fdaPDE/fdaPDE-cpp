@@ -9,7 +9,7 @@ namespace fdaPDE {
 namespace models {
 
   // definition of common distributions from the exponential family
-
+  
   class Bernulli {
   private:
     double p_; // distribution parameter
@@ -38,7 +38,7 @@ namespace models {
       return (x.array()*(1-x.array())).inverse(); }          // 1/(x*(1-x))
 
     // deviance function
-    double deviance(std::size_t x) { return x == 0 ? 2*std::log(1/(1-p_)) : 2*std::log(1/p_); };
+    double deviance(double x, double y) { return y == 0 ? 2*std::log(1/(1-x)) : 2*std::log(1/x); };
   };
 
   class Poisson {
@@ -75,7 +75,7 @@ namespace models {
       return x.array().inverse(); }                          // 1/x
     
     // deviance function
-    double deviance(std::size_t x) { return x > 0 ? x*std::log(x/l_) - (x-l_) : l_; };
+    double deviance(double x, double y) { return y > 0 ? y*std::log(y/x) - (y-x) : x; };
   };
 
   class Exponential {
@@ -100,7 +100,7 @@ namespace models {
       return x.array().pow(2).inverse(); }                   // 1/(x^2)
    
     // deviance function
-    double deviance(std::size_t x) { return 2*((x-l_)/l_ - std::log(x/l_)); };    
+    double deviance(double x, double y) { return 2*((y-x)/x - std::log(y/x)); };    
   };
 
   class Gamma {
@@ -126,7 +126,7 @@ namespace models {
       return x.array().pow(2).inverse(); }                   // 1/(x^2)
 
     // deviance function
-    double deviance(std::size_t x) { return 2*((x-theta_)/theta_ - std::log(x/theta_)); };    
+    double deviance(double x, double y) { return 2*((y-x)/x - std::log(y/x)); };    
   };
   
 }}

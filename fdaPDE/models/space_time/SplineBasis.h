@@ -17,6 +17,7 @@ namespace models {
   public:
     using const_iterator = typename std::vector<Spline<R>>::const_iterator;
     // constructor
+    SplineBasis() = default;
     SplineBasis(const DVector<double>& knots) : knots_(knots) {
       //reserve space
       std::size_t n = knots.size();

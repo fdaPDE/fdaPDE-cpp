@@ -24,6 +24,7 @@ using fdaPDE::calibration::iGCV;
 #include "RegressionBase.h"
 using fdaPDE::models::RegressionBase;
 #include "../ModelTraits.h"
+using fdaPDE::models::Gaussian;
 
 namespace fdaPDE{
 namespace models{
@@ -74,6 +75,7 @@ namespace models{
     typedef SplineBasis<3> TimeBasis; // use cubic B-splines
     static constexpr Sampling sampling = SamplingDesign;
     static constexpr SolverType solver = SolverType::Monolithic;
+    typedef Gaussian DistributionType;
   };
 
   // implementation of STRPDE for parabolic space-time regularization, monolithic solver
@@ -104,7 +106,7 @@ namespace models{
     
     // ModelBase interface implementation
     virtual void solve(); // finds a solution to the smoothing problem
-
+    
     // iGCV interface implementation
     // virtual const DMatrix<double>& T(); // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
     // virtual const DMatrix<double>& Q(); // Q = W(I - H) = W - W*X*(X^T*W*X)^{-1}X^T*W
@@ -119,6 +121,7 @@ namespace models{
     typedef SpaceTimeParabolicTag RegularizationType;
     static constexpr Sampling sampling = SamplingDesign;
     static constexpr SolverType solver = SolverType::Monolithic;
+    typedef Gaussian DistributionType;
   };
   
   // implementation of STRPDE for parabolic space-time regularization, monolithic solver
@@ -171,6 +174,7 @@ namespace models{
     typedef SpaceTimeParabolicTag RegularizationType;
     static constexpr Sampling sampling = SamplingDesign;
     static constexpr SolverType solver = SolverType::Iterative;
+    typedef Gaussian DistributionType;
   };
   
 #include "STRPDE.tpp"
