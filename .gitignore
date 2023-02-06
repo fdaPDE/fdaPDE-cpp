@@ -12,6 +12,10 @@
 |fdaPDE/*
 !wrappers/
 !wrappers/**
+!wrappers/data/
+!wrappers/data/**
+!wrappers/tests/
+!wrappers/tests/**
 !fdaPDE/core/
 !fdaPDE/core/*
 !fdaPDE/core/utils/
