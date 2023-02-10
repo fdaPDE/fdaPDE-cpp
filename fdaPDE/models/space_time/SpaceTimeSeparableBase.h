@@ -23,14 +23,18 @@ namespace models{
     DVector<double> u_;    // stacked discretized forcing [u_1 \ldots u_n, \ldots, u_1 \ldots u_n]
     
     typedef typename model_traits<Model>::TimeBasis TimeBasis; // basis used for discretization in time
-    TimeBasis basis_; 
+    TimeBasis basis_;
+
+    SpMatrix<double> pen_; // discretized regularizing term: \lambda_S*((R1^T*R0^{-1}*R1) \kron Rt) + \lambda_T*(R0 \kron Pt)
   public:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
     typedef typename model_traits<Model>::RegularizationType TimeRegularization; // regularization in time
     typedef SpaceTimeBase<Model> Base;
-    using Base::pde_;  // regularizing term in space
-    using Base::model; // underlying model object
-    using Base::time_; // time interval [0,T]
+    using Base::pde_;    // regularizing term in space Lf = u
+    using Base::model;   // underlying model object
+    using Base::time_;   // time interval [0,T]
+    using Base::lambdaS; // smoothing parameter in space \lambda_S
+    using Base::lambdaT; // smoothing parameter in time \lambda_T
     
     // constructor
     SpaceTimeSeparableBase() = default;
@@ -66,6 +70,19 @@ namespace models{
       }
       return u_;
     }
+
+    // computes and returns \lambda_S*((R1^T*R0^{-1}*R1) \kron Rt) + \lambda_T*(R0 \kron Pt)
+    const SpMatrix<double>& pen() {
+      if(pen_.size() == 0){ // compute once and cache result
+	fdaPDE::SparseLU<SpMatrix<double>> invR0_;
+	invR0_.compute(pde_->R0());
+	SpMatrix<double> Ps_ = pde_->R1().transpose()*invR0_.solve(pde_->R1()); // R1^T*R0^{-1}*R1
+	// \lambda_S*((R1^T*R0^{-1}*R1) \kron Rt) + \lambda_T*(R0 \kron Pt)
+	pen_ = lambdaS()*Kronecker(Ps_, Rt_) + lambdaT()*Kronecker(pde_->R0(), Pt_);
+      }
+      return pen_;
+    }
+
     
     // destructor
     virtual ~SpaceTimeSeparableBase() = default;  

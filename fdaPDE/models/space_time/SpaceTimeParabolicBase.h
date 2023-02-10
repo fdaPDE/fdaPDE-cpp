@@ -24,11 +24,13 @@ namespace models{
 		  "you have asked for parabolic smoothing but using a non-parabolic differential operator");
   private:
     // let m the number of time points
-    DMatrix<double> s_;   // N x 1 initial condition vector
-    DMatrix<double> u_;   // discretized forcing [1/DeltaT * (u_1 + R_0*s) \ldots u_n]
-    SpMatrix<double> Im_; // m x m sparse identity matrix (assembled once and cached for reuse)
-    SpMatrix<double> L_;  // m x m matrix associated with the derivation in time
-    double DeltaT_;       // time step (assumes equidistant points in time)
+    DMatrix<double> s_;    // N x 1 initial condition vector
+    DMatrix<double> u_;    // discretized forcing [1/DeltaT * (u_1 + R_0*s) \ldots u_n]
+    SpMatrix<double> Im_;  // m x m sparse identity matrix (assembled once and cached for reuse)
+    SpMatrix<double> L_;   // m x m matrix associated with the derivation in time
+    double DeltaT_;        // time step (assumes equidistant points in time)
+
+    SpMatrix<double> pen_; // discretized regularizing term: (Im \kron R1 + L \kron R0)^T*(I_m \kron R0)^{-1}*(Im \kron R1 + L \kron R0)
   public:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
     typedef typename model_traits<Model>::RegularizationType TimeRegularization; // regularization in time
@@ -84,6 +86,17 @@ namespace models{
     }
     const DMatrix<double>& s() { return s_; } // initial condition
     double DeltaT() const { return DeltaT_; }
+
+    // computes and returns (Im \kron R1 + L \kron R0)^T*(I_m \kron R0)^{-1}*(Im \kron R1 + L \kron R0)
+    const SpMatrix<double>& pen() {
+      if(pen_.size() == 0){ // compute once and cache result
+	fdaPDE::SparseLU<SpMatrix<double>> invR0_;
+	invR0_.compute(R0());
+	// (Im \kron R1 + L \kron R0)^T*(I_m \kron R0)^{-1}*(Im \kron R1 + L \kron R0)
+	pen_ = (R1() + Kronecker(L_, pde_->R0())).transpose()*invR0_.solve(R1() + Kronecker(L_, pde_->R0()));
+      }
+      return pen_;
+    }
     
     // setters
     void setInitialCondition(const DMatrix<double>& s) { s_ = s; }

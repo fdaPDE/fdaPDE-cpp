@@ -11,17 +11,13 @@ namespace calibration{
   // abstract base class for models capable to support selection of smoothing parameters via GCV optimization
   class iGCV {
   protected:
-    // SparseLU has a deleted copy construcor, need to wrap it in a movable object to allow copy construction of derived models
-    std::shared_ptr<Eigen::SparseLU<SpMatrix<double>>> invR0_{};
+    fdaPDE::SparseLU<SpMatrix<double>> invR0_{};
     DMatrix<double> R_{}; // R = R1^T*R0^{-1}*R1
     DMatrix<double> T_{}; // T = \Psi^T*Q*\Psi + \lambda*R
     DMatrix<double> Q_{}; // Q_ = I - H, whatever H is for the model
   public:
     // constructor
-    iGCV() {
-      // initialize pointer to SparseLU solver
-      invR0_ = std::make_shared<Eigen::SparseLU<SpMatrix<double>>>();
-    };
+    iGCV() {};
 
     // the following methods should compute matrices once and cache them for reuse using the provided data members.
     // Subsequent calls should immediately return the cached result.
@@ -31,7 +27,7 @@ namespace calibration{
     virtual double norm(const DMatrix<double>& obs, const DMatrix<double>& fitted) const = 0;
 
     // utilities
-    Eigen::SparseLU<SpMatrix<double>>& invR0() { return *invR0_; };
+    fdaPDE::SparseLU<SpMatrix<double>>& invR0() { return invR0_; };
     const DMatrix<double>& R() { return R_; } 
     virtual ~iGCV() = default;
   };

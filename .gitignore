@@ -39,6 +39,8 @@
 !fdaPDE/calibration/*
 !fdaPDE/preprocess/
 !fdaPDE/preprocess/*
+!fdaPDE/models/functional/
+!fdaPDE/models/functional/*
 !docs/
 !docs/*
 !docs/core/OPT/
@@ -67,6 +69,8 @@
 !test/data/models/SRPDE/*
 !test/data/models/STRPDE/
 !test/data/models/STRPDE/*
+!test/data/models/FPCA/
+!test/data/models/FPCA/*
 !test/data/misc/
 !test/data/misc/*
 !test/core/
@@ -131,6 +135,8 @@
 !test/data/models/GSRPDE/2D_test4/*
 !test/data/models/GSRPDE/2D_test5/
 !test/data/models/GSRPDE/2D_test5/*
+!test/data/models/FPCA/2D_test1/
+!test/data/models/FPCA/2D_test1/*
 !test/data/PDEs/*.mtx
 *.txt
 *.json

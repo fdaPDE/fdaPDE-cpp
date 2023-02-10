@@ -61,8 +61,6 @@ namespace models{
     
     virtual ~SRPDE() = default;
   };
-
-  // compile time informations related to the model
   template <typename PDE_, Sampling SamplingDesign>
   struct model_traits<SRPDE<PDE_, SamplingDesign>> {
     typedef PDE_ PDE;

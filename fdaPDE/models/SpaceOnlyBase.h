@@ -20,6 +20,8 @@ namespace models {
     using Base::pde_;  // regularizing PDE
     using Base::model; // underlying model object
     using Base::lambda_; // vector of smoothing parameters
+
+    SpMatrix<double> pen_; // discretization of regularizing term R1^T*R0^{-1}*R1
   public:  
     // constructor
     SpaceOnlyBase() = default;
@@ -34,6 +36,16 @@ namespace models {
     const SpMatrix<double>& R1()  const { return pde_->R1(); }    // discretization of differential operator L
     const DMatrix<double>&  u()   const { return pde_->force(); } // discretization of forcing term u
     const SpMatrix<double>& Psi() const { return model().Psi_; }  // matrix of spatial basis evaluation
+
+    // computes and returns R1^T*R0^{-1}*R1
+    const SpMatrix<double>& pen() {
+      if(pen_.size() == 0){ // compute once and cache result
+	fdaPDE::SparseLU<SpMatrix<double>> invR0_;
+	invR0_.compute(R0());
+	pen_ = R1().transpose()*invR0_.solve(R1()); // R1^T*R0^{-1}*R1
+      }
+      return pen_;
+    }
     
     // destructor
     virtual ~SpaceOnlyBase() = default;  

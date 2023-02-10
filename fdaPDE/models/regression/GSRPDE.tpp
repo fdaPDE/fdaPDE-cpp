@@ -21,8 +21,8 @@ template <typename PDE, typename RegularizationType, Sampling SamplingDesign,
 const DMatrix<double>& GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>::T() {
   // compute value of R = R1^T*R0^{-1}*R1, cache for possible reuse
   if(R_.size() == 0){
-    invR0_->compute(R0());
-    R_ = R1().transpose()*invR0_->solve(R1());
+    invR0_.compute(R0());
+    R_ = R1().transpose()*invR0_.solve(R1());
   }
   // compute and store matrix T for possible reuse
   if(!hasCovariates()) // case without covariates, Q is the identity matrix
