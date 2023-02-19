@@ -27,7 +27,7 @@ namespace calibration{
   template <typename M, typename trS_evaluation_strategy = StochasticEDF<M>>
   class GCV {
     // guarantees statistical model M is compatible with GCV computation
-    static_assert(is_regression_model<M>::value && std::is_base_of<iGCV, M>::value,
+    static_assert(std::is_base_of<iGCV, M>::value,
 		  "you are asking to calibrate something which cannot be handled by GCV");
   protected:
     // cache computed values, use pointers to let shallow-copy (optimizers need to access those members)
@@ -37,7 +37,10 @@ namespace calibration{
 
     M& model_; // model to calibrate
     trS_evaluation_strategy trS_; // strategy used to evaluate the trace of smoothing matrix S
-    
+
+    // cache pairs (lambda, Tr[S]) for fast access if GCV is queried at an already computed point
+    std::map<SVector<n_smoothing_parameters<M>::value>, double,
+	     fdaPDE::SVectorCompare<n_smoothing_parameters<M>::value>> cache_;
   public:
     // SFINAE selection of constructor depending on trace evaluation strategy
     template <typename U = trS_evaluation_strategy, // fake type to enable substitution
@@ -52,16 +55,20 @@ namespace calibration{
 	      typename std::enable_if<std::is_same<U, StochasticEDF<M>>::value,int>::type = 0>
     GCV(M& model, std::size_t r, std::size_t seed) : model_(model), trS_(model_, r, seed) {};
 
-    // analytical expression of gcv (called by any type of GCV optimization)
+    // evaluates the analytical expression of gcv at \lambda (called by any type of GCV optimization)
     //
     // edf = n - (q + Tr[S])
     // GCV(\lambda) = n/(edf^2)*norm(y - \hat y)^2
     double operator()(const SVector<n_smoothing_parameters<M>::value>& lambda) {
       // fit the model given current lambda
       model_.setLambda(lambda);
+      model_.init_model();
       model_.solve();
-      // compute equivalent degrees of freedom given current lambda
-      double trS = trS_.compute(); 
+      // compute equivalent degrees of freedom given current lambda (if not already cached)
+      if(cache_.find(lambda) == cache_.end()){
+	cache_[lambda] = trS_.compute();
+      }
+      double trS = cache_[lambda];
       double q = model_.q();          // number of covariates
       std::size_t n = model_.n_obs(); // number of observations      
       double dor = n - (q + trS);     // residual degrees of freedom
@@ -72,6 +79,19 @@ namespace calibration{
       values_->emplace_back(gcv_value);
       return gcv_value;
     }
+
+    // returns GCV index of Model in its current state (assume Model already solved)
+    double eval() {
+      // compute equivalent degrees of freedom given current lambda (if not already cached)
+      if(cache_.find(model_.lambda()) == cache_.end()){
+	cache_[model_.lambda()] = trS_.compute();
+      }
+      double trS = cache_[model_.lambda()];
+      // GCV(\lambda) = n/((n - (q + Tr[S]))^2)*norm(y - \hat y)^2
+      double dor = model_.n_obs() - (model_.q() + trS); // (n - (q + Tr[S])
+      return (model_.n_obs()/std::pow(dor, 2))*( model_.norm(model_.fitted(), model_.y()) ) ;
+    }
+    
     // getters
     const std::vector<double>& edfs() const { return *edfs_; } // equivalent degrees of freedom q + Tr[S]
     const std::vector<double>& values() const { return *values_; } // computed values of GCV index
@@ -173,6 +193,7 @@ namespace calibration{
       return [*this](SVector<1> lambda) mutable -> SVector<1> {
 	// fit the model given current lambda
 	model_.setLambda(lambda);
+	model_.init_model();
 	model_.solve();
 	// compute trace of matrix S and its first derivative given current lambda
 	double trS  = trS_.compute();
@@ -198,6 +219,7 @@ namespace calibration{
       return [*this](SVector<1> lambda) mutable -> SMatrix<1> {
 	// fit the model given current lambda
 	model_.setLambda(lambda);
+	model_.init_model();
 	model_.solve();
 	// compute trace of matrix S and its first and second derivative given current lambda
 	double trS   = trS_.compute();

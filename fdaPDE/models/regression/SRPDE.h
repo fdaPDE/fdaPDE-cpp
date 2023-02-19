@@ -45,6 +45,7 @@ namespace models{
     SRPDE(const PDE& pde, const SamplingData&... s) : RegressionBase<SRPDE<PDE, SamplingDesign>>(pde, s...) {};
     
     // ModelBase implementation
+    void init_model();    // update model object in case of **structural** changes in its definition
     virtual void solve(); // finds a solution to the smoothing problem
     
     // iGCV interface implementation
@@ -67,6 +68,7 @@ namespace models{
     typedef SpaceOnlyTag RegularizationType;
     static constexpr Sampling sampling = SamplingDesign;
     static constexpr SolverType solver = SolverType::Monolithic;
+    static constexpr int n_lambda = 1;
   };
 
 #include "SRPDE.tpp"

@@ -33,10 +33,12 @@ namespace models {
   public:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
     typedef typename select_regularization_type<Model>::type Base;
-    using Base::pde_; // differential operator L 
-    using Base::df_;  // BlockFrame for problem's data storage
-    using Base::Psi;  // matrix of spatial basis evaluation at locations p_1 ... p_n
+    typedef SamplingDesign<Model, model_traits<Model>::sampling> SamplingType;
+    using Base::pde_;    // differential operator L 
+    using Base::df_;     // BlockFrame for problem's data storage
+    using Base::Psi;     // matrix of spatial basis evaluation at locations p_1 ... p_n
     using Base::n_basis; // number of basis function over domain D
+    using Base::idx;     // indices of observations
     
     RegressionBase() = default;
     // space-only constructor
@@ -90,10 +92,13 @@ namespace models {
     // perform proper preprocessing of input data and initialization of regression base.
     // This is called in ModelBase::setData() and executed after initialization of the block frame
     void preprocess() {
-      // if heteroscedastic observations are provided as datum, prepare weights matrix
-      if(hasWeights()) W_ = df_.template get<double>(WEIGHTS_BLK).asDiagonal();
-      else // othersise set W_ to identity and assume homoscedastic observations
-	W_ = DVector<double>::Ones(Base::n_obs()).asDiagonal();
+      DVector<double> W = DVector<double>::Ones(Base::n_obs()); // default to homoscedastic observations
+      if(hasWeights()){ // heteroscedastic observations
+	for(std::size_t i = 0; i < Base::n_obs(); ++i){
+	  W[idx()(i,0)] = df_.template get<double>(WEIGHTS_BLK).coeff(idx()(i,0),0);
+	}
+      }
+      W_ = W.asDiagonal();
       
       if(hasCovariates()){ // parametric model
 	// compute q x q dense matrix X^T*W*X and its factorization

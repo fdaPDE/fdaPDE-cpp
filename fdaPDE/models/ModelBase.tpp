@@ -1,9 +1,10 @@
 // perform initialization of model object, must be called before call to .solve()
 template <typename Model>
 void ModelBase<Model>::init(){
-  pde_->init(); // init pde object
-  model().init_regularization(); // init regularization
-  model().init_sampling(); // init sampling design
+  init_pde();                    // init pde object
+  model().init_regularization(); // init regularization term
+  model().init_sampling();       // init quantites affected by the sampling design
+  model().init_model();          // init model
 }
 
 // a trait to detect if a model requires a preprocessing step
@@ -17,11 +18,7 @@ struct requires_preprocess<
 
 // set model's data from blockframe
 template <typename Model>
-void ModelBase<Model>::setData(const BlockFrame<double, int>& df) {
-  // stop if incoming data has no observations
-  if(!df.hasBlock(OBSERVATIONS_BLK))
-    throw std::logic_error("model without observations is ill-formed");
-  
+void ModelBase<Model>::setData(const BlockFrame<double, int>& df) {  
   df_ = df;
   // insert an index row (if not yet present)
   if(!df_.hasBlock(INDEXES_BLK)){

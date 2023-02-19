@@ -1,29 +1,37 @@
-// finds a solution to the SR-PDE smoothing problem
+// perform proper initialization and update of model. Computes quantites which can be reused
+// across many calls to solve() and are **not affected by a change in the data**.
+// It is implicitly called by ModelBase::init() as part of the initialization process.
+// NB: a change in the smoothing parameter must trigger a re-initialization of the model
 template <typename PDE, Sampling SamplingDesign>
-void SRPDE<PDE, SamplingDesign>::solve() {
-  // assemble system matrix for the nonparameteric part of the model
+void SRPDE<PDE, SamplingDesign>::init_model() {
+  // assemble system matrix for nonparameteric part
   SparseBlockMatrix<double,2,2>
     A(-PsiTD()*W()*Psi(), lambdaS()*R1().transpose(),
       lambdaS()*R1(),     lambdaS()*R0()            );
   // cache non-parametric matrix and its factorization for reuse
   A_ = A.derived();
   invA_.compute(A_);
+  // prepare rhs of linear system
   b_.resize(A_.rows());
+  b_.block(n_basis(),0, n_basis(),1) = lambdaS()*u();
+  return;
+}
+  
+// finds a solution to the SR-PDE smoothing problem
+template <typename PDE, Sampling SamplingDesign>
+void SRPDE<PDE, SamplingDesign>::solve() {
+  BLOCK_FRAME_SANITY_CHECKS;
   DVector<double> sol; // room for problem' solution
   
   if(!hasCovariates()){ // nonparametric case
-    // rhs of SR-PDE linear system
-    b_ << -PsiTD()*W()*y(),
-          lambdaS()*u();
-    
+    // update rhs of SR-PDE linear system
+    b_.block(0,0, n_basis(),1) = -PsiTD()*W()*y();
     // solve linear system A_*x = b_
     sol = invA_.solve(b_);
-    // store result of smoothing
     f_ = sol.head(A_.rows()/2);
   }else{ // parametric case
-    // rhs of SR-PDE linear system
-    b_ << -PsiTD()*lmbQ(y()), // -\Psi^T*D*Q*z
-          lambdaS()*u();
+    // update rhs of SR-PDE linear system
+    b_.block(0,0, n_basis(),1) = -PsiTD()*lmbQ(y()); // -\Psi^T*D*Q*z
     
     // definition of matrices U and V  for application of woodbury formula
     U_ = DMatrix<double>::Zero(A_.rows(), q());

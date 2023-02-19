@@ -17,7 +17,7 @@ namespace models {
   public:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
     typedef typename select_regularization_type<Model>::type Base;
-    using Base::pde_; // differential operator L 
+    using Base::pde_;  // differential operator L 
     
     FunctionalBase() = default;
     // space-only constructor
@@ -42,7 +42,7 @@ namespace models {
 
     // copy constructor, copy only pde object (as a consequence also the problem domain)
     FunctionalBase(const FunctionalBase& rhs) { pde_ = rhs.pde_; }
-
+    
   };
   
 }}

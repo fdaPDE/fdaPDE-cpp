@@ -52,9 +52,9 @@ namespace models{
     DVector<double> V_{};     // V^k = diag(v(\mu^k_1), ..., v(\mu^k_n)) : variance matrix at step k
     DVector<double> W_{};     // W^k = ((G^k)^{-2})*((V^k)^{-1})
     // parameters at convergece
-    DVector<double> f_{}; // estimate of non-parametric spatial field
-    DVector<double> g_{}; // PDE misfit
-    DVector<double> beta_{}; // estimate of coefficient vector    
+    DVector<double> f_{};     // estimate of non-parametric spatial field
+    DVector<double> g_{};     // PDE misfit
+    DVector<double> beta_{};  // estimate of coefficient vector    
   public:
     // constructor
     FPIRLS(const Model& m, double tolerance, std::size_t max_iter)

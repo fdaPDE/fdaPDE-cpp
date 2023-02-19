@@ -1,27 +1,20 @@
 #ifndef __K_FOLD_CV__
 #define __K_FOLD_CV__
 
+#include <algorithm>
+#include <vector>
 #include "../core/utils/Symbols.h"
 #include "../core/utils/DataStructures/BlockFrame.h"
-#include "../models/iStatModel.h"
-using fdaPDE::models::is_stat_model;
-
-#include <Eigen/Core>
-#include <algorithm>
-#include <cmath>
-#include <vector>
-#include <memory>
+#include "../models/ModelTraits.h"
 
 namespace fdaPDE{
 namespace calibration{
 
-  template <typename M>
+  // general implementation of KFold Cross Validation
+  template <typename Model>
   class KFoldCV {
-    // guarantees statistical model M is compatible with KFoldCV
-    static_assert(is_stat_model<M>::value, 
-		  "you are asking to calibrate something which is not a statistical model");
   private:  
-    M& model_;      // model to validate
+    Model& model_;      // model to validate
     std::size_t K_; // number of folds
 
     std::vector<double> avg_scores_{}; // vector recording the mean score of the model for each value of lambda
@@ -53,14 +46,14 @@ namespace calibration{
     
   public:
     // constructor
-    KFoldCV(M& model, std::size_t K) : model_(model), K_(K) {};
+    KFoldCV(Model& model, std::size_t K) : model_(model), K_(K) {};
 
     // select best smoothing parameter according to a K-fold cross validation strategy using the output of functor F as model score
     template <typename F>
-    SVector<1> compute(const std::vector<SVector<1>>& lambdas, const F& scoreFunctor, bool randomize = true){
+    SVector<1> compute(const std::vector<SVector<1>>& lambdas, const F& scoreFunctor,
+		       bool randomize = true){     // if true a randomization of the data is performed before split
       // reserve space for storing scores
       scores_.resize(K_, lambdas.size());
-      
       BlockFrame<double, int> data;
       if(randomize)
 	// perform a first shuffling of the data if required
@@ -77,17 +70,17 @@ namespace calibration{
 
 	// fixed a data split, cycle over all lambda values
 	for(std::size_t j = 0; j < lambdas.size(); ++j){
-	  M m(model_);  // create a fresh copy of current model (O(1) operation)
-	  m.setLambda(lambdas[j][0]);  // set current lambda
-	
-	  // fit the model on training set
+	  Model m(model_);  // create a fresh copy of current model (O(1) operation)
 	  m.setData(train);
+	  m.setLambda(lambdas[j]);  // set current lambda
+	  // fit the model on training set
 	  m.solve();
 	  // evaluate model score on the fold left out (test set)
 	  scores_.coeffRef(fold, j) = scoreFunctor(m, test);
 	}
       }
       // reserve space for storing results
+      avg_scores_.clear(); std_scores_.clear(); // clear possible previous execution
       avg_scores_.reserve(lambdas.size());
       std_scores_.reserve(lambdas.size());
       for(std::size_t j = 0; j < lambdas.size(); ++j){

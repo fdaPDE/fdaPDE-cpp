@@ -24,32 +24,33 @@ namespace models {
     static constexpr std::size_t M = PDE::local_dimension;
     static constexpr std::size_t N = PDE::embedding_dimension;
     static constexpr std::size_t K = PDE::basis_order;
-
+    
     // constructor
     ModelBase() = default;
     ModelBase(const PDE& pde) : pde_(std::make_shared<PDE>(pde)) {};
     // copy constructor
     ModelBase(const ModelBase& rhs) { pde_ = rhs.pde_; }
-    void init(); // entry point for model initialization
+    void init_pde() { pde_->init(); };
+    void init(); // entry point for full model initialization
     
     // setters
     void setDirichletBC(SpMatrix<double>& A, DMatrix<double>& b);
     void setData(const BlockFrame<double, int>& df); // initialize model's data by copying the supplied BlockFrame
     BlockFrame<double, int>& data() { return df_; }  // direct write-access to model's internal data storage
-    void setLambda(const SVector<n_smoothing_parameters<Model>::value>& lambda) { lambda_ = lambda; } 
+    void setLambda(const SVector<model_traits<Model>::n_lambda>& lambda) { lambda_ = lambda; } 
     void setPDE(const PDE& pde) { pde_ = std::make_shared<PDE>(pde); }
     
     // getters
     const BlockFrame<double, int>& data() const { return df_; }
-    const DMatrix<double>& y() const { return df_.get<double>(OBSERVATIONS_BLK); } // observation vector zy
+    const DMatrix<double>& y() const { return df_.get<double>(OBSERVATIONS_BLK); } // observation vector y
     const DMatrix<int>& idx() const { return df_.get<int>(INDEXES_BLK); } // data indices
     // informations related to discretization of regularization term
     const PDE& pde() const { return *pde_; } // regularizing term Lf - u (defined on some domain \Omega)
     const Mesh<M,N,K>& domain() const { return pde_->domain(); }
     std::size_t n_basis() const { return pde_->domain().dof(); }; // number of basis functions used in space discretization
-    std::size_t n_obs() const { return df_.template get<double>(OBSERVATIONS_BLK).rows(); } // number of observations
+    std::size_t n_obs() const { return df_.rows(); } // number of observations
     const ADT<M,N,K>& gse() { if(gse_ == nullptr){ gse_ = std::make_shared<ADT<M,N,K>>(domain()); } return *gse_; }
-    SVector<n_smoothing_parameters<Model>::value> lambda() const { return lambda_; }
+    SVector<model_traits<Model>::n_lambda> lambda() const { return lambda_; }
     
     // abstract part of the interface, must be implemented by concrete models
     virtual void solve() = 0; // finds a solution to the problem, whatever the problem is.
@@ -59,7 +60,7 @@ namespace models {
     std::shared_ptr<PDE> pde_; // regularizing term Lf - u and domain definition D
     std::shared_ptr<ADT<M,N,K>> gse_; // geometric search engine
     BlockFrame<double, int> df_; // blockframe for data storage
-    SVector<n_smoothing_parameters<Model>::value> lambda_; // vector of smoothing parameters
+    SVector<model_traits<Model>::n_lambda> lambda_; // vector of smoothing parameters
     
     // getter to underlying model object
     inline Model& model() { return static_cast<Model&>(*this); }
@@ -67,7 +68,13 @@ namespace models {
   };
 
 #include "ModelBase.tpp"
-  
+
+  // macro for runtime sanity checks on data, should be the first instruction in a solve() implementation
+#define BLOCK_FRAME_SANITY_CHECKS					\
+  /* stop if incoming data has no observations */			\
+  if(!data().hasBlock(OBSERVATIONS_BLK))				\
+    throw std::logic_error("model without observations is ill-formed"); \
+
 }}
 
 #endif // __MODEL_BASE_H__

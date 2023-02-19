@@ -27,13 +27,13 @@ namespace models{
     // init sampling data structures
     void init_sampling() {
       // preallocate space for Psi matrix
-      std::size_t n = model().domain().nodes();
+      std::size_t n = model().n_obs();
       std::size_t N = model().n_basis();    
       Psi_.resize(n, N);    
       // triplet list to fill sparse matrix
       std::vector<fdaPDE::Triplet<double>> tripletList;
       tripletList.reserve(n*N);
-
+      
       if(!model().data().hasBlock(INDEXES_BLK)){
 	// if data locations are equal to mesh nodes then \Psi is the identity matrix.
 	// \psi_i(p_i) = 1 and \psi_i(p_j) = 0 \forall i \neq j
@@ -42,8 +42,8 @@ namespace models{
       }else{
 	// if data are observed in a subset of the spatial locations then \Psi will have some of its columns set to zero
 	// \psi_i(p_j) = 0 \forall j \in {1, ..., n} such that no data is observed at location i
-	// ** this branch is here for supporting cross validation of models with GeoStatMeshNodes sampling **
-	for(std::size_t i = 0; i < n; ++i)
+	// otherwise \Psi is the identity matrix. keeps into account of possible permutations of data
+	for(std::size_t i = 0; i < model().idx().rows(); ++i)
 	  tripletList.emplace_back(i, model().idx()(i,0), 1.0); 
       }
       // finalize construction

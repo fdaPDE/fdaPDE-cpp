@@ -26,7 +26,8 @@ namespace models{
   // base class for model traits
   template <typename B> struct model_traits;
   
-  // trait to detect if a type implements ModelBase (can be regarded as a statistical model)
+  // trait to detect if a type implements ModelBase (can be regarded as a statistical model). This is the least
+  // constraining requirement an algorithm can require on a type
   template <typename T>
   struct is_stat_model {
     static constexpr bool value = fdaPDE::is_base_of_template<ModelBase, T>::value;
@@ -61,14 +62,14 @@ namespace models{
   };
   
   // trait to select the number of smoothing parameters
-  template <typename Model>
+  template <typename RegularizationType>
   class n_smoothing_parameters {
     static constexpr int compute() {
-      if constexpr(is_space_time<Model>::value) return 2;
+      if constexpr(!std::is_same<RegularizationType, SpaceOnlyTag>::value) return 2;
       else return 1;
     }
   public:
-    static constexpr int value = n_smoothing_parameters<Model>::compute();
+    static constexpr int value = n_smoothing_parameters<RegularizationType>::compute();
   };
   
   // allowed sampling strategies
@@ -103,6 +104,7 @@ namespace models{
   using Base::R0;      /* mass matrix in space (tensorized for space-time problems) */   \
   using Base::u;       /* discretization of forcing term */			         \
   using Base::pde;     /* differential operator L (regularizing term) */                 \
+  using Base::data;    /* BlockFrame object containing data */		                 \
   
   // this macro is intended to import all **common** symbols a model can expect from a Regression base
   // symbols specific for the regularization type used need to be imported via dedicated using declaration
