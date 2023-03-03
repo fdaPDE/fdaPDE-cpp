@@ -11,9 +11,8 @@ namespace models{
 
   // base classes for the implenetation of the different sampling designs. Here is computed the matrix of spatial basis
   // evaluations \Psi = [\Psi]_{ij} = \psi_i(p_j) whose construction strongly depends on the type of sampling in space
-
   template <typename Model, Sampling S> class SamplingDesign {};
-  
+
   // data sampled at mesh nodes
   template <typename Model>
   class SamplingDesign<Model, GeoStatMeshNodes> {
@@ -23,29 +22,23 @@ namespace models{
   public:
     // constructor
     SamplingDesign() = default;
-    SamplingDesign(const DMatrix<double>&) {};
+    SamplingDesign(const DMatrix<double>& locs) {};
     // init sampling data structures
-    void init_sampling() {
+    void init_sampling(bool forced = false) {
+      // compute once if not forced to recompute
+      if(Psi_.size() != 0 && forced == false) return;
       // preallocate space for Psi matrix
-      std::size_t n = model().n_obs();
-      std::size_t N = model().n_basis();    
+      std::size_t n = model().domain().dof();
+      std::size_t N = model().n_basis();
       Psi_.resize(n, N);    
       // triplet list to fill sparse matrix
       std::vector<fdaPDE::Triplet<double>> tripletList;
       tripletList.reserve(n*N);
-      
-      if(!model().data().hasBlock(INDEXES_BLK)){
-	// if data locations are equal to mesh nodes then \Psi is the identity matrix.
-	// \psi_i(p_i) = 1 and \psi_i(p_j) = 0 \forall i \neq j
-	for(std::size_t i = 0; i < n; ++i)
-	  tripletList.emplace_back(i, i, 1.0);
-      }else{
-	// if data are observed in a subset of the spatial locations then \Psi will have some of its columns set to zero
-	// \psi_i(p_j) = 0 \forall j \in {1, ..., n} such that no data is observed at location i
-	// otherwise \Psi is the identity matrix. keeps into account of possible permutations of data
-	for(std::size_t i = 0; i < model().idx().rows(); ++i)
-	  tripletList.emplace_back(i, model().idx()(i,0), 1.0); 
-      }
+
+      // if data locations are equal to mesh nodes then \Psi is the identity matrix.
+      // \psi_i(p_i) = 1 and \psi_i(p_j) = 0 \forall i \neq j
+      for(std::size_t i = 0; i < n; ++i)
+	tripletList.emplace_back(model().idx()(i,0), i, 1.0);
       // finalize construction
       Psi_.setFromTriplets(tripletList.begin(), tripletList.end());
       Psi_.makeCompressed();
@@ -54,7 +47,7 @@ namespace models{
     // getters
     SpMatrix<double> Psi_{}; // n x N matrix \Psi = [\psi_{ij}] = \psi_j(p_i) of spatial basis evaluation at data locations p_i
     auto PsiTD() const { return model().Psi().transpose(); }
-    std::size_t n_locs() const { return model().domain().nodes(); }
+    std::size_t n_locs() const { return model().domain().dof(); }
     DMatrix<double> locs() const { return DMatrix<double>(); }
   };
 
@@ -72,7 +65,9 @@ namespace models{
     SamplingDesign() = default;
     SamplingDesign(const DMatrix<double>& locs) : locs_(locs) {};
     // init sampling data structures
-    void init_sampling() {    
+    void init_sampling(bool forced = false) {
+      // compute once if not forced to recompute
+      if(Psi_.size() != 0 && forced == false) return;
       // preallocate space for Psi matrix
       std::size_t n = locs_.rows();
       std::size_t N = model().n_basis();    
@@ -93,7 +88,7 @@ namespace models{
 	  // extract \phi_h from basis
 	  auto psi_h = model().pde().basis()[e->ID()][j];
 	  // evaluate \phi_h(p_i) (value of the basis function centered in mesh node h and evaluated in point p_i)
-	  tripletList.emplace_back(i, h, psi_h(p_i));
+	  tripletList.emplace_back(model().idx()(i,0), h, psi_h(p_i));
 	}
       }
       // finalize construction
@@ -124,7 +119,9 @@ namespace models{
     SamplingDesign() = default;
     SamplingDesign(const DMatrix<int>& subdomains) : subdomains_(subdomains) {};
     // init sampling data structures
-    void init_sampling() {
+    void init_sampling(bool forced = false) {
+      // compute once if not forced to recompute
+      if(Psi_.size() != 0 && forced == false) return;
       // preallocate space for Psi matrix
       std::size_t n = subdomains_.rows();
       std::size_t N = model().n_basis();    
@@ -137,7 +134,7 @@ namespace models{
       D.resize(subdomains_.rows());      
       // start construction of \Psi matrix
       std::size_t tail = 0;
-      for(std::size_t k = 0; k < subdomains_.rows(); ++k){
+      for(std::size_t k = 0; k < n; ++k){
 	std::size_t head = 0;
 	double Di = 0; // measure of subdomain D_i
 	for(std::size_t l = 0; l < subdomains_.cols(); ++l){
@@ -149,7 +146,7 @@ namespace models{
 	    for(const auto& phi : model().pde().basis()[e->ID()]){
 	      std::size_t h = phi.node(); // if we write the finite element as \phi_h, this is h
 	      // evaluate \int_e \phi_h and insert in tripletList. summation is implicitly resolved by Eigen::setFromTriplets
-	      tripletList.emplace_back(k, h, model().pde().integrator().integrate(*e, phi));
+	      tripletList.emplace_back(model().idx()(k,0), h, model().pde().integrator().integrate(*e, phi));
 	      head++, j++; // increment counters
 	    }
 	    Di += e->measure(); // update measure of subdomain D_i
@@ -159,7 +156,7 @@ namespace models{
 	for(std::size_t j = 0; j < head; ++j){
 	  tripletList[tail + j].value() /= Di;
 	}
-	D[k] = Di; // store measure of subdomain
+	D[model().idx()(k,0)] = Di; // store measure of subdomain
 	tail += head;
       }
       // here we must be carefull of the type of model (space-only or space-time) we are handling

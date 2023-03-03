@@ -51,6 +51,7 @@ namespace models {
     std::size_t n_obs() const { return df_.rows(); } // number of observations
     const ADT<M,N,K>& gse() { if(gse_ == nullptr){ gse_ = std::make_shared<ADT<M,N,K>>(domain()); } return *gse_; }
     SVector<model_traits<Model>::n_lambda> lambda() const { return lambda_; }
+    bool hasNaN() const { return model().n_locs() > model().n_obs(); } // true if there are missing data
     
     // abstract part of the interface, must be implemented by concrete models
     virtual void solve() = 0; // finds a solution to the problem, whatever the problem is.
@@ -71,6 +72,9 @@ namespace models {
 
   // macro for runtime sanity checks on data, should be the first instruction in a solve() implementation
 #define BLOCK_FRAME_SANITY_CHECKS					\
+  /* raise error if data comes without index block */			\
+  if(!data().hasBlock(INDEXES_BLK))					\
+    throw std::logic_error("bad BlockFrame, no index block found");	\
   /* stop if incoming data has no observations */			\
   if(!data().hasBlock(OBSERVATIONS_BLK))				\
     throw std::logic_error("model without observations is ill-formed"); \
