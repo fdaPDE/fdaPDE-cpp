@@ -21,36 +21,43 @@ namespace calibration{
     std::size_t seed_;
     DMatrix<double> Us_; // sample from Rademacher distribution
     DMatrix<double> Bs_; // \Psi^T*Q*Us_
-    DMatrix<double> Y_;  // Us_^T*\Psi 
+    DMatrix<double> Y_;  // Us_^T*\Psi
+
+    bool init_ = false;
   public:
     // constructor
     StochasticEDF(const Model& model, std::size_t r, std::size_t seed)
-      : model_(model), r_(r), seed_(seed) {
-      // compute sample from Rademacher distribution
-      std::default_random_engine rng(seed_);
-      std::bernoulli_distribution Be(0.5); // bernulli distribution with parameter p = 0.5
-      Us_.resize(model_.n_obs(), r_); // preallocate memory for matrix Us
-      // fill matrix
-      for(std::size_t i = 0; i < model_.n_obs(); ++i){
-	for(std::size_t j = 0; j < r_; ++j){
-	  if(Be(rng)) Us_(i,j) =  1.0;
-	  else        Us_(i,j) = -1.0;
-	}
-      }
-      // prepare matrix Bs_
-      Bs_ = DMatrix<double>::Zero(2*model_.n_basis(), r_);
-      if(!model_.hasCovariates()) // non-parametric model
-	Bs_.topRows(model_.n_basis()) = -model_.PsiTD()*model_.W()*Us_;
-      else // semi-parametric model
-	Bs_.topRows(model_.n_basis()) = -model_.PsiTD()*model_.lmbQ(Us_);
-      // prepare matrix Y
-      Y_ = Us_.transpose()*model_.Psi();
-    }
+      : model_(model), r_(r), seed_(seed) {}
     StochasticEDF(const Model& model, std::size_t r)
       : StochasticEDF(model, r, std::random_device()()) {}
     
     // evaluate trace of S exploiting a monte carlo approximation
     double compute() {
+      std::size_t n = model_.Psi().cols(); // number of basis functions
+      if(!init_){
+	// compute sample from Rademacher distribution
+	std::default_random_engine rng(seed_);
+	std::bernoulli_distribution Be(0.5); // bernulli distribution with parameter p = 0.5
+	Us_.resize(model_.n_obs(), r_); // preallocate memory for matrix Us
+	// fill matrix
+	for(std::size_t i = 0; i < model_.n_obs(); ++i){
+	  for(std::size_t j = 0; j < r_; ++j){
+	    if(Be(rng)) Us_(i,j) =  1.0;
+	    else        Us_(i,j) = -1.0;
+	  }
+	}
+	// prepare matrix Bs_
+	Bs_ = DMatrix<double>::Zero(2*n, r_);
+	if(!model_.hasCovariates()) // non-parametric model
+	  Bs_.topRows(n) = -model_.PsiTD()*model_.W()*Us_;
+	else // semi-parametric model
+	  Bs_.topRows(n) = -model_.PsiTD()*model_.lmbQ(Us_);
+
+	// prepare matrix Y
+	Y_ = Us_.transpose()*model_.Psi();
+	init_ = true; // never reinitialize again
+      }
+      
       DMatrix<double> sol; // room for problem solution
       if(!model_.hasCovariates()){ // nonparametric case
         sol = model_.invA().solve(Bs_);
@@ -61,7 +68,7 @@ namespace calibration{
       // compute approximated Tr[S] using monte carlo mean
       double MCmean = 0;
       for(std::size_t i = 0; i < r_; ++i)
-	MCmean += Y_.row(i).dot(sol.col(i).head(model_.n_basis()));
+	MCmean += Y_.row(i).dot(sol.col(i).head(n));
       
       return MCmean/r_;
     }

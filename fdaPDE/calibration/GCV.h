@@ -18,7 +18,6 @@ using fdaPDE::core::NLA::SMW;
 #include "iGCV.h"
 #include "../models/ModelTraits.h"
 using fdaPDE::models::is_regression_model;
-using fdaPDE::models::n_smoothing_parameters;
 
 namespace fdaPDE{
 namespace calibration{
@@ -39,8 +38,7 @@ namespace calibration{
     trS_evaluation_strategy trS_; // strategy used to evaluate the trace of smoothing matrix S
 
     // cache pairs (lambda, Tr[S]) for fast access if GCV is queried at an already computed point
-    std::map<SVector<n_smoothing_parameters<M>::value>, double,
-	     fdaPDE::SVectorCompare<n_smoothing_parameters<M>::value>> cache_;
+    std::map<SVector<model_traits<M>::n_lambda>, double, fdaPDE::SVectorCompare<model_traits<M>::n_lambda>> cache_;
   public:
     // SFINAE selection of constructor depending on trace evaluation strategy
     template <typename U = trS_evaluation_strategy, // fake type to enable substitution
@@ -59,7 +57,7 @@ namespace calibration{
     //
     // edf = n - (q + Tr[S])
     // GCV(\lambda) = n/(edf^2)*norm(y - \hat y)^2
-    double operator()(const SVector<n_smoothing_parameters<M>::value>& lambda) {
+    double operator()(const SVector<model_traits<M>::n_lambda>& lambda) {
       // fit the model given current lambda
       model_.setLambda(lambda);
       model_.init_model();
@@ -75,7 +73,7 @@ namespace calibration{
       edfs_->emplace_back(q + trS);   // store equivalent degrees of freedom
       
       // return gcv at point
-      double gcv_value = (n/std::pow(dor, 2))*( model_.norm(model_.fitted(), model_.y()) ) ; 
+      double gcv_value = (n/std::pow(dor, 2))*( model_.norm(model_.fitted(), model_.y()) ) ;
       values_->emplace_back(gcv_value);
       return gcv_value;
     }
@@ -236,10 +234,7 @@ namespace calibration{
       };
     }
   };
-  
-  // expose some usefull symbols
-  //template <typename M> using ExactGCV = GCV<M, ExactEDF<M>>;
-  //template <typename M> using StochasticGCV = GCV<M, StochasticEDF<M>>;
+
 }}
   
 #endif // __GCV_H__
