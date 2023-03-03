@@ -69,7 +69,9 @@ namespace preprocess {
       // define solver for initial condition estimation
       typename ICEstimator_internal_solver<Model, decltype(problem)>::type solver(problem, model_.locs());
       solver.setData(df); // impose data
-      solver.init();
+      solver.init_pde();
+      solver.init_regularization();
+      solver.init_sampling();
       
       // find optimal smoothing parameter
       GCV<decltype(solver), ExactEDF<decltype(solver)>> GCV(solver);
@@ -81,6 +83,7 @@ namespace preprocess {
 
       // fit model with optimal lambda
       solver.setLambda(best_lambda);
+      solver.init_model();
       solver.solve();
       // store initial condition estimate
       estimate_ = solver.f();
