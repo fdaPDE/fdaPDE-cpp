@@ -71,8 +71,8 @@ TEST(GCV_SRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_GridExact) {
   GridOptimizer<1> opt;
 
   ScalarField<1, decltype(GCV)> obj(GCV);
-  opt.findMinimum(obj, lambdas); // optimize gcv field
-  SVector<1> best_lambda = opt.getSolution();
+  opt.optimize(obj, lambdas); // optimize gcv field
+  SVector<1> best_lambda = opt.optimum();
   
   // expected values for q + Tr[S]
   std::vector<double> expected_edfs = {
@@ -137,8 +137,8 @@ TEST(GCV_SRPDE, Test2_Laplacian_NonParametric_GeostatisticalAtNodes_GridStochast
   GridOptimizer<1> opt;
 
   ScalarField<1, decltype(GCV)> obj(GCV);
-  opt.findMinimum(obj, lambdas); // optimize gcv field
-  SVector<1> best_lambda = opt.getSolution();
+  opt.optimize(obj, lambdas); // optimize gcv field
+  SVector<1> best_lambda = opt.optimum();
 
   // expected values for q + Tr[S]
   std::vector<double> expected_edfs = {
@@ -212,8 +212,8 @@ TEST(GCV_SRPDE, Test3_Laplacian_SemiParametric_GeostatisticalAtLocations_GridExa
   GridOptimizer<1> opt;
   
   ScalarField<1, decltype(GCV)> obj(GCV);
-  opt.findMinimum(obj, lambdas); // optimize gcv field
-  SVector<1> best_lambda = opt.getSolution();
+  opt.optimize(obj, lambdas); // optimize gcv field
+  SVector<1> best_lambda = opt.optimum();
 
   // expected values for q + Tr[S]
   std::vector<double> expected_edfs = {
@@ -292,8 +292,8 @@ TEST(GCV_SRPDE, Test4_Laplacian_SemiParametric_GeostatisticalAtLocations_GridSto
   GridOptimizer<1> opt;
 
   ScalarField<1, decltype(GCV)> obj(GCV);
-  opt.findMinimum(obj, lambdas); // optimize gcv field
-  SVector<1> best_lambda = opt.getSolution();
+  opt.optimize(obj, lambdas); // optimize gcv field
+  SVector<1> best_lambda = opt.optimum();
 
   // expected values for q + Tr[S] (approximated)
   std::vector<double> expected_edfs = {
@@ -366,8 +366,8 @@ TEST(GCV_SRPDE, Test5_CostantCoefficientsPDE_NonParametric_GeostatisticalAtNodes
   GridOptimizer<1> opt;
 
   ScalarField<1, decltype(GCV)> obj(GCV);
-  opt.findMinimum(obj, lambdas); // optimize gcv field
-  SVector<1> best_lambda = opt.getSolution();
+  opt.optimize(obj, lambdas); // optimize gcv field
+  SVector<1> best_lambda = opt.optimum();
 
   // expected values for q + Tr[S]
   std::vector<double> expected_edfs = {
@@ -437,8 +437,8 @@ TEST(GCV_SRPDE, Test6_CostantCoefficientsPDE_NonParametric_GeostatisticalAtNodes
   GridOptimizer<1> opt;
 
   ScalarField<1, decltype(GCV)> obj(GCV);
-  opt.findMinimum(obj, lambdas); // optimize gcv field
-  SVector<1> best_lambda = opt.getSolution();
+  opt.optimize(obj, lambdas); // optimize gcv field
+  SVector<1> best_lambda = opt.optimum();
   
   // expected values for q + Tr[S]
   std::vector<double> expected_edfs = {
@@ -528,8 +528,8 @@ TEST(GCV_SRPDE, Test7_NonCostantCoefficientsPDE_NonParametric_Areal_GridExact) {
   GridOptimizer<1> opt;
 
   ScalarField<1, decltype(GCV)> obj(GCV);
-  opt.findMinimum(obj, lambdas); // optimize gcv field
-  SVector<1> best_lambda = opt.getSolution();
+  opt.optimize(obj, lambdas); // optimize gcv field
+  SVector<1> best_lambda = opt.optimum();
   
   // expected values for q + Tr[S]
   std::vector<double> expected_edfs = {
@@ -619,8 +619,8 @@ TEST(GCV_SRPDE, Test8_NonCostantCoefficientsPDE_NonParametric_Areal_GridStochast
   GridOptimizer<1> opt;
 
   ScalarField<1, decltype(GCV)> obj(GCV);
-  opt.findMinimum(obj, lambdas); // optimize gcv field
-  SVector<1> best_lambda = opt.getSolution();
+  opt.optimize(obj, lambdas); // optimize gcv field
+  SVector<1> best_lambda = opt.optimum();
 
   std::vector<double> expected_edfs = {
     6.831047684097598, 6.712363557176861, 6.523569437275610, 6.241165650575311, 5.850412256000765,

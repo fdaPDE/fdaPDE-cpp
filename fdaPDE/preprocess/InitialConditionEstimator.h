@@ -78,8 +78,8 @@ namespace preprocess {
       GridOptimizer<1> opt;
 
       ScalarField<1, decltype(GCV)> obj(GCV);
-      opt.findMinimum(obj, lambdas); // optimize gcv field
-      SVector<1> best_lambda = opt.getSolution();
+      opt.optimize(obj, lambdas); // optimize gcv field
+      SVector<1> best_lambda = opt.optimum();
 
       // fit model with optimal lambda
       solver.setLambda(best_lambda);
