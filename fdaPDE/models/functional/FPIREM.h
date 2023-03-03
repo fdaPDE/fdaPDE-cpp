@@ -65,7 +65,7 @@ namespace models{
       df_ = df;
       // allocate space for solver's data.
       solver_.setData(BlockFrame<double,int>(df_.get<double>(OBSERVATIONS_BLK).cols()));
-      solver_.init_sampling(); // init sampling informations (we know how many data point we expect)
+      solver_.init_sampling(); // init sampling informations (now is known how many data point we expect)
       // reserve space for solution
       loadings_.resize(df_.get<double>(OBSERVATIONS_BLK).cols());
       scores_.resize  (df_.get<double>(OBSERVATIONS_BLK).rows());
@@ -109,12 +109,13 @@ namespace models{
     // getters
     const DVector<double>& scores() const { return scores_; }     // vector of computed scores
     const DVector<double>& loadings() const { return loadings_; } // vector of computed loadings
-    const BlockFrame<double, int>& data() const { return df_; }   // BlockFrame of data
+    const BlockFrame<double, int>& data() const { return df_; }   // BlockFrame of data (required by KFoldCV)
     // expose internal solver informations
     const DMatrix<double>& f()   const { return solver_.f(); } // estimated spatial/spatio-temporal field
     const DMatrix<double>& g()   const { return solver_.g(); } // estimated PDE misfit
     const SpMatrix<double>& R0() const { return solver_.R0();} // mass matrix
     typedef typename FPIREM_internal_solver<Model_>::type SmootherType;
+    SmootherType& smoother() { return solver_; }
   };
   
 }}

@@ -9,9 +9,12 @@ using fdaPDE::models::FunctionalBase;
 #include "../../calibration/KFoldCV.h"
 using fdaPDE::calibration::GCV;
 using fdaPDE::calibration::KFoldCV;
+using fdaPDE::calibration::StochasticEDF;
 #include "FPIREM.h"
 #include "PCScoreCV.h"
 using fdaPDE::models::PCScoreCV;
+#include "../../core/OPT/optimizers/GridOptimizer.h"
+using fdaPDE::core::OPT::GridOptimizer;
 
 namespace fdaPDE {
 namespace models {
@@ -21,8 +24,7 @@ namespace models {
   struct kcv_lambda_selection {};
   
   // base class for any FPCA model
-  template <typename PDE, typename RegularizationType, Sampling
-	    SamplingDesign, typename lambda_selection_strategy>
+  template <typename PDE, typename RegularizationType, Sampling SamplingDesign, typename lambda_selection_strategy>
   class FPCA : public FunctionalBase<
     FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>> {
     // compile time checks
@@ -66,9 +68,7 @@ namespace models {
     void setMaxIterations(std::size_t max_iter) { max_iter_ = max_iter; }
     void setNPC(std::size_t n_pc) { n_pc_ = n_pc; }
     // accepts a collection of \lambda parameters if a not fixed_lambda method is selected
-    typename std::enable_if<
-      !std::is_same<lambda_selection_strategy, fixed_lambda>::value,
-      void>::type setLambda(const std::vector<SVector<model_traits<SmootherType>::n_lambda>>& lambda_vect) {
+    void setLambda(const std::vector<SVector<model_traits<SmootherType>::n_lambda>>& lambda_vect) {
       lambda_vect_ = lambda_vect; }
   };
   template <typename PDE_, typename RegularizationType_,
@@ -80,7 +80,18 @@ namespace models {
     static constexpr SolverType solver = SolverType::Monolithic;
     static constexpr int n_lambda = n_smoothing_parameters<RegularizationType>::value;
   };
+  // specialization for separable regularization
+  template <typename PDE_, Sampling SamplingDesign, typename lambda_selection_strategy>
+  struct model_traits<FPCA<PDE_, fdaPDE::models::SpaceTimeSeparableTag, SamplingDesign, lambda_selection_strategy>> {
+    typedef PDE_ PDE;
+    typedef fdaPDE::models::SpaceTimeSeparableTag RegularizationType;
+    typedef SplineBasis<3> TimeBasis; // use cubic B-splines
+    static constexpr Sampling sampling = SamplingDesign;
+    static constexpr SolverType solver = SolverType::Monolithic;
+    static constexpr int n_lambda = 2;
+  };
 
+  
   #include "fPCA.tpp"
   
 }}
