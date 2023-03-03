@@ -50,6 +50,7 @@ namespace models{
     void setFPIRLSMaxIterations(std::size_t max_iter) { max_iter_ = max_iter; }
     
     // ModelBase implementation
+    void init_model() { return; }
     virtual void solve(); // finds a solution to the smoothing problem
     
     // iGCV interface implementation
@@ -67,6 +68,7 @@ namespace models{
     typedef RegularizationType_ RegularizationType;
     static constexpr Sampling sampling = SamplingDesign;
     static constexpr SolverType solver = Solver;
+    static constexpr int n_lambda = n_smoothing_parameters<RegularizationType_>::value;
     typedef DistributionType_ DistributionType;
   };
 
@@ -78,6 +80,7 @@ namespace models{
     typedef SplineBasis<3> TimeBasis; // use cubic B-splines
     static constexpr Sampling sampling = SamplingDesign;
     static constexpr SolverType solver = Solver;
+    static constexpr int n_lambda = 2;
     typedef DistributionType_ DistributionType;
   };
   

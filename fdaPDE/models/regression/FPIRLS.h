@@ -82,7 +82,8 @@ namespace models{
 	  solver.setInitialCondition(m_.s());
       }
       solver.setLambda(m_.lambda());
-      solver.init();
+      solver.init_pde();
+      solver.init_regularization();
       
       // prepare data for solver, copy covariates if present
       BlockFrame<double, int> df = m_.data();
@@ -104,6 +105,8 @@ namespace models{
 	df.insert<double>(OBSERVATIONS_BLK, py_); // insert should overwrite existing block, if any is present
 	df.insert<double>(WEIGHTS_BLK, W_);
 	solver.setData(df);
+	solver.init_sampling();
+	solver.init_model(); // init model to adapt for changing in weights
 	solver.solve();
 	
 	// extract estimates from solver

@@ -1,38 +1,47 @@
-// finds a solution to the STR-PDE smoothing problem (separable penalization)
+// perform proper initialization and update of model. Computes quantites which can be reused
+// across many calls to solve() and are **not affected by a change in the data**.
+// It is implicitly called by ModelBase::init() as part of the initialization process.
+// NB: a change in the smoothing parameter must trigger a re-initialization of the model
 template <typename PDE, Sampling SamplingDesign>
-void STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign, SolverType::Monolithic>::solve() {
+void STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign, SolverType::Monolithic>::init_model() {
   // assemble system matrix for the nonparameteric part of the model
-  SparseKroneckerProduct<> P = Kronecker(Pt(), pde().R0());
+  SparseKroneckerProduct<> P = Kronecker(Pt(), pde().R0());  
   SparseBlockMatrix<double,2,2>
     A(-PsiTD()*W()*Psi()-lambdaT()*P, lambdaS()*R1().transpose(),
       lambdaS()*R1(),                 lambdaS()*R0()            );
   // cache system matrix for reuse
   A_ = A.derived();
   invA_.compute(A_);
+  // prepare rhs of linear system
   b_.resize(A_.rows());
+  b_.block(A_.rows()/2,0, A_.rows()/2,1) = lambdaS()*u();
+  return;
+}
+
+// finds a solution to the STR-PDE smoothing problem (separable penalization)
+template <typename PDE, Sampling SamplingDesign>
+void STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign, SolverType::Monolithic>::solve() {
+  BLOCK_FRAME_SANITY_CHECKS;
   DVector<double> sol; // room for problem' solution
    
   if(!Base::hasCovariates()){ // nonparametric case
-    // rhs of STR-PDE linear system
-    b_ << -PsiTD()*W()*y(),
-      lambdaS()*u();
-      
+    // update rhs of STR-PDE linear system
+    b_.block(0,0, A_.rows()/2,1) = -PsiTD()*W()*y();
     // solve linear system A_*x = b_
     sol = invA_.solve(b_);
     // store result of smoothing
     f_ = sol.head(A_.rows()/2);
   }else{ // parametric case
-    // rhs of STR-PDE linear system
-    b_ << -PsiTD()*lmbQ(y()), // -\Psi^T*D*Q*z
-      lambdaS()*u();
+    // update rhs of STR-PDE linear system
+    b_.block(0,0, A_.rows()/2,1) = -PsiTD()*lmbQ(y()); // -\Psi^T*D*Q*z
 
     // definition of matrices U and V  for application of woodbury formula
-    DMatrix<double> U = DMatrix<double>::Zero(A_.rows(), q());
-    U.block(0,0, A_.rows()/2, q()) = PsiTD()*W()*X();
-    DMatrix<double> V = DMatrix<double>::Zero(q(), A_.rows());
-    V.block(0,0, q(), A_.rows()/2) = X().transpose()*W()*Psi();
+    U_ = DMatrix<double>::Zero(A_.rows(), q());
+    U_.block(0,0, A_.rows()/2, q()) = PsiTD()*W()*X();
+    V_ = DMatrix<double>::Zero(q(), A_.rows());
+    V_.block(0,0, q(), A_.rows()/2) = X().transpose()*W()*Psi();
     // solve system (A_ + U_*(X^T*W_*X)*V_)x = b using woodbury formula from NLA module
-    sol = SMW<>().solve(invA_, U, XtWX(), V, b_);
+    sol = SMW<>().solve(invA_, U_, XtWX(), V_, b_);
     // store result of smoothing
     f_    = sol.head(A_.rows()/2);
     beta_ = invXtWX().solve(X().transpose()*W())*(y() - Psi()*f_);
@@ -42,9 +51,12 @@ void STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign, SolverType::Monolithic>:
   return;
 }
 
-// finds a solution to the STR-PDE smoothing problem (parabolic penalization, monolithic solution)
+// perform proper initialization and update of model. Computes quantites which can be reused
+// across many calls to solve() and are **not affected by a change in the data**.
+// It is implicitly called by ModelBase::init() as part of the initialization process.
+// NB: a change in the smoothing parameter must trigger a re-initialization of the model
 template <typename PDE, Sampling SamplingDesign>
-void STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign, SolverType::Monolithic>::solve() {
+void STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign, SolverType::Monolithic>::init_model() {
   // assemble system matrix for the nonparameteric part of the model
   SparseKroneckerProduct<> L_ = Kronecker(L(), pde().R0());
   SparseBlockMatrix<double,2,2>
@@ -53,30 +65,36 @@ void STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign, SolverType::Monolithic>:
   // cache system matrix for reuse
   A_ = A.derived();
   invA_.compute(A_);
+  // prepare rhs of linear system  
   b_.resize(A_.rows());
+  b_.block(A_.rows()/2,0, A_.rows()/2,1) = lambdaS()*u();
+  return;
+}
+
+// finds a solution to the STR-PDE smoothing problem (parabolic penalization, monolithic solution)
+template <typename PDE, Sampling SamplingDesign>
+void STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign, SolverType::Monolithic>::solve() {
+  BLOCK_FRAME_SANITY_CHECKS;
   DVector<double> sol; // room for problem' solution
   
   if(!Base::hasCovariates()){ // nonparametric case
-    // rhs of STR-PDE linear system
-    b_ << -PsiTD()*W()*y(),
-          lambdaS()*u();
-      
+    // update rhs of STR-PDE linear system
+    b_.block(0,0, A_.rows()/2,1) = -PsiTD()*W()*y();
     // solve linear system A_*x = b_
     sol = invA_.solve(b_);
     // store result of smoothing
     f_ = sol.head(A_.rows()/2);
   }else{ // parametric case
     // rhs of STR-PDE linear system
-    b_ << -PsiTD()*lmbQ(y()), // -\Psi^T*D*Q*z
-          lambdaS()*u();
+    b_.block(0,0, A_.rows()/2,1) = -PsiTD()*lmbQ(y()); // -\Psi^T*D*Q*z
 
     // definition of matrices U and V  for application of woodbury formula
-    DMatrix<double> U = DMatrix<double>::Zero(A_.rows(), q());
-    U.block(0,0, A_.rows()/2, q()) = PsiTD()*W()*X();
-    DMatrix<double> V = DMatrix<double>::Zero(q(), A_.rows());
-    V.block(0,0, q(), A_.rows()/2) = X().transpose()*W()*Psi();
+    U_ = DMatrix<double>::Zero(A_.rows(), q());
+    U_.block(0,0, A_.rows()/2, q()) = PsiTD()*W()*X();
+    V_ = DMatrix<double>::Zero(q(), A_.rows());
+    V_.block(0,0, q(), A_.rows()/2) = X().transpose()*W()*Psi();
     // solve system (A_ + U_*(X^T*W_*X)*V_)x = b using woodbury formula from NLA module
-    sol = SMW<>().solve(invA_, U, XtWX(), V, b_);
+    sol = SMW<>().solve(invA_, U_, XtWX(), V_, b_);
     // store result of smoothing
     f_ = sol.head(A_.rows()/2);
     beta_ = invXtWX().solve(X().transpose()*W())*(y() - Psi()*f_);

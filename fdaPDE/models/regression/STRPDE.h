@@ -35,7 +35,7 @@ namespace models{
   // implementation of STRPDE for separable space-time regularization
   template <typename PDE, Sampling SamplingDesign>
   class STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign, SolverType::Monolithic>
-    : public RegressionBase<STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign, SolverType::Monolithic>>/*, public iGCV*/ {
+    : public RegressionBase<STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign, SolverType::Monolithic>>, public iGCV {
     // compile time checks
     static_assert(std::is_base_of<PDEBase, PDE>::value);
   private:
@@ -44,27 +44,57 @@ namespace models{
     SpMatrix<double> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
     fdaPDE::SparseLU<SpMatrix<double>> invA_; // factorization of matrix A
     DVector<double> b_{};  // right hand side of problem's linear system (1 x 2N vector)
+
+    // matrices related to woodbury decomposition
+    DMatrix<double> U_{};
+    DMatrix<double> V_{};
   public:
     // import commonly defined symbols from base
     IMPORT_REGRESSION_SYMBOLS;
     using Base::lambdaS; // smoothing parameter in space
     using Base::lambdaT; // smoothing parameter in time
     using Base::Pt;      // time penalization matrix: [Pt_]_{ij} = \int_{[0,T]} (\phi_i)_tt*(\phi_j)_tt
-    using Base::Rt;      // time mass matrix: [Rt_]_{ij} = \int_{[0,T]} \phi_i*\phi_j    
+    using Base::Rt;      // time mass matrix: [Rt_]_{ij} = \int_{[0,T]} \phi_i*\phi_j
     // constructor
     STRPDE() = default;
     template <typename... SamplingData>
-    STRPDE(const PDE& pde, const DMatrix<double>& time, const SamplingData&... s)
-      : RegressionBase<STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign, SolverType::Monolithic>>(pde, time, s...) {};
+    STRPDE(const PDE& pde, const DMatrix<double>& time, const SamplingData&... s) : Base(pde, time, s...) {};
     
     // ModelBase interface implementation
+    void init_model();    // update model object in case of **structural** changes in its definition
     virtual void solve(); // finds a solution to the smoothing problem
 
     // iGCV interface implementation
-    // virtual const DMatrix<double>& T(); // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
-    // virtual const DMatrix<double>& Q(); // Q = W(I - H) = W - W*X*(X^T*W*X)^{-1}X^T*W
+    virtual const DMatrix<double>& T() { // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
+      // compute value of R = R1^T*R0^{-1}*R1, cache for possible reuse
+      if(R_.size() == 0){
+	invR0_.compute(R0());
+	R_ = R1().transpose()*invR0_.solve(R1());
+      }
+      // compute and store matrix T for possible reuse
+      if(!hasCovariates()) // case without covariates, Q is the identity matrix
+	T_ = PsiTD()*W()*Psi()   + lambdaS()*R_;
+      else // general case with covariates
+	T_ = PsiTD()*lmbQ(Psi()) + lambdaS()*R_;
+      return T_;
+    }; 
+    virtual const DMatrix<double>& Q() { // Q = W(I - H) = W - W*X*(X^T*W*X)^{-1}X^T*W
+      if(Q_.size() == 0){ // Q is computed on request since not needed in general
+	// compute Q = W(I - H) = W - W*X*(X*W*X^T)^{-1}*X^T*W
+	Q_ = W()*(DMatrix<double>::Identity(n_obs(), n_obs()) - X()*invXtWX().solve(X().transpose()*W()));
+      }
+      return Q_;
+    };
     // returns the euclidian norm of y - \hat y
-    // virtual double norm(const DMatrix<double>& obs, const DMatrix<double>& fitted) const;
+    virtual double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {
+      return (op1 - op2).squaredNorm();
+    }
+
+    // getters
+    const SpMatrix<double>& A() const { return A_; }
+    const fdaPDE::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
+    const DMatrix<double>& U() const { return U_; }
+    const DMatrix<double>& V() const { return V_; }
     
     virtual ~STRPDE() = default;
   };
@@ -75,6 +105,7 @@ namespace models{
     typedef SplineBasis<3> TimeBasis; // use cubic B-splines
     static constexpr Sampling sampling = SamplingDesign;
     static constexpr SolverType solver = SolverType::Monolithic;
+    static constexpr int n_lambda = 2;
     typedef Gaussian DistributionType;
   };
 
@@ -90,6 +121,10 @@ namespace models{
     SpMatrix<double> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
     fdaPDE::SparseLU<SpMatrix<double>> invA_; // factorization of matrix A
     DVector<double> b_{};  // right hand side of problem's linear system (1 x 2N vector)
+
+    // matrices related to woodbury decomposition
+    DMatrix<double> U_{};
+    DMatrix<double> V_{};    
   public:
     // import commonly defined symbols from base
     IMPORT_REGRESSION_SYMBOLS;
@@ -101,10 +136,10 @@ namespace models{
     // constructor
     STRPDE() = default;
     template <typename... SamplingData>
-    STRPDE(const PDE& pde, const DMatrix<double>& time, const SamplingData&... s)
-      : RegressionBase<STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign, SolverType::Monolithic>>(pde, time, s...) {};
+    STRPDE(const PDE& pde, const DMatrix<double>& time, const SamplingData&... s) : Base(pde, time, s...) {};
     
     // ModelBase interface implementation
+    void init_model();    // update model object in case of **structural** changes in its definition
     virtual void solve(); // finds a solution to the smoothing problem
     
     // iGCV interface implementation
@@ -121,6 +156,7 @@ namespace models{
     typedef SpaceTimeParabolicTag RegularizationType;
     static constexpr Sampling sampling = SamplingDesign;
     static constexpr SolverType solver = SolverType::Monolithic;
+    static constexpr int n_lambda = 2;
     typedef Gaussian DistributionType;
   };
   
@@ -154,10 +190,10 @@ namespace models{
     // constructor
     STRPDE() = default;
     template <typename... SamplingData>
-    STRPDE(const PDE& pde, const DMatrix<double>& time, const SamplingData&... s)
-      : RegressionBase<STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign, SolverType::Iterative>>(pde, time, s...) {};
+    STRPDE(const PDE& pde, const DMatrix<double>& time, const SamplingData&... s) : Base(pde, time, s...) {};
     
     // ModelBase interface implementation
+    void init_model() { return; }
     virtual void solve(); // finds a solution to the smoothing problem
 
     // iGCV interface implementation
@@ -174,6 +210,7 @@ namespace models{
     typedef SpaceTimeParabolicTag RegularizationType;
     static constexpr Sampling sampling = SamplingDesign;
     static constexpr SolverType solver = SolverType::Iterative;
+    static constexpr int n_lambda = 2;
     typedef Gaussian DistributionType;
   };
   
