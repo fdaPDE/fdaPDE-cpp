@@ -3,7 +3,7 @@ template <typename Model>
 void ModelBase<Model>::init(){
   init_pde();                    // init pde object
   model().init_regularization(); // init regularization term
-  model().init_sampling();       // init quantites affected by the sampling design
+  model().init_sampling(true);   // init \Psi matrix, always force recomputation
   model().init_model();          // init model
 }
 

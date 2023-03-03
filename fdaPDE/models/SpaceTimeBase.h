@@ -24,7 +24,7 @@ namespace models {
     using Base::pde_; // regularizing PDE
     using Base::lambda_; // vector of smoothing parameters
 
-    DVector<double> time_; // time domain [0, T] 
+    DVector<double> time_; // time domain [0, T]
   public:
     // constructor
     SpaceTimeBase() = default;

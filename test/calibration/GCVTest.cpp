@@ -58,7 +58,7 @@ TEST(GCV_SRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_GridExact) {
 
   // set model data
   BlockFrame<double, int> df;
-  df.insert("y", y);
+  df.insert(OBSERVATIONS_BLK, y);
   model.setData(df);
   model.init(); // init model
 
@@ -123,7 +123,7 @@ TEST(GCV_SRPDE, Test2_Laplacian_NonParametric_GeostatisticalAtNodes_GridStochast
 
   // set model data
   BlockFrame<double, int> df;
-  df.insert("y", y);
+  df.insert(OBSERVATIONS_BLK, y);
   model.setData(df);
   model.init(); // init model
 
@@ -186,7 +186,7 @@ TEST(GCV_SRPDE, Test3_Laplacian_SemiParametric_GeostatisticalAtLocations_GridExa
   DMatrix<double> loc = locFile.toEigen();
 
   // define statistical model
-  SRPDE<decltype(problem), Sampling::GeoStatLocations> model(problem, loc);
+  SRPDE<decltype(problem), Sampling::GeoStatLocations> model(problem);
   
   // load data from .csv files
   CSVFile<double> yFile; // observation file
@@ -198,8 +198,9 @@ TEST(GCV_SRPDE, Test3_Laplacian_SemiParametric_GeostatisticalAtLocations_GridExa
 
   // set model data
   BlockFrame<double, int> df;
-  df.insert("y", y);
-  df.insert("X", X);
+  df.insert(OBSERVATIONS_BLK,  y);
+  df.insert(DESIGN_MATRIX_BLK, X);
+  df.insert(SPACE_LOCATIONS_BLK, loc);
   model.setData(df);
   model.init(); // init model
 
@@ -265,7 +266,7 @@ TEST(GCV_SRPDE, Test4_Laplacian_SemiParametric_GeostatisticalAtLocations_GridSto
   DMatrix<double> loc = locFile.toEigen();
 
   // define statistical model
-  SRPDE<decltype(problem), Sampling::GeoStatLocations> model(problem, loc);
+  SRPDE<decltype(problem), Sampling::GeoStatLocations> model(problem);
   
   // load data from .csv files
   CSVFile<double> yFile; // observation file
@@ -277,8 +278,9 @@ TEST(GCV_SRPDE, Test4_Laplacian_SemiParametric_GeostatisticalAtLocations_GridSto
 
   // set model data
   BlockFrame<double, int> df;
-  df.insert("y", y);
-  df.insert("X", X);
+  df.insert(OBSERVATIONS_BLK,  y);
+  df.insert(DESIGN_MATRIX_BLK, X);
+  df.insert(SPACE_LOCATIONS_BLK, loc);
   model.setData(df);
   model.init(); // init model
 
@@ -353,7 +355,7 @@ TEST(GCV_SRPDE, Test5_CostantCoefficientsPDE_NonParametric_GeostatisticalAtNodes
 
   // set model data
   BlockFrame<double, int> df;
-  df.insert("y", y);
+  df.insert(OBSERVATIONS_BLK, y);
   model.setData(df);
   model.init(); // init model
 
@@ -423,7 +425,7 @@ TEST(GCV_SRPDE, Test6_CostantCoefficientsPDE_NonParametric_GeostatisticalAtNodes
 
   // set model data
   BlockFrame<double, int> df;
-  df.insert("y", y);
+  df.insert(OBSERVATIONS_BLK, y);
   model.setData(df);
   model.init(); // init model
 
@@ -506,7 +508,7 @@ TEST(GCV_SRPDE, Test7_NonCostantCoefficientsPDE_NonParametric_Areal_GridExact) {
   DMatrix<int> areal = arealFile.toEigen();
 
   double lambda = std::pow(0.1, 3);
-  SRPDE<decltype(problem), Sampling::Areal> model(problem, areal);
+  SRPDE<decltype(problem), Sampling::Areal> model(problem);
   
   // load data from .csv files
   CSVFile<double> yFile; // observation file
@@ -515,7 +517,8 @@ TEST(GCV_SRPDE, Test7_NonCostantCoefficientsPDE_NonParametric_Areal_GridExact) {
   
   // set model data
   BlockFrame<double, int> df;
-  df.insert("y", y);
+  df.insert(OBSERVATIONS_BLK, y);
+  df.insert(SPACE_AREAL_BLK, areal);
   model.setData(df);
   model.init(); // init model
 
@@ -596,7 +599,7 @@ TEST(GCV_SRPDE, Test8_NonCostantCoefficientsPDE_NonParametric_Areal_GridStochast
   DMatrix<int> areal = arealFile.toEigen();
 
   double lambda = std::pow(0.1, 3);
-  SRPDE<decltype(problem), Sampling::Areal> model(problem, areal);
+  SRPDE<decltype(problem), Sampling::Areal> model(problem);
   
   // load data from .csv files
   CSVFile<double> yFile; // observation file
@@ -605,7 +608,8 @@ TEST(GCV_SRPDE, Test8_NonCostantCoefficientsPDE_NonParametric_Areal_GridStochast
   
   // set model data
   BlockFrame<double, int> df;
-  df.insert("y", y);
+  df.insert(OBSERVATIONS_BLK, y);
+  df.insert(SPACE_AREAL_BLK, areal);
   model.setData(df);
   model.init(); // init model
 

@@ -37,13 +37,13 @@ namespace models{
     // constructor
     GSRPDE() = default;
     // space-only constructor
-    template <typename... SamplingData, typename U = RegularizationType,
+    template <typename U = RegularizationType,
 	      typename std::enable_if< std::is_same<U, SpaceOnlyTag>::value, int>::type = 0> 
-    GSRPDE(const PDE& pde, const SamplingData&... s) : Base(pde, s...) {};
+    GSRPDE(const PDE& pde) : Base(pde) {};
     // space-time constructor
-    template <typename... SamplingData, typename U = RegularizationType,
+    template <typename U = RegularizationType,
 	      typename std::enable_if<!std::is_same<U, SpaceOnlyTag>::value, int>::type = 0> 
-    GSRPDE(const PDE& pde, const DVector<double>& time, const SamplingData&... s) : Base(pde, time, s...) {};
+    GSRPDE(const PDE& pde, const DVector<double>& time) : Base(pde, time) {};
 
     // setter
     void setFPIRLSTolerance(double tol) { tol_ = tol; }

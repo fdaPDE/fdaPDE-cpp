@@ -13,9 +13,6 @@ using fdaPDE::models::select_regularization_type;
 
 namespace fdaPDE {
 namespace models {
-
-#define DESIGN_MATRIX_BLK "X" // design matrix
-#define WEIGHTS_BLK "W" // weights for heteroscedastic observations
   
   // base class for any *regression* fdaPDE model
   template <typename Model>
@@ -42,24 +39,22 @@ namespace models {
     
     RegressionBase() = default;
     // space-only constructor
-    template <typename... SamplingData,
-	      typename U = Model, // fake type to enable substitution in SFINAE
+    template <typename U = Model, // fake type to enable substitution in SFINAE
 	      typename std::enable_if<
 		std::is_same<typename model_traits<U>::RegularizationType, SpaceOnlyTag>::value,
 		int>::type = 0> 
-    RegressionBase(const PDE& pde, const SamplingData&... s) 
+    RegressionBase(const PDE& pde) 
       : select_regularization_type<Model>::type(pde),
-      SamplingDesign<Model, model_traits<Model>::sampling>(s...) {}; // s can either be DMatrix<double> or DMatrix<int>
+      SamplingDesign<Model, model_traits<Model>::sampling>() {}; // s can either be DMatrix<double> or DMatrix<int>
 
     // space-time constructor
-    template <typename... SamplingData,
-	      typename U = Model, // fake type to enable substitution in SFINAE
+    template <typename U = Model, // fake type to enable substitution in SFINAE
 	      typename std::enable_if<!
 		std::is_same<typename model_traits<U>::RegularizationType, SpaceOnlyTag>::value,
 		int>::type = 0> 
-    RegressionBase(const PDE& pde, const DVector<double>& time, const SamplingData&... s)
+    RegressionBase(const PDE& pde, const DVector<double>& time)
       : select_regularization_type<Model>::type(pde, time),
-      SamplingDesign<Model, model_traits<Model>::sampling>(s...) {}; // s can either be DMatrix<double> or DMatrix<int>
+      SamplingDesign<Model, model_traits<Model>::sampling>() {}; // s can either be DMatrix<double> or DMatrix<int>
     
     // copy constructor, copy only pde object (as a consequence also the problem domain)
     RegressionBase(const RegressionBase& rhs) { pde_ = rhs.pde_; }

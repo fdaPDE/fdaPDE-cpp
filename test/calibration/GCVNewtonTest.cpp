@@ -60,7 +60,7 @@ TEST(GCV_SRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_NewtonExact)
 
   // set model data
   BlockFrame<double, int> df;
-  df.insert("y", y);
+  df.insert(OBSERVATIONS_BLK, y);
   model.setData(df);
   model.init(); // init model
 
@@ -118,7 +118,7 @@ TEST(GCV_SRPDE, Test2_Laplacian_NonParametric_GeostatisticalAtNodes_NewtonFinite
 
   // set model data
   BlockFrame<double, int> df;
-  df.insert("y", y);
+  df.insert(OBSERVATIONS_BLK, y);
   model.setData(df);
   model.init(); // init model
 
@@ -179,7 +179,7 @@ TEST(GCV_SRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_NewtonFinite
 
   // set model data
   BlockFrame<double, int> df;
-  df.insert("y", y);
+  df.insert(OBSERVATIONS_BLK, y);
   model.setData(df);
   model.init(); // init model
 

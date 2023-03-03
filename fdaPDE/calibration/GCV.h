@@ -38,7 +38,7 @@ namespace calibration{
     trS_evaluation_strategy trS_; // strategy used to evaluate the trace of smoothing matrix S
 
     // cache pairs (lambda, Tr[S]) for fast access if GCV is queried at an already computed point
-    std::map<SVector<model_traits<M>::n_lambda>, double, fdaPDE::SVectorCompare<model_traits<M>::n_lambda>> cache_;
+    std::map<SVector<model_traits<M>::n_lambda>, double, fdaPDE::s_vector_compare<model_traits<M>::n_lambda>> cache_;
   public:
     // SFINAE selection of constructor depending on trace evaluation strategy
     template <typename U = trS_evaluation_strategy, // fake type to enable substitution

@@ -22,7 +22,6 @@ namespace models{
   public:
     // constructor
     SamplingDesign() = default;
-    SamplingDesign(const DMatrix<double>& locs) {};
     // init sampling data structures
     void init_sampling(bool forced = false) {
       // compute once if not forced to recompute
@@ -48,7 +47,7 @@ namespace models{
     SpMatrix<double> Psi_{}; // n x N matrix \Psi = [\psi_{ij}] = \psi_j(p_i) of spatial basis evaluation at data locations p_i
     auto PsiTD() const { return model().Psi().transpose(); }
     std::size_t n_locs() const { return model().domain().dof(); }
-    DMatrix<double> locs() const { return DMatrix<double>(); }
+    DMatrix<double> locs() const { return model().domain().dofCoords(); }
   };
 
   // data sampled at general locations p_1, p_2, ... p_n
@@ -63,14 +62,20 @@ namespace models{
   public:   
     // constructor
     SamplingDesign() = default;
-    SamplingDesign(const DMatrix<double>& locs) : locs_(locs) {};
     // init sampling data structures
     void init_sampling(bool forced = false) {
+      if(!model().data().hasBlock(SPACE_LOCATIONS_BLK))
+	throw std::logic_error("bad BlockFrame, you have requested a GeoStatLocations sampling but cannot find locations");
       // compute once if not forced to recompute
       if(Psi_.size() != 0 && forced == false) return;
+      // extract locations from BlockFrame
+      if constexpr(is_space_time<Model>::value) // get unique locations
+	locs_ = model().data().template extract_unique<double>(SPACE_LOCATIONS_BLK);
+      else locs_ = model().data().template get<double>(SPACE_LOCATIONS_BLK);
+      
       // preallocate space for Psi matrix
       std::size_t n = locs_.rows();
-      std::size_t N = model().n_basis();    
+      std::size_t N = model().n_basis();
       Psi_.resize(n, N);    
       // triplet list to fill sparse matrix
       std::vector<fdaPDE::Triplet<double>> tripletList;
@@ -102,7 +107,8 @@ namespace models{
     std::size_t n_locs() const { return locs_.rows(); }
     const DMatrix<double>& locs() const { return locs_; }
     // setter
-    void setLocs(const DMatrix<double>& locs) { locs_ = locs; }
+    void setLocations(const DMatrix<double>& locs) {
+      model().data().template insert<int>(SPACE_LOCATIONS_BLK, locs); }
   };
 
   // data sampled at subdomains D_1, D_2, ... D_d
@@ -117,11 +123,17 @@ namespace models{
   public:   
     // constructor
     SamplingDesign() = default;
-    SamplingDesign(const DMatrix<int>& subdomains) : subdomains_(subdomains) {};
     // init sampling data structures
     void init_sampling(bool forced = false) {
+      if(!model().data().hasBlock(SPACE_AREAL_BLK))
+	throw std::logic_error("bad BlockFrame, you have requested an Areal sampling but cannot find incidence matrix");
       // compute once if not forced to recompute
       if(Psi_.size() != 0 && forced == false) return;
+      // extract locations from BlockFrame
+      if constexpr(is_space_time<Model>::value) // get unique locations
+	subdomains_ = model().data().template extract_unique<int>(SPACE_AREAL_BLK);
+      else subdomains_ = model().data().template get<int>(SPACE_AREAL_BLK);
+
       // preallocate space for Psi matrix
       std::size_t n = subdomains_.rows();
       std::size_t N = model().n_basis();    
@@ -184,7 +196,8 @@ namespace models{
     const DiagMatrix<double>& D() const { return D_; }
     const DMatrix<int>& locs() const { return subdomains_; }
     // setter
-    void setSubdomains(const DMatrix<int>& subdomains) { subdomains_ = subdomains; }
+    void setSubdomains(const DMatrix<int>& subdomains) {
+      model().data().template insert<int>(SPACE_AREAL_BLK, subdomains); }
   };  
   
 }}

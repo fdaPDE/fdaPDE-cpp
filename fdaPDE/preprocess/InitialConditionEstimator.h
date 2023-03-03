@@ -45,17 +45,19 @@ namespace preprocess {
     static_assert(std::is_same<typename model_traits<Model>::RegularizationType, SpaceTimeParabolicTag>::value,
 		  "Initial condition estimation is for parabolic regularization only");
   private:
-    const Model& model_; // model to initialize
+    Model& model_;
     DMatrix<double> estimate_;
   public:
     // constructor
-    InitialConditionEstimator(const Model& model) : model_(model) {};
+    InitialConditionEstimator(Model& model) : model_(model) {
+      // initialize sampling informations of model if still not computed
+      model_.init_sampling();
+    };
     // builds the initial condition estimate
     void apply(const std::vector<SVector<1>>& lambdas){
       // extract data at time step 0
       std::size_t n = model_.n_locs();
       BlockFrame<double, int> df = model_.data()(0, n-1).extract();
-
       // cast space-time differential operator df/dt + Lf = u to space-only Lf = u
       auto L = model_.pde().bilinearForm().template remove_operator<dT>();
       // prepare regularization term
@@ -67,7 +69,7 @@ namespace preprocess {
       problem.init(); // init PDE object
       
       // define solver for initial condition estimation
-      typename ICEstimator_internal_solver<Model, decltype(problem)>::type solver(problem, model_.locs());
+      typename ICEstimator_internal_solver<Model, decltype(problem)>::type solver(problem);
       solver.setData(df); // impose data
       solver.init_pde();
       solver.init_regularization();
@@ -76,7 +78,6 @@ namespace preprocess {
       // find optimal smoothing parameter
       GCV<decltype(solver), ExactEDF<decltype(solver)>> GCV(solver);
       GridOptimizer<1> opt;
-
       ScalarField<1, decltype(GCV)> obj(GCV);
       opt.optimize(obj, lambdas); // optimize gcv field
       SVector<1> best_lambda = opt.optimum();

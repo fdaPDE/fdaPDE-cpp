@@ -66,7 +66,7 @@ TEST(STRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_Separable_Monol
 
   // set model data
   BlockFrame<double, int> df;
-  df.stack("y", y);
+  df.stack(OBSERVATIONS_BLK, y);
   model.setData(df);
   
   // // solve smoothing problem
@@ -133,7 +133,7 @@ TEST(STRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable_
   DMatrix<double> loc = locFile.toEigen();
 
   STRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparableTag,
-	 Sampling::GeoStatLocations, SolverType::Monolithic> model(problem, time_mesh, loc);
+	 Sampling::GeoStatLocations, SolverType::Monolithic> model(problem, time_mesh);
   model.setLambdaS(lambdaS);
   model.setLambdaT(lambdaT);
   
@@ -147,8 +147,9 @@ TEST(STRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable_
 
   // set model data
   BlockFrame<double, int> df;
-  df.stack ("y", y);
-  df.stack ("X", X);
+  df.stack (OBSERVATIONS_BLK,  y);
+  df.stack (DESIGN_MATRIX_BLK, X);
+  df.insert(SPACE_LOCATIONS_BLK, loc);
   model.setData(df);
   
   // solve smoothing problem
@@ -174,7 +175,7 @@ TEST(STRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable_
   Eigen::loadMarket(expectedR1,  "data/models/STRPDE/2D_test2/R1.mtx");
   SpMatrix<double> computedR1 = model.R1();
   EXPECT_TRUE( almost_equal(expectedR1, computedR1) );
-
+  
   // estimate of spatial field \hat f
   SpMatrix<double> expectedSolution;
   Eigen::loadMarket(expectedSolution, "data/models/STRPDE/2D_test2/sol.mtx");
@@ -238,7 +239,7 @@ TEST(STRPDE, Test3_NonCostantCoefficientsPDE_NonParametric_Areal_Parabolic_Monol
   DMatrix<int> areal = arealFile.toEigen();
   
   STRPDE<decltype(problem), fdaPDE::models::SpaceTimeParabolicTag, Sampling::Areal,
-	 SolverType::Monolithic> model(problem, time_mesh, areal);
+	 SolverType::Monolithic> model(problem, time_mesh);
   model.setLambdaS(lambdaS);
   model.setLambdaT(lambdaT);
 
@@ -249,7 +250,8 @@ TEST(STRPDE, Test3_NonCostantCoefficientsPDE_NonParametric_Areal_Parabolic_Monol
 
   // set model data
   BlockFrame<double, int> df;
-  df.stack ("y", y);
+  df.stack (OBSERVATIONS_BLK, y);
+  df.insert(SPACE_AREAL_BLK, areal);
   model.setData(df);
 
   // define initial condition estimator over grid of lambdas
@@ -325,7 +327,7 @@ TEST(STRPDE, Test4_Laplacian_NonParametric_GeostatisticalAtNodes_Parabolic_Itera
 
   // set model data
   BlockFrame<double, int> df;
-  df.stack("y", y);
+  df.stack(OBSERVATIONS_BLK, y);
   model.setData(df);
 
   // define initial condition estimator over grid of lambdas

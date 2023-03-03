@@ -57,7 +57,7 @@ TEST(GSRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_Poisson) {
   // define statistical model
   double lambda = 1e-3;
   GSRPDE<decltype(problem), SpaceOnlyTag, fdaPDE::models::GeoStatLocations,
-	 SolverType::Monolithic, fdaPDE::models::Poisson> model(problem, loc);
+	 SolverType::Monolithic, fdaPDE::models::Poisson> model(problem);
   model.setLambdaS(lambda);
   
   // load data from .csv files
@@ -67,7 +67,8 @@ TEST(GSRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_Poisson) {
 
   // set model data
   BlockFrame<double, int> df;
-  df.insert("y", y);
+  df.insert(OBSERVATIONS_BLK, y);
+  df.insert(SPACE_LOCATIONS_BLK, loc);
   model.setData(df);
 
   // solve smoothing problem
@@ -93,7 +94,7 @@ TEST(GSRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_Poisson) {
    order FE:     1
    distribution: bernulli
  */
-TEST(GSRPDE, Test2_Laplacian_NonParametric_GeostatisticalAtNodes_Bernulli) {
+TEST(GSRPDE, Test2_Laplacian_NonParametric_GeostatisticalLocations_Bernulli) {
   // define domain and regularizing PDE
   MeshLoader<Mesh2D<>> domain("unit_square_medium");
   auto L = Laplacian();
@@ -109,7 +110,7 @@ TEST(GSRPDE, Test2_Laplacian_NonParametric_GeostatisticalAtNodes_Bernulli) {
   // define statistical model
   double lambda = 1e-3;
   GSRPDE<decltype(problem), SpaceOnlyTag, fdaPDE::models::GeoStatLocations,
-	 SolverType::Monolithic, fdaPDE::models::Bernulli> model(problem, loc);
+	 SolverType::Monolithic, fdaPDE::models::Bernulli> model(problem);
   model.setLambdaS(lambda);
   
   // load data from .csv files
@@ -119,7 +120,8 @@ TEST(GSRPDE, Test2_Laplacian_NonParametric_GeostatisticalAtNodes_Bernulli) {
 
   // set model data
   BlockFrame<double, int> df;
-  df.insert("y", y);
+  df.insert(OBSERVATIONS_BLK, y);
+  df.insert(SPACE_LOCATIONS_BLK, loc);
   model.setData(df);
 
   // solve smoothing problem
@@ -145,7 +147,7 @@ TEST(GSRPDE, Test2_Laplacian_NonParametric_GeostatisticalAtNodes_Bernulli) {
    order FE:     1
    distribution: exponential
  */
-TEST(GSRPDE, Test3_Laplacian_NonParametric_GeostatisticalAtNodes_Exponential) {
+TEST(GSRPDE, Test3_Laplacian_NonParametric_GeostatisticalLocations_Exponential) {
   // define domain and regularizing PDE
   MeshLoader<Mesh2D<>> domain("unit_square_medium");
   auto L = Laplacian();
@@ -161,7 +163,7 @@ TEST(GSRPDE, Test3_Laplacian_NonParametric_GeostatisticalAtNodes_Exponential) {
   // define statistical model
   double lambda = 1e-3;
   GSRPDE<decltype(problem), SpaceOnlyTag, fdaPDE::models::GeoStatLocations,
-	 SolverType::Monolithic, fdaPDE::models::Exponential> model(problem, loc);
+	 SolverType::Monolithic, fdaPDE::models::Exponential> model(problem);
   model.setLambdaS(lambda);
   
   // load data from .csv files
@@ -171,7 +173,8 @@ TEST(GSRPDE, Test3_Laplacian_NonParametric_GeostatisticalAtNodes_Exponential) {
 
   // set model data
   BlockFrame<double, int> df;
-  df.insert("y", y);
+  df.insert(OBSERVATIONS_BLK, y);
+  df.insert(SPACE_LOCATIONS_BLK, loc);
   model.setData(df);
 
   // solve smoothing problem
@@ -197,7 +200,7 @@ TEST(GSRPDE, Test3_Laplacian_NonParametric_GeostatisticalAtNodes_Exponential) {
    order FE:     1
    distribution: gamma
  */
-TEST(GSRPDE, Test4_Laplacian_NonParametric_GeostatisticalAtNodes_Gamma) {
+TEST(GSRPDE, Test4_Laplacian_NonParametric_GeostatisticalLocations_Gamma) {
   // define domain and regularizing PDE
   MeshLoader<Mesh2D<>> domain("unit_square_medium");
   auto L = Laplacian();
@@ -213,7 +216,7 @@ TEST(GSRPDE, Test4_Laplacian_NonParametric_GeostatisticalAtNodes_Gamma) {
   // define statistical model
   double lambda = 1e-3;
   GSRPDE<decltype(problem), SpaceOnlyTag, fdaPDE::models::GeoStatLocations,
-	 SolverType::Monolithic, fdaPDE::models::Gamma> model(problem, loc);
+	 SolverType::Monolithic, fdaPDE::models::Gamma> model(problem);
   model.setLambdaS(lambda);
   
   // load data from .csv files
@@ -223,7 +226,8 @@ TEST(GSRPDE, Test4_Laplacian_NonParametric_GeostatisticalAtNodes_Gamma) {
 
   // set model data
   BlockFrame<double, int> df;
-  df.insert("y", y);
+  df.insert(OBSERVATIONS_BLK, y);
+  df.insert(SPACE_LOCATIONS_BLK, loc);
   model.setData(df);
 
   // solve smoothing problem
@@ -273,7 +277,7 @@ TEST(GSRPDE, Test5_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable_
 
   GSRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparableTag,
 	 fdaPDE::models::GeoStatLocations, SolverType::Monolithic, fdaPDE::models::Gamma>
-    model(problem, time_mesh, loc);
+    model(problem, time_mesh);
   model.setLambdaS(lambdaS);
   model.setLambdaT(lambdaT);
   
@@ -287,8 +291,9 @@ TEST(GSRPDE, Test5_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable_
 
   // set model data
   BlockFrame<double, int> df;
-  df.stack ("y", y);
-  df.insert("X", X);
+  df.stack (OBSERVATIONS_BLK,  y);
+  df.insert(DESIGN_MATRIX_BLK, X);
+  df.insert(SPACE_LOCATIONS_BLK, loc);
   model.setData(df);
   
   // solve smoothing problem
@@ -301,7 +306,8 @@ TEST(GSRPDE, Test5_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable_
   SpMatrix<double> expectedSolution;
   Eigen::loadMarket(expectedSolution, "data/models/GSRPDE/2D_test5/sol_separable.mtx");
   DMatrix<double> computedF = model.f();
-  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution), computedF, std::pow(0.1, 10)) );
+  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution), computedF, std::pow(0.1, 10)) ) <<
+    (DMatrix<double>(expectedSolution) - computedF).lpNorm<Eigen::Infinity>();
 
   // estimate of coefficient vector \hat \beta
   SpMatrix<double> expectedBeta;
@@ -343,7 +349,7 @@ TEST(GSRPDE, Test6_Laplacian_SemiParametric_GeostatisticalAtLocations_Parabolic_
   
   GSRPDE<decltype(problem), fdaPDE::models::SpaceTimeParabolicTag,
 	 Sampling::GeoStatLocations, SolverType::Monolithic, fdaPDE::models::Gamma>
-    model(problem, time_mesh, loc);
+    model(problem, time_mesh);
   model.setLambdaS(lambdaS);
   model.setLambdaT(lambdaT);
 
@@ -357,10 +363,11 @@ TEST(GSRPDE, Test6_Laplacian_SemiParametric_GeostatisticalAtLocations_Parabolic_
 
   // set model data
   BlockFrame<double, int> df;
-  df.stack ("y", y);
-  df.insert("X", X);
+  df.stack (OBSERVATIONS_BLK,  y);
+  df.insert(DESIGN_MATRIX_BLK, X);
+  df.insert(SPACE_LOCATIONS_BLK, loc);
   model.setData(df);
-
+  
   // define initial condition estimator over grid of lambdas
   InitialConditionEstimator ICestimator(model);
   std::vector<SVector<1>> lambdas;

@@ -41,8 +41,7 @@ namespace models{
     using Base::lambdaS; // smoothing parameter in space
     // constructor
     SRPDE() = default;
-    template <typename... SamplingData>
-    SRPDE(const PDE& pde, const SamplingData&... s) : RegressionBase<SRPDE<PDE, SamplingDesign>>(pde, s...) {};
+    SRPDE(const PDE& pde) : Base(pde) {};
     
     // ModelBase implementation
     void init_model();    // update model object in case of **structural** changes in its definition

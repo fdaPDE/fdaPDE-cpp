@@ -51,7 +51,7 @@ TEST(SRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes) {
 
   // set model data
   BlockFrame<double, int> df;
-  df.insert("y", y);
+  df.insert(OBSERVATIONS_BLK, y);
   model.setData(df);
 
   // solve smoothing problem
@@ -110,7 +110,7 @@ TEST(SRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations) {
 
   // use optimal lambda to avoid possible numerical issues
   double lambda = 0.2201047;
-  SRPDE<decltype(problem), Sampling::GeoStatLocations> model(problem, loc);
+  SRPDE<decltype(problem), Sampling::GeoStatLocations> model(problem);
   model.setLambdaS(lambda);
   
   // load data from .csv files
@@ -123,8 +123,9 @@ TEST(SRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations) {
 
   // set model data
   BlockFrame<double, int> df;
-  df.insert("y", y);
-  df.insert("X", X);
+  df.insert(OBSERVATIONS_BLK,  y);
+  df.insert(DESIGN_MATRIX_BLK, X);
+  df.insert(SPACE_LOCATIONS_BLK, loc);
   model.setData(df);
   
   // solve smoothing problem
@@ -198,7 +199,7 @@ TEST(SRPDE, Test3_CostantCoefficientsPDE_NonParametric_GeostatisticalAtNodes) {
 
   // set model data
   BlockFrame<double, int> df;
-  df.insert("y", y);
+  df.insert(OBSERVATIONS_BLK, y);
   model.setData(df);
 
   // solve smoothing problem
@@ -276,7 +277,7 @@ TEST(SRPDE, Test4_NonCostantCoefficientsPDE_NonParametric_Areal) {
   DMatrix<int> areal = arealFile.toEigen();
 
   double lambda = std::pow(0.1, 3);
-  SRPDE<decltype(problem), Sampling::Areal> model(problem, areal);
+  SRPDE<decltype(problem), Sampling::Areal> model(problem);
   model.setLambdaS(lambda);
   
   // load data from .csv files
@@ -286,7 +287,8 @@ TEST(SRPDE, Test4_NonCostantCoefficientsPDE_NonParametric_Areal) {
   
   // set model data
   BlockFrame<double, int> df;
-  df.insert("y", y);
+  df.insert(OBSERVATIONS_BLK, y);
+  df.insert(SPACE_AREAL_BLK, areal);
   model.setData(df);
   
   // solve smoothing problem

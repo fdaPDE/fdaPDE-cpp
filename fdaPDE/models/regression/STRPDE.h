@@ -57,8 +57,7 @@ namespace models{
     using Base::Rt;      // time mass matrix: [Rt_]_{ij} = \int_{[0,T]} \phi_i*\phi_j
     // constructor
     STRPDE() = default;
-    template <typename... SamplingData>
-    STRPDE(const PDE& pde, const DMatrix<double>& time, const SamplingData&... s) : Base(pde, time, s...) {};
+    STRPDE(const PDE& pde, const DMatrix<double>& time) : Base(pde, time) {};
     
     // ModelBase interface implementation
     void init_model();    // update model object in case of **structural** changes in its definition
@@ -135,8 +134,7 @@ namespace models{
     using Base::s;       // initial condition
     // constructor
     STRPDE() = default;
-    template <typename... SamplingData>
-    STRPDE(const PDE& pde, const DMatrix<double>& time, const SamplingData&... s) : Base(pde, time, s...) {};
+    STRPDE(const PDE& pde, const DMatrix<double>& time) : Base(pde, time) {};
     
     // ModelBase interface implementation
     void init_model();    // update model object in case of **structural** changes in its definition
@@ -189,8 +187,7 @@ namespace models{
     using Base::DeltaT;    // distance between two time instants
     // constructor
     STRPDE() = default;
-    template <typename... SamplingData>
-    STRPDE(const PDE& pde, const DMatrix<double>& time, const SamplingData&... s) : Base(pde, time, s...) {};
+    STRPDE(const PDE& pde, const DMatrix<double>& time) : Base(pde, time) {};
     
     // ModelBase interface implementation
     void init_model() { return; }
