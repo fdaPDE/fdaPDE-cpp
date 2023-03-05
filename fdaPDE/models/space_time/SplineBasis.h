@@ -67,6 +67,7 @@ namespace models {
       }
       // finalize construction
       result.setFromTriplets(tripletList.begin(), tripletList.end());
+      result.prune(0.0); // remove zeros
       result.makeCompressed();    
       return result;
     }
