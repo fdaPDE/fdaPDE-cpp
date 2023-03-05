@@ -36,11 +36,9 @@ namespace models{
       b_ = knots_[i_+R+1] - knots_[i_+1] != 0 ? 1.0/(knots_[i_+R+1] - knots_[i_+1]) : 0.0;
     };
     
-    // evaluates the spline at a given point
+    // evaluates the spline at a given point by Cox-DeBoor recursion
     inline double operator()(SVector<1> x) const {
-      // exploit local support of splines
-      if(x[0] < knots_[i_] || knots_[i_+R+1] < x[0]) return 0.0;
-      // develop Cox-DeBoor recursion
+      //if((x[0] < knots_[i_] || knots_[i_+R+1] < x[0])) return 0.0;
       return a_*(x[0] - knots_[i_])*Spline<R-1,M>(knots_, i_)(x) + b_*(knots_[i_+R+1] - x[0])*Spline<R-1,M>(knots_, i_+1)(x);
     }
     
@@ -62,7 +60,7 @@ namespace models{
     DVector<double> knots_;
     std::size_t i_; // knot index where this basis is centered
 
-    static constexpr double tol_ = 10*std::numeric_limits<double>::epsilon();
+    static constexpr double tol_ = 50*std::numeric_limits<double>::epsilon(); // approx 10^-14
   public:
     // constructor
     Spline() = default;

@@ -92,7 +92,7 @@ TEST(STRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_Separable_Monol
   Eigen::loadMarket(expectedR1,  "data/models/STRPDE/2D_test1/R1.mtx");
   SpMatrix<double> computedR1 = model.R1();
   EXPECT_TRUE( almost_equal(expectedR1, computedR1) );
-    
+  
   // estimate of spatial field \hat f
   SpMatrix<double> expectedSolution;
   Eigen::loadMarket(expectedSolution,   "data/models/STRPDE/2D_test1/sol.mtx");
@@ -175,13 +175,13 @@ TEST(STRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable_
   Eigen::loadMarket(expectedR1,  "data/models/STRPDE/2D_test2/R1.mtx");
   SpMatrix<double> computedR1 = model.R1();
   EXPECT_TRUE( almost_equal(expectedR1, computedR1) );
-  
+
   // estimate of spatial field \hat f
   SpMatrix<double> expectedSolution;
   Eigen::loadMarket(expectedSolution, "data/models/STRPDE/2D_test2/sol.mtx");
   DMatrix<double> computedF = model.f();
   std::size_t N = computedF.rows();
-  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );
+  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution), computedF) );
 
   // estimate of coefficient vector \hat \beta
   SpMatrix<double> expectedBeta;
@@ -359,6 +359,65 @@ TEST(STRPDE, Test4_Laplacian_NonParametric_GeostatisticalAtNodes_Parabolic_Itera
   // estimate of spatial field \hat f
   SpMatrix<double> expectedSolution;
   Eigen::loadMarket(expectedSolution, "data/models/STRPDE/2D_test4/sol.mtx");
+  DMatrix<double> computedF = model.f();
+  std::size_t N = computedF.rows();
+  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );
+}
+
+
+/* test 5
+   domain:       unit square [1,1] x [1,1]
+   sampling:     locations = nodes, time locations != time nodes
+   penalization: simple laplacian
+   covariates:   no
+   BC:           no
+   order FE:     1
+   time penalization: separable (mass penalization)
+ */
+TEST(STRPDE, Test5_Laplacian_NonParametric_GeostatisticalAtNodes_TimeLocations_Separable_Monolithic) {
+  // define time domain
+  DVector<double> time_mesh;
+  time_mesh.resize(11);
+  std::size_t i = 0;
+  for(double x = 0; x <= 2; x+=0.2, ++i) time_mesh[i] = x;
+  
+  // define spatial domain and regularizing PDE
+  MeshLoader<Mesh2D<>> domain("unit_square_coarse");
+  auto L = Laplacian();
+  DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements()*3*time_mesh.rows(), 1);
+  PDE problem(domain.mesh, L, u); // definition of regularizing PDE
+  // define statistical model
+  double lambdaS = 0.01; // smoothing in space
+  double lambdaT = 0.01; // smoothing in time
+  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparableTag,
+	 Sampling::GeoStatMeshNodes, SolverType::Monolithic> model(problem, time_mesh);
+  model.setLambdaS(lambdaS);
+  model.setLambdaT(lambdaT);
+
+  // load data from .csv files
+  CSVReader<double> reader{};
+  CSVFile<double> yFile; // observation file
+  yFile = reader.parseFile("data/models/STRPDE/2D_test5/y.csv");
+  DMatrix<double> y = yFile.toEigen();
+  CSVFile<double> timeLocationsFile;
+  timeLocationsFile = reader.parseFile("data/models/STRPDE/2D_test5/time_locations.csv");
+  DMatrix<double> timeLocations = timeLocationsFile.toEigen();
+  
+  // set model data
+  BlockFrame<double, int> df;
+  df.stack(OBSERVATIONS_BLK, y);
+  df.insert(TIME_LOCATIONS_BLK, timeLocations);
+  model.setData(df);
+  
+  // // solve smoothing problem
+  model.init();
+  model.solve();
+
+  //    **  test correctness of computed results  **   
+  
+  // estimate of spatial field \hat f
+  SpMatrix<double> expectedSolution;
+  Eigen::loadMarket(expectedSolution,   "data/models/STRPDE/2D_test5/sol.mtx");
   DMatrix<double> computedF = model.f();
   std::size_t N = computedF.rows();
   EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );

@@ -26,7 +26,7 @@ enable_testing()
 add_executable(fdaPDE_test MainTest.cpp)
 target_link_libraries (fdaPDE_test Eigen3::Eigen)
 target_link_libraries (fdaPDE_test gtest_main)
-target_sources(fdaPDE_test PRIVATE ../fdaPDE/core/NLA/FSPAI.cpp)
+# target_sources(fdaPDE_test PRIVATE ../fdaPDE/core/NLA/FSPAI.cpp)
 
 
 add_test(NAME fdaPDE_test

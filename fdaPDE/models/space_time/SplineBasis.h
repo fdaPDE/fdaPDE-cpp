@@ -61,8 +61,7 @@ namespace models {
       tripletList.reserve(m*M);
 
       for(int i = 0; i < M; ++i){
-	// evaluate spline at m locations
-	for(int j = 0; j < m; ++j){
+	for(int j = 0; j < m; ++j){ // evaluate spline at given m time locations
 	  tripletList.emplace_back(j, i, basis_[i](SVector<1>(points[j])));
 	}
       }

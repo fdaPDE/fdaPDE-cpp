@@ -24,7 +24,7 @@ namespace models{
     
     typedef typename model_traits<Model>::TimeBasis TimeBasis; // basis used for discretization in time
     TimeBasis basis_;
-
+    DMatrix<double> time_locations_; // time instants t_1, ..., t_m. used only if provided from BlockFrame
     SpMatrix<double> pen_; // discretized regularizing term: \lambda_S*((R1^T*R0^{-1}*R1) \kron Rt) + \lambda_T*(R0 \kron Pt)
   public:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
@@ -43,7 +43,14 @@ namespace models{
     // init data structure related to separable regularization
     void init_regularization() {
       // compute \Phi = [\Phi]_{ij} = \phi_i(t_j) using the provided basis function
-      Phi_ = basis_.eval(time_);
+      if(!model().data().hasBlock(TIME_LOCATIONS_BLK)){
+	// assume time instants t_1, ..., t_m equal to time nodes
+	Phi_ = basis_.eval(time_);
+      }else{
+	// extract time locations t_1, ..., t_m from BlockFrame and evaluate basis on them
+	time_locations_ = model().data().template extract_unique<double>(TIME_LOCATIONS_BLK);
+	Phi_ = basis_.eval(time_locations_);
+      }
       // discretize operators in time
       TimeAssembler<TimeBasis> assembler(time_);
       Rt_ = assembler.assemble(TimeMass<TimeBasis>());    // mass matrix in time
@@ -57,6 +64,10 @@ namespace models{
     const SpMatrix<double>& Rt()  const { return Rt_; }
     const SpMatrix<double>& Pt()  const { return Pt_; }
     const SpMatrix<double>& Phi() const { return Phi_; }
+    inline std::size_t n_time() const { // overloads Base::n_time()
+      if(!model().data().hasBlock(TIME_LOCATIONS_BLK)) return time_.rows();
+      return time_locations_.rows();
+    } 
 
     // return stacked version of discretized forcing field
     const DVector<double>& u() {
@@ -82,7 +93,6 @@ namespace models{
       }
       return pen_;
     }
-
     
     // destructor
     virtual ~SpaceTimeSeparableBase() = default;  

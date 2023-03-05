@@ -14,7 +14,7 @@ using fdaPDE::testing::MESH_TYPE_LIST;
 #include "../utils/Utils.h"
 using fdaPDE::testing::almost_equal;
 
-// test definition of spline basis over a closed interval [0,1]
+// test definition of spline basis
 TEST(SplineBasisTest, Definition) {
   // define vector of equidistant knots on unit interval [0,1]
   DVector<double> knots;
@@ -23,9 +23,7 @@ TEST(SplineBasisTest, Definition) {
   
   // define cubic B-spline basis over [0,1]
   SplineBasis<3> basis(knots);
-
-  // load expected results. file misc/spline.mtx contains the evaluation of a correct definition of a Bspline
-  // basis over the interval [0,1] defined on knots vector and evaluated at points placed at a distance of 0.01 each
+  
   SpMatrix<double> expected;
   Eigen::loadMarket(expected, "data/misc/spline.mtx");
   
@@ -33,17 +31,17 @@ TEST(SplineBasisTest, Definition) {
     // evaluate i-th spline over [0,1]
     std::vector<double> result;
     result.reserve(101);
-    for(double x = 0; x <= 1.01; x += 0.01){ 
+    for(double x = 0; x <= 1.01; x += 0.01){
       result.push_back(basis[i](SVector<1>(x)));
     }
     // check results within double tolerance
     for(std::size_t j = 0; j < result.size(); ++j){
       EXPECT_TRUE(almost_equal(result[j], expected.coeff(j,i)));
-    }    
-  }  
+    }
+  }
 }
 
-// test definition of spline basis over a closed interval [0,1]
+// test definition of spline basis derivative
 TEST(SplineBasisTest, SecondDerivative) {
   // define vector of equidistant knots on unit interval [0,1]
   DVector<double> knots;
@@ -53,8 +51,6 @@ TEST(SplineBasisTest, SecondDerivative) {
   // define cubic B-spline basis over [0,1]
   SplineBasis<3> basis(knots);
 
-  // load expected results. file misc/spline_der.mtx contains the evaluation of the second derivative of a correct definition
-  // of a Bspline basis over the interval [0,1] defined on knots vector and evaluated at points placed at a distance of 0.01 each
   SpMatrix<double> expected;
   Eigen::loadMarket(expected, "data/misc/spline_der.mtx");
   
