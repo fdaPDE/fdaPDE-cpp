@@ -4,6 +4,11 @@ void ModelBase<Model>::init(){
   init_pde();                    // init pde object
   model().init_regularization(); // init regularization term
   model().init_sampling(true);   // init \Psi matrix, always force recomputation
+
+  // analyze and set missing data
+  model().analyze_nan();
+  model().set_nan();
+  
   model().init_model();          // init model
 }
 
@@ -30,6 +35,19 @@ void ModelBase<Model>::setData(const BlockFrame<double, int>& df) {
   // perform preprocessing of data depending on model type, if model has a defined preprocess() step
   if constexpr(requires_preprocess<Model>::value){
     model().preprocess();
+  }
+  return;
+}
+
+// analyze missing data pattern, compute nan indices based on observation vector
+template <typename Model>
+void ModelBase<Model>::analyze_nan() {
+  BLOCK_FRAME_SANITY_CHECKS;
+  for(std::size_t i = 0; i < n_obs(); ++i){
+    if(std::isnan(y()(i,0))){ // requires -ffast-math compiler flag to be disabled, NaN not detected otherwise
+      nan_idxs_.emplace_back(i);
+      df_.get<double>(OBSERVATIONS_BLK)(i,0) = 0.0; // zero out NaN
+    }
   }
   return;
 }

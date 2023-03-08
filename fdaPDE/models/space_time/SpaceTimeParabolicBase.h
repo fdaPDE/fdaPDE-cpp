@@ -74,7 +74,6 @@ namespace models{
     // getters
     SparseKroneckerProduct<> R0()  const { return Kronecker(Im_, pde_->R0()); }
     SparseKroneckerProduct<> R1()  const { return Kronecker(Im_, pde_->R1()); }
-    SparseKroneckerProduct<> Psi() const { return Kronecker(Im_, model().Psi_); }
     // matrices proper of separable regularization
     const SpMatrix<double>& L() const { return L_; }
     // return discretized force corrected by initial conditions
@@ -134,9 +133,7 @@ namespace models{
     void init_regularization() {
       // compute time step (assuming equidistant points)
       DeltaT_ = time_[1] - time_[0];
-
-      // compute forcing term corrected by initial condition (pde is initialized before the regularization term)
-      u_ = pde_->force();
+      u_ = pde_->force(); // compute forcing term
       // correct first n rows of discretized force as (u_1 + R0*s/DeltaT)
       u_.block(0,0, model().n_basis(),1) += (1.0/DeltaT_)*(pde_->R0()*s_);
     }
@@ -148,7 +145,6 @@ namespace models{
       return u_.block(model().n_basis()*k,0, model().n_basis(),1); }
     DMatrix<double> y(std::size_t k) const { // vector of input data points at time k
       return model().y().block(model().n_locs()*k, 0, model().n_locs(),1); }
-    const SpMatrix<double>& Psi() const { return model().Psi_; }  // matrix of spatial basis evaluation
     double DeltaT() const { return DeltaT_; } 
     using Base::y; // import y() method defined in ModelBase
     const DMatrix<double>& s() const { return s_; }

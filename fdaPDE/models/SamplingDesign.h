@@ -2,6 +2,8 @@
 #define __SAMPLING_DESIGN_H__
 
 #include "../core/utils/Symbols.h"
+#include "../core/NLA/KroneckerProduct.h"
+using fdaPDE::core::NLA::Kronecker;
 #include "ModelBase.h"
 #include "ModelTraits.h"
 using fdaPDE::models::is_space_time;
@@ -9,16 +11,64 @@ using fdaPDE::models::is_space_time;
 namespace fdaPDE{
 namespace models{
 
-  // base classes for the implenetation of the different sampling designs. Here is computed the matrix of spatial basis
-  // evaluations \Psi = [\Psi]_{ij} = \psi_i(p_j) whose construction strongly depends on the type of sampling in space
+  // base classes for the implemetation of the different sampling designs.
+  // Here is computed the matrix of spatial basis evaluations \Psi = [\Psi]_{ij} = \psi_i(p_j) 
   template <typename Model, Sampling S> class SamplingDesign {};
+  
+  // base class for all sampling strategies implementing common operations on \Psi matrix
+  template <typename Model>
+  class SamplingBase {
+  protected:
+    DEFINE_CRTP_MODEL_UTILS; // import model() method (const and non-const access)
+    SpMatrix<double> Psi_{}; // n x N matrix \Psi = [\psi_{ij}] = \psi_j(p_i) of spatial basis evaluation at data locations p_i
+    SpMatrix<double> cache_; // cache used for \Psi matrix (you might want to apply different missingness patterns)
+  public:
+    // sets the (j*n_basis + i)-th row of \Psi to zero if no data is observed at location (p_i, t_j)
+    void set_nan() {
+      // meaningfull only if NaN are present
+      if(model().hasNaN()){
+	Psi_ = cache_; // recover original \Psi from cached data
+	for(auto i : model().nan_idxs()) Psi_.row(i) *= 0; // impose NaN
+	Psi_.prune(0.0);
+	Psi_.makeCompressed();
+      }
+      return;
+    }
 
+    // permute rows of \Psi matrix according to idx block of model's BlockFrame.
+    void realign() {
+      // recover permutation from BlockFrame and set up permutation matrix
+      DVector<int> permutation_vector = model().idx();
+      Eigen::PermutationMatrix<Eigen::Dynamic, Eigen::Dynamic> P;
+      P.indices() = permutation_vector;      
+      Psi_ = P*Psi_; // apply by-row permutation to \Psi
+      return;
+    }
+
+    void finalize() {
+      if constexpr(is_solver_monolithic<Model>::value){
+	if constexpr(is_space_time_separable<Model>::value){
+	  Psi_ = Kronecker(model().Phi(), Psi_);
+	}
+	if constexpr(is_space_time_parabolic<Model>::value){
+	  SpMatrix<double> Im; // m x m identity matrix
+	  Im.resize(model().n_time(), model().n_time());
+	  Im.setIdentity();
+	  Psi_ = Kronecker(Im, Psi_);
+	}
+      }
+      cache_ = Psi_; // cache \Psi to avoid recomputation
+      return;
+    }
+  };
+  
   // data sampled at mesh nodes
   template <typename Model>
-  class SamplingDesign<Model, GeoStatMeshNodes> {
-  private:
-    // recover model object
-    inline const Model& model() const { return static_cast<const Model&>(*this); }
+  class SamplingDesign<Model, GeoStatMeshNodes> : public SamplingBase<Model> {
+    DEFINE_CRTP_MODEL_UTILS; // import model() method (const and non-const access)
+    typedef SamplingBase<Model> Base;
+    using Base::finalize;
+    using Base::Psi_;
   public:
     // constructor
     SamplingDesign() = default;
@@ -27,7 +77,7 @@ namespace models{
       // compute once if not forced to recompute
       if(Psi_.size() != 0 && forced == false) return;
       // preallocate space for Psi matrix
-      std::size_t n = model().domain().dof();
+      std::size_t n = model().n_basis();
       std::size_t N = model().n_basis();
       Psi_.resize(n, N);    
       // triplet list to fill sparse matrix
@@ -37,28 +87,29 @@ namespace models{
       // if data locations are equal to mesh nodes then \Psi is the identity matrix.
       // \psi_i(p_i) = 1 and \psi_i(p_j) = 0 \forall i \neq j
       for(std::size_t i = 0; i < n; ++i)
-	tripletList.emplace_back(model().idx()(i,0), i, 1.0);
+	tripletList.emplace_back(i, i, 1.0);
       // finalize construction
       Psi_.setFromTriplets(tripletList.begin(), tripletList.end());
       Psi_.makeCompressed();
+      finalize();
     }
     
     // getters
-    SpMatrix<double> Psi_{}; // n x N matrix \Psi = [\psi_{ij}] = \psi_j(p_i) of spatial basis evaluation at data locations p_i
-    auto PsiTD() const { return model().Psi().transpose(); }
+    const SpMatrix<double>& Psi() const { return Psi_; }
+    auto PsiTD() const { return Psi_.transpose(); }
     std::size_t n_locs() const { return model().domain().dof(); }
     DMatrix<double> locs() const { return model().domain().dofCoords(); }
   };
 
   // data sampled at general locations p_1, p_2, ... p_n
   template <typename Model>
-  class SamplingDesign<Model, GeoStatLocations> {
+  class SamplingDesign<Model, GeoStatLocations> : public SamplingBase<Model> {
   private:
     DMatrix<double> locs_;   // matrix of spatial locations p_1, p2_, ... p_n
-
-    // recover model object
-    inline Model& model() { return static_cast<Model&>(*this); }
-    inline const Model& model() const { return static_cast<const Model&>(*this); }
+    DEFINE_CRTP_MODEL_UTILS; // import model() method (const and non-const access)
+    typedef SamplingBase<Model> Base;
+    using Base::finalize;
+    using Base::Psi_;
   public:   
     // constructor
     SamplingDesign() = default;
@@ -93,17 +144,18 @@ namespace models{
 	  // extract \phi_h from basis
 	  auto psi_h = model().pde().basis()[e->ID()][j];
 	  // evaluate \phi_h(p_i) (value of the basis function centered in mesh node h and evaluated in point p_i)
-	  tripletList.emplace_back(model().idx()(i,0), h, psi_h(p_i));
+	  tripletList.emplace_back(i, h, psi_h(p_i));
 	}
       }
       // finalize construction
       Psi_.setFromTriplets(tripletList.begin(), tripletList.end());
       Psi_.makeCompressed();
+      finalize();
     };
 
     // getters
-    SpMatrix<double> Psi_{}; // n x N matrix \Psi = [\psi_{ij}] = \psi_j(p_i) of spatial basis evaluation at data locations p_i
-    auto PsiTD() const { return model().Psi().transpose(); }
+    const SpMatrix<double>& Psi() const { return Psi_; }
+    auto PsiTD() const { return Psi_.transpose(); }
     std::size_t n_locs() const { return locs_.rows(); }
     const DMatrix<double>& locs() const { return locs_; }
     // setter
@@ -113,13 +165,14 @@ namespace models{
 
   // data sampled at subdomains D_1, D_2, ... D_d
   template <typename Model>
-  class SamplingDesign<Model, Areal> {
+  class SamplingDesign<Model, Areal> : public SamplingBase<Model> {
   private:
     DMatrix<int> subdomains_; // incidence matrix D = [D]_{ij} = 1 \iff element j belongs to subdomain i.
-    DiagMatrix<double> D_;    // diagonal matrix of subdomains' measures
-    
-    // recover model object
-    inline const Model& model() const { return static_cast<const Model&>(*this); }
+    DiagMatrix<double> D_;    // diagonal matrix of subdomains' measures    
+    DEFINE_CRTP_MODEL_UTILS;  // import model() method (const and non-const access)
+    typedef SamplingBase<Model> Base;
+    using Base::finalize;
+    using Base::Psi_;
   public:   
     // constructor
     SamplingDesign() = default;
@@ -158,7 +211,7 @@ namespace models{
 	    for(const auto& phi : model().pde().basis()[e->ID()]){
 	      std::size_t h = phi.node(); // if we write the finite element as \phi_h, this is h
 	      // evaluate \int_e \phi_h and insert in tripletList. summation is implicitly resolved by Eigen::setFromTriplets
-	      tripletList.emplace_back(model().idx()(k,0), h, model().pde().integrator().integrate(*e, phi));
+	      tripletList.emplace_back(k, h, model().pde().integrator().integrate(*e, phi));
 	      head++, j++; // increment counters
 	    }
 	    Di += e->measure(); // update measure of subdomain D_i
@@ -168,7 +221,7 @@ namespace models{
 	for(std::size_t j = 0; j < head; ++j){
 	  tripletList[tail + j].value() /= Di;
 	}
-	D[model().idx()(k,0)] = Di; // store measure of subdomain
+	D[k] = Di; // store measure of subdomain
 	tail += head;
       }
       // here we must be carefull of the type of model (space-only or space-time) we are handling
@@ -187,11 +240,12 @@ namespace models{
       // finalize construction
       Psi_.setFromTriplets(tripletList.begin(), tripletList.end());
       Psi_.makeCompressed();
+      finalize();
     };
 
     // getters
-    SpMatrix<double> Psi_{};  // n x N matrix \Psi = [\Psi]_{ij} = \int_{D_i} \psi_j = \sum_{e \in D_i} \int_{e} \psi_j
-    auto PsiTD() const { return model().Psi().transpose()*D_; }
+    const SpMatrix<double>& Psi() const { return Psi_; }
+    auto PsiTD() const { return Psi_.transpose()*D_; }
     std::size_t n_locs() const { return subdomains_.rows(); }
     const DiagMatrix<double>& D() const { return D_; }
     const DMatrix<int>& locs() const { return subdomains_; }
@@ -199,7 +253,7 @@ namespace models{
     void setSubdomains(const DMatrix<int>& subdomains) {
       model().data().template insert<int>(SPACE_AREAL_BLK, subdomains); }
   };  
-  
+    
 }}
 
 #endif // __SAMPLING_DESIGN_H__

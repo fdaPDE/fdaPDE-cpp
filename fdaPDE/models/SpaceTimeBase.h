@@ -49,23 +49,6 @@ namespace models {
       // correct regularization PDE informations
       pde_->setForcing(pde_->forcingData().rightCols(m - n));
     }
-
-    // impose missing data by setting the (j*n_basis + i)-th row of \Psi to zero if no data
-    // is observed at space-time point (p_i, t_j)
-    // void setNaN() {
-    //   // compute locations indexes where data are not observed
-    //   std::unordered_set<std::size_t> missing_idx;
-    //   for(std::size_t i = 0; i < model().n_locs()*n_time(); ++i) missing_idx.emplace(i);
-    //   for(std::size_t i = 0; i < model().idx().rows(); ++i) missing_idx.erase(model().idx()(i,0));
-    //   // impose NaN at space-time location (p_i, t_j) by setting the (j*n_basis + i)-th row of \Psi to zero
-    //   for(int k = 0; k < model().Psi_.outerSize(); ++k){
-    // 	for(SpMatrix<double>::InnerIterator it(model().Psi_,k); it; ++it){
-    // 	  if(missing_idx.find(it.row()) != missing_idx.end())
-    // 	    it.valueRef() = 0;
-    // 	}
-    //   }
-    //   return;
-    // }
     
     // destructor
     virtual ~SpaceTimeBase() = default;  

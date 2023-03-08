@@ -101,7 +101,6 @@ TEST(STRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_Separable_Monol
   EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );
 }
 
-
 /* test 2
    domain:       c-shaped
    sampling:     locations != nodes
@@ -189,7 +188,6 @@ TEST(STRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable_
   DVector<double> computedBeta = model.beta();
   EXPECT_TRUE( almost_equal(DMatrix<double>(expectedBeta), computedBeta) );
 }
-
 
 /* test 3
    domain:       quasicircular domain
@@ -364,7 +362,6 @@ TEST(STRPDE, Test4_Laplacian_NonParametric_GeostatisticalAtNodes_Parabolic_Itera
   EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );
 }
 
-
 /* test 5
    domain:       unit square [1,1] x [1,1]
    sampling:     locations = nodes, time locations != time nodes
@@ -418,6 +415,65 @@ TEST(STRPDE, Test5_Laplacian_NonParametric_GeostatisticalAtNodes_TimeLocations_S
   // estimate of spatial field \hat f
   SpMatrix<double> expectedSolution;
   Eigen::loadMarket(expectedSolution,   "data/models/STRPDE/2D_test5/sol.mtx");
+  DMatrix<double> computedF = model.f();
+  std::size_t N = computedF.rows();
+  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );
+}
+
+/* test 6
+   domain:         c-shaped
+   space sampling: locations != nodes
+   time sampling:  locations != nodes
+   missing data:   yes
+   penalization:   simple laplacian
+   covariates:     no
+   BC:             no
+   order FE:       1
+   time penalization: separable (mass penalization)
+ */
+TEST(STRPDE, Test6_Laplacian_NonParametric_GeostatisticalAtLocations_TimeLocations_Separable_Monolithic_MissingData) {
+  // define knot vector for B-spline basis
+  DVector<double> time_mesh;
+  time_mesh.resize(21);
+  for(std::size_t i = 0; i < 21; ++i) time_mesh[i] = 1.0/20*i;
+  // define spatial domain and regularizing PDE
+  MeshLoader<Mesh2D<>> domain("c_shaped");
+  auto L = Laplacian();
+  DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements()*3*time_mesh.rows(), 1);
+  PDE problem(domain.mesh, L, u); // definition of regularizing PDE
+  // define statistical model
+  double lambdaS = 1e-3; // smoothing in space
+  double lambdaT = 1e-3; // smoothing in time
+  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparableTag,
+	 Sampling::GeoStatLocations, SolverType::Monolithic> model(problem, time_mesh);
+  model.setLambdaS(lambdaS);
+  model.setLambdaT(lambdaT);
+
+  // load data from .csv files
+  CSVReader<double> reader{};
+  CSVFile<double> yFile; // observation file (with complex missing data pattern)
+  yFile = reader.parseFile("data/models/STRPDE/2D_test6/y.csv");
+  DMatrix<double> y = yFile.toEigen();
+  CSVFile<double> timeLocationsFile;
+  timeLocationsFile = reader.parseFile("data/models/STRPDE/2D_test6/time_locations.csv");
+  DMatrix<double> timeLocations = timeLocationsFile.toEigen();
+  CSVFile<double> spaceLocationsFile;
+  spaceLocationsFile = reader.parseFile("data/models/STRPDE/2D_test6/locs.csv");
+  DMatrix<double> spaceLocations = spaceLocationsFile.toEigen();
+  
+  // set model data
+  BlockFrame<double, int> df;
+  df.stack (OBSERVATIONS_BLK, y);
+  df.insert(SPACE_LOCATIONS_BLK, spaceLocations);
+  df.insert(TIME_LOCATIONS_BLK, timeLocations);
+  model.setData(df);
+
+  model.init();  // initialize model stack
+  model.solve(); // solve smoothing problem
+
+  // estimate of spatial field \hat f
+  SpMatrix<double> expectedSolution;
+  Eigen::loadMarket(expectedSolution,   "data/models/STRPDE/2D_test6/sol.mtx");
   DMatrix<double> computedF = model.f();
   std::size_t N = computedF.rows();
   EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );

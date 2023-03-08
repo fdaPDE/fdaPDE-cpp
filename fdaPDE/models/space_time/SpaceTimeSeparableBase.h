@@ -59,7 +59,6 @@ namespace models{
     // getters
     SparseKroneckerProduct<> R0()  const { return Kronecker(Rt_, pde_->R0()); }
     SparseKroneckerProduct<> R1()  const { return Kronecker(Rt_, pde_->R1()); }
-    SparseKroneckerProduct<> Psi() const { return Kronecker(Phi_, model().Psi_); }
     // matrices proper of separable regularization
     const SpMatrix<double>& Rt()  const { return Rt_; }
     const SpMatrix<double>& Pt()  const { return Pt_; }

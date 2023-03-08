@@ -35,7 +35,6 @@ namespace models {
     const SpMatrix<double>& R0()  const { return pde_->R0(); }    // mass matrix in space
     const SpMatrix<double>& R1()  const { return pde_->R1(); }    // discretization of differential operator L
     const DMatrix<double>&  u()   const { return pde_->force(); } // discretization of forcing term u
-    const SpMatrix<double>& Psi() const { return model().Psi_; }  // matrix of spatial basis evaluation
     inline std::size_t n_time() const { return 1; } // number of time instants, always 1 for space-only problems
 
     // computes and returns R1^T*R0^{-1}*R1

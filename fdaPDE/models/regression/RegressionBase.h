@@ -30,12 +30,12 @@ namespace models {
   public:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
     typedef typename select_regularization_type<Model>::type Base;
-    typedef SamplingDesign<Model, model_traits<Model>::sampling> SamplingType;
-    using Base::pde_;    // differential operator L 
-    using Base::df_;     // BlockFrame for problem's data storage
-    using Base::Psi;     // matrix of spatial basis evaluation at locations p_1 ... p_n
-    using Base::n_basis; // number of basis function over domain D
-    using Base::idx;     // indices of observations
+    typedef SamplingDesign<Model, model_traits<Model>::sampling> SamplingBase;
+    using Base::pde_;        // differential operator L 
+    using Base::df_;         // BlockFrame for problem's data storage
+    using Base::n_basis;     // number of basis function over domain D
+    using Base::idx;         // indices of observations
+    using SamplingBase::Psi; // matrix of spatial basis evaluation at locations p_1 ... p_n
     
     RegressionBase() = default;
     // space-only constructor

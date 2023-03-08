@@ -301,12 +301,12 @@ TEST(GSRPDE, Test5_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable_
   model.solve();
 
   //   **  test correctness of computed results  **   
-  
+
   // estimate of spatial field \hat f
   SpMatrix<double> expectedSolution;
   Eigen::loadMarket(expectedSolution, "data/models/GSRPDE/2D_test5/sol_separable.mtx");
   DMatrix<double> computedF = model.f();
-  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution), computedF, std::pow(0.1, 10)) );  
+  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution), computedF, std::pow(0.1, 10)) );
   // estimate of coefficient vector \hat \beta
   SpMatrix<double> expectedBeta;
   Eigen::loadMarket(expectedBeta, "data/models/GSRPDE/2D_test5/beta_separable.mtx");

@@ -9,9 +9,19 @@ namespace models{
 
   // collection of traits used across the models module
 
+  // base class for model traits
+  template <typename B> struct model_traits;
+  
   // possible solution strategies for a model
   enum SolverType { Monolithic, Iterative };
-  
+  // traits for detection of solution strategy
+  template <typename Model>
+  struct is_solver_monolithic { 
+    static constexpr bool value = model_traits<Model>::solver == SolverType::Monolithic; };
+  template <typename Model>
+  struct is_solver_iterative { 
+    static constexpr bool value = model_traits<Model>::solver == SolverType::Iterative; };
+
   template <typename Model> class ModelBase; // base class for any fdaPDE statistical model
   template <typename Model> class SpaceOnlyBase; // base class for any spatial model
   template <typename Model> class SpaceTimeBase; // base class for any spatio-temporal model
@@ -22,10 +32,7 @@ namespace models{
   struct SpaceOnlyTag {};
   struct SpaceTimeSeparableTag {};
   struct SpaceTimeParabolicTag {};
-  
-  // base class for model traits
-  template <typename B> struct model_traits;
-  
+    
   // trait to detect if a type implements ModelBase (can be regarded as a statistical model). This is the least
   // constraining requirement an algorithm can require on a type
   template <typename T>
@@ -50,9 +57,23 @@ namespace models{
   template <typename Model>
   struct is_space_time {
     static constexpr bool value = !std::is_same<
-      typename model_traits<typename std::decay<Model>::type>::RegularizationType, SpaceOnlyTag>::value;
+      typename model_traits<typename std::decay<Model>::type>::RegularizationType,
+      SpaceOnlyTag>::value;
   };
 
+  template <typename Model>
+  struct is_space_time_separable {
+    static constexpr bool value = std::is_same<
+      typename model_traits<typename std::decay<Model>::type>::RegularizationType,
+      SpaceTimeSeparableTag>::value;
+  };
+  template <typename Model>
+  struct is_space_time_parabolic {
+    static constexpr bool value = std::is_same<
+      typename model_traits<typename std::decay<Model>::type>::RegularizationType,
+      SpaceTimeParabolicTag>::value;
+  };
+  
   // trait to detect if a model has a non-gaussian error distribution
   class Gaussian; // tag used for distinguish a generalized model from a non-generalized one
   template <typename Model>
@@ -122,6 +143,12 @@ namespace models{
   using Base::g_;            /* PDE misfit */				                 \
   using Base::beta_;         /* estimate of coefficient vector for parametric part */    \
 
+  // macro for the import of some common CRTP functionalities. Requires a Model
+  // type to be in the scope of this macro
+#define DEFINE_CRTP_MODEL_UTILS						         \
+  inline const Model& model() const { return static_cast<const Model&>(*this); } \
+  inline Model& model() { return static_cast<Model&>(*this); }		         \
+  
   // standardized definitions for stat model BlockFrame. layers below will make heavy assumptions on
   // the layout of the BlockFrame, use these instead of manually typing the block name when accessing df_
 #define OBSERVATIONS_BLK    "OBSERVATIONS"     // matrix of observations
