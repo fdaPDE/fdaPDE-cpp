@@ -34,17 +34,22 @@ void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::s
   solver.setTolerance(tol_);
   solver.setMaxIterations(max_iter_);
 
-  BlockFrame<double, int> df;
-  df.insert<double>(OBSERVATIONS_BLK, y().transpose()); // move original data to a n_subject() x n_obs() matrix
+  BlockFrame<double, int> df = data();
+  //df.insert<double>(OBSERVATIONS_BLK, y().transpose()); // move original data to a n_subject() x n_obs() matrix
   // define GCV objective for internal smoothing model used by FPIREM
   GCV<SmootherType, StochasticEDF<SmootherType>> GCV(solver.smoother(), 100);
+  std::cout << ":)" << std::endl;
   // wrap GCV into a ScalarField accepted by the OPT module
   ScalarField<model_traits<SmootherType>::n_lambda> f;
   f = [&GCV, &solver](const SVector<model_traits<SmootherType>::n_lambda>& p) -> double {
     // set \lambda and solve smoothing problem on solver
     std::cout << "lambda: " << p << std::endl;
     solver.setLambda(p);
+    std::cout << "settato" << std::endl;
     solver.solve();
+    std::cout << "risolto" << std::endl;
+    std::cout << "GCV" << std::endl;
+    std::cout << GCV.eval() << std::endl;
     // return evaluation of GCV at point
     return GCV.eval();
   };
@@ -56,13 +61,15 @@ void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::s
     solver.setData(df);
     opt.optimize(f, lambda_vect_); // select optimal lambda for this PC
     // compute result given estimated optimal \lambda
+    std::cout << "lambda found \n" << opt.optimum() << std::endl;
+    
     solver.setLambda(opt.optimum());
     solver.solve(); // find minimum of \norm_F{Y - s^T*f}^2 + (s^T*s)*P(f)
     // store result
     loadings_.col(i) = solver.loadings();
     scores_.col(i)   = solver.scores();    
     // subtract computed PC from data
-    df.get<double>(OBSERVATIONS_BLK) -= scores_.col(i)*loadings_.col(i).transpose();
+    df.get<double>(OBSERVATIONS_BLK) -= loadings_.col(i)*scores_.col(i).transpose();
   }
   return;      
 }

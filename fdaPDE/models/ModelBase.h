@@ -52,7 +52,7 @@ namespace models {
     const ADT<M,N,K>& gse() { if(gse_ == nullptr){ gse_ = std::make_shared<ADT<M,N,K>>(domain()); } return *gse_; }
     SVector<model_traits<Model>::n_lambda> lambda() const { return lambda_; }
     bool hasNaN() const { return nan_idxs_.size() != 0; } // true if there are missing data
-    const std::vector<std::size_t> nan_idxs() const { return nan_idxs_; } // return indeces where data are missing
+    const std::list<std::size_t>& nan_idxs() const { return nan_idxs_; } // return indeces where data are missing
     void analyze_nan();
     
     // abstract part of the interface, must be implemented by concrete models
@@ -64,7 +64,7 @@ namespace models {
     std::shared_ptr<ADT<M,N,K>> gse_; // geometric search engine
     BlockFrame<double, int> df_; // blockframe for data storage
     SVector<model_traits<Model>::n_lambda> lambda_; // vector of smoothing parameters
-    std::vector<std::size_t> nan_idxs_; // observations indexes where data is missing
+    std::list<std::size_t> nan_idxs_; // observations indexes where data is missing
     
     // getter to underlying model object
     inline Model& model() { return static_cast<Model&>(*this); }

@@ -53,7 +53,7 @@ TEST(STRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_Separable_Monol
   // define statistical model
   double lambdaS = 0.01; // smoothing in space
   double lambdaT = 0.01; // smoothing in time
-  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparableTag,
+  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparable,
 	 Sampling::GeoStatMeshNodes, SolverType::Monolithic> model(problem, time_mesh);
   model.setLambdaS(lambdaS);
   model.setLambdaT(lambdaT);
@@ -131,7 +131,7 @@ TEST(STRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable_
   locFile = reader.parseFile("data/models/STRPDE/2D_test2/locs.csv");
   DMatrix<double> loc = locFile.toEigen();
 
-  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparableTag,
+  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparable,
 	 Sampling::GeoStatLocations, SolverType::Monolithic> model(problem, time_mesh);
   model.setLambdaS(lambdaS);
   model.setLambdaT(lambdaT);
@@ -236,7 +236,7 @@ TEST(STRPDE, Test3_NonCostantCoefficientsPDE_NonParametric_Areal_Parabolic_Monol
   arealFile = int_reader.parseFile("data/models/STRPDE/2D_test3/incidence_matrix.csv");
   DMatrix<int> areal = arealFile.toEigen();
   
-  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeParabolicTag, Sampling::Areal,
+  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeParabolic, Sampling::Areal,
 	 SolverType::Monolithic> model(problem, time_mesh);
   model.setLambdaS(lambdaS);
   model.setLambdaT(lambdaT);
@@ -312,7 +312,7 @@ TEST(STRPDE, Test4_Laplacian_NonParametric_GeostatisticalAtNodes_Parabolic_Itera
   // define statistical model
   double lambdaS = 1;//0.01; // smoothing in space
   double lambdaT = 1;//0.01; // smoothing in time
-  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeParabolicTag,
+  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeParabolic,
 	 Sampling::GeoStatMeshNodes, SolverType::Iterative> model(problem, time_mesh);
   model.setLambdaS(lambdaS);
   model.setLambdaT(lambdaT);
@@ -386,7 +386,7 @@ TEST(STRPDE, Test5_Laplacian_NonParametric_GeostatisticalAtNodes_TimeLocations_S
   // define statistical model
   double lambdaS = 0.01; // smoothing in space
   double lambdaT = 0.01; // smoothing in time
-  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparableTag,
+  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparable,
 	 Sampling::GeoStatMeshNodes, SolverType::Monolithic> model(problem, time_mesh);
   model.setLambdaS(lambdaS);
   model.setLambdaT(lambdaT);
@@ -444,7 +444,7 @@ TEST(STRPDE, Test6_Laplacian_NonParametric_GeostatisticalAtLocations_TimeLocatio
   // define statistical model
   double lambdaS = 1e-3; // smoothing in space
   double lambdaT = 1e-3; // smoothing in time
-  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparableTag,
+  STRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparable,
 	 Sampling::GeoStatLocations, SolverType::Monolithic> model(problem, time_mesh);
   model.setLambdaS(lambdaS);
   model.setLambdaT(lambdaT);

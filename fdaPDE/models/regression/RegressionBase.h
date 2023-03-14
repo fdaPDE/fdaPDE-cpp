@@ -41,20 +41,20 @@ namespace models {
     // space-only constructor
     template <typename U = Model, // fake type to enable substitution in SFINAE
 	      typename std::enable_if<
-		std::is_same<typename model_traits<U>::RegularizationType, SpaceOnlyTag>::value,
+		std::is_same<typename model_traits<U>::RegularizationType, SpaceOnly>::value,
 		int>::type = 0> 
     RegressionBase(const PDE& pde) 
       : select_regularization_type<Model>::type(pde),
-      SamplingDesign<Model, model_traits<Model>::sampling>() {}; // s can either be DMatrix<double> or DMatrix<int>
+      SamplingDesign<Model, model_traits<Model>::sampling>() {};
 
     // space-time constructor
     template <typename U = Model, // fake type to enable substitution in SFINAE
 	      typename std::enable_if<!
-		std::is_same<typename model_traits<U>::RegularizationType, SpaceOnlyTag>::value,
+		std::is_same<typename model_traits<U>::RegularizationType, SpaceOnly>::value,
 		int>::type = 0> 
     RegressionBase(const PDE& pde, const DVector<double>& time)
       : select_regularization_type<Model>::type(pde, time),
-      SamplingDesign<Model, model_traits<Model>::sampling>() {}; // s can either be DMatrix<double> or DMatrix<int>
+      SamplingDesign<Model, model_traits<Model>::sampling>() {};
     
     // copy constructor, copy only pde object (as a consequence also the problem domain)
     RegressionBase(const RegressionBase& rhs) { pde_ = rhs.pde_; }
@@ -66,7 +66,10 @@ namespace models {
     const DiagMatrix<double>& W() const { return W_; } // observations' weights
     const DMatrix<double>& XtWX() const { return XtWX_; } 
     const Eigen::PartialPivLU<DMatrix<double>>& invXtWX() const { return invXtWX_; }
-    
+    const DMatrix<double>& f() const { return f_; }; // estimate of spatial field
+    const DMatrix<double>& g() const { return g_; }; // PDE misfit
+    const DMatrix<double>& beta() const { return beta_; }; // estimate of regression coefficients
+
     // utilities
     bool hasCovariates() const { return q() != 0; } // true if the model has a parametric part
     bool hasWeights() const { return df_.hasBlock(WEIGHTS_BLK); } // true if heteroscedastic observation are assumed
@@ -84,29 +87,25 @@ namespace models {
       return W_*x - W_*X()*z;
     }
 
-    // perform proper preprocessing of input data and initialization of regression base.
-    // This is called in ModelBase::setData() and executed after initialization of the block frame
-    void preprocess() {
-      DVector<double> W = DVector<double>::Ones(Base::n_obs()); // default to homoscedastic observations
-      if(hasWeights()){ // heteroscedastic observations
-	for(std::size_t i = 0; i < Base::n_obs(); ++i){
+    // Call this if the internal status of the model must be updated after a change in the data
+    // (Called by ModelBase::setData() and executed after initialization of the block frame)
+    void update_to_data() {
+      // default to homoscedastic observations
+      DVector<double> W = DVector<double>::Ones(Base::n_obs());
+      if(hasWeights()){ // update observations' weights if provided
+	for(std::size_t i = 0; i < Base::n_obs(); ++i)
 	  W[idx()(i,0)] = df_.template get<double>(WEIGHTS_BLK).coeff(idx()(i,0),0);
-	}
       }
       W_ = W.asDiagonal();
-      
-      if(hasCovariates()){ // parametric model
+
+      // model is semi-parametric
+      if(hasCovariates()){
 	// compute q x q dense matrix X^T*W*X and its factorization
 	XtWX_ = X().transpose()*W_*X();
 	invXtWX_ = XtWX_.partialPivLu();
       }
     }
-
-    // getters to problem solution
-    const DMatrix<double>& f() const    { return f_; };
-    const DMatrix<double>& g() const    { return g_; };
-    const DMatrix<double>& beta() const { return beta_; };
-    
+        
     // computes fitted values \hat y = \Psi*f_ + X*beta_
     DMatrix<double> fitted() const {
       DMatrix<double> hat_y = Psi()*f_;

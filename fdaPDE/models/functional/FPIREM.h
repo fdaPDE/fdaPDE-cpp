@@ -4,8 +4,8 @@
 #include <Eigen/SVD>
 #include "../../core/utils/Symbols.h"
 #include "../ModelTraits.h"
-using fdaPDE::models::SpaceOnlyTag;
-using fdaPDE::models::SpaceTimeSeparableTag;
+using fdaPDE::models::SpaceOnly;
+using fdaPDE::models::SpaceTimeSeparable;
 #include "../regression/SRPDE.h"
 #include "../regression/STRPDE.h"
 
@@ -21,7 +21,7 @@ namespace models{
       // space-only problem
       SRPDE <typename model_traits<Model_>::PDE, model_traits<Model_>::sampling>,
       // space-time problem
-      STRPDE<typename model_traits<Model_>::PDE, SpaceTimeSeparableTag, model_traits<Model_>::sampling,
+      STRPDE<typename model_traits<Model_>::PDE, SpaceTimeSeparable, model_traits<Model_>::sampling,
 	     SolverType::Monolithic>
       >::type;
   };
@@ -48,38 +48,52 @@ namespace models{
     FPIREM(const Model& m) {
       // define internal problem solver required for computation of loadings
       if constexpr(!is_space_time<Model_>::value) // space-only
-	solver_ = typename FPIREM_internal_solver<Model_>::type(m.pde(), m.locs());
+	solver_ = typename FPIREM_internal_solver<Model_>::type(m.pde());
       else // space-time
-	solver_ = typename FPIREM_internal_solver<Model_>::type(m.pde(), m.time_domain(), m.locs());
+	solver_ = typename FPIREM_internal_solver<Model_>::type(m.pde(), m.time_domain());
       // partially initialize internal solver
       solver_.init_pde();
-      solver_.init_regularization();
+      std::cout << "initializzato" << std::endl;
     }
     
     // setters
     void setLambda(const SVector<model_traits<Model_>::n_lambda>& lambda) {
+      std::cout << "set_lambda" << std::endl;
+
       solver_.setLambda(lambda); // set lambda
       solver_.init_model();      // update solver's matrices to reflect the update on smoothing parameters
+
+      std::cout << "set_lambda" << std::endl;
+
     }
     void setData(const BlockFrame<double,int>& df) {
+      std::cout << "set_data" << std::endl;
+
       df_ = df;
       // allocate space for solver's data.
-      solver_.setData(BlockFrame<double,int>(df_.get<double>(OBSERVATIONS_BLK).cols()));
+      solver_.setData(df);
+      solver_.init_regularization();
       solver_.init_sampling(); // init sampling informations (now is known how many data point we expect)
       // reserve space for solution
-      loadings_.resize(df_.get<double>(OBSERVATIONS_BLK).cols());
-      scores_.resize  (df_.get<double>(OBSERVATIONS_BLK).rows());
+      loadings_.resize(df_.get<double>(OBSERVATIONS_BLK).rows());
+      scores_.resize  (df_.get<double>(OBSERVATIONS_BLK).cols());
       // perform Singular Value Decomposition of Y to initialize PC loadings once
-      Eigen::JacobiSVD<DMatrix<double>> svd(df_.get<double>(OBSERVATIONS_BLK), Eigen::ComputeThinU|Eigen::ComputeThinV);
+      Eigen::JacobiSVD<DMatrix<double>> svd(df_.get<double>(OBSERVATIONS_BLK).transpose(), Eigen::ComputeThinU|Eigen::ComputeThinV);
       loadings_ = svd.matrixV().col(0);
+
+      std::cout << "set_data" << std::endl;
     }
     // control iterative algorithm parameters
     void setTolerance(double tol) { tol_ = tol; }
     void setMaxIterations(std::size_t max_iter) { max_iter_ = max_iter; }
+
+    void analyze_nan() { solver_.analyze_nan(); }
+    void set_nan() { solver_.set_nan(); }
     
     // solves the minimization problem \norm_F{Y - s^T*f}^2 + (s^T*s)*P(f)
     void solve() {
-      DMatrix<double> Y_ = df_.get<double>(OBSERVATIONS_BLK); // n_subject() x n_obs() matrix
+      std::cout << "solve" << std::endl;
+      DMatrix<double> Y_ = df_.get<double>(OBSERVATIONS_BLK).transpose(); // n_subject() x n_obs() matrix
       // algorithm initialization
       std::size_t iter_ = 0;
       double Jold = std::numeric_limits<double>::max();
@@ -90,14 +104,21 @@ namespace models{
 	// compute score vector s as Y*f/\norm(Y*f)
 	scores_ = Y_*loadings_;
 	scores_ = scores_/scores_.norm();
+
+	std::cout << "scores: " << scores_.topRows(10) << std::endl;
+	
 	// compute loadings by solving either an SRPDE or STRPDE (separable regularization) problem
 	solver_.data().template insert<double>(OBSERVATIONS_BLK, Y_.transpose()*scores_); // Y^T*s
+	//solver_.analyze_nan(); solver_.set_nan();
 	solver_.solve();
 	// prepare for next iteration
 	iter_++;
 	Jold = Jnew;
 	// update value of discretized functional
 	loadings_ = solver_.fitted(); // \Psi*f
+
+	std::cout << "loadings: " << loadings_.topRows(10) << std::endl;
+	
 	Jnew = (Y_ - scores_*loadings_.transpose()).squaredNorm() + solver_.g().squaredNorm();
       }
       // normalize loadings and unnormalize scores

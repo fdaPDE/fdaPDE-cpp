@@ -109,7 +109,7 @@ namespace calibration{
   //    dGCV(\lambda)  = \frac{2n}{edf^2}[ \sigma^2 * Tr[dS] + a ]
   //    ddGCV(\lambda) = \frac{2n}{edf^2}[ \frac{1}{edf}(3*\sigma^2*Tr[dS] + 4*a)*Tr[dS] + \sigma^2*Tr[ddS] + b ]    
   template <typename M>
-  class ExactGCV<M, fdaPDE::models::SpaceOnlyTag> : public GCV<M, ExactEDF<M>> {
+  class ExactGCV<M, fdaPDE::models::SpaceOnly> : public GCV<M, ExactEDF<M>> {
   private:
     // import symbols from base
     typedef GCV<M, ExactEDF<M>> Base;

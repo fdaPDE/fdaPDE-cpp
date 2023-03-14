@@ -12,9 +12,12 @@ using fdaPDE::models::SpaceTimeBase;
 namespace fdaPDE{
 namespace models{
 
+  // base class for separable regularization solved using either a moholitic or iterative solution strategy
+  template <typename Model, SolverType Solver> class SpaceTimeSeparableBase;
+  
   // base class for separable regularization
   template <typename Model>
-    class SpaceTimeSeparableBase : public SpaceTimeBase<Model> {
+    class SpaceTimeSeparableBase<Model, SolverType::Monolithic> : public SpaceTimeBase<Model> {
   private:
     // let \phi_i the i-th basis function in time
     SpMatrix<double> Rt_;  // mass matrix in time: [Rt_]_{ij} = \int_{[0,T]} \phi_i*\phi_j

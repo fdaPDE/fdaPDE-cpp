@@ -54,9 +54,15 @@ namespace models {
 
     // constructor
     FPCA() = default;
-    template <typename... SamplingData>
-    FPCA(const PDE& pde, const SamplingData&... s) : Base(pde, s...) {};
-
+    // space-only constructor
+    template <typename U = RegularizationType,
+	      typename std::enable_if< std::is_same<U, SpaceOnly>::value, int>::type = 0> 
+    FPCA(const PDE& pde) : Base(pde) {};
+    // space-time constructor
+    template <typename U = RegularizationType,
+	      typename std::enable_if<!std::is_same<U, SpaceOnly>::value, int>::type = 0> 
+    FPCA(const PDE& pde, const DVector<double>& time) : Base(pde, time) {};
+    
     void init() { return; } // overload Base initialization since there is nothing to init
     virtual void solve();   // compute principal components
     
@@ -82,9 +88,9 @@ namespace models {
   };
   // specialization for separable regularization
   template <typename PDE_, Sampling SamplingDesign, typename lambda_selection_strategy>
-  struct model_traits<FPCA<PDE_, fdaPDE::models::SpaceTimeSeparableTag, SamplingDesign, lambda_selection_strategy>> {
+  struct model_traits<FPCA<PDE_, fdaPDE::models::SpaceTimeSeparable, SamplingDesign, lambda_selection_strategy>> {
     typedef PDE_ PDE;
-    typedef fdaPDE::models::SpaceTimeSeparableTag RegularizationType;
+    typedef fdaPDE::models::SpaceTimeSeparable RegularizationType;
     typedef SplineBasis<3> TimeBasis; // use cubic B-splines
     static constexpr Sampling sampling = SamplingDesign;
     static constexpr SolverType solver = SolverType::Monolithic;

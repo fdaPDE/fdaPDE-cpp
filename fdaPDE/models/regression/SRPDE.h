@@ -64,7 +64,7 @@ namespace models{
   template <typename PDE_, Sampling SamplingDesign>
   struct model_traits<SRPDE<PDE_, SamplingDesign>> {
     typedef PDE_ PDE;
-    typedef SpaceOnlyTag RegularizationType;
+    typedef SpaceOnly RegularizationType;
     static constexpr Sampling sampling = SamplingDesign;
     static constexpr SolverType solver = SolverType::Monolithic;
     static constexpr int n_lambda = 1;

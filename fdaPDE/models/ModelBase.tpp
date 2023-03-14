@@ -14,11 +14,11 @@ void ModelBase<Model>::init(){
 
 // a trait to detect if a model requires a preprocessing step
 template <typename Model, typename T = void>
-struct requires_preprocess : std::false_type {};
+struct requires_update_to_data : std::false_type {};
 
 template <typename Model> 
-struct requires_preprocess<
-  Model, std::void_t<decltype(std::declval<Model>().preprocess())>
+struct requires_update_to_data<
+  Model, std::void_t<decltype(std::declval<Model>().update_to_data())>
   > : std::true_type {};
 
 // set model's data from blockframe
@@ -32,10 +32,8 @@ void ModelBase<Model>::setData(const BlockFrame<double, int>& df) {
     for(std::size_t i = 0; i < n; ++i) idx(i,0) = i;
     df_.insert(INDEXES_BLK, idx);
   }
-  // perform preprocessing of data depending on model type, if model has a defined preprocess() step
-  if constexpr(requires_preprocess<Model>::value){
-    model().preprocess();
-  }
+  // update model to data, if requested
+  if constexpr(requires_update_to_data<Model>::value) model().update_to_data();
   return;
 }
 
@@ -43,6 +41,7 @@ void ModelBase<Model>::setData(const BlockFrame<double, int>& df) {
 template <typename Model>
 void ModelBase<Model>::analyze_nan() {
   BLOCK_FRAME_SANITY_CHECKS;
+  nan_idxs_.clear(); // empty nan vector
   for(std::size_t i = 0; i < n_obs(); ++i){
     if(std::isnan(y()(i,0))){ // requires -ffast-math compiler flag to be disabled, NaN not detected otherwise
       nan_idxs_.emplace_back(i);

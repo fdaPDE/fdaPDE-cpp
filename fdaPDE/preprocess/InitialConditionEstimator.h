@@ -15,9 +15,10 @@ using fdaPDE::calibration::ExactEDF;
 // models module imports
 #include "../models/ModelTraits.h"
 using fdaPDE::models::is_generalized;
+using fdaPDE::models::is_space_time_parabolic;
 #include "../models/regression/SRPDE.h"
 #include "../models/regression/GSRPDE.h"
-using fdaPDE::models::SpaceTimeParabolicTag;
+using fdaPDE::models::SpaceTimeParabolic;
 using fdaPDE::models::SRPDE;
 using fdaPDE::models::GSRPDE;
 
@@ -33,8 +34,8 @@ namespace preprocess {
       // STRPDE model
       SRPDE <PDE, model_traits<Model_>::sampling>,
       // generalized STRPDE model
-      GSRPDE<PDE, typename fdaPDE::models::SpaceOnlyTag, model_traits<Model_>::sampling,
-	     model_traits<Model_>::solver, typename model_traits<Model_>::DistributionType>
+      GSRPDE<PDE, fdaPDE::models::SpaceOnly, model_traits<Model_>::sampling, model_traits<Model_>::solver,
+	     typename model_traits<Model_>::DistributionType>
       >::type;
   };
   
@@ -42,7 +43,7 @@ namespace preprocess {
   // the estimation is obtained selecting the best spatial field estimate obtained from an SRPDE model via GCV optimization
   template <typename Model>
   class InitialConditionEstimator {
-    static_assert(std::is_same<typename model_traits<Model>::RegularizationType, SpaceTimeParabolicTag>::value,
+    static_assert(is_space_time_parabolic<Model>::value,
 		  "Initial condition estimation is for parabolic regularization only");
   private:
     Model& model_;

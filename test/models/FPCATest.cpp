@@ -14,7 +14,7 @@ using fdaPDE::models::FPCA;
 #include "../fdaPDE/models/SamplingDesign.h"
 using fdaPDE::models::Sampling;
 #include "../../fdaPDE/models/ModelTraits.h"
-using fdaPDE::models::SpaceOnlyTag;
+using fdaPDE::models::SpaceOnly;
 using fdaPDE::models::SolverType;
 
 #include "../utils/MeshLoader.h"
@@ -33,7 +33,7 @@ using fdaPDE::testing::almost_equal;
    BC:           no
    order FE:     1
  */
-/*TEST(FPCA, Test1_Laplacian_GeostatisticalAtNodes) {
+TEST(FPCA, Test1_Laplacian_GeostatisticalAtNodes) {
   // define domain and regularizing PDE
   MeshLoader<Mesh2D<>> domain("unit_square");
   auto L = Laplacian();
@@ -43,7 +43,7 @@ using fdaPDE::testing::almost_equal;
   // define statistical model
   // use optimal lambda to avoid possible numerical issues
   double lambda = 1e-2;
-  FPCA<decltype(problem), SpaceOnlyTag, fdaPDE::models::Sampling::GeoStatMeshNodes,
+  FPCA<decltype(problem), SpaceOnly, fdaPDE::models::Sampling::GeoStatMeshNodes,
        fdaPDE::models::gcv_lambda_selection> model(problem);
   model.setLambdaS(lambda);
   
@@ -55,7 +55,7 @@ using fdaPDE::testing::almost_equal;
 
   // set model data
   BlockFrame<double, int> df;
-  df.insert("y", DMatrix<double>(y.transpose()));
+  df.insert(OBSERVATIONS_BLK, DMatrix<double>(y.transpose()));
   model.setData(df);
 
   std::vector<SVector<1>> lambdas;
@@ -65,6 +65,8 @@ using fdaPDE::testing::almost_equal;
   // solve smoothing problem
   model.init();
   model.solve();
+
+  std::cout << model.loadings() << std::endl;
   
   //   **  test correctness of computed results  **
   
@@ -78,7 +80,7 @@ using fdaPDE::testing::almost_equal;
   // DMatrix<double> computedScores = model.scores();
   // EXPECT_TRUE( almost_equal(DMatrix<double>(expectedScores), computedScores) );
   
-  }*/
+  }
 
 
 /* test 2
@@ -107,7 +109,7 @@ using fdaPDE::testing::almost_equal;
   double lambdaS = 1e-2;
   double lambdaT = 1e-2;
   // defaults to monolithic solution
-  FPCA<decltype(problem), fdaPDE::models::SpaceTimeSeparableTag,
+  FPCA<decltype(problem), fdaPDE::models::SpaceTimeSeparable,
        fdaPDE::models::Sampling::GeoStatMeshNodes, fdaPDE::models::fixed_lambda> model(problem, time_mesh);
   model.setLambdaS(lambdaS);
   model.setLambdaT(lambdaT);
@@ -152,7 +154,7 @@ using fdaPDE::testing::almost_equal;
    BC:           no
    order FE:     1
  */
-TEST(FPCA, Test2_Laplacian_GeostatisticalAtNodes_Separable_Monolithic) {
+/*TEST(FPCA, Test2_Laplacian_GeostatisticalAtNodes_Separable_Monolithic) {
   // define time domain
   DVector<double> time_mesh;
   time_mesh.resize(11);
@@ -170,7 +172,7 @@ TEST(FPCA, Test2_Laplacian_GeostatisticalAtNodes_Separable_Monolithic) {
   double lambdaS = 1e-4;
   double lambdaT = 1e-4;
   // defaults to monolithic solution
-  FPCA<decltype(problem), fdaPDE::models::SpaceTimeSeparableTag,
+  FPCA<decltype(problem), fdaPDE::models::SpaceTimeSeparable,
        fdaPDE::models::Sampling::GeoStatMeshNodes, fdaPDE::models::gcv_lambda_selection> model;
   model.setPDE(problem);
   model.setTimeDomain(time_mesh);
@@ -202,7 +204,7 @@ TEST(FPCA, Test2_Laplacian_GeostatisticalAtNodes_Separable_Monolithic) {
 
   //std::cout << model.loadings() << std::endl;
   
-  /*   **  test correctness of computed results  **   */
+  //   **  test correctness of computed results  ** 
   
   // SpMatrix<double> expectedLoadings;
   // Eigen::loadMarket(expectedLoadings, "data/models/FPCA/2D_test1/loadings.mtx");
@@ -214,4 +216,4 @@ TEST(FPCA, Test2_Laplacian_GeostatisticalAtNodes_Separable_Monolithic) {
   // DMatrix<double> computedScores = model.scores();
   // EXPECT_TRUE( almost_equal(DMatrix<double>(expectedScores), computedScores) );
   
-}
+}*/

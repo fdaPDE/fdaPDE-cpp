@@ -28,24 +28,24 @@ void SRPDE<PDE, SamplingDesign>::solve() {
     b_.block(0,0, n_basis(),1) = -PsiTD()*W()*y();
     // solve linear system A_*x = b_
     sol = invA_.solve(b_);
-    f_ = sol.head(A_.rows()/2);
+    f_ = sol.head(n_basis());
   }else{ // parametric case
     // update rhs of SR-PDE linear system
     b_.block(0,0, n_basis(),1) = -PsiTD()*lmbQ(y()); // -\Psi^T*D*Q*z
     
     // definition of matrices U and V  for application of woodbury formula
     U_ = DMatrix<double>::Zero(A_.rows(), q());
-    U_.block(0,0, A_.rows()/2, q()) = PsiTD()*W()*X();
+    U_.block(0,0, n_basis(), q()) = PsiTD()*W()*X();
     V_ = DMatrix<double>::Zero(q(), A_.rows());
-    V_.block(0,0, q(), A_.rows()/2) = X().transpose()*W()*Psi();
+    V_.block(0,0, q(), n_basis()) = X().transpose()*W()*Psi();
     // solve system (A_ + U_*(X^T*W_*X)*V_)x = b using woodbury formula from NLA module
     sol = SMW<>().solve(invA_, U_, XtWX(), V_, b_);
     // store result of smoothing 
-    f_    = sol.head(A_.rows()/2);
+    f_    = sol.head(n_basis());
     beta_ = invXtWX().solve(X().transpose()*W())*(y() - Psi()*f_);
   }
   // store PDE misfit
-  g_ = sol.tail(A_.rows()/2);
+  g_ = sol.tail(n_basis());
   return;
 }
 

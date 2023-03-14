@@ -78,16 +78,15 @@ namespace models{
 	solver = typename FPIRLS_internal_solver<Model>::type(m_.pde(), m_.time_domain());
 	// in case of parabolic regularization derive initial condition from input model
 	if constexpr(std::is_same<typename model_traits<Model_>::RegularizationType,
-		     SpaceTimeParabolicTag>::value)
+		     SpaceTimeParabolic>::value)
 	  solver.setInitialCondition(m_.s());
       }
       solver.setLambda(m_.lambda());
       solver.init_pde();
       solver.init_regularization();
-      
       // prepare data for solver, copy covariates if present
-      BlockFrame<double, int> df = m_.data();
-      if(m_.hasCovariates()) df.insert<double>(DESIGN_MATRIX_BLK, m_.X()); 
+      solver.data() = m_.data();
+      solver.init_sampling();
       
       // algorithm stops when an enought small difference between two consecutive values of the J is recordered
       double J_old = tolerance_+1; double J_new = 0;
@@ -102,11 +101,11 @@ namespace models{
 	
 	// solve weighted least square problem
 	// \argmin_{\beta, f} [ \norm(W^{1/2}(y - X\beta - f_n))^2 + \lambda \int_D (Lf - u)^2 ]
-	df.insert<double>(OBSERVATIONS_BLK, py_); // insert should overwrite existing block, if any is present
-	df.insert<double>(WEIGHTS_BLK, W_);
-	solver.setData(df);
-	solver.init_sampling();
-	solver.init_model(); // init model to adapt for changing in weights
+	solver.data().template insert<double>(OBSERVATIONS_BLK, py_);
+	solver.data().template insert<double>(WEIGHTS_BLK, W_);
+	// update solver to change in the data
+	solver.update_to_data();
+	solver.init_model(); 
 	solver.solve();
 	
 	// extract estimates from solver

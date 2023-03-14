@@ -14,7 +14,7 @@ using fdaPDE::core::FEM::SpaceVaryingAdvection;
 using fdaPDE::models::GSRPDE;
 #include "../../fdaPDE/models/ModelTraits.h"
 using fdaPDE::models::SolverType;
-using fdaPDE::models::SpaceOnlyTag;
+using fdaPDE::models::SpaceOnly;
 #include "../../fdaPDE/models/SamplingDesign.h"
 using fdaPDE::models::Sampling;
 #include "../../fdaPDE/models/regression/Distributions.h"
@@ -56,7 +56,7 @@ TEST(GSRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_Poisson) {
   
   // define statistical model
   double lambda = 1e-3;
-  GSRPDE<decltype(problem), SpaceOnlyTag, fdaPDE::models::GeoStatLocations,
+  GSRPDE<decltype(problem), SpaceOnly, fdaPDE::models::GeoStatLocations,
 	 SolverType::Monolithic, fdaPDE::models::Poisson> model(problem);
   model.setLambdaS(lambda);
   
@@ -109,7 +109,7 @@ TEST(GSRPDE, Test2_Laplacian_NonParametric_GeostatisticalLocations_Bernulli) {
   
   // define statistical model
   double lambda = 1e-3;
-  GSRPDE<decltype(problem), SpaceOnlyTag, fdaPDE::models::GeoStatLocations,
+  GSRPDE<decltype(problem), SpaceOnly, fdaPDE::models::GeoStatLocations,
 	 SolverType::Monolithic, fdaPDE::models::Bernulli> model(problem);
   model.setLambdaS(lambda);
   
@@ -162,7 +162,7 @@ TEST(GSRPDE, Test3_Laplacian_NonParametric_GeostatisticalLocations_Exponential) 
   
   // define statistical model
   double lambda = 1e-3;
-  GSRPDE<decltype(problem), SpaceOnlyTag, fdaPDE::models::GeoStatLocations,
+  GSRPDE<decltype(problem), SpaceOnly, fdaPDE::models::GeoStatLocations,
 	 SolverType::Monolithic, fdaPDE::models::Exponential> model(problem);
   model.setLambdaS(lambda);
   
@@ -215,7 +215,7 @@ TEST(GSRPDE, Test4_Laplacian_NonParametric_GeostatisticalLocations_Gamma) {
   
   // define statistical model
   double lambda = 1e-3;
-  GSRPDE<decltype(problem), SpaceOnlyTag, fdaPDE::models::GeoStatLocations,
+  GSRPDE<decltype(problem), SpaceOnly, fdaPDE::models::GeoStatLocations,
 	 SolverType::Monolithic, fdaPDE::models::Gamma> model(problem);
   model.setLambdaS(lambda);
   
@@ -275,7 +275,7 @@ TEST(GSRPDE, Test5_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable_
   locFile = reader.parseFile("data/models/GSRPDE/2D_test5/locs.csv");
   DMatrix<double> loc = locFile.toEigen();
 
-  GSRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparableTag,
+  GSRPDE<decltype(problem), fdaPDE::models::SpaceTimeSeparable,
 	 fdaPDE::models::GeoStatLocations, SolverType::Monolithic, fdaPDE::models::Gamma>
     model(problem, time_mesh);
   model.setLambdaS(lambdaS);
@@ -345,7 +345,7 @@ TEST(GSRPDE, Test6_Laplacian_SemiParametric_GeostatisticalAtLocations_Parabolic_
   locFile = reader.parseFile("data/models/GSRPDE/2D_test5/locs.csv");
   DMatrix<double> loc = locFile.toEigen();
   
-  GSRPDE<decltype(problem), fdaPDE::models::SpaceTimeParabolicTag,
+  GSRPDE<decltype(problem), fdaPDE::models::SpaceTimeParabolic,
 	 Sampling::GeoStatLocations, SolverType::Monolithic, fdaPDE::models::Gamma>
     model(problem, time_mesh);
   model.setLambdaS(lambdaS);

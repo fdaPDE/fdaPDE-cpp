@@ -17,7 +17,7 @@ namespace models {
   template <typename Model>
   class SpaceTimeBase : public ModelBase<Model> {
     // check Model refers to the space-time case
-    static_assert(!std::is_same<typename model_traits<Model>::RegularizationType, SpaceOnlyTag>::value);
+    static_assert(is_space_time<Model>::value);
   protected:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
     typedef ModelBase<Model> Base;

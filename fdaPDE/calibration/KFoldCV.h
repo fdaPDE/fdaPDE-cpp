@@ -36,11 +36,9 @@ namespace calibration{
 	else
 	  trainIdx[j >= m*(i+1) ? j-m : j] = j;
       }
-
-      // create views of train and test sets
+      // create views
       BlockView<Sparse, double, int> train = data(trainIdx);
       BlockView<Sparse, double, int> test  = data(testIdx);
-    
       return std::make_pair(train, test);
     }
     
@@ -65,14 +63,15 @@ namespace calibration{
 	// create train test partition
 	std::pair<BlockView<Sparse, double, int>, BlockView<Sparse, double, int>> train_test = split(data, fold);
 	// decouple training from testing
-	BlockFrame<double, int> train = train_test.first.extract();
+	BlockFrame<double, int> train = train_test.first.extrude();
 	BlockFrame<double, int> test = train_test.second.extract();
-
+	
 	// fixed a data split, cycle over all lambda values
 	for(std::size_t j = 0; j < lambdas.size(); ++j){
 	  Model m(model_);  // create a fresh copy of current model (O(1) operation)
 	  m.setData(train);
 	  m.setLambda(lambdas[j]);  // set current lambda
+	  
 	  // fit the model on training set
 	  m.solve();
 	  // evaluate model score on the fold left out (test set)

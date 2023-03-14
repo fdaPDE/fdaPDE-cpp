@@ -25,13 +25,13 @@ namespace models{
   template <typename Model> class ModelBase; // base class for any fdaPDE statistical model
   template <typename Model> class SpaceOnlyBase; // base class for any spatial model
   template <typename Model> class SpaceTimeBase; // base class for any spatio-temporal model
-  template <typename Model> class SpaceTimeSeparableBase; // spatio-temporal model with separable regularization
-  template <typename Model, SolverType Solver> class SpaceTimeParabolicBase; // spatio-temporal model with parabolic regularization
+  template <typename Model, SolverType solver> class SpaceTimeSeparableBase; // spatio-temporal, separable regularization
+  template <typename Model, SolverType Solver> class SpaceTimeParabolicBase; // spatio-temporal, parabolic regularization
   
   // empty classes for tagging regularization types
-  struct SpaceOnlyTag {};
-  struct SpaceTimeSeparableTag {};
-  struct SpaceTimeParabolicTag {};
+  struct SpaceOnly {};
+  struct SpaceTimeSeparable {};
+  struct SpaceTimeParabolic {};
     
   // trait to detect if a type implements ModelBase (can be regarded as a statistical model). This is the least
   // constraining requirement an algorithm can require on a type
@@ -40,15 +40,15 @@ namespace models{
     static constexpr bool value = fdaPDE::is_base_of_template<ModelBase, T>::value;
   };  
   
-  // trait for the selection of the type of regularization on the base of the property of a model
+  // trait for the selection of the type of regularization
   template <typename Model>
   struct select_regularization_type {
     using type = typename std::conditional<
-      std::is_same<typename model_traits<Model>::RegularizationType, SpaceOnlyTag>::value,
+      std::is_same<typename model_traits<Model>::RegularizationType, SpaceOnly>::value,
       SpaceOnlyBase<Model>,
       typename std::conditional<
-        std::is_same<typename model_traits<Model>::RegularizationType, SpaceTimeSeparableTag>::value,
-        SpaceTimeSeparableBase<Model>,
+        std::is_same<typename model_traits<Model>::RegularizationType, SpaceTimeSeparable>::value,
+        SpaceTimeSeparableBase<Model, model_traits<Model>::solver>,
         SpaceTimeParabolicBase<Model, model_traits<Model>::solver>>::type
       >::type;
   };
@@ -58,20 +58,20 @@ namespace models{
   struct is_space_time {
     static constexpr bool value = !std::is_same<
       typename model_traits<typename std::decay<Model>::type>::RegularizationType,
-      SpaceOnlyTag>::value;
+      SpaceOnly>::value;
   };
 
   template <typename Model>
   struct is_space_time_separable {
     static constexpr bool value = std::is_same<
       typename model_traits<typename std::decay<Model>::type>::RegularizationType,
-      SpaceTimeSeparableTag>::value;
+      SpaceTimeSeparable>::value;
   };
   template <typename Model>
   struct is_space_time_parabolic {
     static constexpr bool value = std::is_same<
       typename model_traits<typename std::decay<Model>::type>::RegularizationType,
-      SpaceTimeParabolicTag>::value;
+      SpaceTimeParabolic>::value;
   };
   
   // trait to detect if a model has a non-gaussian error distribution
@@ -86,7 +86,7 @@ namespace models{
   template <typename RegularizationType>
   class n_smoothing_parameters {
     static constexpr int compute() {
-      if constexpr(!std::is_same<RegularizationType, SpaceOnlyTag>::value) return 2;
+      if constexpr(!std::is_same<RegularizationType, SpaceOnly>::value) return 2;
       else return 1;
     }
   public:

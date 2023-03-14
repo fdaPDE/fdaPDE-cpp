@@ -38,11 +38,11 @@ namespace models{
     GSRPDE() = default;
     // space-only constructor
     template <typename U = RegularizationType,
-	      typename std::enable_if< std::is_same<U, SpaceOnlyTag>::value, int>::type = 0> 
+	      typename std::enable_if< std::is_same<U, SpaceOnly>::value, int>::type = 0> 
     GSRPDE(const PDE& pde) : Base(pde) {};
     // space-time constructor
     template <typename U = RegularizationType,
-	      typename std::enable_if<!std::is_same<U, SpaceOnlyTag>::value, int>::type = 0> 
+	      typename std::enable_if<!std::is_same<U, SpaceOnly>::value, int>::type = 0> 
     GSRPDE(const PDE& pde, const DVector<double>& time) : Base(pde, time) {};
 
     // setter
@@ -74,9 +74,9 @@ namespace models{
 
   // specialization for separable regularization
   template <typename PDE_, Sampling SamplingDesign, SolverType Solver, typename DistributionType_>
-  struct model_traits<GSRPDE<PDE_, fdaPDE::models::SpaceTimeSeparableTag, SamplingDesign, Solver, DistributionType_>> {
+  struct model_traits<GSRPDE<PDE_, fdaPDE::models::SpaceTimeSeparable, SamplingDesign, Solver, DistributionType_>> {
     typedef PDE_ PDE;
-    typedef fdaPDE::models::SpaceTimeSeparableTag RegularizationType;
+    typedef fdaPDE::models::SpaceTimeSeparable RegularizationType;
     typedef SplineBasis<3> TimeBasis; // use cubic B-splines
     static constexpr Sampling sampling = SamplingDesign;
     static constexpr SolverType solver = Solver;

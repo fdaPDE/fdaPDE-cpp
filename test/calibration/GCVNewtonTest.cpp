@@ -65,7 +65,7 @@ TEST(GCV_SRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_NewtonExact)
   model.init(); // init model
 
   // define GCV function and optimize
-  ExactGCV<decltype(model), fdaPDE::models::SpaceOnlyTag> GCV(model);
+  ExactGCV<decltype(model), fdaPDE::models::SpaceOnly> GCV(model);
   NewtonOptimizer<1> opt(10, 0.05, 1);
 
   Logger<decltype(opt)> opt_logger;

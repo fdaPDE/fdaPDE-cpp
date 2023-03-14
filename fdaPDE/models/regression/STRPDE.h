@@ -34,12 +34,12 @@ namespace models{
 
   // implementation of STRPDE for separable space-time regularization
   template <typename PDE, Sampling SamplingDesign>
-  class STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign, SolverType::Monolithic>
-    : public RegressionBase<STRPDE<PDE, SpaceTimeSeparableTag, SamplingDesign, SolverType::Monolithic>>, public iGCV {
+  class STRPDE<PDE, SpaceTimeSeparable, SamplingDesign, SolverType::Monolithic>
+    : public RegressionBase<STRPDE<PDE, SpaceTimeSeparable, SamplingDesign, SolverType::Monolithic>>, public iGCV {
     // compile time checks
     static_assert(std::is_base_of<PDEBase, PDE>::value);
   private:
-    typedef SpaceTimeSeparableTag TimeRegularization;
+    typedef SpaceTimeSeparable TimeRegularization;
     typedef RegressionBase<STRPDE<PDE, TimeRegularization, SamplingDesign, SolverType::Monolithic>> Base;
     SpMatrix<double> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
     fdaPDE::SparseLU<SpMatrix<double>> invA_; // factorization of matrix A
@@ -98,9 +98,9 @@ namespace models{
     virtual ~STRPDE() = default;
   };
   template <typename PDE_, Sampling SamplingDesign>
-  struct model_traits<STRPDE<PDE_, SpaceTimeSeparableTag, SamplingDesign, SolverType::Monolithic>> {
+  struct model_traits<STRPDE<PDE_, SpaceTimeSeparable, SamplingDesign, SolverType::Monolithic>> {
     typedef PDE_ PDE;
-    typedef SpaceTimeSeparableTag RegularizationType;
+    typedef SpaceTimeSeparable RegularizationType;
     typedef SplineBasis<3> TimeBasis; // use cubic B-splines
     static constexpr Sampling sampling = SamplingDesign;
     static constexpr SolverType solver = SolverType::Monolithic;
@@ -110,13 +110,13 @@ namespace models{
 
   // implementation of STRPDE for parabolic space-time regularization, monolithic solver
   template <typename PDE, Sampling SamplingDesign>
-  class STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign, SolverType::Monolithic>
-    : public RegressionBase<STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign, SolverType::Monolithic>>/*, public iGCV*/ {
+  class STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, SolverType::Monolithic>
+    : public RegressionBase<STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, SolverType::Monolithic>>/*, public iGCV*/ {
     // compile time checks
     static_assert(std::is_base_of<PDEBase, PDE>::value);
   private:
-    typedef SpaceTimeParabolicTag TimeRegularization;
-    typedef RegressionBase<STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign, SolverType::Monolithic>> Base;
+    typedef SpaceTimeParabolic TimeRegularization;
+    typedef RegressionBase<STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, SolverType::Monolithic>> Base;
     SpMatrix<double> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
     fdaPDE::SparseLU<SpMatrix<double>> invA_; // factorization of matrix A
     DVector<double> b_{};  // right hand side of problem's linear system (1 x 2N vector)
@@ -149,9 +149,9 @@ namespace models{
     virtual ~STRPDE() = default;
   };
   template <typename PDE_, Sampling SamplingDesign>
-  struct model_traits<STRPDE<PDE_, SpaceTimeParabolicTag, SamplingDesign, SolverType::Monolithic>> {
+  struct model_traits<STRPDE<PDE_, SpaceTimeParabolic, SamplingDesign, SolverType::Monolithic>> {
     typedef PDE_ PDE;
-    typedef SpaceTimeParabolicTag RegularizationType;
+    typedef SpaceTimeParabolic RegularizationType;
     static constexpr Sampling sampling = SamplingDesign;
     static constexpr SolverType solver = SolverType::Monolithic;
     static constexpr int n_lambda = 2;
@@ -160,13 +160,13 @@ namespace models{
   
   // implementation of STRPDE for parabolic space-time regularization, monolithic solver
   template <typename PDE, Sampling SamplingDesign>
-  class STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign, SolverType::Iterative>
-    : public RegressionBase<STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign, SolverType::Iterative>>/*, public iGCV*/ {
+  class STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, SolverType::Iterative>
+    : public RegressionBase<STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, SolverType::Iterative>>/*, public iGCV*/ {
     // compile time checks
     static_assert(std::is_base_of<PDEBase, PDE>::value);
   private:
-    typedef SpaceTimeParabolicTag TimeRegularization;
-    typedef RegressionBase<STRPDE<PDE, SpaceTimeParabolicTag, SamplingDesign, SolverType::Iterative>> Base;
+    typedef SpaceTimeParabolic TimeRegularization;
+    typedef RegressionBase<STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, SolverType::Iterative>> Base;
     SpMatrix<double> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
     fdaPDE::SparseLU<SpMatrix<double>> invA_; // factorization of matrix A
     DVector<double> b_{};  // right hand side of problem's linear system (1 x 2N vector)
@@ -202,9 +202,9 @@ namespace models{
     virtual ~STRPDE() = default;
   };
   template <typename PDE_, Sampling SamplingDesign>
-  struct model_traits<STRPDE<PDE_, SpaceTimeParabolicTag, SamplingDesign, SolverType::Iterative>> {
+  struct model_traits<STRPDE<PDE_, SpaceTimeParabolic, SamplingDesign, SolverType::Iterative>> {
     typedef PDE_ PDE;
-    typedef SpaceTimeParabolicTag RegularizationType;
+    typedef SpaceTimeParabolic RegularizationType;
     static constexpr Sampling sampling = SamplingDesign;
     static constexpr SolverType solver = SolverType::Iterative;
     static constexpr int n_lambda = 2;
