@@ -74,9 +74,9 @@ namespace models{
       }
       solver.setLambda(m_.lambda());
       solver.init_pde();
-      solver.init_regularization();
       // prepare data for solver, copy covariates if present
       solver.data() = m_.data();
+      solver.init_regularization();
       solver.init_sampling();
       
       // algorithm stops when an enought small difference between two consecutive values of the J is recordered
