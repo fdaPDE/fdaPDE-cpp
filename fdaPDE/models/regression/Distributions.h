@@ -65,7 +65,7 @@ namespace models {
       return;
     }
     // vectorized operations
-    DMatrix<double> variance(const DMatrix<double>& x) {
+    DMatrix<double> variance(const DMatrix<double>& x) const {
       return x; }                                            // x
     DMatrix<double> link(const DMatrix<double>& x) const {
       return x.array().log(); }                              // log(x)
@@ -90,7 +90,7 @@ namespace models {
     double mean() const { return 1/l_; }
     void preprocess(DVector<double>& data) const { return; }
     // vectorized operations
-    DMatrix<double> variance(const DMatrix<double>& x) {
+    DMatrix<double> variance(const DMatrix<double>& x) const {
       return x.array().pow(2); }                             // x^2   
     DMatrix<double> link(const DMatrix<double>& x) const {
       return (-x).array().inverse(); }                       // -1/x
@@ -116,7 +116,7 @@ namespace models {
     double mean() const { return k_*theta_; }
     void preprocess(DVector<double>& data) const { return; }
     // vectorized operations
-    DMatrix<double> variance(const DMatrix<double>& x) {
+    DMatrix<double> variance(const DMatrix<double>& x) const {
       return x.array().pow(2); }                             // x^2
     DMatrix<double> link(const DMatrix<double>& x) const {
       return (-x).array().inverse(); }                       // -1/x

@@ -44,17 +44,12 @@ namespace models{
     std::size_t max_iter_;
     std::size_t k_ = 0; // FPIRLS iteration index
     
-    // let g() the link function of the considered distribution and y = (y_1, y_2, ..., y_n) the (1 x n) vector of observations
     DVector<double> mu_{};    // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : mean vector at step k
-    DVector<double> theta_{}; // \theta^k = [ g(\mu^k_1), ..., g(\mu^k_n) ]
-    DVector<double> G_{};     // G^k = diag(g'(\mu^k_1), ..., g'(\mu^k_n))
-    DVector<double> py_{};    // \tilde z^k = G^k(y-u^k) + \theta^k : pseudo-observations vector at step k
-    DVector<double> V_{};     // V^k = diag(v(\mu^k_1), ..., v(\mu^k_n)) : variance matrix at step k
-    DVector<double> W_{};     // W^k = ((G^k)^{-2})*((V^k)^{-1})
     // parameters at convergece
     DVector<double> f_{};     // estimate of non-parametric spatial field
     DVector<double> g_{};     // PDE misfit
-    DVector<double> beta_{};  // estimate of coefficient vector    
+    DVector<double> beta_{};  // estimate of coefficient vector
+    DVector<double> W_{};     // weight matrix
   public:
     // constructor
     FPIRLS(const Model& m, double tolerance, std::size_t max_iter)
@@ -62,11 +57,7 @@ namespace models{
     
     // executes the FPIRLS algorithm
     void compute() {
-      static_assert(is_regression_model<Model>::value);
-      // get number of data and preallocate space
-      std::size_t n = m_.n_obs();
-      theta_.resize(n); G_.resize(n); py_.resize(n); V_.resize(n); W_.resize(n);
-      
+      static_assert(is_regression_model<Model>::value);      
       // algorithm initialization
       mu_ = m_.y();
       distribution_.preprocess(mu_);
@@ -92,18 +83,14 @@ namespace models{
       double J_old = tolerance_+1; double J_new = 0;
       // start loop
       while(k_ < max_iter_ && std::abs(J_new - J_old) > tolerance_){
-        theta_ = distribution_.link(mu_);
-	G_ = distribution_.der_link(mu_);
-	V_ = distribution_.variance(mu_);
-	W_ = ((G_.array().pow(2)*V_.array()).inverse()).matrix();
-	// compute pseudo observations
-	py_ = G_.asDiagonal()*(m_.y() - mu_) + theta_;
+	// request weight matrix W and pseudo-observation vector \tilde y from model
+	auto pair = m_.compute(mu_);
 	
 	// solve weighted least square problem
 	// \argmin_{\beta, f} [ \norm(W^{1/2}(y - X\beta - f_n))^2 + \lambda \int_D (Lf - u)^2 ]
-	solver.data().template insert<double>(OBSERVATIONS_BLK, py_);
-	solver.data().template insert<double>(WEIGHTS_BLK, W_);
-	// update solver to change in the data
+	solver.data().template insert<double>(OBSERVATIONS_BLK, std::get<1>(pair));
+	solver.data().template insert<double>(WEIGHTS_BLK, std::get<0>(pair));
+	// update solver to change in the weight matrix
 	solver.update_to_data();
 	solver.init_model(); 
 	solver.solve();
@@ -122,6 +109,8 @@ namespace models{
 	// prepare for next iteration
 	k_++; J_old = J_new; J_new = J;
       }
+      // store weight matrix at convergence
+      W_ = std::get<0>(m_.compute(mu_));
       return;
     }
 

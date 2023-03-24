@@ -14,6 +14,19 @@ void GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>::solv
   return;
 }
 
+template <typename PDE, typename RegularizationType, Sampling SamplingDesign,
+	  SolverType Solver, typename Distribution>
+std::tuple<DVector<double>&, DVector<double>&>
+GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>::compute(const DVector<double>& mu) {
+  DVector<double> theta_ = distribution_.link(mu); // \theta^k = [ g(\mu^k_1), ..., g(\mu^k_n) ]
+  DVector<double> G_ = distribution_.der_link(mu); // G^k = diag(g'(\mu^k_1), ..., g'(\mu^k_n))
+  DVector<double> V_ = distribution_.variance(mu); // V^k = diag(v(\mu^k_1), ..., v(\mu^k_n))
+  // compute weight matrix and pseudo-observation vector
+  pW_ = ((G_.array().pow(2)*V_.array()).inverse()).matrix();
+  py_ = G_.asDiagonal()*(y() - mu) + theta_;
+  return std::tie(pW_, py_);
+}
+
 // required to support GCV based smoothing parameter selection
 // in case of a GSRPDE model we have T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1), with Q = W*(I-H)
 template <typename PDE, typename RegularizationType, Sampling SamplingDesign,

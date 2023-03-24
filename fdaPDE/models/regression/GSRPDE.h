@@ -25,15 +25,19 @@ namespace models{
     // compile time checks
     static_assert(std::is_base_of<PDEBase, PDE>::value);
   private:
-    typedef RegressionBase<GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>> Base;   
-    DiagMatrix<double> W_; // weight matrix obtained at FPIRLS convergence
-
+    typedef RegressionBase<GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>> Base;
+    DiagMatrix<double> W_;
+    Distribution distribution_{};
+    DVector<double> py_{}; // \tilde y^k = G^k(y-u^k) + \theta^k
+    DVector<double> pW_;   // diagonal of W^k = ((G^k)^{-2})*((V^k)^{-1}) 
+    
     // FPIRLS parameters (set to default)
     std::size_t max_iter_ = 15;
     double tol_ = 0.0002020;
   public:
     IMPORT_REGRESSION_SYMBOLS;
     using Base::lambdaS; // smoothing parameter in space
+    
     // constructor
     GSRPDE() = default;
     // space-only constructor
@@ -52,6 +56,10 @@ namespace models{
     // ModelBase implementation
     void init_model() { return; }
     virtual void solve(); // finds a solution to the smoothing problem
+
+    // required by FPIRLS (computes weight matrix and vector of pseudo-observations)
+    // returns a pair of references to W^k = ((G^k)^{-2})*((V^k)^{-1}) and \tilde y^k = G^k(y-u^k) + \theta^k
+    std::tuple<DVector<double>&, DVector<double>&> compute(const DVector<double>& mu);
     
     // iGCV interface implementation
     virtual const DMatrix<double>& T(); // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
