@@ -65,7 +65,8 @@ TEST(ScalarFieldTest, HessianApproximation) {
   std::function<SMatrix<2>(SVector<2>)> hess = field.deriveTwice(0.01);
   // define evaluation point and true hessian matrix
   SVector<2> p(1,1);
-  SMatrix<2> hessian = SMatrix<2>{ {std::exp(1), 2}, {2, 1} };
+  SMatrix<2> hessian;
+  hessian << std::exp(1), 2, 2, 1;
   // test if the obtained gradient is approximated correctly (truncation error is of order O(h^2), h is the step size)
   EXPECT_TRUE((hess(p) - hessian).squaredNorm() < std::pow(0.01, 2));
 }
@@ -96,7 +97,8 @@ TEST(ScalarFieldTest, DiscontinuousField) {
 
   // get the hessian function
   std::function<SMatrix<2>(SVector<2>)> hess = field.deriveTwice(0.01);
-  SMatrix<2> hessian = SMatrix<2>{ {0, 0}, {0, 0} };
+  SMatrix<2> hessian;
+  hessian << 0,0,0,0;
   // test if the obtained gradient is approximated correctly (truncation error is of order O(h^2), h is the step size)
   EXPECT_TRUE((hess(p) - hessian).squaredNorm() < std::pow(0.01, 2));  
 }
@@ -247,7 +249,9 @@ TEST(ScalarFieldTest, TwiceDifferentiableField) {
   std::function<double(SVector<2>)> dx = [](SVector<2> x) -> double { return 3*std::pow(x[0], 2); };
   std::function<double(SVector<2>)> dy = [](SVector<2> x) -> double { return 1; };
   std::function<SMatrix<2>(SVector<2>)> hess  = [](SVector<2> x) -> SMatrix<2> {
-    return SMatrix<2>{ {6*x[0], 0}, {0, 0} };
+    SMatrix<2> H;
+    H << 6*x[0],0,0,0;
+    return H;
   };
   
   // wrap all in a twice differentiable scalar field
@@ -255,7 +259,8 @@ TEST(ScalarFieldTest, TwiceDifferentiableField) {
   TwiceDifferentiableScalarField<2> tdf(baseField, {dx, dy}, hess);
   // define evaluation point
   SVector<2> p(1,1);
-  SMatrix<2> hessian = SMatrix<2>{ {6,0}, {0,0} };
+  SMatrix<2> hessian;
+  hessian << 6,0,0,0;
   // check deriveTwice() calls exact hessian
   ASSERT_FALSE( (sf.deriveTwice()(p) - tdf.deriveTwice()(p)).norm() < DOUBLE_TOLERANCE );
   // check exact hessian is actually called
