@@ -12,6 +12,7 @@ using fdaPDE::core::MESH::ADT;
 #include "../core/utils/DataStructures/BlockFrame.h"
 #include "ModelTraits.h"
 using fdaPDE::models::model_traits;
+#include "ModelMacros.h"
 
 namespace fdaPDE {
 namespace models {

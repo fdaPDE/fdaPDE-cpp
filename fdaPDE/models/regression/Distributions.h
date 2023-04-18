@@ -8,8 +8,6 @@
 namespace fdaPDE {
 namespace models {
 
-  // definition of common distributions from the exponential family
-  
   class Bernulli {
   private:
     double p_; // distribution parameter

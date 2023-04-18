@@ -9,6 +9,7 @@ using fdaPDE::core::NLA::SMW;
 #include "Distributions.h"
 #include <cstddef>
 #include "../ModelTraits.h"
+#include "../ModelMacros.h"
 #include "SRPDE.h"
 #include "STRPDE.h"
 
@@ -114,7 +115,8 @@ namespace models{
       return;
     }
 
-    // getters 
+    // getters
+    const DVector<double>& mu() const { return mu_; } // mean vector at convergence
     const DVector<double>& weights() const { return W_; } // weights matrix W at convergence
     const DVector<double>& beta() const { return beta_; } // estimate of coefficient vector 
     const DVector<double>& f() const { return f_; } // estimate of spatial field 

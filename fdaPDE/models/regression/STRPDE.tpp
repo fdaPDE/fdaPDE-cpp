@@ -5,10 +5,10 @@
 template <typename PDE, Sampling SamplingDesign>
 void STRPDE<PDE, SpaceTimeSeparable, SamplingDesign, SolverType::Monolithic>::init_model() {
   // assemble system matrix for the nonparameteric part of the model
-  SparseKroneckerProduct<> P = Kronecker(Pt(), pde().R0());  
+  if(is_empty(P_)) P_ = Kronecker(Pt(), pde().R0());  
   SparseBlockMatrix<double,2,2>
-    A(-PsiTD()*W()*Psi()-lambdaT()*P, lambdaS()*R1().transpose(),
-      lambdaS()*R1(),                 lambdaS()*R0()            );
+    A(-PsiTD()*W()*Psi()-lambdaT()*P_, lambdaS()*R1().transpose(),
+      lambdaS()*R1(),                  lambdaS()*R0()            );
   // cache system matrix for reuse
   A_ = A.derived();
   invA_.compute(A_);
@@ -29,7 +29,6 @@ void STRPDE<PDE, SpaceTimeSeparable, SamplingDesign, SolverType::Monolithic>::so
     b_.block(0,0, A_.rows()/2,1) = -PsiTD()*W()*y();
     // solve linear system A_*x = b_
     sol = invA_.solve(b_);
-    // store result of smoothing
     f_ = sol.head(A_.rows()/2);
   }else{ // parametric case
     // update rhs of STR-PDE linear system
@@ -58,7 +57,7 @@ void STRPDE<PDE, SpaceTimeSeparable, SamplingDesign, SolverType::Monolithic>::so
 template <typename PDE, Sampling SamplingDesign>
 void STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, SolverType::Monolithic>::init_model() {
   // assemble system matrix for the nonparameteric part of the model
-  SparseKroneckerProduct<> L_ = Kronecker(L(), pde().R0());
+  if(is_empty(L_)) L_ = Kronecker(L(), pde().R0());
   SparseBlockMatrix<double,2,2>
     A(-PsiTD()*W()*Psi(),              lambdaS()*(R1() + lambdaT()*L_).transpose(),
       lambdaS()*(R1() + lambdaT()*L_), lambdaS()*R0()                             );
@@ -82,7 +81,6 @@ void STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, SolverType::Monolithic>::so
     b_.block(0,0, A_.rows()/2,1) = -PsiTD()*W()*y();
     // solve linear system A_*x = b_
     sol = invA_.solve(b_);
-    // store result of smoothing
     f_ = sol.head(A_.rows()/2);
   }else{ // parametric case
     // rhs of STR-PDE linear system

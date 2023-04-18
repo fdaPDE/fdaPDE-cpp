@@ -3,19 +3,17 @@
 
 #include <memory>
 #include <type_traits>
-// CORE imports
 #include "../../core/utils/Symbols.h"
 #include "../../core/FEM/PDE.h"
 using fdaPDE::core::FEM::PDEBase;
 #include "../ModelBase.h"
+#include "../ModelMacros.h"
 #include "../../core/NLA/SparseBlockMatrix.h"
 using fdaPDE::core::NLA::SparseBlockMatrix;
 #include "../../core/NLA/SMW.h"
 using fdaPDE::core::NLA::SMW;
-// calibration module imports
 #include "../../calibration/iGCV.h"
 using fdaPDE::calibration::iGCV;
-// regression module imports
 #include "../SamplingDesign.h"
 #include "RegressionBase.h"
 using fdaPDE::models::RegressionBase;
@@ -32,10 +30,6 @@ namespace models{
     SpMatrix<double> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
     fdaPDE::SparseLU<SpMatrix<double>> invA_; // factorization of matrix A
     DVector<double> b_{}; // right hand side of problem's linear system (1 x 2N vector)
-
-    // matrices related to woodbury decomposition
-    DMatrix<double> U_{};
-    DMatrix<double> V_{};  
   public:
     IMPORT_REGRESSION_SYMBOLS;
     using Base::lambdaS; // smoothing parameter in space
@@ -56,8 +50,6 @@ namespace models{
     // getters
     const SpMatrix<double>& A() const { return A_; }
     const fdaPDE::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
-    const DMatrix<double>& U() const { return U_; }
-    const DMatrix<double>& V() const { return V_; }
     
     virtual ~SRPDE() = default;
   };

@@ -5,7 +5,7 @@
 #include "../ModelBase.h"
 #include "../SamplingDesign.h"
 #include "../ModelTraits.h"
-using fdaPDE::models::select_regularization_type;
+#include "../ModelMacros.h"
 #include "../SpaceOnlyBase.h"
 #include "../SpaceTimeBase.h"
 #include "../space_time/SpaceTimeSeparableBase.h"
@@ -23,6 +23,10 @@ namespace models {
     DMatrix<double> XtWX_{}; // q x q dense matrix X^T*W*X
     Eigen::PartialPivLU<DMatrix<double>> invXtWX_{}; // factorization of the dense q x q matrix XtWX_.
 
+    // matrices required for Woodbury decomposition
+    DMatrix<double> U_;  // [\Psi^T*D*W*X, 0] 
+    DMatrix<double> V_;  // [X^T*W*\Psi,   0]
+    
     // room for problem solution
     DMatrix<double> f_{};    // estimate of the spatial field (1 x N vector)
     DMatrix<double> g_{};    // PDE misfit
@@ -69,6 +73,8 @@ namespace models {
     const DMatrix<double>& f() const { return f_; }; // estimate of spatial field
     const DMatrix<double>& g() const { return g_; }; // PDE misfit
     const DMatrix<double>& beta() const { return beta_; }; // estimate of regression coefficients
+    const DMatrix<double>& U() const { return U_; }
+    const DMatrix<double>& V() const { return V_; }
 
     // utilities
     bool hasCovariates() const { return q() != 0; } // true if the model has a parametric part
@@ -81,6 +87,7 @@ namespace models {
     //    return Wx - WXz = W(I-H)x = Qx
     // it is required to having assigned a design matrix X to the model before calling this method
     DMatrix<double> lmbQ(const DMatrix<double>& x) const {
+      if(!hasCovariates()) return W_*x;
       DMatrix<double> v = X().transpose()*W_*x; // X^T*W*x
       DMatrix<double> z = invXtWX_.solve(v);  // (X^T*W*X)^{-1}*X^T*W*x
       // compute W*x - W*X*z = W*x - (W*X*(X^T*W*X)^{-1}*X^T*W)*x = W(I - H)*x = Q*x
@@ -108,7 +115,7 @@ namespace models {
         
     // computes fitted values \hat y = \Psi*f_ + X*beta_
     DMatrix<double> fitted() const {
-      DMatrix<double> hat_y = Psi()*f_;
+      DMatrix<double> hat_y = SamplingBase::cachePsi()*f_;
       if(hasCovariates()) hat_y += X()*beta_;
       return hat_y;
     }

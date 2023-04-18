@@ -3,7 +3,6 @@
 
 #include <memory>
 #include <type_traits>
-// CORE imports
 #include "../../core/utils/Symbols.h"
 #include "../../core/FEM/PDE.h"
 using fdaPDE::core::FEM::PDEBase;
@@ -17,14 +16,11 @@ using fdaPDE::core::NLA::SparseKroneckerProduct;
 using fdaPDE::core::NLA::Kronecker;
 #include "../../core/utils/DataStructures/BlockVector.h"
 using fdaPDE::BlockVector;
-// calibration module imports
 #include "../../calibration/iGCV.h"
 using fdaPDE::calibration::iGCV;
-// regression module imports
 #include "RegressionBase.h"
-using fdaPDE::models::RegressionBase;
 #include "../ModelTraits.h"
-using fdaPDE::models::Gaussian;
+#include "../ModelMacros.h"
 
 namespace fdaPDE{
 namespace models{
@@ -45,9 +41,7 @@ namespace models{
     fdaPDE::SparseLU<SpMatrix<double>> invA_; // factorization of matrix A
     DVector<double> b_{};  // right hand side of problem's linear system (1 x 2N vector)
 
-    // matrices related to woodbury decomposition
-    DMatrix<double> U_{};
-    DMatrix<double> V_{};
+    SpMatrix<double> P_; // Pt \kron R0
   public:
     // import commonly defined symbols from base
     IMPORT_REGRESSION_SYMBOLS;
@@ -66,7 +60,7 @@ namespace models{
     // iGCV interface implementation
     virtual const DMatrix<double>& T() { // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
       // compute value of R = R1^T*R0^{-1}*R1, cache for possible reuse
-      if(R_.size() == 0){
+      if(is_empty(R_)){
 	invR0_.compute(R0());
 	R_ = R1().transpose()*invR0_.solve(R1());
       }
@@ -92,8 +86,6 @@ namespace models{
     // getters
     const SpMatrix<double>& A() const { return A_; }
     const fdaPDE::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
-    const DMatrix<double>& U() const { return U_; }
-    const DMatrix<double>& V() const { return V_; }
     
     virtual ~STRPDE() = default;
   };
@@ -105,7 +97,6 @@ namespace models{
     static constexpr Sampling sampling = SamplingDesign;
     static constexpr SolverType solver = SolverType::Monolithic;
     static constexpr int n_lambda = 2;
-    typedef Gaussian DistributionType;
   };
 
   // implementation of STRPDE for parabolic space-time regularization, monolithic solver
@@ -121,9 +112,7 @@ namespace models{
     fdaPDE::SparseLU<SpMatrix<double>> invA_; // factorization of matrix A
     DVector<double> b_{};  // right hand side of problem's linear system (1 x 2N vector)
 
-    // matrices related to woodbury decomposition
-    DMatrix<double> U_{};
-    DMatrix<double> V_{};    
+    SpMatrix<double> L_; // L \kron R0
   public:
     // import commonly defined symbols from base
     IMPORT_REGRESSION_SYMBOLS;
@@ -145,6 +134,10 @@ namespace models{
     // virtual const DMatrix<double>& Q(); // Q = W(I - H) = W - W*X*(X^T*W*X)^{-1}X^T*W
     // returns the euclidian norm of y - \hat y
     // virtual double norm(const DMatrix<double>& obs, const DMatrix<double>& fitted) const;
+
+    // getters
+    const SpMatrix<double>& A() const { return A_; }
+    const fdaPDE::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
     
     virtual ~STRPDE() = default;
   };
@@ -155,7 +148,6 @@ namespace models{
     static constexpr Sampling sampling = SamplingDesign;
     static constexpr SolverType solver = SolverType::Monolithic;
     static constexpr int n_lambda = 2;
-    typedef Gaussian DistributionType;
   };
   
   // implementation of STRPDE for parabolic space-time regularization, monolithic solver
@@ -208,7 +200,6 @@ namespace models{
     static constexpr Sampling sampling = SamplingDesign;
     static constexpr SolverType solver = SolverType::Iterative;
     static constexpr int n_lambda = 2;
-    typedef Gaussian DistributionType;
   };
   
 #include "STRPDE.tpp"

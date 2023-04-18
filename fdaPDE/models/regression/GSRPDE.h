@@ -3,13 +3,12 @@
 
 #include <memory>
 #include <type_traits>
-// CORE imports
 #include "../../core/utils/Symbols.h"
 #include "../../core/FEM/PDE.h"
 using fdaPDE::core::FEM::PDEBase;
 #include "../ModelBase.h"
 #include "../ModelTraits.h"
-// calibration module imports
+#include "../ModelMacros.h"
 #include "../../calibration/iGCV.h"
 using fdaPDE::calibration::iGCV;
 #include "FPIRLS.h"
