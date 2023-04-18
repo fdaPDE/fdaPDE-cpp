@@ -21,7 +21,7 @@ namespace models{
   template <typename Model>
   class SpaceTimeParabolicBase<Model, SolverType::Monolithic> : public SpaceTimeBase<Model> {
     static_assert(is_parabolic<typename model_traits<Model>::PDE::BilinearFormType>::value,
-		  "you have asked for parabolic smoothing but using a non-parabolic differential operator");
+		  "you have asked for parabolic regularization but using a non-parabolic differential operator");
   private:
     // let m the number of time points
     DMatrix<double> s_;    // N x 1 initial condition vector
@@ -29,8 +29,13 @@ namespace models{
     SpMatrix<double> Im_;  // m x m sparse identity matrix (assembled once and cached for reuse)
     SpMatrix<double> L_;   // m x m matrix associated with the derivation in time
     double DeltaT_;        // time step (assumes equidistant points in time)
+    SpMatrix<double> R0_;  // Im \kron R0 (R0: discretization of the identity operator)
+    SpMatrix<double> R1_;  // Im \kron R1 (R1: discretization of the differential operator L in the regularizing PDE)
 
-    SpMatrix<double> pen_; // discretized regularizing term: (Im \kron R1 + L \kron R0)^T*(I_m \kron R0)^{-1}*(Im \kron R1 + L \kron R0)
+    // quantites related to discretization of the penalty term
+    SpMatrix<double> penT_; // discretization of the time derivative: L \kron R0
+    fdaPDE::SparseLU<SpMatrix<double>> invR0_; // factorization of Im \kron R0
+    SpMatrix<double> pen_;  // discretized regularizing term: (Im \kron R1 + L \kron R0)^T*(I_m \kron R0)^{-1}*(Im \kron R1 + L \kron R0)
   public:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
     typedef typename model_traits<Model>::RegularizationType TimeRegularization; // regularization in time
@@ -38,6 +43,8 @@ namespace models{
     using Base::pde_;  // regularizing term in space
     using Base::model; // underlying model object
     using Base::time_; // time interval [0,T]
+    using Base::lambdaS; // smoothing parameter in space
+    using Base::lambdaT; // smoothing parameter in time
     
     // constructor
     SpaceTimeParabolicBase() = default;
@@ -59,42 +66,44 @@ namespace models{
       // start assembly loop
       double invDeltaT = 1.0/DeltaT_;
       tripletList.emplace_back(0,0, invDeltaT);
-      for(std::size_t i = 1; i < m_-1; ++i){
+      for(std::size_t i = 1; i < m_; ++i){
 	tripletList.emplace_back(i,   i,  invDeltaT);
 	tripletList.emplace_back(i, i-1, -invDeltaT);
       }
-      tripletList.emplace_back(m_-1,m_-2, -invDeltaT);
-      tripletList.emplace_back(m_-1,m_-1,  invDeltaT);
       // finalize construction
       L_.resize(m_,m_);
       L_.setFromTriplets(tripletList.begin(), tripletList.end());
       L_.makeCompressed();
+      // compute tensorized matrices
+      R0_ = Kronecker(Im_, pde_->R0());
+      R1_ = Kronecker(Im_, pde_->R1());
     } 
     
     // getters
-    SparseKroneckerProduct<> R0()  const { return Kronecker(Im_, pde_->R0()); }
-    SparseKroneckerProduct<> R1()  const { return Kronecker(Im_, pde_->R1()); }
+    const SpMatrix<double>& R0()  const { return R0_; }
+    const SpMatrix<double>& R1()  const { return R1_; }
     // matrices proper of separable regularization
     const SpMatrix<double>& L() const { return L_; }
     // return discretized force corrected by initial conditions
     const DMatrix<double>& u() {
-      u_ = pde_->force();
-      // correct first n rows of discretized force as (u_1 + R0*s/DeltaT)
-      u_.block(0,0, model().n_basis(),1) += (1.0/DeltaT_)*(pde_->R0()*s_);
+      if(is_empty(u_)){ // compute once and cache
+	u_ = pde_->force();
+	// correct first n rows of discretized force as (u_1 + R0*s/DeltaT)
+	u_.block(0,0, model().n_basis(),1) += (1.0/DeltaT_)*(pde_->R0()*s_);
+      }
       return u_;
     }
     const DMatrix<double>& s() { return s_; } // initial condition
     double DeltaT() const { return DeltaT_; }
 
-    // computes and returns (Im \kron R1 + L \kron R0)^T*(I_m \kron R0)^{-1}*(Im \kron R1 + L \kron R0)
-    const SpMatrix<double>& pen() {
-      if(pen_.size() == 0){ // compute once and cache result
-	fdaPDE::SparseLU<SpMatrix<double>> invR0_;
+    // computes and cache matrices (Im \kron R0)^{-1} and L \kron R0
+    // returns an expression encoding \lambdaS*((Im \kron R1 + \lambda_T*(L \kron R0))^T*(I_m \kron R0)^{-1}*(Im \kron R1 + \lambda_T*(L \kron R0)))
+    auto pen() {
+      if(is_empty(pen_)){ // compute once and cache result
 	invR0_.compute(R0());
-	// (Im \kron R1 + L \kron R0)^T*(I_m \kron R0)^{-1}*(Im \kron R1 + L \kron R0)
-	pen_ = (R1() + Kronecker(L_, pde_->R0())).transpose()*invR0_.solve(R1() + Kronecker(L_, pde_->R0()));
+	penT_ = Kronecker(L_, pde_->R0());	
       }
-      return pen_;
+      return lambdaS()*(R1() + lambdaT()*penT_).transpose()*invR0_.solve(R1() + lambdaT()*penT_);
     }
     
     // setters
@@ -108,7 +117,7 @@ namespace models{
   template <typename Model>
   class SpaceTimeParabolicBase<Model, SolverType::Iterative> : public SpaceTimeBase<Model> {
     static_assert(is_parabolic<typename model_traits<Model>::PDE::BilinearFormType>::value,
-		  "you have asked for parabolic smoothing but using a non-parabolic differential operator");
+		  "you have asked for parabolic regularization but using a non-parabolic differential operator");
   protected:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
     typedef typename model_traits<Model>::RegularizationType TimeRegularization; // regularization in time

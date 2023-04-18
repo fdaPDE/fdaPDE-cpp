@@ -37,14 +37,14 @@ namespace models {
     const DMatrix<double>&  u()   const { return pde_->force(); } // discretization of forcing term u
     inline std::size_t n_time() const { return 1; } // number of time instants, always 1 for space-only problems
 
-    // computes and returns R1^T*R0^{-1}*R1
-    const SpMatrix<double>& pen() {
-      if(pen_.size() == 0){ // compute once and cache result
+    // computes and cache R1^T*R0^{-1}*R1. Returns an expression encoding \lambda_S*(R1^T*R0^{-1}*R1)
+    auto pen() {
+      if(is_empty(pen_)) {
 	fdaPDE::SparseLU<SpMatrix<double>> invR0_;
-	invR0_.compute(R0());
+	invR0_.compute(pde_->R0());
 	pen_ = R1().transpose()*invR0_.solve(R1()); // R1^T*R0^{-1}*R1
       }
-      return pen_;
+      return lambdaS()*pen_;
     }
     
     // destructor
