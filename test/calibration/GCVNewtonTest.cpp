@@ -13,7 +13,6 @@ using fdaPDE::core::FEM::SpaceVaryingAdvection;
 #include "../fdaPDE/models/regression/SRPDE.h"
 using fdaPDE::models::SRPDE;
 #include "../fdaPDE/models/SamplingDesign.h"
-using fdaPDE::models::Sampling;
 #include "../fdaPDE/calibration/GCV.h"
 using fdaPDE::calibration::FiniteDifferenceGCV;
 using fdaPDE::calibration::ExactGCV;
@@ -50,7 +49,7 @@ TEST(GCV_SRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_NewtonExact)
   PDE problem(domain.mesh, L, u); // definition of regularizing PDE
 
   // define statistical model
-  SRPDE<decltype(problem), fdaPDE::models::Sampling::GeoStatMeshNodes> model(problem);
+  SRPDE<decltype(problem), fdaPDE::models::GeoStatMeshNodes> model(problem);
   
   // load data from .csv files
   CSVReader<double> reader{};
@@ -108,7 +107,7 @@ TEST(GCV_SRPDE, Test2_Laplacian_NonParametric_GeostatisticalAtNodes_NewtonFinite
   PDE problem(domain.mesh, L, u); // definition of regularizing PDE
 
   // define statistical model
-  SRPDE<decltype(problem), fdaPDE::models::Sampling::GeoStatMeshNodes> model(problem);
+  SRPDE<decltype(problem), fdaPDE::models::GeoStatMeshNodes> model(problem);
   
   // load data from .csv files
   CSVReader<double> reader{};
@@ -169,7 +168,7 @@ TEST(GCV_SRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_NewtonFinite
   PDE problem(domain.mesh, L, u); // definition of regularizing PDE
 
   // define statistical model
-  SRPDE<decltype(problem), fdaPDE::models::Sampling::GeoStatMeshNodes> model(problem);
+  SRPDE<decltype(problem), fdaPDE::models::GeoStatMeshNodes> model(problem);
   
   // load data from .csv files
   CSVReader<double> reader{};
