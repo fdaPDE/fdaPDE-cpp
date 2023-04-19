@@ -61,6 +61,8 @@ namespace models{
       cache_ = Psi_; // cache \Psi to avoid recomputation
       return;
     }
+
+    const SpMatrix<double>& B() const { return cache_; }
   };
   
   // data sampled at mesh nodes
