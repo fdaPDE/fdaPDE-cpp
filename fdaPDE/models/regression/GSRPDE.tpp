@@ -1,6 +1,6 @@
 // finds a solution to the GSR-PDE smoothing problem
-template <typename PDE, typename RegularizationType, Sampling SamplingDesign,
-	  SolverType Solver, typename Distribution>
+template <typename PDE, typename RegularizationType, typename SamplingDesign,
+	  typename Solver, typename Distribution>
 void GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>::solve() {
   // execute FPIRLS for minimization of the functional
   // \norm{V^{-1/2}(y - \mu)}^2 + \lambda \int_D (Lf - u)^2
@@ -14,8 +14,8 @@ void GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>::solv
   return;
 }
 
-template <typename PDE, typename RegularizationType, Sampling SamplingDesign,
-	  SolverType Solver, typename Distribution>
+template <typename PDE, typename RegularizationType, typename SamplingDesign,
+	  typename Solver, typename Distribution>
 std::tuple<DVector<double>&, DVector<double>&>
 GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>::compute(const DVector<double>& mu) {
   DVector<double> theta_ = distribution_.link(mu); // \theta^k = [ g(\mu^k_1), ..., g(\mu^k_n) ]
@@ -29,8 +29,8 @@ GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>::compute(c
 
 // required to support GCV based smoothing parameter selection
 // in case of a GSRPDE model we have T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1), with Q = W*(I-H)
-template <typename PDE, typename RegularizationType, Sampling SamplingDesign,
-	  SolverType Solver, typename Distribution>
+template <typename PDE, typename RegularizationType, typename SamplingDesign,
+	  typename Solver, typename Distribution>
 const DMatrix<double>& GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>::T() {
   // compute value of R = R1^T*R0^{-1}*R1, cache for possible reuse
   if(R_.size() == 0){
@@ -47,8 +47,8 @@ const DMatrix<double>& GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, D
 
 // Q is computed on demand only when it is needed by GCV and cached for fast reacess (in general operations
 // involving Q can be substituted with the more efficient routine lmbQ(), which is part of iRegressionModel interface)
-template <typename PDE, typename RegularizationType, Sampling SamplingDesign,
-	  SolverType Solver, typename Distribution>
+template <typename PDE, typename RegularizationType, typename SamplingDesign,
+	  typename Solver, typename Distribution>
 const DMatrix<double>& GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>::Q() {
   if(Q_.size() == 0){ // Q is computed on request since not needed in general
     // compute Q = W(I - H) = W - W*X*(X*W*X^T)^{-1}*X^T*W
@@ -58,8 +58,8 @@ const DMatrix<double>& GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, D
 }
 
 // returns the deviance of y - \hat y induced by the specific distribution considered.
-template <typename PDE, typename RegularizationType, Sampling SamplingDesign,
-	  SolverType Solver, typename Distribution>
+template <typename PDE, typename RegularizationType, typename SamplingDesign,
+	  typename Solver, typename Distribution>
 double GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>::norm
 (const DMatrix<double>& obs, const DMatrix<double>& fitted) const {
   Distribution distr_{}; // define distribution object

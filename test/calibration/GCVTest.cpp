@@ -13,7 +13,6 @@ using fdaPDE::core::FEM::SpaceVaryingAdvection;
 #include "../fdaPDE/models/regression/SRPDE.h"
 using fdaPDE::models::SRPDE;
 #include "../fdaPDE/models/SamplingDesign.h"
-using fdaPDE::models::Sampling;
 #include "../fdaPDE/calibration/GCV.h"
 using fdaPDE::calibration::GCV;
 using fdaPDE::calibration::ExactGCV;
@@ -48,7 +47,7 @@ TEST(GCV_SRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_GridExact) {
   PDE problem(domain.mesh, L, u); // definition of regularizing PDE
 
   // define statistical model
-  SRPDE<decltype(problem), fdaPDE::models::Sampling::GeoStatMeshNodes>  model(problem);
+  SRPDE<decltype(problem), fdaPDE::models::GeoStatMeshNodes>  model(problem);
   
   // load data from .csv files
   CSVReader<double> reader{};
@@ -113,7 +112,7 @@ TEST(GCV_SRPDE, Test2_Laplacian_NonParametric_GeostatisticalAtNodes_GridStochast
   PDE problem(domain.mesh, L, u); // definition of regularizing PDE
 
   // define statistical model
-  SRPDE<decltype(problem), fdaPDE::models::Sampling::GeoStatMeshNodes>  model(problem);
+  SRPDE<decltype(problem), fdaPDE::models::GeoStatMeshNodes>  model(problem);
   
   // load data from .csv files
   CSVReader<double> reader{};
@@ -186,7 +185,7 @@ TEST(GCV_SRPDE, Test3_Laplacian_SemiParametric_GeostatisticalAtLocations_GridExa
   DMatrix<double> loc = locFile.toEigen();
 
   // define statistical model
-  SRPDE<decltype(problem), Sampling::GeoStatLocations> model(problem);
+  SRPDE<decltype(problem), fdaPDE::models::GeoStatLocations> model(problem);
   
   // load data from .csv files
   CSVFile<double> yFile; // observation file
@@ -266,7 +265,7 @@ TEST(GCV_SRPDE, Test4_Laplacian_SemiParametric_GeostatisticalAtLocations_GridSto
   DMatrix<double> loc = locFile.toEigen();
 
   // define statistical model
-  SRPDE<decltype(problem), Sampling::GeoStatLocations> model(problem);
+  SRPDE<decltype(problem), fdaPDE::models::GeoStatLocations> model(problem);
   
   // load data from .csv files
   CSVFile<double> yFile; // observation file
@@ -345,7 +344,7 @@ TEST(GCV_SRPDE, Test5_CostantCoefficientsPDE_NonParametric_GeostatisticalAtNodes
   PDE problem(domain.mesh, L, u); // definition of regularizing PDE
 
   // define statistical model
-  SRPDE<decltype(problem), Sampling::GeoStatMeshNodes> model(problem);
+  SRPDE<decltype(problem), fdaPDE::models::GeoStatMeshNodes> model(problem);
   
   // load data from .csv files
   CSVReader<double> reader{};
@@ -415,7 +414,7 @@ TEST(GCV_SRPDE, Test6_CostantCoefficientsPDE_NonParametric_GeostatisticalAtNodes
   PDE problem(domain.mesh, L, u); // definition of regularizing PDE
 
   // define statistical model
-  SRPDE<decltype(problem), Sampling::GeoStatMeshNodes> model(problem);
+  SRPDE<decltype(problem), fdaPDE::models::GeoStatMeshNodes> model(problem);
   
   // load data from .csv files
   CSVReader<double> reader{};
@@ -508,7 +507,7 @@ TEST(GCV_SRPDE, Test7_NonCostantCoefficientsPDE_NonParametric_Areal_GridExact) {
   DMatrix<int> areal = arealFile.toEigen();
 
   double lambda = std::pow(0.1, 3);
-  SRPDE<decltype(problem), Sampling::Areal> model(problem);
+  SRPDE<decltype(problem), fdaPDE::models::Areal> model(problem);
   
   // load data from .csv files
   CSVFile<double> yFile; // observation file
@@ -599,7 +598,7 @@ TEST(GCV_SRPDE, Test8_NonCostantCoefficientsPDE_NonParametric_Areal_GridStochast
   DMatrix<int> areal = arealFile.toEigen();
 
   double lambda = std::pow(0.1, 3);
-  SRPDE<decltype(problem), Sampling::Areal> model(problem);
+  SRPDE<decltype(problem), fdaPDE::models::Areal> model(problem);
   
   // load data from .csv files
   CSVFile<double> yFile; // observation file

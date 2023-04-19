@@ -7,13 +7,14 @@ using fdaPDE::core::NLA::Kronecker;
 #include "ModelBase.h"
 #include "ModelTraits.h"
 using fdaPDE::models::is_space_time;
+#include "ModelMacros.h"
 
 namespace fdaPDE{
 namespace models{
 
   // base classes for the implemetation of the different sampling designs.
   // Here is computed the matrix of spatial basis evaluations \Psi = [\Psi]_{ij} = \psi_i(p_j) 
-  template <typename Model, Sampling S> class SamplingDesign {};
+  template <typename Model, typename S> class SamplingDesign {};
   
   // base class for all sampling strategies implementing common operations on \Psi matrix
   template <typename Model>
@@ -45,7 +46,7 @@ namespace models{
       return;
     }
 
-    void finalize() {
+    void finalize() { // change name in tensorize
       if constexpr(is_solver_monolithic<Model>::value){
 	if constexpr(is_space_time_separable<Model>::value){
 	  Psi_ = Kronecker(model().Phi(), Psi_);

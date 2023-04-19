@@ -2,7 +2,7 @@
 // across many calls to solve() and are **not affected by a change in the data**.
 // It is implicitly called by ModelBase::init() as part of the initialization process.
 // NB: a change in the smoothing parameter must trigger a re-initialization of the model
-template <typename PDE, Sampling SamplingDesign>
+template <typename PDE, typename SamplingDesign>
 void SRPDE<PDE, SamplingDesign>::init_model() {
   // assemble system matrix for nonparameteric part
   SparseBlockMatrix<double,2,2>
@@ -18,7 +18,7 @@ void SRPDE<PDE, SamplingDesign>::init_model() {
 }
   
 // finds a solution to the SR-PDE smoothing problem
-template <typename PDE, Sampling SamplingDesign>
+template <typename PDE, typename SamplingDesign>
 void SRPDE<PDE, SamplingDesign>::solve() {
   BLOCK_FRAME_SANITY_CHECKS;
   DVector<double> sol; // room for problem' solution
@@ -51,7 +51,7 @@ void SRPDE<PDE, SamplingDesign>::solve() {
 
 // required to support GCV based smoothing parameter selection
 // in case of an SRPDE model we have T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
-template <typename PDE, Sampling SamplingDesign>
+template <typename PDE, typename SamplingDesign>
 const DMatrix<double>& SRPDE<PDE, SamplingDesign>::T() {
   // compute value of R = R1^T*R0^{-1}*R1, cache for possible reuse
   if(R_.size() == 0){
@@ -68,7 +68,7 @@ const DMatrix<double>& SRPDE<PDE, SamplingDesign>::T() {
 
 // Q is computed on demand only when it is needed by GCV and cached for fast reacess (in general operations
 // involving Q can be substituted with the more efficient routine lmbQ(), which is part of iRegressionModel interface)
-template <typename PDE, Sampling SamplingDesign>
+template <typename PDE, typename SamplingDesign>
 const DMatrix<double>& SRPDE<PDE, SamplingDesign>::Q() {
   if(Q_.size() == 0){ // Q is computed on request since not needed in general
     // compute Q = W(I - H) = W - W*X*(X*W*X^T)^{-1}*X^T*W
@@ -78,7 +78,7 @@ const DMatrix<double>& SRPDE<PDE, SamplingDesign>::Q() {
 }
 
 // returns the euclidean norm of op1 - op2
-template <typename PDE, Sampling SamplingDesign>
+template <typename PDE, typename SamplingDesign>
 double SRPDE<PDE, SamplingDesign>::norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {
   return (op1 - op2).squaredNorm();
 }

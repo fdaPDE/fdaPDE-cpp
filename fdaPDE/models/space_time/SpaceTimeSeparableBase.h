@@ -13,11 +13,11 @@ namespace fdaPDE{
 namespace models{
 
   // base class for separable regularization solved using either a moholitic or iterative solution strategy
-  template <typename Model, SolverType Solver> class SpaceTimeSeparableBase;
+  template <typename Model, typename Solver> class SpaceTimeSeparableBase;
   
   // base class for separable regularization
   template <typename Model>
-    class SpaceTimeSeparableBase<Model, SolverType::Monolithic> : public SpaceTimeBase<Model> {
+    class SpaceTimeSeparableBase<Model, MonolithicSolver> : public SpaceTimeBase<Model> {
   private:
     // let \phi_i the i-th basis function in time
     SpMatrix<double> Rt_;  // mass matrix in time: [Rt_]_{ij} = \int_{[0,T]} \phi_i*\phi_j
@@ -34,7 +34,7 @@ namespace models{
     SpMatrix<double> penT_; // discretization of time regularization:  (R0 \kron Pt)
   public:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
-    typedef typename model_traits<Model>::RegularizationType TimeRegularization; // regularization in time
+    typedef typename model_traits<Model>::regularization TimeRegularization; // regularization in time
     typedef SpaceTimeBase<Model> Base;
     using Base::pde_;    // regularizing term in space Lf = u
     using Base::model;   // underlying model object

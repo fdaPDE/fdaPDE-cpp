@@ -21,7 +21,7 @@ using fdaPDE::models::RegressionBase;
 namespace fdaPDE{
 namespace models{
   
-  template <typename PDE, Sampling SamplingDesign>
+  template <typename PDE, typename SamplingDesign>
   class SRPDE : public RegressionBase<SRPDE<PDE, SamplingDesign>>, public iGCV {
     // compile time checks
     static_assert(std::is_base_of<PDEBase, PDE>::value);
@@ -53,15 +53,19 @@ namespace models{
     
     virtual ~SRPDE() = default;
   };
-  template <typename PDE_, Sampling SamplingDesign>
-  struct model_traits<SRPDE<PDE_, SamplingDesign>> {
+  template <typename PDE_, typename SamplingDesign_>
+  struct model_traits<SRPDE<PDE_, SamplingDesign_>> {
     typedef PDE_ PDE;
-    typedef SpaceOnly RegularizationType;
-    static constexpr Sampling sampling = SamplingDesign;
-    static constexpr SolverType solver = SolverType::Monolithic;
+    typedef SpaceOnly regularization;
+    typedef SamplingDesign_ sampling;
+    typedef MonolithicSolver solver;
     static constexpr int n_lambda = 1;
   };
 
+  // srpde trait
+  template <typename Model>
+  struct is_srpde { static constexpr bool value = is_instance_of<Model, SRPDE>::value; };
+  
 #include "SRPDE.tpp"
 }}
     

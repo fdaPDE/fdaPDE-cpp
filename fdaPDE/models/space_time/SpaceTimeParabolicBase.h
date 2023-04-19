@@ -15,11 +15,11 @@ namespace fdaPDE{
 namespace models{
 
   // base class for parabolic regularization solved using either a moholitic or iterative solution strategy
-  template <typename Model, SolverType Solver> class SpaceTimeParabolicBase;
+  template <typename Model, typename Solver> class SpaceTimeParabolicBase;
 
   // base class for parabolic regularization, monholitic solver
   template <typename Model>
-  class SpaceTimeParabolicBase<Model, SolverType::Monolithic> : public SpaceTimeBase<Model> {
+  class SpaceTimeParabolicBase<Model, MonolithicSolver> : public SpaceTimeBase<Model> {
     static_assert(is_parabolic<typename model_traits<Model>::PDE::BilinearFormType>::value,
 		  "you have asked for parabolic regularization but using a non-parabolic differential operator");
   private:
@@ -38,7 +38,7 @@ namespace models{
     SpMatrix<double> pen_;  // discretized regularizing term: (Im \kron R1 + L \kron R0)^T*(I_m \kron R0)^{-1}*(Im \kron R1 + L \kron R0)
   public:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
-    typedef typename model_traits<Model>::RegularizationType TimeRegularization; // regularization in time
+    typedef typename model_traits<Model>::regularization TimeRegularization; // regularization in time
     typedef SpaceTimeBase<Model> Base;
     using Base::pde_;  // regularizing term in space
     using Base::model; // underlying model object
@@ -115,12 +115,12 @@ namespace models{
 
   // base class for parabolic regularization, iterative solver
   template <typename Model>
-  class SpaceTimeParabolicBase<Model, SolverType::Iterative> : public SpaceTimeBase<Model> {
+  class SpaceTimeParabolicBase<Model, IterativeSolver> : public SpaceTimeBase<Model> {
     static_assert(is_parabolic<typename model_traits<Model>::PDE::BilinearFormType>::value,
 		  "you have asked for parabolic regularization but using a non-parabolic differential operator");
   protected:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
-    typedef typename model_traits<Model>::RegularizationType TimeRegularization; // regularization in time
+    typedef typename model_traits<Model>::regularization TimeRegularization; // regularization in time
     typedef SpaceTimeBase<Model> Base;
     using Base::pde_;  // regularizing term in space
     using Base::model; // underlying model object

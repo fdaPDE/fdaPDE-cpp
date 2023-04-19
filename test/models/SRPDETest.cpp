@@ -13,7 +13,6 @@ using fdaPDE::core::FEM::SpaceVaryingAdvection;
 #include "../fdaPDE/models/regression/SRPDE.h"
 using fdaPDE::models::SRPDE;
 #include "../fdaPDE/models/SamplingDesign.h"
-using fdaPDE::models::Sampling;
 
 #include "../utils/MeshLoader.h"
 using fdaPDE::testing::MeshLoader;
@@ -40,7 +39,7 @@ TEST(SRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes) {
   // define statistical model
   // use optimal lambda to avoid possible numerical issues
   double lambda = 5.623413 * std::pow(0.1, 5);
-  SRPDE<decltype(problem), fdaPDE::models::Sampling::GeoStatMeshNodes>  model(problem);
+  SRPDE<decltype(problem), fdaPDE::models::GeoStatMeshNodes> model(problem);
   model.setLambdaS(lambda);
   
   // load data from .csv files
@@ -110,7 +109,7 @@ TEST(SRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations) {
 
   // use optimal lambda to avoid possible numerical issues
   double lambda = 0.2201047;
-  SRPDE<decltype(problem), Sampling::GeoStatLocations> model(problem);
+  SRPDE<decltype(problem), fdaPDE::models::GeoStatLocations> model(problem);
   model.setLambdaS(lambda);
   
   // load data from .csv files
@@ -188,7 +187,7 @@ TEST(SRPDE, Test3_CostantCoefficientsPDE_NonParametric_GeostatisticalAtNodes) {
 
   // define statistical model
   double lambda = 10;
-  SRPDE<decltype(problem), Sampling::GeoStatMeshNodes> model(problem);
+  SRPDE<decltype(problem), fdaPDE::models::GeoStatMeshNodes> model(problem);
   model.setLambdaS(lambda);
   
   // load data from .csv files
@@ -277,7 +276,7 @@ TEST(SRPDE, Test4_NonCostantCoefficientsPDE_NonParametric_Areal) {
   DMatrix<int> areal = arealFile.toEigen();
 
   double lambda = std::pow(0.1, 3);
-  SRPDE<decltype(problem), Sampling::Areal> model(problem);
+  SRPDE<decltype(problem), fdaPDE::models::Areal> model(problem);
   model.setLambdaS(lambda);
   
   // load data from .csv files

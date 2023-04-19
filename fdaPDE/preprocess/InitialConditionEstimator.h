@@ -16,10 +16,11 @@ using fdaPDE::calibration::ExactEDF;
 #include "../models/ModelTraits.h"
 using fdaPDE::models::is_space_time_parabolic;
 #include "../models/regression/SRPDE.h"
+using fdaPDE::models::SRPDE;
 #include "../models/regression/GSRPDE.h"
 using fdaPDE::models::SpaceTimeParabolic;
-using fdaPDE::models::SRPDE;
 using fdaPDE::models::GSRPDE;
+using fdaPDE::models::is_gsrpde;
 
 namespace fdaPDE{
 namespace preprocess {
@@ -27,13 +28,13 @@ namespace preprocess {
   // trait to select the type of space-only model to use for estimation of initial condition
   template <typename Model, typename PDE, typename = void> struct ICEstimator_internal_solver {
     typedef typename std::decay<Model>::type Model_;
-    using type = SRPDE<PDE, model_traits<Model_>::sampling>;
+    using type = SRPDE<PDE, typename model_traits<Model_>::sampling>;
   };
   template <typename Model, typename PDE> // generalized STR-PDE problem
   struct ICEstimator_internal_solver<Model, PDE, std::void_t<typename model_traits<Model>::DistributionType>> {
     typedef typename std::decay<Model>::type Model_;
-    using type = GSRPDE<PDE, fdaPDE::models::SpaceOnly, model_traits<Model_>::sampling, model_traits<Model_>::solver,
-			typename model_traits<Model_>::DistributionType>;
+    using type = GSRPDE<PDE, fdaPDE::models::SpaceOnly, typename model_traits<Model_>::sampling,
+			typename model_traits<Model_>::solver, typename model_traits<Model_>::DistributionType>;
   };
   
   // for a space-time regression model builds an estimation of the initial condition from the data at time step 0

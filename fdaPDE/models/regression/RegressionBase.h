@@ -17,7 +17,8 @@ namespace models {
   // base class for any *regression* fdaPDE model
   template <typename Model>
   class RegressionBase :
-    public select_regularization_type<Model>::type, public SamplingDesign<Model, model_traits<Model>::sampling> {
+    public select_regularization_type<Model>::type,
+    public SamplingDesign<Model, typename model_traits<Model>::sampling> {
   protected:
     DiagMatrix<double> W_{}; // diagonal matrix of weights (implements possible heteroscedasticity)
     DMatrix<double> XtWX_{}; // q x q dense matrix X^T*W*X
@@ -34,7 +35,7 @@ namespace models {
   public:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
     typedef typename select_regularization_type<Model>::type Base;
-    typedef SamplingDesign<Model, model_traits<Model>::sampling> SamplingBase;
+    typedef SamplingDesign<Model, typename model_traits<Model>::sampling> SamplingBase;
     using Base::pde_;        // differential operator L 
     using Base::df_;         // BlockFrame for problem's data storage
     using Base::n_basis;     // number of basis function over domain D
@@ -45,20 +46,20 @@ namespace models {
     // space-only constructor
     template <typename U = Model, // fake type to enable substitution in SFINAE
 	      typename std::enable_if<
-		std::is_same<typename model_traits<U>::RegularizationType, SpaceOnly>::value,
+		std::is_same<typename model_traits<U>::regularization, SpaceOnly>::value,
 		int>::type = 0> 
     RegressionBase(const PDE& pde) 
       : select_regularization_type<Model>::type(pde),
-      SamplingDesign<Model, model_traits<Model>::sampling>() {};
+      SamplingDesign<Model, typename model_traits<Model>::sampling>() {};
 
     // space-time constructor
     template <typename U = Model, // fake type to enable substitution in SFINAE
 	      typename std::enable_if<!
-		std::is_same<typename model_traits<U>::RegularizationType, SpaceOnly>::value,
+		std::is_same<typename model_traits<U>::regularization, SpaceOnly>::value,
 		int>::type = 0> 
     RegressionBase(const PDE& pde, const DVector<double>& time)
       : select_regularization_type<Model>::type(pde, time),
-      SamplingDesign<Model, model_traits<Model>::sampling>() {};
+      SamplingDesign<Model, typename model_traits<Model>::sampling>() {};
     
     // copy constructor, copy only pde object (as a consequence also the problem domain)
     RegressionBase(const RegressionBase& rhs) { pde_ = rhs.pde_; }
@@ -115,7 +116,7 @@ namespace models {
         
     // computes fitted values \hat y = \Psi*f_ + X*beta_
     DMatrix<double> fitted() const {
-      DMatrix<double> hat_y = SamplingBase::cachePsi()*f_;
+      DMatrix<double> hat_y = Psi()*f_;
       if(hasCovariates()) hat_y += X()*beta_;
       return hat_y;
     }
