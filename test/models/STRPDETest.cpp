@@ -474,5 +474,6 @@ TEST(STRPDE, Test6_Laplacian_NonParametric_GeostatisticalAtLocations_TimeLocatio
   Eigen::loadMarket(expectedSolution,   "data/models/STRPDE/2D_test6/sol.mtx");
   DMatrix<double> computedF = model.f();
   std::size_t N = computedF.rows();
-  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) );
+  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution).topRows(N), computedF) ) <<
+    (DMatrix<double>(expectedSolution).topRows(N) - computedF).lpNorm<Eigen::Infinity>();
 }

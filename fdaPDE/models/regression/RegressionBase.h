@@ -29,9 +29,9 @@ namespace models {
     DMatrix<double> V_;  // [X^T*W*\Psi,   0]
     
     // room for problem solution
-    DMatrix<double> f_{};    // estimate of the spatial field (1 x N vector)
-    DMatrix<double> g_{};    // PDE misfit
-    DMatrix<double> beta_{}; // estimate of the coefficient vector (1 x q vector)
+    DVector<double> f_{};    // estimate of the spatial field (1 x N vector)
+    DVector<double> g_{};    // PDE misfit
+    DVector<double> beta_{}; // estimate of the coefficient vector (1 x q vector)
   public:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
     typedef typename select_regularization_type<Model>::type Base;
@@ -71,9 +71,9 @@ namespace models {
     const DiagMatrix<double>& W() const { return W_; } // observations' weights
     const DMatrix<double>& XtWX() const { return XtWX_; } 
     const Eigen::PartialPivLU<DMatrix<double>>& invXtWX() const { return invXtWX_; }
-    const DMatrix<double>& f() const { return f_; }; // estimate of spatial field
-    const DMatrix<double>& g() const { return g_; }; // PDE misfit
-    const DMatrix<double>& beta() const { return beta_; }; // estimate of regression coefficients
+    const DVector<double>& f() const { return f_; }; // estimate of spatial field
+    const DVector<double>& g() const { return g_; }; // PDE misfit
+    const DVector<double>& beta() const { return beta_; }; // estimate of regression coefficients
     const DMatrix<double>& U() const { return U_; }
     const DMatrix<double>& V() const { return V_; }
 

@@ -26,7 +26,7 @@ namespace fdaPDE{
 namespace models{
 
   // base class for STRPDE model
-  template <typename PDE, typename TimeRegularization, typename SamplingDesign, typename Solver> class STRPDE;
+  template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver> class STRPDE;
 
   // implementation of STRPDE for separable space-time regularization
   template <typename PDE, typename SamplingDesign>
@@ -35,8 +35,8 @@ namespace models{
     // compile time checks
     static_assert(std::is_base_of<PDEBase, PDE>::value);
   private:
-    typedef SpaceTimeSeparable TimeRegularization;
-    typedef RegressionBase<STRPDE<PDE, TimeRegularization, SamplingDesign, MonolithicSolver>> Base;
+    typedef SpaceTimeSeparable RegularizationType;
+    typedef RegressionBase<STRPDE<PDE, RegularizationType, SamplingDesign, MonolithicSolver>> Base;
     SpMatrix<double> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
     fdaPDE::SparseLU<SpMatrix<double>> invA_; // factorization of matrix A
     DVector<double> b_{};  // right hand side of problem's linear system (1 x 2N vector)
@@ -106,7 +106,7 @@ namespace models{
     // compile time checks
     static_assert(std::is_base_of<PDEBase, PDE>::value);
   private:
-    typedef SpaceTimeParabolic TimeRegularization;
+    typedef SpaceTimeParabolic RegularizationType;
     typedef RegressionBase<STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, MonolithicSolver>> Base;
     SpMatrix<double> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
     fdaPDE::SparseLU<SpMatrix<double>> invA_; // factorization of matrix A
@@ -157,7 +157,7 @@ namespace models{
     // compile time checks
     static_assert(std::is_base_of<PDEBase, PDE>::value);
   private:
-    typedef SpaceTimeParabolic TimeRegularization;
+    typedef SpaceTimeParabolic RegularizationType;
     typedef RegressionBase<STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, IterativeSolver>> Base;
     SpMatrix<double> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
     fdaPDE::SparseLU<SpMatrix<double>> invA_; // factorization of matrix A
