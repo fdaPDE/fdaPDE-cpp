@@ -45,8 +45,6 @@ namespace models {
     double tol_ = 1e-6;         // relative tolerance between Jnew and Jold, used as stopping criterion
     std::size_t max_iter_ = 20; // maximum number of allowed iterations
     std::size_t k_ = 0;         // iteration index
-    // avoid a costly solver initialization if the same \lambda is used across consecutive calls to compute()
-    SVector<model_traits<Model_>::n_lambda> last_lambda;
     
     // parameters at convergence
     DVector<double> s_; // estimate of score vector
@@ -54,8 +52,7 @@ namespace models {
   public:
     // constructor
     ProfilingEstimation(const Model& m, double tol, std::size_t max_iter)
-      : tol_(tol), max_iter_(max_iter),
-	gcv_(solver_, 100) {
+      : tol_(tol), max_iter_(max_iter), gcv_(solver_, 100) {
       // define internal problem solver required for smoothing step
       if constexpr(!is_space_time<Model_>::value) // space-only
 	solver_ = typename PE_internal_solver<Model_>::type(m.pde());
@@ -72,12 +69,9 @@ namespace models {
 
     // executes the ProfilingEstimation algorithm given data X and smoothing parameter \lambda
     void compute(const DMatrix<double>& X, const SVector<model_traits<Model_>::n_lambda>& lambda) {
-      // solver initialization, avoid to initialize if solver already in correct state
-      if(lambda != last_lambda){
-	solver_.setLambda(lambda);
-	solver_.init_model();
-	last_lambda = lambda;
-      }
+      // solver initialization
+      solver_.setLambda(lambda);
+      solver_.init_model();
       // reserve space for solution
       f_.resize(X.rows()); s_.resize(X.cols());
       
@@ -116,7 +110,7 @@ namespace models {
     // getters
     const DVector<double>& f() const { return f_; } // vector f at convergence
     const DVector<double>& s() const { return s_; } // vector s at convergence
-    double gcv() const { return gcv_.eval(); }      // GCV index at convergence
+    double gcv() { return gcv_.eval(); }            // GCV index at convergence
     std::size_t n_iter() const { return k_ - 1; }   // number of iterations
 
     // setters
