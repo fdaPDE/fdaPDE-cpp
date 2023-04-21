@@ -32,7 +32,7 @@ void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::s
   GridOptimizer<n_lambda> opt; // optimization algorithm
   // Principal Components computation
   for(std::size_t i = 0; i < n_pc_; i++){
-    opt.optimize(f, lambda_vect_); // select optimal \lambda for i-th PC
+    opt.optimize(f, lambdas()); // select optimal \lambda for i-th PC
     // compute and store results given estimated optimal \lambda
     pe.compute(X, opt.optimum());
     loadings_.col(i) = pe.f(); scores_.col(i) = pe.s();

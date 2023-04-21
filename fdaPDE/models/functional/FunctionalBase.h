@@ -15,6 +15,9 @@ namespace models {
   class FunctionalBase
     : public select_regularization_type<Model>::type,
       public SamplingDesign<Model, typename model_traits<Model>::sampling> {
+  protected:
+    // vector of smoothing parameters
+    std::vector<SVector<model_traits<Model>::n_lambda>> lambdas_;
   public:
     typedef typename model_traits<Model>::PDE PDE; // PDE used for regularization in space
     typedef typename select_regularization_type<Model>::type Base;
@@ -41,7 +44,10 @@ namespace models {
 
     // copy constructor, copy only pde object (as a consequence also the problem domain)
     FunctionalBase(const FunctionalBase& rhs) { pde_ = rhs.pde_; }
-    
+
+    // accepts a collection of \lambda parameters if a not fixed_lambda method is selected
+    void setLambda(const std::vector<SVector<model_traits<Model>::n_lambda>>& lambdas) { lambdas_ = lambdas; }
+    const std::vector<SVector<model_traits<Model>::n_lambda>>& lambdas() const { return lambdas_; }
   };
   
 }}

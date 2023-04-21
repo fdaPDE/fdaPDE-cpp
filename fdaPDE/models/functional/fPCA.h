@@ -42,6 +42,7 @@ namespace models {
   public:
     IMPORT_MODEL_SYMBOLS;
     using Base::lambda;
+    using Base::lambdas;
     // constructor
     FPCA() = default;
     // space-only constructor
