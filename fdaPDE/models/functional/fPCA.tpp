@@ -10,7 +10,7 @@ void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::s
     pe.compute(X, lambda()); 
     loadings_.col(i) = pe.f(); scores_.col(i) = pe.s();
     // subtract computed PC from data	
-    X -= loadings_.col(i)*scores_.col(i).transpose();
+    X -= scores_.col(i)*loadings_.col(i).transpose();
   }
   return;
 }
@@ -37,7 +37,7 @@ void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::s
     pe.compute(X, opt.optimum());
     loadings_.col(i) = pe.f(); scores_.col(i) = pe.s();
     // subtract computed PC from data
-    X -= loadings_.col(i)*scores_.col(i).transpose();
+    X -= scores_.col(i)*loadings_.col(i).transpose();
   }
   return;
 }
@@ -47,8 +47,8 @@ template <typename PDE, typename RegularizationType,
 	  typename SamplingDesign, typename lambda_selection_strategy>
 void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::solve() {
   // pre-allocate space
-  loadings_.resize(y().rows(), n_pc_);
-  scores_.resize(y().cols(),   n_pc_);
+  loadings_.resize(y().cols(), n_pc_);
+  scores_.resize(y().rows(),   n_pc_);
 
   // dispatch to desired solution strategy
   solve_(lambda_selection_strategy());

@@ -51,9 +51,6 @@
   // the layout of the BlockFrame, use these instead of manually typing the block name when accessing df_
 #define OBSERVATIONS_BLK    "OBSERVATIONS"     // matrix of observations
 #define INDEXES_BLK         "INDEXES"          // vector of observation indices
-#define SPACE_LOCATIONS_BLK "SPACE_LOCATIONS"  // matrix of space-location
-#define TIME_LOCATIONS_BLK  "TIME_LOCATIONS"   // vector of time-locations
-#define SPACE_AREAL_BLK     "INCIDENCE_MATRIX" // incidence matrix of areal observations
 #define DESIGN_MATRIX_BLK   "DESIGN_MATRIX"    // in regression is the design matrix
 #define WEIGHTS_BLK         "WEIGHTS"          // in regression are the weights for heteroscedastic observations
 

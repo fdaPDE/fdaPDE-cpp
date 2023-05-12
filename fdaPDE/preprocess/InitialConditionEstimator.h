@@ -55,7 +55,7 @@ namespace preprocess {
     // builds the initial condition estimate
     void apply(const std::vector<SVector<1>>& lambdas){
       // extract data at time step 0
-      std::size_t n = model_.n_locs();
+      std::size_t n = model_.n_spatial_locs();
       BlockFrame<double, int> df = model_.data()(0, n-1).extract();
       // cast space-time differential operator df/dt + Lf = u to space-only Lf = u
       auto L = model_.pde().bilinearForm().template remove_operator<dT>();
@@ -69,7 +69,9 @@ namespace preprocess {
       
       // define solver for initial condition estimation
       typename ICEstimator_internal_solver<Model, decltype(problem)>::type solver(problem);
-      solver.setData(df); // impose data
+      solver.set_spatial_locations(model_.locs());
+      solver.setData(df);
+      // initialize solver
       solver.init_pde();
       solver.init_regularization();
       solver.init_sampling();
@@ -80,9 +82,10 @@ namespace preprocess {
       ScalarField<1, decltype(GCV)> obj(GCV);
       opt.optimize(obj, lambdas); // optimize gcv field
       SVector<1> best_lambda = opt.optimum();
-
+      
       // fit model with optimal lambda
       solver.setLambda(best_lambda);
+
       solver.init_model();
       solver.solve();
       // store initial condition estimate

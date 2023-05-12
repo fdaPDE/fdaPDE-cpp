@@ -153,7 +153,7 @@ namespace models{
     DMatrix<double> u(std::size_t k) const { // discretization of forcing term u at time k
       return u_.block(model().n_basis()*k,0, model().n_basis(),1); }
     DMatrix<double> y(std::size_t k) const { // vector of input data points at time k
-      return model().y().block(model().n_locs()*k, 0, model().n_locs(),1); }
+      return model().y().block(model().n_spatial_locs()*k, 0, model().n_spatial_locs(),1); }
     double DeltaT() const { return DeltaT_; } 
     using Base::y; // import y() method defined in ModelBase
     const DMatrix<double>& s() const { return s_; }

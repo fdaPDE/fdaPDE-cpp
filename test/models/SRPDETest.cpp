@@ -111,6 +111,7 @@ TEST(SRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations) {
   double lambda = 0.2201047;
   SRPDE<decltype(problem), fdaPDE::models::GeoStatLocations> model(problem);
   model.setLambdaS(lambda);
+  model.set_spatial_locations(loc);
   
   // load data from .csv files
   CSVFile<double> yFile; // observation file
@@ -120,11 +121,10 @@ TEST(SRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations) {
   XFile = reader.parseFile  ("data/models/SRPDE/2D_test2/X.csv");
   DMatrix<double> X = XFile.toEigen();
 
-  // set model data
+  // set data
   BlockFrame<double, int> df;
   df.insert(OBSERVATIONS_BLK,  y);
   df.insert(DESIGN_MATRIX_BLK, X);
-  df.insert(SPACE_LOCATIONS_BLK, loc);
   model.setData(df);
   
   // solve smoothing problem
@@ -278,16 +278,16 @@ TEST(SRPDE, Test4_NonCostantCoefficientsPDE_NonParametric_Areal) {
   double lambda = std::pow(0.1, 3);
   SRPDE<decltype(problem), fdaPDE::models::Areal> model(problem);
   model.setLambdaS(lambda);
+  model.set_spatial_locations(areal);
   
   // load data from .csv files
   CSVFile<double> yFile; // observation file
   yFile = reader.parseFile("data/models/SRPDE/2D_test4/z.csv");
   DMatrix<double> y = yFile.toEigen();
-  
+
   // set model data
   BlockFrame<double, int> df;
   df.insert(OBSERVATIONS_BLK, y);
-  df.insert(SPACE_AREAL_BLK, areal);
   model.setData(df);
   
   // solve smoothing problem

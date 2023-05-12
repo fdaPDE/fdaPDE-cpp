@@ -77,11 +77,12 @@ namespace models{
 	  solver.setInitialCondition(m_.s());
       }
       solver.setLambda(m_.lambda());
+      solver.set_spatial_locations(m_.locs());
       solver.init_pde();
-      // prepare data for solver, copy covariates if present
-      solver.data() = m_.data();
       solver.init_regularization();
       solver.init_sampling();
+      // prepare data for solver, copy covariates if present
+      solver.data() = m_.data();
       
       // algorithm stops when an enought small difference between two consecutive values of the J is recordered
       double J_old = tolerance_+1; double J_new = 0;
@@ -96,7 +97,7 @@ namespace models{
 	solver.data().template insert<double>(WEIGHTS_BLK, std::get<0>(pair));
 	// update solver to change in the weight matrix
 	solver.update_to_data();
-	solver.init_model(); 
+	solver.init_model();
 	solver.solve();
 	
 	// extract estimates from solver

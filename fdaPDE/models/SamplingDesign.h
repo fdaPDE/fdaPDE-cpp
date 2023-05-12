@@ -46,14 +46,13 @@ namespace models{
       return;
     }
 
-    void finalize() { // change name in tensorize
+    void tensorize() {
       if constexpr(is_solver_monolithic<Model>::value){
-	if constexpr(is_space_time_separable<Model>::value){
+	if constexpr(is_space_time_separable<Model>::value)
 	  Psi_ = Kronecker(model().Phi(), Psi_);
-	}
 	if constexpr(is_space_time_parabolic<Model>::value){
 	  SpMatrix<double> Im; // m x m identity matrix
-	  Im.resize(model().n_time(), model().n_time());
+	  Im.resize(model().n_temporal_locs(), model().n_temporal_locs());
 	  Im.setIdentity();
 	  Psi_ = Kronecker(Im, Psi_);
 	}
@@ -68,9 +67,10 @@ namespace models{
   // data sampled at mesh nodes
   template <typename Model>
   class SamplingDesign<Model, GeoStatMeshNodes> : public SamplingBase<Model> {
+  private:
     DEFINE_CRTP_MODEL_UTILS; // import model() method (const and non-const access)
     typedef SamplingBase<Model> Base;
-    using Base::finalize;
+    using Base::tensorize;
     using Base::Psi_;
   public:
     // constructor
@@ -94,14 +94,16 @@ namespace models{
       // finalize construction
       Psi_.setFromTriplets(tripletList.begin(), tripletList.end());
       Psi_.makeCompressed();
-      finalize();
+      tensorize(); // tensorize \Psi for space-time problems
     }
     
     // getters
     const SpMatrix<double>& Psi() const { return Psi_; }
     auto PsiTD() const { return Psi_.transpose(); }
-    std::size_t n_locs() const { return model().domain().dof(); }
+    std::size_t n_spatial_locs() const { return model().domain().dof(); }
     DMatrix<double> locs() const { return model().domain().dofCoords(); }
+    // set locations (nothing to do, locations are implicitly set to mesh nodes)
+    template <typename Derived> void set_spatial_locations(const DMatrix<Derived>& locs) { return; }
   };
 
   // data sampled at general locations p_1, p_2, ... p_n
@@ -111,22 +113,17 @@ namespace models{
     DMatrix<double> locs_;   // matrix of spatial locations p_1, p2_, ... p_n
     DEFINE_CRTP_MODEL_UTILS; // import model() method (const and non-const access)
     typedef SamplingBase<Model> Base;
-    using Base::finalize;
+    using Base::tensorize;
     using Base::Psi_;
   public:   
     // constructor
     SamplingDesign() = default;
     // init sampling data structures
     void init_sampling(bool forced = false) {
-      if(!model().data().hasBlock(SPACE_LOCATIONS_BLK))
-	throw std::logic_error("bad BlockFrame, you have requested a GeoStatLocations sampling but cannot find locations");
+      if(locs_.size() == 0)
+	throw std::logic_error("you have requested a GeoStatLocations sampling without supplying locations");
       // compute once if not forced to recompute
-      if(Psi_.size() != 0 && forced == false) return;
-      // extract locations from BlockFrame
-      if constexpr(is_space_time<Model>::value) // get unique locations
-	locs_ = model().data().template extract_unique<double>(SPACE_LOCATIONS_BLK);
-      else locs_ = model().data().template get<double>(SPACE_LOCATIONS_BLK);
-      
+      if(Psi_.size() != 0 && forced == false) return;      
       // preallocate space for Psi matrix
       std::size_t n = locs_.rows();
       std::size_t N = model().n_basis();
@@ -153,17 +150,16 @@ namespace models{
       // finalize construction
       Psi_.setFromTriplets(tripletList.begin(), tripletList.end());
       Psi_.makeCompressed();
-      finalize();
+      tensorize(); // tensorize \Psi for space-time problems
     };
 
     // getters
     const SpMatrix<double>& Psi() const { return Psi_; }
     auto PsiTD() const { return Psi_.transpose(); }
-    std::size_t n_locs() const { return locs_.rows(); }
+    std::size_t n_spatial_locs() const { return locs_.rows(); }
     const DMatrix<double>& locs() const { return locs_; }
     // setter
-    void setLocations(const DMatrix<double>& locs) {
-      model().data().template insert<int>(SPACE_LOCATIONS_BLK, locs); }
+    void set_spatial_locations(const DMatrix<double>& locs) { locs_ = locs; }
   };
 
   // data sampled at subdomains D_1, D_2, ... D_d
@@ -174,22 +170,17 @@ namespace models{
     DiagMatrix<double> D_;    // diagonal matrix of subdomains' measures    
     DEFINE_CRTP_MODEL_UTILS;  // import model() method (const and non-const access)
     typedef SamplingBase<Model> Base;
-    using Base::finalize;
+    using Base::tensorize;
     using Base::Psi_;
   public:   
     // constructor
     SamplingDesign() = default;
     // init sampling data structures
     void init_sampling(bool forced = false) {
-      if(!model().data().hasBlock(SPACE_AREAL_BLK))
-	throw std::logic_error("bad BlockFrame, you have requested an Areal sampling but cannot find incidence matrix");
+      if(subdomains_.size() == 0)
+	throw std::logic_error("you have requested an Areal sampling without supplying the incidence matrix");
       // compute once if not forced to recompute
       if(Psi_.size() != 0 && forced == false) return;
-      // extract locations from BlockFrame
-      if constexpr(is_space_time<Model>::value) // get unique locations
-	subdomains_ = model().data().template extract_unique<int>(SPACE_AREAL_BLK);
-      else subdomains_ = model().data().template get<int>(SPACE_AREAL_BLK);
-
       // preallocate space for Psi matrix
       std::size_t n = subdomains_.rows();
       std::size_t N = model().n_basis();    
@@ -230,8 +221,8 @@ namespace models{
       // here we must be carefull of the type of model (space-only or space-time) we are handling
       if constexpr(is_space_time<Model>::value){
 	// store I_m \kron D
-	std::size_t m = model().time_domain().rows();
-	std::size_t n = n_locs();
+	std::size_t m = model().n_temporal_locs();
+	std::size_t n = n_spatial_locs();
 	DVector<double> IkronD(n*m);
 	for(std::size_t i = 0; i < m; ++i) IkronD.segment(i*n, n) = D;
 	// compute and store result
@@ -243,18 +234,17 @@ namespace models{
       // finalize construction
       Psi_.setFromTriplets(tripletList.begin(), tripletList.end());
       Psi_.makeCompressed();
-      finalize();
+      tensorize(); // tensorize \Psi for space-time problems
     };
-
+    
     // getters
     const SpMatrix<double>& Psi() const { return Psi_; }
     auto PsiTD() const { return Psi_.transpose()*D_; }
-    std::size_t n_locs() const { return subdomains_.rows(); }
+    std::size_t n_spatial_locs() const { return subdomains_.rows(); }
     const DiagMatrix<double>& D() const { return D_; }
     const DMatrix<int>& locs() const { return subdomains_; }
     // setter
-    void setSubdomains(const DMatrix<int>& subdomains) {
-      model().data().template insert<int>(SPACE_AREAL_BLK, subdomains); }
+    void set_spatial_locations(const DMatrix<int>& subdomains) { subdomains_ = subdomains; }
   };  
     
 }}

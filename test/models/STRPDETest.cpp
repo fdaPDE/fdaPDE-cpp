@@ -133,6 +133,7 @@ TEST(STRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable_
 	 fdaPDE::models::MonolithicSolver> model(problem, time_mesh);
   model.setLambdaS(lambdaS);
   model.setLambdaT(lambdaT);
+  model.set_spatial_locations(loc);
   
   // load data from .csv files
   CSVFile<double> yFile; // observation file
@@ -146,7 +147,6 @@ TEST(STRPDE, Test2_Laplacian_SemiParametric_GeostatisticalAtLocations_Separable_
   BlockFrame<double, int> df;
   df.stack (OBSERVATIONS_BLK,  y);
   df.stack (DESIGN_MATRIX_BLK, X);
-  df.insert(SPACE_LOCATIONS_BLK, loc);
   model.setData(df);
   
   // solve smoothing problem
@@ -222,8 +222,7 @@ TEST(STRPDE, Test3_NonCostantCoefficientsPDE_NonParametric_Areal_Parabolic_Monol
   // parabolic PDE
   auto L = dT() + Laplacian(diffCoeff.asParameter()) + Gradient(adveCoeff.asParameter());
   
-  DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements()*3, time_mesh.rows());
-  
+  DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements()*3, time_mesh.rows());  
   PDE problem(domain.mesh, L, u); // definition of regularizing PDE
   // define statistical model
   double lambdaS = std::pow(0.1, 6); // smoothing in space
@@ -238,6 +237,7 @@ TEST(STRPDE, Test3_NonCostantCoefficientsPDE_NonParametric_Areal_Parabolic_Monol
 	 fdaPDE::models::MonolithicSolver> model(problem, time_mesh);
   model.setLambdaS(lambdaS);
   model.setLambdaT(lambdaT);
+  model.set_spatial_locations(areal);
 
   // load data from .csv files
   CSVFile<double> yFile; // observation file
@@ -247,9 +247,8 @@ TEST(STRPDE, Test3_NonCostantCoefficientsPDE_NonParametric_Areal_Parabolic_Monol
   // set model data
   BlockFrame<double, int> df;
   df.stack (OBSERVATIONS_BLK, y);
-  df.insert(SPACE_AREAL_BLK, areal);
   model.setData(df);
-
+  
   // define initial condition estimator over grid of lambdas
   InitialConditionEstimator ICestimator(model);
   std::vector<SVector<1>> lambdas;
@@ -265,10 +264,7 @@ TEST(STRPDE, Test3_NonCostantCoefficientsPDE_NonParametric_Areal_Parabolic_Monol
 
   // set estimated initial condition
   model.setInitialCondition(ICestimate);
-  // shift data one time instant forward
-  std::size_t n = y.rows();
-  model.setData(df.tail(n).extract());
-  model.shift_time(1);
+  model.shift_time(1); // shift data one time instant forward
   
   model.init();
   model.solve();
@@ -276,7 +272,7 @@ TEST(STRPDE, Test3_NonCostantCoefficientsPDE_NonParametric_Areal_Parabolic_Monol
   //   **  test correctness of computed results  **   
 
   DMatrix<double> computedF;
-  computedF.resize((model.n_time()+1)*model.n_basis(), 1);
+  computedF.resize((model.n_temporal_locs()+1)*model.n_basis(), 1);
   computedF << model.s(), model.f();
   
   // estimate of spatial field \hat f (with estimatate of initial condition)
@@ -332,16 +328,11 @@ TEST(STRPDE, Test4_Laplacian_NonParametric_GeostatisticalAtNodes_Parabolic_Itera
   for(double x = -9; x <= 3; x += 0.1) lambdas.push_back(SVector<1>(std::pow(10,x))); 
   // compute estimate
   ICestimator.apply(lambdas);
-
   DMatrix<double> ICestimate = ICestimator.get();
 
   // set estimated initial condition
-  model.setInitialCondition(ICestimate);
-  
-  // shift data one time instant forward
-  std::size_t n = y.rows();
-  model.setData(df.tail(n).extract());
-  model.shift_time(1);
+  model.setInitialCondition(ICestimate);  
+  model.shift_time(1); // shift data one time instant forward
   // set parameters for iterative method
   model.setTolerance(1e-4);
   model.setMaxIterations(50);
@@ -381,6 +372,13 @@ TEST(STRPDE, Test5_Laplacian_NonParametric_GeostatisticalAtNodes_TimeLocations_S
   auto L = Laplacian();
   DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements()*3*time_mesh.rows(), 1);
   PDE problem(domain.mesh, L, u); // definition of regularizing PDE
+
+  // load data from .csv files
+  CSVReader<double> reader{};
+  CSVFile<double> timeLocationsFile;
+  timeLocationsFile = reader.parseFile("data/models/STRPDE/2D_test5/time_locations.csv");
+  DMatrix<double> timeLocations = timeLocationsFile.toEigen();
+  
   // define statistical model
   double lambdaS = 0.01; // smoothing in space
   double lambdaT = 0.01; // smoothing in time
@@ -388,20 +386,15 @@ TEST(STRPDE, Test5_Laplacian_NonParametric_GeostatisticalAtNodes_TimeLocations_S
 	 fdaPDE::models::MonolithicSolver> model(problem, time_mesh);
   model.setLambdaS(lambdaS);
   model.setLambdaT(lambdaT);
-
-  // load data from .csv files
-  CSVReader<double> reader{};
+  model.set_temporal_locations(timeLocations);
+  
   CSVFile<double> yFile; // observation file
   yFile = reader.parseFile("data/models/STRPDE/2D_test5/y.csv");
   DMatrix<double> y = yFile.toEigen();
-  CSVFile<double> timeLocationsFile;
-  timeLocationsFile = reader.parseFile("data/models/STRPDE/2D_test5/time_locations.csv");
-  DMatrix<double> timeLocations = timeLocationsFile.toEigen();
   
   // set model data
   BlockFrame<double, int> df;
   df.stack(OBSERVATIONS_BLK, y);
-  df.insert(TIME_LOCATIONS_BLK, timeLocations);
   model.setData(df);
   
   // // solve smoothing problem
@@ -439,6 +432,16 @@ TEST(STRPDE, Test6_Laplacian_NonParametric_GeostatisticalAtLocations_TimeLocatio
   auto L = Laplacian();
   DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements()*3*time_mesh.rows(), 1);
   PDE problem(domain.mesh, L, u); // definition of regularizing PDE
+
+  // load sample locations
+  CSVReader<double> reader{};
+  CSVFile<double> timeLocationsFile;
+  timeLocationsFile = reader.parseFile("data/models/STRPDE/2D_test6/time_locations.csv");
+  DMatrix<double> timeLocations = timeLocationsFile.toEigen();
+  CSVFile<double> spaceLocationsFile;
+  spaceLocationsFile = reader.parseFile("data/models/STRPDE/2D_test6/locs.csv");
+  DMatrix<double> spaceLocations = spaceLocationsFile.toEigen();
+
   // define statistical model
   double lambdaS = 1e-3; // smoothing in space
   double lambdaT = 1e-3; // smoothing in time
@@ -446,26 +449,19 @@ TEST(STRPDE, Test6_Laplacian_NonParametric_GeostatisticalAtLocations_TimeLocatio
 	 fdaPDE::models::MonolithicSolver> model(problem, time_mesh);
   model.setLambdaS(lambdaS);
   model.setLambdaT(lambdaT);
-
+  model.set_spatial_locations(spaceLocations);
+  model.set_temporal_locations(timeLocations);
+  
   // load data from .csv files
-  CSVReader<double> reader{};
   CSVFile<double> yFile; // observation file (with complex missing data pattern)
   yFile = reader.parseFile("data/models/STRPDE/2D_test6/y.csv");
   DMatrix<double> y = yFile.toEigen();
-  CSVFile<double> timeLocationsFile;
-  timeLocationsFile = reader.parseFile("data/models/STRPDE/2D_test6/time_locations.csv");
-  DMatrix<double> timeLocations = timeLocationsFile.toEigen();
-  CSVFile<double> spaceLocationsFile;
-  spaceLocationsFile = reader.parseFile("data/models/STRPDE/2D_test6/locs.csv");
-  DMatrix<double> spaceLocations = spaceLocationsFile.toEigen();
   
   // set model data
   BlockFrame<double, int> df;
   df.stack (OBSERVATIONS_BLK, y);
-  df.insert(SPACE_LOCATIONS_BLK, spaceLocations);
-  df.insert(TIME_LOCATIONS_BLK, timeLocations);
   model.setData(df);
-
+  
   model.init();  // initialize model stack
   model.solve(); // solve smoothing problem
 

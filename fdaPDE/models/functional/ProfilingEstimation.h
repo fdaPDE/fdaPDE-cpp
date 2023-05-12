@@ -31,7 +31,7 @@ namespace models {
       >::type;
   };
   
-  // finds vectors s,f minimizing \norm{X - s f^\top}_F^2 + s^\top s P_{\lambda_{\mathcal{D}}, \lambda_T}(f)
+  // finds vectors s,f minimizing \norm{X - s*f^T}_F^2 + s^T*s P_{\lambda_{\mathcal{D}}, \lambda_T}(f)
   // being P_{\lambda_{\mathcal{D}}, \lambda_T}(f) the penalty term and \norm{}_F the Frobenius norm
   template <typename Model>
   class ProfilingEstimation {
@@ -59,13 +59,15 @@ namespace models {
       else // space-time
 	solver_ = typename PE_internal_solver<Model_>::type(m.pde(), m.time_domain());
       solver_.init_pde();
-      // prepare data for solver
-      solver_.setData(m.data()); // change this when we move locations out of blockframe
+      solver_.set_spatial_locations(m.locs());
+      // set temporal locations here...
+      solver_.setData(BlockFrame<double,int>(m.n_locs()));
+      // initialize solver
       solver_.init_regularization();
       solver_.init_sampling();
     };
 
-    // somewhere we need to provide a specilization for the case of missing data and a propoer dispatcher
+    // somewhere we need to provide a specilization for the case of missing data and a proper dispatcher
 
     // executes the ProfilingEstimation algorithm given data X and smoothing parameter \lambda
     void compute(const DMatrix<double>& X, const SVector<model_traits<Model_>::n_lambda>& lambda) {
@@ -73,13 +75,13 @@ namespace models {
       solver_.setLambda(lambda);
       solver_.init_model();
       // reserve space for solution
-      f_.resize(X.rows()); s_.resize(X.cols());
+      f_.resize(X.cols()); s_.resize(X.rows());
       
       // initialization of f_ using SVD
-      Eigen::JacobiSVD<DMatrix<double>> svd(X.transpose(), Eigen::ComputeThinU|Eigen::ComputeThinV);
+      Eigen::JacobiSVD<DMatrix<double>> svd(X, Eigen::ComputeThinU|Eigen::ComputeThinV);
       f_ = svd.matrixV().col(0);
       // start iterative procedure
-      DMatrix<double> X_ = X.transpose(); // l x n matrix
+      DMatrix<double> X_ = X; // copy data to avoid side effects on caller state
       double Jold = std::numeric_limits<double>::max(); double Jnew = 1;
       while(!almost_equal(Jnew, Jold, tol_) && k_ < max_iter_){
 	// compute score vector s as Y*f/\norm(Y*f)

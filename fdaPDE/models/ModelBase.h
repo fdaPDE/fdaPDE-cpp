@@ -36,7 +36,7 @@ namespace models {
     
     // setters
     void setDirichletBC(SpMatrix<double>& A, DMatrix<double>& b);
-    void setData(const BlockFrame<double, int>& df); // initialize model's data by copying the supplied BlockFrame
+    void setData(const BlockFrame<double, int>& df, bool reindex = false); // initialize model's data by copying the supplied BlockFrame
     BlockFrame<double, int>& data() { return df_; }  // direct write-access to model's internal data storage
     void setLambda(const SVector<model_traits<Model>::n_lambda>& lambda) { lambda_ = lambda; } 
     void setPDE(const PDE& pde) { pde_ = std::make_shared<PDE>(pde); }
@@ -50,6 +50,7 @@ namespace models {
     const Mesh<M,N,K>& domain() const { return pde_->domain(); }
     std::size_t n_basis() const { return pde_->domain().dof(); }; // number of basis functions used in space discretization
     std::size_t n_obs() const { return df_.rows(); } // number of observations
+    std::size_t n_locs() const { return model().n_spatial_locs()*model().n_temporal_locs(); } // observations' locations
     const ADT<M,N,K>& gse() { if(gse_ == nullptr){ gse_ = std::make_shared<ADT<M,N,K>>(domain()); } return *gse_; }
     SVector<model_traits<Model>::n_lambda> lambda() const { return lambda_; }
     bool hasNaN() const { return nan_idxs_.size() != 0; } // true if there are missing data

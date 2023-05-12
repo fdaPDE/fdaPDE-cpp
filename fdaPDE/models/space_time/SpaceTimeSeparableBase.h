@@ -29,7 +29,7 @@ namespace models{
     
     typedef typename model_traits<Model>::TimeBasis TimeBasis; // basis used for discretization in time
     TimeBasis basis_;
-    DMatrix<double> time_locations_; // time instants t_1, ..., t_m. used only if provided from BlockFrame
+    DVector<double> time_locations_; // time instants t_1, ..., t_m. used only if supplied via set_temporal_locations()
     SpMatrix<double> penS_; // discretization of space regularization: (R1^T*R0^{-1}*R1) \kron Rt
     SpMatrix<double> penT_; // discretization of time regularization:  (R0 \kron Pt)
   public:
@@ -50,14 +50,10 @@ namespace models{
     void init_regularization() {
       basis_ = TimeBasis(time_);
       // compute \Phi = [\Phi]_{ij} = \phi_i(t_j) using the provided basis function
-      if(!model().data().hasBlock(TIME_LOCATIONS_BLK)){
-	// assume time instants t_1, ..., t_m equal to time nodes
-	Phi_ = basis_.eval(time_);
-      }else{
-	// extract time locations t_1, ..., t_m from BlockFrame and evaluate basis on them
-	time_locations_ = model().data().template extract_unique<double>(TIME_LOCATIONS_BLK);
-	Phi_ = basis_.eval(time_locations_);
-      }
+      if(is_empty(time_locations_))
+	Phi_ = basis_.eval(time_); // assume time instants t_1, ..., t_m equal to time nodes
+      else Phi_ = basis_.eval(time_locations_); // evaluate on given time locations
+
       // discretize operators in time
       TimeAssembler<TimeBasis> assembler(time_);
       Rt_ = assembler.assemble(TimeMass<TimeBasis>());    // mass matrix in time
@@ -65,7 +61,9 @@ namespace models{
       // compute tensorized matrices
       R0_ = Kronecker(Rt_, pde_->R0());
       R1_ = Kronecker(Rt_, pde_->R1());
-    } 
+    }
+    // setters
+    void set_temporal_locations(const DVector<double> time_locations) { time_locations_ = time_locations; }
     // getters
     const SpMatrix<double>& R0()  const { return R0_; }
     const SpMatrix<double>& R1()  const { return R1_; }
@@ -73,10 +71,8 @@ namespace models{
     const SpMatrix<double>& Rt()  const { return Rt_; }
     const SpMatrix<double>& Pt()  const { return Pt_; }
     const SpMatrix<double>& Phi() const { return Phi_; }
-    inline std::size_t n_time() const { // overloads Base::n_time()
-      if(!model().data().hasBlock(TIME_LOCATIONS_BLK)) return time_.rows();
-      return time_locations_.rows();
-    } 
+    inline std::size_t n_temporal_locs() const { return is_empty(time_locations_) ? time_.rows() : time_locations_.rows(); }
+    const DVector<double>& time_locs() const { return is_empty(time_locations_) ? time_ : time_locations_; }
 
     // return stacked version of discretized forcing field
     const DVector<double>& u() {

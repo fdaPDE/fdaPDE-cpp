@@ -186,6 +186,7 @@ TEST(GCV_SRPDE, Test3_Laplacian_SemiParametric_GeostatisticalAtLocations_GridExa
 
   // define statistical model
   SRPDE<decltype(problem), fdaPDE::models::GeoStatLocations> model(problem);
+  model.set_spatial_locations(loc);
   
   // load data from .csv files
   CSVFile<double> yFile; // observation file
@@ -199,7 +200,6 @@ TEST(GCV_SRPDE, Test3_Laplacian_SemiParametric_GeostatisticalAtLocations_GridExa
   BlockFrame<double, int> df;
   df.insert(OBSERVATIONS_BLK,  y);
   df.insert(DESIGN_MATRIX_BLK, X);
-  df.insert(SPACE_LOCATIONS_BLK, loc);
   model.setData(df);
   model.init(); // init model
 
@@ -266,6 +266,7 @@ TEST(GCV_SRPDE, Test4_Laplacian_SemiParametric_GeostatisticalAtLocations_GridSto
 
   // define statistical model
   SRPDE<decltype(problem), fdaPDE::models::GeoStatLocations> model(problem);
+  model.set_spatial_locations(loc);
   
   // load data from .csv files
   CSVFile<double> yFile; // observation file
@@ -279,7 +280,6 @@ TEST(GCV_SRPDE, Test4_Laplacian_SemiParametric_GeostatisticalAtLocations_GridSto
   BlockFrame<double, int> df;
   df.insert(OBSERVATIONS_BLK,  y);
   df.insert(DESIGN_MATRIX_BLK, X);
-  df.insert(SPACE_LOCATIONS_BLK, loc);
   model.setData(df);
   model.init(); // init model
 
@@ -508,6 +508,7 @@ TEST(GCV_SRPDE, Test7_NonCostantCoefficientsPDE_NonParametric_Areal_GridExact) {
 
   double lambda = std::pow(0.1, 3);
   SRPDE<decltype(problem), fdaPDE::models::Areal> model(problem);
+  model.set_spatial_locations(areal);
   
   // load data from .csv files
   CSVFile<double> yFile; // observation file
@@ -517,7 +518,6 @@ TEST(GCV_SRPDE, Test7_NonCostantCoefficientsPDE_NonParametric_Areal_GridExact) {
   // set model data
   BlockFrame<double, int> df;
   df.insert(OBSERVATIONS_BLK, y);
-  df.insert(SPACE_AREAL_BLK, areal);
   model.setData(df);
   model.init(); // init model
 
@@ -599,6 +599,7 @@ TEST(GCV_SRPDE, Test8_NonCostantCoefficientsPDE_NonParametric_Areal_GridStochast
 
   double lambda = std::pow(0.1, 3);
   SRPDE<decltype(problem), fdaPDE::models::Areal> model(problem);
+  model.set_spatial_locations(areal);
   
   // load data from .csv files
   CSVFile<double> yFile; // observation file
@@ -608,7 +609,6 @@ TEST(GCV_SRPDE, Test8_NonCostantCoefficientsPDE_NonParametric_Areal_GridStochast
   // set model data
   BlockFrame<double, int> df;
   df.insert(OBSERVATIONS_BLK, y);
-  df.insert(SPACE_AREAL_BLK, areal);
   model.setData(df);
   model.init(); // init model
 

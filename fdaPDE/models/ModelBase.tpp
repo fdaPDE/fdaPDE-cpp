@@ -5,11 +5,10 @@ void ModelBase<Model>::init(){
   model().init_regularization(); // init regularization term
   model().init_sampling(true);   // init \Psi matrix, always force recomputation
   
-  // analyze and set missing data
-  model().analyze_nan();
+  model().analyze_nan();         // analyze and set missing data
   model().set_nan();
-  
-  model().init_model();          // init model
+  // init model's internals
+  model().init_model();
 }
 
 // a trait to detect if a model requires a preprocessing step
@@ -23,10 +22,10 @@ struct requires_update_to_data<
 
 // set model's data from blockframe
 template <typename Model>
-void ModelBase<Model>::setData(const BlockFrame<double, int>& df) {  
+void ModelBase<Model>::setData(const BlockFrame<double, int>& df, bool reindex) {  
   df_ = df;
-  // insert an index row (if not yet present)
-  if(!df_.hasBlock(INDEXES_BLK)){
+  // insert an index row (if not yet present or requested)
+  if(!df_.hasBlock(INDEXES_BLK) || reindex){
     std::size_t n = df_.rows();
     DMatrix<int> idx(n,1);
     for(std::size_t i = 0; i < n; ++i) idx(i,0) = i;

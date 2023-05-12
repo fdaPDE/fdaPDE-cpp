@@ -48,7 +48,7 @@ TEST(FPCA, Test1_Laplacian_GeostatisticalAtNodes) {
   
   // set model data
   BlockFrame<double, int> df;
-  df.insert(OBSERVATIONS_BLK, DMatrix<double>(y.transpose()));
+  df.insert(OBSERVATIONS_BLK, DMatrix<double>(y));
   model.setData(df);
 
   // solve smoothing problem

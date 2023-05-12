@@ -35,7 +35,7 @@ namespace models {
     const SpMatrix<double>& R0()  const { return pde_->R0(); }    // mass matrix in space
     const SpMatrix<double>& R1()  const { return pde_->R1(); }    // discretization of differential operator L
     const DMatrix<double>&  u()   const { return pde_->force(); } // discretization of forcing term u
-    inline std::size_t n_time() const { return 1; } // number of time instants, always 1 for space-only problems
+    inline std::size_t n_temporal_locs() const { return 1; }      // number of time instants, always 1 for space-only problems
 
     // computes and cache R1^T*R0^{-1}*R1. Returns an expression encoding \lambda_S*(R1^T*R0^{-1}*R1)
     auto pen() {

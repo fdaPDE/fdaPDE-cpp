@@ -119,8 +119,8 @@ namespace models{
     using Base::lambdaS; // smoothing parameter in space
     using Base::lambdaT; // smoothing parameter in time
     using Base::L;       // [L]_{ii} = 1/DeltaT for i \in {1 ... m} and [L]_{i,i-1} = -1/DeltaT for i \in {1 ... m-1}
-    using Base::n_time;  // number of time instants m defined over [0,T]
     using Base::s;       // initial condition
+    using Base::n_temporal_locs; // number of time instants m defined over [0,T]
     // constructor
     STRPDE() = default;
     STRPDE(const PDE& pde, const DMatrix<double>& time) : Base(pde, time) {};
@@ -173,10 +173,10 @@ namespace models{
     IMPORT_REGRESSION_SYMBOLS;
     using Base::lambdaS;   // smoothing parameter in space
     using Base::lambdaT;   // smoothing parameter in time
-    using Base::n_time;    // number of time instants m defined over [0,T]
     using Base::tol_;      // tolerance on std::abs((Jnew - Jold)/Jnew)
     using Base::max_iter_; // maximum number of allowed iterations before forced stop
     using Base::DeltaT;    // distance between two time instants
+    using Base::n_temporal_locs; // number of time instants m defined over [0,T]
     // constructor
     STRPDE() = default;
     STRPDE(const PDE& pde, const DMatrix<double>& time) : Base(pde, time) {};
