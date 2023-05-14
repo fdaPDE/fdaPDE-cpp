@@ -31,7 +31,7 @@ namespace models {
       >::type;
   };
   
-  // finds vectors s,f minimizing \norm{X - s*f^T}_F^2 + s^T*s P_{\lambda_{\mathcal{D}}, \lambda_T}(f)
+  // finds vectors s,f_n minimizing \norm{X - s*f_n^T}_F^2 + s^T*s P_{\lambda_{\mathcal{D}}, \lambda_T}(f)
   // being P_{\lambda_{\mathcal{D}}, \lambda_T}(f) the penalty term and \norm{}_F the Frobenius norm
   template <typename Model>
   class ProfilingEstimation {
@@ -47,8 +47,9 @@ namespace models {
     std::size_t k_ = 0;         // iteration index
     
     // parameters at convergence
-    DVector<double> s_; // estimate of score vector
-    DVector<double> f_; // estimate of loadings vector
+    DVector<double> s_;   // estimate of vector s
+    DVector<double> f_n_; // estimate of vector f_n (spatial field evaluated at observations' locations)
+    DVector<double> f_;   // estimated spatial field
   public:
     // constructor
     ProfilingEstimation(const Model& m, double tol, std::size_t max_iter)
@@ -75,17 +76,17 @@ namespace models {
       solver_.setLambda(lambda);
       solver_.init_model();
       // reserve space for solution
-      f_.resize(X.cols()); s_.resize(X.rows());
+      f_n_.resize(X.cols()); s_.resize(X.rows());
       
       // initialization of f_ using SVD
       Eigen::JacobiSVD<DMatrix<double>> svd(X, Eigen::ComputeThinU|Eigen::ComputeThinV);
-      f_ = svd.matrixV().col(0);
+      f_n_ = svd.matrixV().col(0);
       // start iterative procedure
       DMatrix<double> X_ = X; // copy data to avoid side effects on caller state
       double Jold = std::numeric_limits<double>::max(); double Jnew = 1;
       while(!almost_equal(Jnew, Jold, tol_) && k_ < max_iter_){
 	// compute score vector s as Y*f/\norm(Y*f)
-	s_ = X_*f_;
+	s_ = X_*f_n_;
 	s_ = s_/s_.norm();
 	// compute loadings by solving a proper smoothing problem
 	solver_.data().template insert<double>(OBSERVATIONS_BLK, X_.transpose()*s_); // X^T*s
@@ -94,8 +95,8 @@ namespace models {
 	k_++;
 	Jold = Jnew;
 	// update value of discretized functional
-	f_ = solver_.fitted(); // \Psi*f
-	Jnew = (X_ - s_*f_.transpose()).squaredNorm(); // Frobenius norm of reconstruction error
+	f_n_ = solver_.fitted(); // \Psi*f
+	Jnew = (X_ - s_*f_n_.transpose()).squaredNorm(); // Frobenius norm of reconstruction error
 	if constexpr(is_space_only<Model>::value)
 	  // for a space only problem we can leverage the following identity
 	  // \int_D (Lf-u)^2 = g^\top*R_0*g = f^\top*P*f, being P = R_1^\top*(R_0)^{-1}*R_1
@@ -104,16 +105,19 @@ namespace models {
 	  // space-time separable regularization requires to compute the penalty matrix
 	  Jnew += solver_.f().dot(solver_.pen()*solver_.f());
       }
-      // normalize loadings and unnormalize scores
-      double norm = std::sqrt(solver_.f().dot(solver_.R0()*solver_.f()));
-      f_ = f_/norm; s_ = s_*norm;
+      // normalize loadings with respect to L^2 norm
+      double norm = std::sqrt(f_n_.dot(solver_.R0()*f_n_));
+      f_n_ = f_n_/norm; s_ = s_*norm;
+      // store estimated spatial (normalized wrt L^2 norm)
+      f_ = solver_.f()/(std::sqrt(solver_.f().dot(solver_.R0()*solver_.f())));
       return;
     }
     // getters
-    const DVector<double>& f() const { return f_; } // vector f at convergence
-    const DVector<double>& s() const { return s_; } // vector s at convergence
-    double gcv() { return gcv_.eval(); }            // GCV index at convergence
-    std::size_t n_iter() const { return k_ - 1; }   // number of iterations
+    const DVector<double>& f_n() const { return f_n_; }  // vector f_n at convergence
+    const DVector<double>& f() const { return f_; }      // estimated spatial field at convergence
+    const DVector<double>& s() const { return s_; }      // vector s at convergence
+    double gcv() { return gcv_.eval(); }                 // GCV index at convergence
+    std::size_t n_iter() const { return k_ - 1; }        // number of iterations
 
     // setters
     void set_tolerance(double tol) { tol_ = tol; }
