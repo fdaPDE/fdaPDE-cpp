@@ -15,53 +15,55 @@ namespace models{
   // base classes for the implemetation of the different sampling designs.
   // Here is computed the matrix of spatial basis evaluations \Psi = [\Psi]_{ij} = \psi_i(p_j) 
   template <typename Model, typename S> class SamplingDesign {};
+
+  // tag to request the not-NaN corrected version of matrix \Psi
+  struct not_nan_corrected{};
   
   // base class for all sampling strategies implementing common operations on \Psi matrix
   template <typename Model>
   class SamplingBase {
   protected:
     DEFINE_CRTP_MODEL_UTILS; // import model() method (const and non-const access)
-    SpMatrix<double> Psi_{}; // n x N matrix \Psi = [\psi_{ij}] = \psi_j(p_i) of spatial basis evaluation at data locations p_i
-    SpMatrix<double> cache_; // cache used for \Psi matrix (you might want to apply different missingness patterns)
+    SpMatrix<double> Psi_; // n x N matrix \Psi = [\psi_{ij}] = \psi_j(p_i) of spatial basis evaluation at data locations p_i
+    SpMatrix<double> B_;   // matrix \Psi where rows corresponding to NaN observations are zeroed
   public:
-    // sets the (j*n_basis + i)-th row of \Psi to zero if no data is observed at location (p_i, t_j)
+    // assemble matrix B (sets all rows of \Psi corresponding to NaN observations to zero)
     void set_nan() {
-      // meaningfull only if NaN are present
       if(model().hasNaN()){
-	Psi_ = cache_; // recover original \Psi from cached data
-	for(auto i : model().nan_idxs()) Psi_.row(i) *= 0; // impose NaN
-	Psi_.prune(0.0);
-	Psi_.makeCompressed();
+	// reserve space
+	B_.resize(Psi_.rows(), Psi_.cols());
+	// triplet list to fill sparse matrix
+	std::vector<fdaPDE::Triplet<double>> tripletList;
+	tripletList.reserve(Psi_.rows()*Psi_.cols());
+	for (int k = 0; k < Psi_.outerSize(); ++k)
+	  for (SpMatrix<double>::InnerIterator it(Psi_,k); it; ++it){
+	    if(model().nan_idxs().find(it.row()) == model().nan_idxs().end()){
+	      // no missing data at this location
+	      tripletList.emplace_back(it.row(), it.col(), it.value());
+	    }
+	  }
+	// finalize construction
+	B_.setFromTriplets(tripletList.begin(), tripletList.end());
+	B_.makeCompressed();
       }
       return;
     }
 
-    // permute rows of \Psi matrix according to idx block of model's BlockFrame.
-    void realign() {
-      // recover permutation from BlockFrame and set up permutation matrix
-      DVector<int> permutation_vector = model().idx();
-      Eigen::PermutationMatrix<Eigen::Dynamic, Eigen::Dynamic> P;
-      P.indices() = permutation_vector;      
-      Psi_ = P*Psi_; // apply by-row permutation to \Psi
-      return;
-    }
-
+    // if the model is space-time, perform a proper tensorization of matrix \Psi
     void tensorize() {
       if constexpr(is_solver_monolithic<Model>::value){
-	if constexpr(is_space_time_separable<Model>::value)
-	  Psi_ = Kronecker(model().Phi(), Psi_);
+	if constexpr(is_space_time_separable<Model>::value) Psi_ = Kronecker(model().Phi(), Psi_);
 	if constexpr(is_space_time_parabolic<Model>::value){
-	  SpMatrix<double> Im; // m x m identity matrix
-	  Im.resize(model().n_temporal_locs(), model().n_temporal_locs());
+	  SpMatrix<double> Im(model().n_temporal_locs(), model().n_temporal_locs()); // m x m identity matrix
 	  Im.setIdentity();
 	  Psi_ = Kronecker(Im, Psi_);
 	}
       }
-      cache_ = Psi_; // cache \Psi to avoid recomputation
       return;
     }
 
-    const SpMatrix<double>& B() const { return cache_; }
+    // getters to not-corrected \Psi matrix
+    const SpMatrix<double>& Psi(not_nan_corrected) const { return Psi_; }
   };
   
   // data sampled at mesh nodes
@@ -70,8 +72,10 @@ namespace models{
   private:
     DEFINE_CRTP_MODEL_UTILS; // import model() method (const and non-const access)
     typedef SamplingBase<Model> Base;
-    using Base::tensorize;
+    using Base::tensorize; // tensorize matrix \Psi for space-time problems
+    using Base::set_nan;   // zero rows of \Psi matrix depending on missingness-pattern
     using Base::Psi_;
+    using Base::B_;
   public:
     // constructor
     SamplingDesign() = default;
@@ -95,11 +99,13 @@ namespace models{
       Psi_.setFromTriplets(tripletList.begin(), tripletList.end());
       Psi_.makeCompressed();
       tensorize(); // tensorize \Psi for space-time problems
+      set_nan(); // correct for missing observations
     }
     
     // getters
-    const SpMatrix<double>& Psi() const { return Psi_; }
-    auto PsiTD() const { return Psi_.transpose(); }
+    using Base::Psi; // getter to not nan-corrected \Psi
+    const SpMatrix<double>& Psi() const { return model().hasNaN() ? B_ : Psi_; }
+    auto PsiTD() const { return model().hasNaN() ? B_.transpose() : Psi_.transpose(); }
     std::size_t n_spatial_locs() const { return model().domain().dof(); }
     DMatrix<double> locs() const { return model().domain().dofCoords(); }
     // set locations (nothing to do, locations are implicitly set to mesh nodes)
@@ -113,8 +119,10 @@ namespace models{
     DMatrix<double> locs_;   // matrix of spatial locations p_1, p2_, ... p_n
     DEFINE_CRTP_MODEL_UTILS; // import model() method (const and non-const access)
     typedef SamplingBase<Model> Base;
-    using Base::tensorize;
+    using Base::tensorize; // tensorize matrix \Psi for space-time problems
+    using Base::set_nan;   // zero rows of \Psi matrix depending on missingness-pattern
     using Base::Psi_;
+    using Base::B_;
   public:   
     // constructor
     SamplingDesign() = default;
@@ -151,11 +159,13 @@ namespace models{
       Psi_.setFromTriplets(tripletList.begin(), tripletList.end());
       Psi_.makeCompressed();
       tensorize(); // tensorize \Psi for space-time problems
+      set_nan(); // correct for missing observations
     };
 
     // getters
-    const SpMatrix<double>& Psi() const { return Psi_; }
-    auto PsiTD() const { return Psi_.transpose(); }
+    using Base::Psi; // getter to not nan-corrected \Psi
+    const SpMatrix<double>& Psi() const { return model().hasNaN() ? B_ : Psi_; }
+    auto PsiTD() const { return model().hasNaN() ? B_.transpose() : Psi_.transpose(); }
     std::size_t n_spatial_locs() const { return locs_.rows(); }
     const DMatrix<double>& locs() const { return locs_; }
     // setter
@@ -170,8 +180,10 @@ namespace models{
     DiagMatrix<double> D_;    // diagonal matrix of subdomains' measures    
     DEFINE_CRTP_MODEL_UTILS;  // import model() method (const and non-const access)
     typedef SamplingBase<Model> Base;
-    using Base::tensorize;
+    using Base::tensorize; // tensorize matrix \Psi for space-time problems
+    using Base::set_nan;   // zero rows of \Psi matrix depending on missingness-pattern
     using Base::Psi_;
+    using Base::B_;
   public:   
     // constructor
     SamplingDesign() = default;
@@ -235,11 +247,13 @@ namespace models{
       Psi_.setFromTriplets(tripletList.begin(), tripletList.end());
       Psi_.makeCompressed();
       tensorize(); // tensorize \Psi for space-time problems
+      set_nan(); // correct for missing observations
     };
     
     // getters
-    const SpMatrix<double>& Psi() const { return Psi_; }
-    auto PsiTD() const { return Psi_.transpose()*D_; }
+    using Base::Psi; // getter to not nan-corrected \Psi
+    const SpMatrix<double>& Psi() const { return model().hasNaN() ? B_ : Psi_; }
+    auto PsiTD() const { return model().hasNaN() ? B_.transpose()*D_ : Psi_.transpose()*D_; }
     std::size_t n_spatial_locs() const { return subdomains_.rows(); }
     const DiagMatrix<double>& D() const { return D_; }
     const DMatrix<int>& locs() const { return subdomains_; }

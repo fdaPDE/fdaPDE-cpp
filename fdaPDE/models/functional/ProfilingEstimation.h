@@ -106,10 +106,10 @@ namespace models {
 	  Jnew += solver_.f().dot(solver_.pen()*solver_.f());
       }
       // normalize loadings with respect to L^2 norm
-      double norm = std::sqrt(f_n_.dot(solver_.R0()*f_n_));
+      double norm = std::sqrt(solver_.f().dot(solver_.R0()*solver_.f()));
       f_n_ = f_n_/norm; s_ = s_*norm;
-      // store estimated spatial (normalized wrt L^2 norm)
-      f_ = solver_.f()/(std::sqrt(solver_.f().dot(solver_.R0()*solver_.f())));
+      // store estimated spatial field
+      f_ = solver_.f();
       return;
     }
     // getters

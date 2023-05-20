@@ -117,7 +117,7 @@ namespace models {
         
     // computes fitted values \hat y = \Psi*f_ + X*beta_
     DMatrix<double> fitted() const {
-      DMatrix<double> hat_y = SamplingBase::B()*f_;
+      DMatrix<double> hat_y = SamplingBase::Psi(not_nan_corrected())*f_;
       if(hasCovariates()) hat_y += X()*beta_;
       return hat_y;
     }
