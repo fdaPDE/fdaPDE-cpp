@@ -26,7 +26,7 @@ void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::s
   ScalarField<n_lambda> f;
   f = [&pe, &X](const SVector<n_lambda>& p) -> double {
     // find vectors s,f minimizing \norm_F{Y - s^T*f}^2 + (s^T*s)*P(f) fixed \lambda = p
-    pe.compute(X, p); 
+    pe.compute(X, p);
     return pe.gcv(); // return GCV at convergence
   };
   GridOptimizer<n_lambda> opt; // optimization algorithm

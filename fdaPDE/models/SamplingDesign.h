@@ -29,7 +29,7 @@ namespace models{
   public:
     // assemble matrix B (sets all rows of \Psi corresponding to NaN observations to zero)
     void set_nan() {
-      if(model().hasNaN()){
+      if(model().has_nan()){
 	// reserve space
 	B_.resize(Psi_.rows(), Psi_.cols());
 	// triplet list to fill sparse matrix
@@ -104,8 +104,8 @@ namespace models{
     
     // getters
     using Base::Psi; // getter to not nan-corrected \Psi
-    const SpMatrix<double>& Psi() const { return model().hasNaN() ? B_ : Psi_; }
-    auto PsiTD() const { return model().hasNaN() ? B_.transpose() : Psi_.transpose(); }
+    const SpMatrix<double>& Psi() const { return model().has_nan() ? B_ : Psi_; }
+    auto PsiTD() const { return model().has_nan() ? B_.transpose() : Psi_.transpose(); }
     std::size_t n_spatial_locs() const { return model().domain().dof(); }
     DMatrix<double> locs() const { return model().domain().dofCoords(); }
     // set locations (nothing to do, locations are implicitly set to mesh nodes)
@@ -164,8 +164,8 @@ namespace models{
 
     // getters
     using Base::Psi; // getter to not nan-corrected \Psi
-    const SpMatrix<double>& Psi() const { return model().hasNaN() ? B_ : Psi_; }
-    auto PsiTD() const { return model().hasNaN() ? B_.transpose() : Psi_.transpose(); }
+    const SpMatrix<double>& Psi() const { return model().has_nan() ? B_ : Psi_; }
+    auto PsiTD() const { return model().has_nan() ? B_.transpose() : Psi_.transpose(); }
     std::size_t n_spatial_locs() const { return locs_.rows(); }
     const DMatrix<double>& locs() const { return locs_; }
     // setter
@@ -252,8 +252,8 @@ namespace models{
     
     // getters
     using Base::Psi; // getter to not nan-corrected \Psi
-    const SpMatrix<double>& Psi() const { return model().hasNaN() ? B_ : Psi_; }
-    auto PsiTD() const { return model().hasNaN() ? B_.transpose()*D_ : Psi_.transpose()*D_; }
+    const SpMatrix<double>& Psi() const { return model().has_nan() ? B_ : Psi_; }
+    auto PsiTD() const { return model().has_nan() ? B_.transpose()*D_ : Psi_.transpose()*D_; }
     std::size_t n_spatial_locs() const { return subdomains_.rows(); }
     const DiagMatrix<double>& D() const { return D_; }
     const DMatrix<int>& locs() const { return subdomains_; }

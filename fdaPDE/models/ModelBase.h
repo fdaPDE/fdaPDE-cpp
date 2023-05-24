@@ -53,9 +53,8 @@ namespace models {
     std::size_t n_locs() const { return model().n_spatial_locs()*model().n_temporal_locs(); } // number of observations' locations
     const ADT<M,N,K>& gse() { if(gse_ == nullptr){ gse_ = std::make_shared<ADT<M,N,K>>(domain()); } return *gse_; }
     SVector<model_traits<Model>::n_lambda> lambda() const { return lambda_; }
-    bool hasNaN() const { return nan_idxs_.size() != 0; } // true if there are missing data
-    const std::unordered_set<std::size_t>& nan_idxs() const { return nan_idxs_; } // return indeces where data are missing
-    void analyze_nan();
+    bool has_nan() const { return nan_idxs_.size() != 0; } // true if there are missing data
+    const std::unordered_set<std::size_t>& nan_idxs() const { return nan_idxs_; } // return indexes where data are missing
     
     // abstract part of the interface, must be implemented by concrete models
     virtual void solve() = 0; // finds a solution to the problem, whatever the problem is.
@@ -71,6 +70,8 @@ namespace models {
     // getter to underlying model object
     inline Model& model() { return static_cast<Model&>(*this); }
     inline const Model& model() const { return static_cast<const Model&>(*this); } // const version
+  private:
+    void analyze_nan(); // analyze missing data pattern, set nan_idxs_ structure
   };
 
   // macro for runtime sanity checks on data, should be the first instruction in a solve() implementation

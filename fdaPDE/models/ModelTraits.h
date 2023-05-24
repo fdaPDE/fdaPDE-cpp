@@ -96,14 +96,23 @@ namespace models{
   struct Areal {};            // subdomains D_1, ..., D_n are provided
   // traits for sampling design in space
   template <typename Model>
-  struct is_sampling_areal { 
-    static constexpr bool value = std::is_same<typename model_traits<Model>::sampling, Areal>::value; };
+  struct is_sampling_areal {
+    static constexpr bool value = std::is_same<
+      typename model_traits<Model>::sampling, Areal
+      >::value;
+  };
   template <typename Model>
-  struct is_sampling_pointwise_at_mesh { 
-    static constexpr bool value = std::is_same<typename model_traits<Model>::sampling, GeoStatMeshNodes>::value; };
+  struct is_sampling_pointwise_at_mesh {
+    static constexpr bool value = std::is_same<
+      typename model_traits<Model>::sampling, GeoStatMeshNodes
+      >::value;
+  };
   template <typename Model>
-  struct is_sampling_pointwise_at_locs { 
-    static constexpr bool value = std::is_same<typename model_traits<Model>::sampling, GeoStatLocations>::value; };
+  struct is_sampling_pointwise_at_locs {
+    static constexpr bool value = std::is_same<
+      typename model_traits<Model>::sampling, GeoStatLocations
+      >::value;
+  };
   
 }}
 

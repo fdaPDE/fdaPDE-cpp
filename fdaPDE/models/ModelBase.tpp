@@ -29,8 +29,7 @@ void ModelBase<Model>::setData(const BlockFrame<double, int>& df, bool reindex) 
     for(std::size_t i = 0; i < n; ++i) idx(i,0) = i;
     df_.insert(INDEXES_BLK, idx);
   }
-  model().analyze_nan(); // analyze missing data
-
+  if(df_.hasBlock(OBSERVATIONS_BLK)) analyze_nan(); // analyze missing data
   // update model to data, if requested
   if constexpr(requires_update_to_data<Model>::value) model().update_to_data();
   return;
