@@ -43,13 +43,11 @@ namespace models {
     
     // getters
     const BlockFrame<double, int>& data() const { return df_; }
-    const DMatrix<double>& y() const { return df_.get<double>(OBSERVATIONS_BLK); } // observation vector y
     const DMatrix<int>& idx() const { return df_.get<int>(INDEXES_BLK); } // data indices
     // informations related to discretization of regularization term
     const PDE& pde() const { return *pde_; } // regularizing term Lf - u (defined on some domain \Omega)
     const Mesh<M,N,K>& domain() const { return pde_->domain(); }
     std::size_t n_basis() const { return pde_->domain().dof(); }; // number of basis functions used in space discretization
-    std::size_t n_obs() const { return df_.rows(); } // number of observations
     std::size_t n_locs() const { return model().n_spatial_locs()*model().n_temporal_locs(); } // number of observations' locations
     const ADT<M,N,K>& gse() { if(gse_ == nullptr){ gse_ = std::make_shared<ADT<M,N,K>>(domain()); } return *gse_; }
     SVector<model_traits<Model>::n_lambda> lambda() const { return lambda_; }

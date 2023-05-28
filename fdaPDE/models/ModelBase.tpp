@@ -4,19 +4,8 @@ void ModelBase<Model>::init(){
   init_pde();                    // init pde object
   model().init_regularization(); // init regularization term
   model().init_sampling(true);   // init \Psi matrix, always force recomputation
-
-  // init model's internals
   model().init_model();
 }
-
-// a trait to detect if a model requires a preprocessing step
-template <typename Model, typename T = void>
-struct requires_update_to_data : std::false_type {};
-
-template <typename Model> 
-struct requires_update_to_data<
-  Model, std::void_t<decltype(std::declval<Model>().update_to_data())>
-  > : std::true_type {};
 
 // set model's data from blockframe
 template <typename Model>
@@ -29,8 +18,7 @@ void ModelBase<Model>::setData(const BlockFrame<double, int>& df, bool reindex) 
     for(std::size_t i = 0; i < n; ++i) idx(i,0) = i;
     df_.insert(INDEXES_BLK, idx);
   }
-  // update model to data, if requested
-  if constexpr(requires_update_to_data<Model>::value) model().update_to_data();
+  model().init_data(); // specific initialization requested by the model
 }
 
 // set boundary conditions on problem's linear system

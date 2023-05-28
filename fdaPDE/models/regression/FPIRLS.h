@@ -65,25 +65,27 @@ namespace models{
       // algorithm initialization
       mu_ = m_.y();
       distribution_.preprocess(mu_);
-      // define internal problem solver and initialize it
+      // define internal problem solver
       typename FPIRLS_internal_solver<Model>::type solver;
       if constexpr(!is_space_time<Model>::value) // space-only
 	solver = typename FPIRLS_internal_solver<Model>::type(m_.pde());
       else{ // space-time
 	solver = typename FPIRLS_internal_solver<Model>::type(m_.pde(), m_.time_domain());
 	// in case of parabolic regularization derive initial condition from input model
-	if constexpr(std::is_same<typename model_traits<Model_>::regularization,
-		     SpaceTimeParabolic>::value)
+	if constexpr(is_space_time_parabolic<Model_>::value)
 	  solver.setInitialCondition(m_.s());
+	// in case of separable regularization set possible temporal locations
+	if constexpr(is_space_time_separable<Model_>::value)
+	  solver.set_temporal_locations(m_.time_locs());
       }
+      // solver initialization
+      solver.data() = m_.data();
       solver.setLambda(m_.lambda());
       solver.set_spatial_locations(m_.locs());
       solver.init_pde();
       solver.init_regularization();
       solver.init_sampling();
-      // prepare data for solver, copy covariates if present
-      solver.data() = m_.data();
-      
+
       // algorithm stops when an enought small difference between two consecutive values of the J is recordered
       double J_old = tolerance_+1; double J_new = 0;
       // start loop
@@ -96,7 +98,7 @@ namespace models{
 	solver.data().template insert<double>(OBSERVATIONS_BLK, std::get<1>(pair));
 	solver.data().template insert<double>(WEIGHTS_BLK, std::get<0>(pair));
 	// update solver to change in the weight matrix
-	solver.update_to_data();
+	solver.init_data();
 	solver.init_model();
 	solver.solve();
 	

@@ -73,7 +73,7 @@ namespace models{
       Psi_.setFromTriplets(tripletList.begin(), tripletList.end());
       Psi_.makeCompressed();
       tensorize(); // tensorize \Psi for space-time problems
-      model().init_nan(); // initialize NaN structures
+      model().init_nan(); // analyze and set missingness pattern
     }
     
     // getters    
@@ -129,7 +129,7 @@ namespace models{
       Psi_.setFromTriplets(tripletList.begin(), tripletList.end());
       Psi_.makeCompressed();
       tensorize(); // tensorize \Psi for space-time problems
-      model().init_nan(); // initialize NaN structures
+      model().init_nan(); // analyze and set missingness pattern
     };
 
     // getters
@@ -213,7 +213,7 @@ namespace models{
       Psi_.setFromTriplets(tripletList.begin(), tripletList.end());
       Psi_.makeCompressed();
       tensorize(); // tensorize \Psi for space-time problems
-      model().init_nan(); // initialize NaN structures
+      model().init_nan(); // analyze and set missingness pattern
     };
     
     // getters
