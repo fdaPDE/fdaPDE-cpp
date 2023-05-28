@@ -29,24 +29,8 @@ void ModelBase<Model>::setData(const BlockFrame<double, int>& df, bool reindex) 
     for(std::size_t i = 0; i < n; ++i) idx(i,0) = i;
     df_.insert(INDEXES_BLK, idx);
   }
-  if(df_.hasBlock(OBSERVATIONS_BLK)) analyze_nan(); // analyze missing data
   // update model to data, if requested
   if constexpr(requires_update_to_data<Model>::value) model().update_to_data();
-  return;
-}
-
-// analyze missing data pattern, compute nan indices based on observation vector
-template <typename Model>
-void ModelBase<Model>::analyze_nan() {
-  BLOCK_FRAME_SANITY_CHECKS;
-  nan_idxs_.clear(); // empty nan set
-  for(std::size_t i = 0; i < n_obs(); ++i){
-    if(std::isnan(y()(i,0))){ // requires -ffast-math compiler flag to be disabled
-      nan_idxs_.insert(i);
-      df_.get<double>(OBSERVATIONS_BLK)(i,0) = 0.0; // zero out NaN
-    }
-  }
-  return;
 }
 
 // set boundary conditions on problem's linear system
