@@ -37,7 +37,7 @@ namespace models{
   private:
     typedef SpaceTimeSeparable RegularizationType;
     typedef RegressionBase<STRPDE<PDE, RegularizationType, SamplingDesign, MonolithicSolver>> Base;
-    SpMatrix<double> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
+    SparseBlockMatrix<double,2,2> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
     fdaPDE::SparseLU<SpMatrix<double>> invA_; // factorization of matrix A
     DVector<double> b_{};  // right hand side of problem's linear system (1 x 2N vector)
 
@@ -84,7 +84,7 @@ namespace models{
     }
 
     // getters
-    const SpMatrix<double>& A() const { return A_; }
+    const SparseBlockMatrix<double,2,2>& A() const { return A_; }
     const fdaPDE::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
     
     virtual ~STRPDE() = default;
@@ -108,7 +108,7 @@ namespace models{
   private:
     typedef SpaceTimeParabolic RegularizationType;
     typedef RegressionBase<STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, MonolithicSolver>> Base;
-    SpMatrix<double> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
+    SparseBlockMatrix<double,2,2> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
     fdaPDE::SparseLU<SpMatrix<double>> invA_; // factorization of matrix A
     DVector<double> b_{};  // right hand side of problem's linear system (1 x 2N vector)
 
@@ -136,7 +136,7 @@ namespace models{
     // virtual double norm(const DMatrix<double>& obs, const DMatrix<double>& fitted) const;
 
     // getters
-    const SpMatrix<double>& A() const { return A_; }
+    const SparseBlockMatrix<double,2,2>& A() const { return A_; }
     const fdaPDE::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
     
     virtual ~STRPDE() = default;
@@ -159,7 +159,7 @@ namespace models{
   private:
     typedef SpaceTimeParabolic RegularizationType;
     typedef RegressionBase<STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, IterativeSolver>> Base;
-    SpMatrix<double> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
+    SparseBlockMatrix<double,2,2> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
     fdaPDE::SparseLU<SpMatrix<double>> invA_; // factorization of matrix A
     DVector<double> b_{};  // right hand side of problem's linear system (1 x 2N vector)
 

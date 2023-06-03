@@ -5,11 +5,10 @@
 template <typename PDE, typename SamplingDesign>
 void SRPDE<PDE, SamplingDesign>::init_model() {
   // assemble system matrix for nonparameteric part
-  SparseBlockMatrix<double,2,2>
-    A(-PsiTD()*W()*Psi(), lambdaS()*R1().transpose(),
-      lambdaS()*R1(),     lambdaS()*R0()            );
-  // cache non-parametric matrix and its factorization for reuse
-  A_ = A.derived();
+  A_ = SparseBlockMatrix<double,2,2>
+    (-PsiTD()*W()*Psi(), lambdaS()*R1().transpose(),
+     lambdaS()*R1(),     lambdaS()*R0()            );
+  // cache non-parametric matrix factorization for reuse
   invA_.compute(A_);
   // prepare rhs of linear system
   b_.resize(A_.rows());
@@ -34,9 +33,9 @@ void SRPDE<PDE, SamplingDesign>::solve() {
     b_.block(0,0, n_basis(),1) = -PsiTD()*lmbQ(y()); // -\Psi^T*D*Q*z
     
     // definition of matrices U and V  for application of woodbury formula
-    U_ = DMatrix<double>::Zero(A_.rows(), q());
+    U_ = DMatrix<double>::Zero(2*n_basis(), q());
     U_.block(0,0, n_basis(), q()) = PsiTD()*W()*X();
-    V_ = DMatrix<double>::Zero(q(), A_.rows());
+    V_ = DMatrix<double>::Zero(q(), 2*n_basis());
     V_.block(0,0, q(), n_basis()) = X().transpose()*W()*Psi();
     // solve system (A_ + U_*(X^T*W_*X)*V_)x = b using woodbury formula from NLA module
     sol = SMW<>().solve(invA_, U_, XtWX(), V_, b_);

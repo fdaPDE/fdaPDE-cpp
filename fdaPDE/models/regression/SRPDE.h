@@ -27,7 +27,7 @@ namespace models{
     static_assert(std::is_base_of<PDEBase, PDE>::value);
   private:
     typedef RegressionBase<SRPDE<PDE, SamplingDesign>> Base;   
-    SpMatrix<double> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
+    SparseBlockMatrix<double,2,2> A_{}; // system matrix of non-parametric problem (2N x 2N matrix)
     fdaPDE::SparseLU<SpMatrix<double>> invA_; // factorization of matrix A
     DVector<double> b_{}; // right hand side of problem's linear system (1 x 2N vector)
   public:
@@ -48,7 +48,7 @@ namespace models{
     virtual double norm(const DMatrix<double>& obs, const DMatrix<double>& fitted) const;
 
     // getters
-    const SpMatrix<double>& A() const { return A_; }
+    const SparseBlockMatrix<double,2,2>& A() const { return A_; }
     const fdaPDE::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
     
     virtual ~SRPDE() = default;

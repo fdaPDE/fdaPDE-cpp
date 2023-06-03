@@ -6,11 +6,10 @@ template <typename PDE, typename SamplingDesign>
 void STRPDE<PDE, SpaceTimeSeparable, SamplingDesign, MonolithicSolver>::init_model() {
   // assemble system matrix for the nonparameteric part of the model
   if(is_empty(P_)) P_ = Kronecker(Pt(), pde().R0());  
-  SparseBlockMatrix<double,2,2>
-    A(-PsiTD()*W()*Psi()-lambdaT()*P_, lambdaS()*R1().transpose(),
-      lambdaS()*R1(),                  lambdaS()*R0()            );
+  A_ = SparseBlockMatrix<double,2,2>
+    (-PsiTD()*W()*Psi()-lambdaT()*P_, lambdaS()*R1().transpose(),
+     lambdaS()*R1(),                  lambdaS()*R0()            );
   // cache system matrix for reuse
-  A_ = A.derived();
   invA_.compute(A_);
   // prepare rhs of linear system
   b_.resize(A_.rows());
@@ -58,11 +57,10 @@ template <typename PDE, typename SamplingDesign>
 void STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, MonolithicSolver>::init_model() {
   // assemble system matrix for the nonparameteric part of the model
   if(is_empty(L_)) L_ = Kronecker(L(), pde().R0());
-  SparseBlockMatrix<double,2,2>
-    A(-PsiTD()*W()*Psi(),              lambdaS()*(R1() + lambdaT()*L_).transpose(),
-      lambdaS()*(R1() + lambdaT()*L_), lambdaS()*R0()                             );
+  A_ =SparseBlockMatrix<double,2,2>
+    (-PsiTD()*W()*Psi(),              lambdaS()*(R1() + lambdaT()*L_).transpose(),
+     lambdaS()*(R1() + lambdaT()*L_), lambdaS()*R0()                             );
   // cache system matrix for reuse
-  A_ = A.derived();
   invA_.compute(A_);
   // prepare rhs of linear system  
   b_.resize(A_.rows());
@@ -127,11 +125,10 @@ void STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, IterativeSolver>::solve
 template <typename PDE, typename SamplingDesign>
 void STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, IterativeSolver>::solve() {  
   // compute starting point (f^(k,0), g^(k,0)) k = 1 ... m for iterative minimization of functional J(f,g)
-  SparseBlockMatrix<double,2,2>
-    A(PsiTD()*Psi(),   lambdaS()*R1().transpose(), 
-      lambdaS()*R1(), -lambdaS()*R0()           );
+  A_ = SparseBlockMatrix<double,2,2>
+    (PsiTD()*Psi(),   lambdaS()*R1().transpose(), 
+     lambdaS()*R1(), -lambdaS()*R0()           );
   // cache system matrix and its factorization
-  A_ = A.derived();
   invA_.compute(A_);
   b_.resize(A_.rows());
 
@@ -172,11 +169,8 @@ void STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, IterativeSolver>::solve() {
   std::size_t i = 1; // iteration number
 
   // build system matrix for the iterative scheme
-  std::size_t N = n_basis();
-  SparseBlockMatrix<double,2,2>
-    M(SpMatrix<double>(N, N),            lambdaS()*lambdaT()/DeltaT()*R0(),
-      lambdaS()*lambdaT()/DeltaT()*R0(), SpMatrix<double>(N, N)           );
-  A_ = A_ + M.derived();
+  A_.block(0,1) += lambdaS()*lambdaT()/DeltaT()*R0();
+  A_.block(1,0) += lambdaS()*lambdaT()/DeltaT()*R0();
   invA_.compute(A_);
   b_.resize(A_.rows());
   
