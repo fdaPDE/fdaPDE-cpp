@@ -4,6 +4,8 @@
 #include "../core/utils/Symbols.h"
 #include "../core/NLA/KroneckerProduct.h"
 using fdaPDE::core::NLA::Kronecker;
+#include "../core/MESH/Element.h"
+using fdaPDE::core::MESH::ct_nnodes;
 #include "ModelBase.h"
 #include "ModelTraits.h"
 using fdaPDE::models::is_space_time;
@@ -48,7 +50,7 @@ namespace models{
   private:
     DEFINE_CRTP_MODEL_UTILS; // import model() method (const and non-const access)
     typedef SamplingBase<Model> Base;
-    using Base::tensorize; // tensorize matrix \Psi for space-time problems
+    using Base::tensorize;   // tensorize matrix \Psi for space-time problems
     using Base::Psi_;
   public:
     // constructor
@@ -63,7 +65,7 @@ namespace models{
       Psi_.resize(n, N);    
       // triplet list to fill sparse matrix
       std::vector<fdaPDE::Triplet<double>> tripletList;
-      tripletList.reserve(n*N);
+      tripletList.reserve(n);
 
       // if data locations are equal to mesh nodes then \Psi is the identity matrix.
       // \psi_i(p_i) = 1 and \psi_i(p_j) = 0 \forall i \neq j
@@ -73,7 +75,6 @@ namespace models{
       Psi_.setFromTriplets(tripletList.begin(), tripletList.end());
       Psi_.makeCompressed();
       tensorize(); // tensorize \Psi for space-time problems
-      model().init_nan(); // analyze and set missingness pattern
     }
     
     // getters    
@@ -91,7 +92,7 @@ namespace models{
     DMatrix<double> locs_;   // matrix of spatial locations p_1, p2_, ... p_n
     DEFINE_CRTP_MODEL_UTILS; // import model() method (const and non-const access)
     typedef SamplingBase<Model> Base;
-    using Base::tensorize; // tensorize matrix \Psi for space-time problems
+    using Base::tensorize;   // tensorize matrix \Psi for space-time problems
     using Base::Psi_;
   public:   
     // constructor
@@ -108,7 +109,8 @@ namespace models{
       Psi_.resize(n, N);    
       // triplet list to fill sparse matrix
       std::vector<fdaPDE::Triplet<double>> tripletList;
-      tripletList.reserve(n*N);
+      // a point is evaluated non-zero at most a number of times equal to the number of basis over a mesh element
+      tripletList.reserve(n*ct_nnodes(Model::M, Model::K));
 
       auto gse = model().gse(); // geometric search engine
       // cycle over all locations
@@ -129,7 +131,6 @@ namespace models{
       Psi_.setFromTriplets(tripletList.begin(), tripletList.end());
       Psi_.makeCompressed();
       tensorize(); // tensorize \Psi for space-time problems
-      model().init_nan(); // analyze and set missingness pattern
     };
 
     // getters
@@ -148,7 +149,7 @@ namespace models{
     DiagMatrix<double> D_;    // diagonal matrix of subdomains' measures    
     DEFINE_CRTP_MODEL_UTILS;  // import model() method (const and non-const access)
     typedef SamplingBase<Model> Base;
-    using Base::tensorize; // tensorize matrix \Psi for space-time problems
+    using Base::tensorize;    // tensorize matrix \Psi for space-time problems
     using Base::Psi_;
   public:   
     // constructor
@@ -165,7 +166,7 @@ namespace models{
       Psi_.resize(n, N);    
       // triplet list to fill sparse matrix
       std::vector<fdaPDE::Triplet<double>> tripletList;
-      tripletList.reserve(n*N);
+      tripletList.reserve(n*N); // n is small, should not cause any bad_alloc
 
       DVector<double> D; // store measure of subdomains, this will be ported to a diagonal matrix at the end
       D.resize(subdomains_.rows());      
@@ -213,7 +214,6 @@ namespace models{
       Psi_.setFromTriplets(tripletList.begin(), tripletList.end());
       Psi_.makeCompressed();
       tensorize(); // tensorize \Psi for space-time problems
-      model().init_nan(); // analyze and set missingness pattern
     };
     
     // getters
