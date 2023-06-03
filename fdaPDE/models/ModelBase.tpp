@@ -4,6 +4,7 @@ void ModelBase<Model>::init(){
   init_pde();                    // init pde object
   model().init_regularization(); // init regularization term
   model().init_sampling(true);   // init \Psi matrix, always force recomputation
+  model().init_nan();            // analyze and set missingness pattern
   model().init_model();
 }
 

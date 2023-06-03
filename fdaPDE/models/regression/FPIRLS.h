@@ -85,6 +85,7 @@ namespace models{
       solver.init_pde();
       solver.init_regularization();
       solver.init_sampling();
+      solver.init_nan();
 
       // algorithm stops when an enought small difference between two consecutive values of the J is recordered
       double J_old = tolerance_+1; double J_new = 0;

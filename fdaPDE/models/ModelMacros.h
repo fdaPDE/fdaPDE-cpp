@@ -5,8 +5,6 @@
 
   // this macro is intended to import all **common** symbols a model type can expect from its parent classes
 #define IMPORT_MODEL_SYMBOLS                                                             \
-  using Base::y;       /* vector of observations y = [y_1 ... y_n] */                    \
-  using Base::n_obs;   /* number of observations n */                                    \
   using Base::n_basis; /* number of basis function for discretization in space N */      \
   using Base::n_locs;  /* number of locations p_1 ... p_n where data are observed */     \
   using Base::Psi;     /* n x N matrix of spatial basis evaluations at p_1 ... p_n */    \
@@ -24,6 +22,8 @@
 #define IMPORT_REGRESSION_SYMBOLS                                                        \
   IMPORT_MODEL_SYMBOLS;			              			                 \
   /* data access */                                                                      \
+  using Base::y;             /* vector of observations y = [y_1 ... y_n] */              \
+  using Base::n_obs;         /* number of observations n */                              \
   using Base::W;             /* matrix of observation weights W_ = diag[W_1 ... W_n] */  \
   using Base::q;             /* number of covariates */                                  \
   using Base::X;             /* n x q design matrix X = [X_1 ... X_q] */                 \
