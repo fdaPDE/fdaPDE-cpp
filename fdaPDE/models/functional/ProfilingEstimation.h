@@ -218,7 +218,8 @@ namespace models {
     // executes the ProfilingEstimation algorithm given data X and smoothing parameter \lambda
     virtual void compute(const BlockFrame<double, int>& df, const SVector<model_traits<Model_>::n_lambda>& lambda) {
       // copy data to avoid side effects on caller state
-      DMatrix<double> X_ = df.template get<double>(OBSERVATIONS_BLK);
+      const DMatrix<double>& X_nan = df.template get<double>(OBSERVATIONS_BLK);
+      DMatrix<double> X_ = X_nan.array().isNaN().select(0, X_nan); // set NaN to zero
       
       // solver initialization
       std::size_t N = m_.Psi(not_nan()).cols(); // number of basis, but for space-time (separable) problems should be something else....
@@ -239,7 +240,6 @@ namespace models {
       // start iterative procedure
       double Jold = std::numeric_limits<double>::max(); double Jnew = 1;
       this->k_ = 0; // reset iteration counter
-      DVector<double> solution;
 
       // for space-time problems only... this can be computed once at construction time...
       SpMatrix<double> P_;
@@ -249,7 +249,6 @@ namespace models {
 	// compute score vector s as X*f/\norm(X*f)
 	s_ = X_*f_n_;
 	s_ = s_/s_.norm();
-
 	// Assembly of matrix [L]_{ij} = \sum_{m=1}^M \sum_{n \in O_m}(s_m^2*\psi_i(p_n)*\psi_j(p_n))
 	// being M : number of considered statistical units, O_l : observation locations' indexes for l-th unit
 	SpMatrix<double> L; L.resize(N,N);
@@ -265,25 +264,16 @@ namespace models {
 	invA_.compute(A_);
 	// update rhs of linear system
 	b_.block(0,0, N,1) = -m_.PsiTD(not_nan())*X_.transpose()*s_;
-
-	// solve smoothing problem
-	solution = invA_.solve(b_);
+	// solve linear system and store results
+	DVector<double> solution = invA_.solve(b_);
 	f_ = solution.topRows(N); g_ = solution.bottomRows(N);
+	f_n_ = m_.Psi(not_nan())*f_; // \Psi*f
 	
 	// prepare for next iteration
 	this->k_++;
 	Jold = Jnew;
-	// update value of discretized functional
-	f_n_ = m_.Psi(not_nan())*f_; // \Psi*f
-	double Jnew = 0;
-	// Frobenius norm of reconstruction error (if we keep nan this can be vectorized with eigen...)
-	for(std::size_t i = 0; i < X_.rows(); ++i){
-	  int ID = df.template get<int>(INDEXES_BLK)(i,0);
-	  for(std::size_t j = 0; j < X_.cols(); ++j) // cycle over locations
-	    if(m_.nan_idxs()[ID].find(j) == m_.nan_idxs()[ID].end()){
-	      Jnew += std::pow(X_(i,j) - s_[i]*f_n_[j], 2);
-	    }
-	}
+	// Frobenius norm of reconstruction error
+	double Jnew = X_nan.array().isNaN().select(0, X_nan - s_*f_n_.transpose()).squaredNorm();
 	if constexpr(is_space_only<Model>::value)
 	  // for a space only problem we can leverage the following identity
 	  // \int_D (Lf-u)^2 = g^\top*R_0*g = f^\top*P*f, being P = R_1^\top*(R_0)^{-1}*R_1

@@ -81,10 +81,12 @@ namespace models {
 	for(std::size_t j = 0; j < n_locs(); ++j){
 	  if(std::isnan(X()(i,j))){ // requires -ffast-math compiler flag to be disabled
 	    nan_idxs_[i].insert(j);
-	    df_.template get<double>(OBSERVATIONS_BLK)(i,j) = 0.0; // zero out NaN
+	    //df_.template get<double>(OBSERVATIONS_BLK)(i,j) = 0.0; // zero out NaN
 	  }
 	}
-	if(!nan_idxs_[i].empty()){ // NaN detected, start assembly
+
+	// NaN detected for this unit, start assembly
+	if(!nan_idxs_[i].empty()){
 	  for(std::size_t i = 0; i < n_stat_units(); ++i){
 	    B_[i].resize(n, N); // reserve space
 	    std::vector<fdaPDE::Triplet<double>> tripletList;
@@ -99,7 +101,8 @@ namespace models {
 	    B_[i].setFromTriplets(tripletList.begin(), tripletList.end());
 	    B_[i].makeCompressed();
 	  }	  
-	} // otherwise no matrix is assembled, full \Psi is returned by Psi(std::size_t) getter
+	}
+	// otherwise no matrix is assembled, full \Psi is returned by Psi(std::size_t) getter
       }
       return;
     }
