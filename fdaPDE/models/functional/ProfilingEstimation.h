@@ -45,10 +45,12 @@ namespace models {
     }
     // dynamically dispatch calls to instantiated strategy
     const DVector<double>& f_n() const { return pe_->f_n(); } // vector f_n at convergence
-    const DVector<double>& f() const { return pe_->f(); } // estimated spatial field at convergence
-    const DVector<double>& g() const { return pe_->g(); } // PDE misfit at convergence
-    const DVector<double>& s() const { return pe_->s(); } // vector s at convergence
-    std::size_t n_iter() const { return pe_->n_iter(); }  // number of iterations
+    const DVector<double>& f() const { return pe_->f(); }     // estimated field at convergence
+    const DVector<double>& g() const { return pe_->g(); }     // PDE misfit at convergence
+    const DVector<double>& s() const { return pe_->s(); }     // vector s at convergence
+    std::size_t n_iter() const { return pe_->n_iter(); }      // number of iterations
+    double f_norm() const { return pe_->f_norm(); }           // L^2 norm of esimated field
+    double f_n_norm() const { return pe_->f_n_norm(); }       // f_n vector norm
     // setters
     void set_tolerance(double tol) { pe_->set_tolerance(tol); }
     void set_max_iter(std::size_t max_iter) { pe_->set_max_iter(max_iter); }
@@ -70,10 +72,12 @@ namespace models {
     std::size_t k_ = 0;         // iteration index
     
     // parameters at convergence
-    DVector<double> s_;   // estimate of vector s
-    DVector<double> f_n_; // estimate of vector f_n (spatial field evaluated at observations' locations)
-    DVector<double> f_;   // estimated spatial field
-    DVector<double> g_;   // PDE misfit at convergence
+    DVector<double> s_;   
+    DVector<double> f_n_; 
+    DVector<double> f_; // estimated spatial(spatio-temporal) field at convergence
+    DVector<double> g_; // PDE misfit at convergence
+    double f_norm_;     // L^2 norm of estimated field at converegence
+    double f_n_norm_;   // f_n norm (use euclidean norm if is_sampling_pointwise_at_mesh<Model> evaluates false)
   public:
     // constructor
     ProfilingEstimationStrategy() = default;
@@ -81,11 +85,13 @@ namespace models {
       tol_(tol), max_iter_(max_iter) {};
     
     // getters
-    const DVector<double>& f_n() const { return f_n_; } // vector f_n at convergence
-    const DVector<double>& f() const { return f_; } // estimated spatial field at convergence
-    const DVector<double>& g() const { return g_; } // PDE misfit at convergence
-    const DVector<double>& s() const { return s_; } // vector s at convergence
-    std::size_t n_iter() const { return k_ - 1; }   // number of iterations
+    const DVector<double>& f_n() const { return f_n_; } 
+    const DVector<double>& f() const { return f_; } 
+    const DVector<double>& g() const { return g_; } 
+    const DVector<double>& s() const { return s_; } 
+    std::size_t n_iter() const { return k_ - 1; }   
+    double f_norm() const { return f_norm_; }
+    double f_n_norm() const { return f_n_norm_; }
     // setters
     void set_tolerance(double tol) { tol_ = tol; }
     void set_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
@@ -148,7 +154,7 @@ namespace models {
       // solver initialization
       solver_.setLambda(lambda);
       solver_.init_model();
-      DMatrix<double> X_ = df.template get<double>(OBSERVATIONS_BLK); // copy data to avoid side effects on caller state
+      const DMatrix<double>& X_ = df.template get<double>(OBSERVATIONS_BLK);
       // reserve space for solution
       f_n_.resize(X_.cols()); s_.resize(X_.rows());
 
@@ -180,18 +186,13 @@ namespace models {
 	  // space-time separable regularization requires to compute the penalty matrix
 	  Jnew += solver_.f().dot(solver_.pen()*solver_.f());
       }
-      // compute L^2 norm of spatial field
-      double L2norm = std::sqrt(solver_.f().dot(solver_.R0()*solver_.f()));;
-      f_ = solver_.f();///L2norm;
-      if constexpr(is_sampling_pointwise_at_mesh<Model_>::value){
-	// store normalized f_n with respcet to L^2 norm
-	f_n_ = f_; //s_ = s_*L2norm;
-      }else{ // use euclidean norm if L^2 norm of f_n vector cannot be computed 
-	L2norm = f_n_.norm();
-	f_n_ = f_n_/L2norm; s_ = s_*L2norm;
-      }
-      this->g_ = solver_.g(); // store PDE misfit at convergence
-      return;
+      // store results
+      f_ = solver_.f(); // estimated field at convergence
+      this->g_ = solver_.g(); // PDE misfit at convergence
+      this->f_norm_ = std::sqrt(f_.dot(solver_.R0()*f_)); // L^2 norm of estimated field
+      // compute norm of loadings vector
+      if constexpr(is_sampling_pointwise_at_mesh<Model_>::value) this->f_n_norm_ = this->f_norm_;
+      else this->f_n_norm_ = f_n_.norm(); // use euclidean norm if L^2 norm of f_n vector cannot be computed 
     }
     
     // getters
@@ -206,6 +207,8 @@ namespace models {
     typedef typename std::decay<Model>::type Model_;
     typedef ProfilingEstimationStrategy<Model> Base;
     Model_& m_;
+
+    SpMatrix<double> P_; // Pt \kron R0, [Pt_]_{ij} = \int_{[0,T]} (\phi_i)_tt*(\phi_j)_tt, R0 FEM mass matrix
   public:
     using Base::f_n_; // spatial (spatio-temporal) field fitted values
     using Base::s_;   // scores vector
@@ -213,13 +216,17 @@ namespace models {
     using Base::g_;   // PDE misfit
     // constructor
     ProfilingEstimationImpl(Model& m, double tol, std::size_t max_iter)
-      : Base(tol, max_iter), m_(m) {};
+      : Base(tol, max_iter), m_(m) {
+      // initialize P_ if regularization is space-time separable
+      if constexpr(is_space_time<Model>::value) P_ = Kronecker(m_.Pt(), m_.pde().R0());
+    };
     
     // executes the ProfilingEstimation algorithm given data X and smoothing parameter \lambda
     virtual void compute(const BlockFrame<double, int>& df, const SVector<model_traits<Model_>::n_lambda>& lambda) {
-      // copy data to avoid side effects on caller state
+      // extract missingness pattern
       const DMatrix<double>& X_nan = df.template get<double>(OBSERVATIONS_BLK);
-      DMatrix<double> X_ = X_nan.array().isNaN().select(0, X_nan); // set NaN to zero
+      auto nan_pattern = X_nan.array().isNaN(); 
+      DMatrix<double> X_ = nan_pattern.select(0, X_nan); // set NaN to zero
       
       // solver initialization
       std::size_t N = m_.Psi(not_nan()).cols(); // number of basis, but for space-time (separable) problems should be something else....
@@ -231,20 +238,15 @@ namespace models {
       DVector<double> b_;  // right hand side of problem's linear system (1 x 2N vector)
       b_.resize(2*N);
       b_.block(N,0, N,1) = DMatrix<double>::Zero(N, 1);
-      
-      // reserve space for solution
-      f_n_.resize(X_.cols()); s_.resize(X_.rows());      
+
       // initialization of f_ using SVD
+      f_n_.resize(X_.cols()); s_.resize(X_.rows());      
       Eigen::JacobiSVD<DMatrix<double>> svd(X_, Eigen::ComputeThinU|Eigen::ComputeThinV);
       f_n_ = svd.matrixV().col(0);
+      
       // start iterative procedure
       double Jold = std::numeric_limits<double>::max(); double Jnew = 1;
       this->k_ = 0; // reset iteration counter
-
-      // for space-time problems only... this can be computed once at construction time...
-      SpMatrix<double> P_;
-      if constexpr(is_space_time<Model>::value) P_ = Kronecker(m_.Pt(), m_.pde().R0());
-      
       while(!almost_equal(Jnew, Jold, this->tol_) && this->k_ < this->max_iter_){
 	// compute score vector s as X*f/\norm(X*f)
 	s_ = X_*f_n_;
@@ -266,14 +268,14 @@ namespace models {
 	b_.block(0,0, N,1) = -m_.PsiTD(not_nan())*X_.transpose()*s_;
 	// solve linear system and store results
 	DVector<double> solution = invA_.solve(b_);
-	f_ = solution.topRows(N); g_ = solution.bottomRows(N);
+	f_ = solution.topRows(N); g_ = solution.bottomRows(N); // estimated field and PDE misfit
 	f_n_ = m_.Psi(not_nan())*f_; // \Psi*f
 	
 	// prepare for next iteration
 	this->k_++;
 	Jold = Jnew;
 	// Frobenius norm of reconstruction error
-	double Jnew = X_nan.array().isNaN().select(0, X_nan - s_*f_n_.transpose()).squaredNorm();
+	double Jnew = nan_pattern.select(0, X_nan - s_*f_n_.transpose()).squaredNorm();
 	if constexpr(is_space_only<Model>::value)
 	  // for a space only problem we can leverage the following identity
 	  // \int_D (Lf-u)^2 = g^\top*R_0*g = f^\top*P*f, being P = R_1^\top*(R_0)^{-1}*R_1
@@ -282,13 +284,11 @@ namespace models {
 	  // space-time separable regularization requires to compute the penalty matrix
 	  Jnew += f_.dot(m_.pen()*f_);
       }
-
-      // we should return the norm?? to let user of profiling estimation to normalize their results...
-      
-      // normalize loadings with respect to L^2 norm
-      double norm = std::sqrt(f_.dot(m_.R0()*f_));
-      //f_n_ = f_n_/norm; s_ = s_*norm;
-      return;
+      // store results
+      this->f_norm_ = std::sqrt(f_.dot(m_.R0()*f_)); // L^2 norm of estimated field
+      // compute norm of loadings vector
+      if constexpr(is_sampling_pointwise_at_mesh<Model_>::value) this->f_n_norm_ = this->f_norm_;
+      else this->f_n_norm_ = f_n_.norm(); // use euclidean norm if L^2 norm of f_n vector cannot be computed 
     }
     
     // **currently not working**

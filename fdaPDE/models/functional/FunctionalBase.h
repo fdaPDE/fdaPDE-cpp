@@ -79,10 +79,8 @@ namespace models {
       for(std::size_t i = 0; i < n_stat_units(); ++i){
 	// derive missingness pattern for i-th statistical unit
 	for(std::size_t j = 0; j < n_locs(); ++j){
-	  if(std::isnan(X()(i,j))){ // requires -ffast-math compiler flag to be disabled
+	  if(std::isnan(X()(i,j))) // requires -ffast-math compiler flag to be disabled
 	    nan_idxs_[i].insert(j);
-	    //df_.template get<double>(OBSERVATIONS_BLK)(i,j) = 0.0; // zero out NaN
-	  }
 	}
 
 	// NaN detected for this unit, start assembly
