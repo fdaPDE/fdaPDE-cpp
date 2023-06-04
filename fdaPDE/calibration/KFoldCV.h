@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <vector>
+#include <thread> // multithreading support
 #include "../core/utils/Symbols.h"
 #include "../core/utils/DataStructures/BlockFrame.h"
 #include "../models/ModelTraits.h"
@@ -11,16 +12,15 @@ namespace fdaPDE{
 namespace calibration{
 
   // general implementation of KFold Cross Validation
-  template <typename Model>
   class KFoldCV {
   private:  
-    Model& model_;      // model to validate
     std::size_t K_; // number of folds
 
-    std::vector<double> avg_scores_{}; // vector recording the mean score of the model for each value of lambda
-    std::vector<double> std_scores_{}; // vector recording the standard deviation of the recordered scores
-    DMatrix<double> scores_{};         // matrix of scores (one column for each explored lambda value, one row for each fold)
-  
+    std::vector<double> avg_scores_; // mean CV score for each \lambda
+    std::vector<double> std_scores_; // CV score standard deviation for each \lambda
+    DMatrix<double> scores_;         // matrix of CV scores
+    DVector<double> optimum_;        // optimal smoothing parameter
+    
     // split data in K folds
     std::pair<BlockView<Sparse, double, int>, BlockView<Sparse, double, int>>
     split(const BlockFrame<double, int>& data, std::size_t i) {
@@ -44,39 +44,33 @@ namespace calibration{
     
   public:
     // constructor
-    KFoldCV(Model& model, std::size_t K) : model_(model), K_(K) {};
+    KFoldCV() = default;
+    KFoldCV(std::size_t K) : K_(K) {};
 
-    // select best smoothing parameter according to a K-fold cross validation strategy using the output of functor F as model score
-    template <typename F>
-    SVector<1> compute(const std::vector<SVector<1>>& lambdas, const F& scoreFunctor,
-		       bool randomize = true){     // if true a randomization of the data is performed before split
-      // reserve space for storing scores
+    // selects best smoothing parameter according to a K-fold cross validation strategy using the output of functor F as CV score
+    // F receives, in this order: current smoothing parameter, train set and test set
+    void compute
+    (const std::vector<DVector<double>>& lambdas, const BlockFrame<double, int>& data, 
+     const std::function<double(DVector<double>, BlockFrame<double, int>, BlockFrame<double, int>)>& F,
+     bool randomize = true){ // if true a randomization of the data is performed before split
+      // reserve space for CV scores
       scores_.resize(K_, lambdas.size());
-      BlockFrame<double, int> data;
-      if(randomize)
-	// perform a first shuffling of the data if required
-	data = model_.data().shuffle();
-      else data = model_.data();
-
-      // cycle over all folds (execute just K_ splits of the data, very expensive operation)
+      BlockFrame<double, int> data_;
+      if(randomize) // perform a first shuffling of the data if required	
+	data_ = data.shuffle();
+      else data_ = data;
+      
+      // cycle over all folds
       for(std::size_t fold = 0; fold < K_; ++fold){
 	// create train test partition
-	std::pair<BlockView<Sparse, double, int>, BlockView<Sparse, double, int>> train_test = split(data, fold);
+	std::pair<BlockView<Sparse, double, int>, BlockView<Sparse, double, int>> train_test = split(data_, fold);
 	// decouple training from testing
-	BlockFrame<double, int> train = train_test.first.extrude();
+	BlockFrame<double, int> train = train_test.first.extract();
 	BlockFrame<double, int> test = train_test.second.extract();
 	
 	// fixed a data split, cycle over all lambda values
-	for(std::size_t j = 0; j < lambdas.size(); ++j){
-	  Model m(model_);  // create a fresh copy of current model (O(1) operation)
-	  m.setData(train);
-	  m.setLambda(lambdas[j]);  // set current lambda
-	  
-	  // fit the model on training set
-	  m.solve();
-	  // evaluate model score on the fold left out (test set)
-	  scores_.coeffRef(fold, j) = scoreFunctor(m, test);
-	}
+	for(std::size_t j = 0; j < lambdas.size(); ++j)
+	  scores_.coeffRef(fold, j) = F(lambdas[j], train, test); // compute CV score
       }
       // reserve space for storing results
       avg_scores_.clear(); std_scores_.clear(); // clear possible previous execution
@@ -95,15 +89,20 @@ namespace calibration{
 	std_scores_.push_back(std_score);
       }
 
-      // return optimal lambda according to given metric F
+      // store optimal lambda according to given metric F
       std::vector<double>::iterator opt_score = std::min_element(avg_scores_.begin(), avg_scores_.end());
-      return lambdas[std::distance(avg_scores_.begin(), opt_score)];
+      optimum_ = lambdas[std::distance(avg_scores_.begin(), opt_score)];
     }
-
+    
     // getters
-    std::vector<double> avg_scores() const { return avg_scores_; }
-    std::vector<double> std_scores() const { return std_scores_; }
-    DMatrix<double> scores() const { return scores_; } // table of all scores (K_ x |lambdas| matrix)  
+    std::vector<double> avg_scores() const { return avg_scores_; } // mean CV score vector
+    std::vector<double> std_scores() const { return std_scores_; } // CV score standard deviation vector
+    DMatrix<double> scores() const { return scores_; } // CV scores
+    DVector<double> optimum() const { return optimum_; } // optimal smoothing level according to provided CV index
+    // setters
+    void set_K(std::size_t K) { K_ = K; }
   };
+  
 }}
+
 #endif // __K_FOLD_CV__
