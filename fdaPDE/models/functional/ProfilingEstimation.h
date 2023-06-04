@@ -56,8 +56,7 @@ namespace models {
     void set_max_iter(std::size_t max_iter) { pe_->set_max_iter(max_iter); }
 
     // apply profiling estimation algorithm on data matrix X and smoothing vector \lambda
-    void compute(const BlockFrame<double,int>& df, const SVector<model_traits<Model_>::n_lambda>& lambda) {
-      pe_->compute(df, lambda); };
+    void compute(const BlockFrame<double,int>& df, const SVector<model_traits<Model_>::n_lambda>& lambda) { pe_->compute(df, lambda); };
     double gcv() { return pe_->gcv(); }; // return gcv index at convergence
   };
   

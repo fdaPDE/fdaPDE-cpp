@@ -141,6 +141,10 @@
 !test/data/models/GSRPDE/2D_test5/*
 !test/data/models/FPCA/2D_test1/
 !test/data/models/FPCA/2D_test1/*
+!test/data/models/FPCA/2D_test2/
+!test/data/models/FPCA/2D_test2/*
+!test/data/models/FPCA/2D_test3/
+!test/data/models/FPCA/2D_test3/*
 !test/data/PDEs/*.mtx
 *.txt
 *.json
