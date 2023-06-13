@@ -17,6 +17,7 @@ using fdaPDE::core::NLA::SMW;
 // interfaces
 #include "iGCV.h"
 #include "../models/ModelTraits.h"
+using fdaPDE::models::model_traits;
 using fdaPDE::models::is_regression_model;
 
 namespace fdaPDE{
@@ -87,7 +88,7 @@ namespace calibration{
       double trS = cache_[model_.lambda()];
       // GCV(\lambda) = n/((n - (q + Tr[S]))^2)*norm(y - \hat y)^2
       double dor = model_.n_obs() - (model_.q() + trS); // (n - (q + Tr[S])
-      return (model_.n_obs()/std::pow(dor, 2))*( model_.norm(model_.fitted(), model_.y()) ) ;
+      return (model_.n_obs()/std::pow(dor, 2))*( model_.norm(model_.fitted(), model_.y()) );
     }
     
     // getters
