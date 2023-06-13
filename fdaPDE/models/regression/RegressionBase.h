@@ -94,8 +94,8 @@ namespace models {
     DMatrix<double> fitted() const; // computes fitted values \hat y = \Psi*f_ + X*beta_
 
     // initialization methods 
-    void init_data(); // update model's status to data (called by ModelBase::setData())
-    void init_nan();  // regression models' missing data logic (called by SamplingBase::init_sampling())
+    void update_data(); // update model's status to data (called by ModelBase::setData())
+    void init_nan();    // regression models' missing data logic (called by SamplingBase::init_sampling())
   };
 
   # include "RegressionBase.tpp"

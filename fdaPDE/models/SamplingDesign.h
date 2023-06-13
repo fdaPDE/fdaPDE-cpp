@@ -60,8 +60,8 @@ namespace models{
       // compute once if not forced to recompute
       if(Psi_.size() != 0 && forced == false) return;
       // preallocate space for Psi matrix
-      std::size_t n = model().n_basis();
-      std::size_t N = model().n_basis();
+      std::size_t n = model().n_spatial_basis();
+      std::size_t N = model().n_spatial_basis();
       Psi_.resize(n, N);    
       // triplet list to fill sparse matrix
       std::vector<fdaPDE::Triplet<double>> tripletList;
@@ -105,7 +105,7 @@ namespace models{
       if(Psi_.size() != 0 && forced == false) return;      
       // preallocate space for Psi matrix
       std::size_t n = locs_.rows();
-      std::size_t N = model().n_basis();
+      std::size_t N = model().n_spatial_basis();
       Psi_.resize(n, N);    
       // triplet list to fill sparse matrix
       std::vector<fdaPDE::Triplet<double>> tripletList;
@@ -162,7 +162,7 @@ namespace models{
       if(Psi_.size() != 0 && forced == false) return;
       // preallocate space for Psi matrix
       std::size_t n = subdomains_.rows();
-      std::size_t N = model().n_basis();    
+      std::size_t N = model().n_spatial_basis();    
       Psi_.resize(n, N);    
       // triplet list to fill sparse matrix
       std::vector<fdaPDE::Triplet<double>> tripletList;

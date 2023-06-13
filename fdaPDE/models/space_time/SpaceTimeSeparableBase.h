@@ -67,6 +67,8 @@ namespace models{
     // getters
     const SpMatrix<double>& R0()  const { return R0_; }
     const SpMatrix<double>& R1()  const { return R1_; }
+    std::size_t n_basis() const { return pde_->domain().dof()*basis_.size(); } // number of basis functions
+    std::size_t n_temporal_basis() const { return basis_.size(); } // number of basis functions on the temporal dimension
     // matrices proper of separable regularization
     const SpMatrix<double>& Rt()  const { return Rt_; }
     const SpMatrix<double>& Pt()  const { return Pt_; }
@@ -77,11 +79,10 @@ namespace models{
     // return stacked version of discretized forcing field
     const DVector<double>& u() {
       if(is_empty(u_)){ // compute once and cache
-	std::size_t M = basis_.size();
-	std::size_t N = Base::n_basis();
-	u_.resize(N*M);
+	std::size_t N = Base::n_spatial_basis();
+	u_.resize(n_basis());
 	// in separable regularization PDE doesn't depend on time. stack forcing term m times
-	for(std::size_t i = 0; i < M; ++i) u_.segment(i*N, N) = pde_->force();
+	for(std::size_t i = 0; i < basis_.size(); ++i) u_.segment(i*N, N) = pde_->force();
       }
       return u_;
     }

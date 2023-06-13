@@ -41,10 +41,11 @@ namespace models {
     // getters
     inline double lambdaS() const { return lambda_[0]; }
     inline double lambdaT() const { return lambda_[1]; }
-    const DVector<double>& time_domain() const { return time_; }
-    const DVector<double>& time_locs() const { return time_; } // for space-time separable regularization it might be different
-    inline std::size_t n_temporal_locs() const { return time_.rows(); } // number of time instants
-
+    const DVector<double>& time_domain() const { return time_; }           // number of nodes in time
+    const DVector<double>& time_locs() const { return time_; }             // time locations where we have observations
+    inline std::size_t n_temporal_locs() const { return time_.rows(); }    // number of time instants
+    std::size_t n_spatial_basis() const { return pde_->domain().dof();; }  // number of basis functions in space
+    
     // remove first n time instants from the problem
     void shift_time(std::size_t n) {
       std::size_t m = time_.rows(); // number of time instants

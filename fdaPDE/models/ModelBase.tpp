@@ -19,7 +19,7 @@ void ModelBase<Model>::setData(const BlockFrame<double, int>& df, bool reindex) 
     for(std::size_t i = 0; i < n; ++i) idx(i,0) = i;
     df_.insert(INDEXES_BLK, idx);
   }
-  model().init_data(); // specific initialization requested by the model
+  model().update_data(); // specific initialization requested by the model
 }
 
 // set boundary conditions on problem's linear system

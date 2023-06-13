@@ -51,9 +51,9 @@ namespace models{
     void setFPIRLSTolerance(double tol) { tol_ = tol; }
     void setFPIRLSMaxIterations(std::size_t max_iter) { max_iter_ = max_iter; }
     
-    // ModelBase implementation
-    void init_model() { return; }
-    virtual void solve(); // finds a solution to the smoothing problem
+    void init_model() { return; };        // update model object in case of **structural** changes in its definition
+    void update_to_weights() { return; }  // update model object in case of changes in the weights matrix
+    virtual void solve();                 // finds a solution to the smoothing problem
 
     // required by FPIRLS (computes weight matrix and vector of pseudo-observations)
     // returns a pair of references to W^k = ((G^k)^{-2})*((V^k)^{-1}) and \tilde y^k = G^k(y-u^k) + \theta^k

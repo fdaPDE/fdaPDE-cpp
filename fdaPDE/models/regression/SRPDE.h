@@ -32,14 +32,15 @@ namespace models{
     DVector<double> b_{}; // right hand side of problem's linear system (1 x 2N vector)
   public:
     IMPORT_REGRESSION_SYMBOLS;
+    using Base::n_basis; // number of spatial basis
     using Base::lambdaS; // smoothing parameter in space
     // constructor
     SRPDE() = default;
     SRPDE(const PDE& pde) : Base(pde) {};
     
-    // ModelBase implementation
-    void init_model();    // update model object in case of **structural** changes in its definition
-    virtual void solve(); // finds a solution to the smoothing problem
+    void init_model();        // update model object in case of **structural** changes in its definition
+    void update_to_weights(); // update model object in case of changes in the weights matrix
+    virtual void solve();     // finds a solution to the smoothing problem
     
     // iGCV interface implementation
     virtual const DMatrix<double>& T(); // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)

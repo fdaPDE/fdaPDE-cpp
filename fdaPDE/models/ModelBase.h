@@ -5,14 +5,16 @@
 #include <type_traits>
 
 #include "../core/utils/Symbols.h"
+#include "../core/utils/multithreading/ThreadPool.h"
 #include "../core/MESH/Mesh.h"
-using fdaPDE::core::MESH::Mesh;
 #include "../core/MESH/engines/AlternatingDigitalTree/ADT.h"
-using fdaPDE::core::MESH::ADT;
 #include "../core/utils/DataStructures/BlockFrame.h"
 #include "ModelTraits.h"
-using fdaPDE::models::model_traits;
 #include "ModelMacros.h"
+
+using fdaPDE::multithreading::ThreadPool;
+using fdaPDE::core::MESH::Mesh;
+using fdaPDE::core::MESH::ADT;
 
 namespace fdaPDE {
 namespace models {
@@ -33,6 +35,7 @@ namespace models {
     ModelBase(const ModelBase& rhs) { pde_ = rhs.pde_; }
     void init_pde() { pde_->init(); };
     void init(); // entry point for full model initialization
+    void init_multithreading(const std::shared_ptr<ThreadPool>& tp) { tp_ = tp; parallel_ = true; }
     
     // setters
     void setDirichletBC(SpMatrix<double>& A, DMatrix<double>& b);
@@ -47,20 +50,25 @@ namespace models {
     // informations related to discretization of regularization term
     const PDE& pde() const { return *pde_; } // regularizing term Lf - u (defined on some domain \Omega)
     const Mesh<M,N,K>& domain() const { return pde_->domain(); }
-    std::size_t n_basis() const { return pde_->domain().dof(); }; // number of basis functions used in space discretization
     std::size_t n_locs() const { return model().n_spatial_locs()*model().n_temporal_locs(); } // number of observations' locations
     const ADT<M,N,K>& gse() { if(gse_ == nullptr){ gse_ = std::make_shared<ADT<M,N,K>>(domain()); } return *gse_; }
     SVector<model_traits<Model>::n_lambda> lambda() const { return lambda_; }
+    ThreadPool& multithreading() { return *tp_; } // access to multithreaded execution
     
     // abstract part of the interface, must be implemented by concrete models
     virtual void solve() = 0; // finds a solution to the problem, whatever the problem is.
     // destructor
     virtual ~ModelBase() = default;
-  protected:   
+  protected:
+    // model internals
     std::shared_ptr<PDE> pde_; // regularizing term Lf - u and domain definition D
-    std::shared_ptr<ADT<M,N,K>> gse_; // geometric search engine
+    std::shared_ptr<ADT<M,N,K>> gse_; // geometric search engine (to be removed, let it accessible from domain() + let pointer to dynamic type)
     BlockFrame<double, int> df_; // blockframe for data storage
     SVector<model_traits<Model>::n_lambda> lambda_; // vector of smoothing parameters
+
+    // multithreading support
+    std::shared_ptr<ThreadPool> tp_; // thread pool associated to this model (a valid ThreadPool must be assigned first)
+    bool parallel_ = false; // asserted true if multithreaded execution for this model is requested
     
     // getter to underlying model object
     inline Model& model() { return static_cast<Model&>(*this); }

@@ -15,7 +15,16 @@ void SRPDE<PDE, SamplingDesign>::init_model() {
   b_.block(n_basis(),0, n_basis(),1) = lambdaS()*u();
   return;
 }
-  
+
+// updates model in case of a change in the weights matrix
+template <typename PDE, typename SamplingDesign>
+void SRPDE<PDE, SamplingDesign>::update_to_weights() {
+  // adjust north-west block of matrix A_ and factorize
+  A_.block(0,0) = -PsiTD()*W()*Psi();
+  invA_.compute(A_);
+  return;
+}
+
 // finds a solution to the SR-PDE smoothing problem
 template <typename PDE, typename SamplingDesign>
 void SRPDE<PDE, SamplingDesign>::solve() {

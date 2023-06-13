@@ -82,6 +82,7 @@ namespace models{
     // getters
     const SpMatrix<double>& R0()  const { return R0_; }
     const SpMatrix<double>& R1()  const { return R1_; }
+    std::size_t n_basis() const { return pde_->domain().dof(); } // number of basis functions
     // matrices proper of separable regularization
     const SpMatrix<double>& L() const { return L_; }
     // return discretized force corrected by initial conditions
@@ -154,6 +155,7 @@ namespace models{
       return u_.block(model().n_basis()*k,0, model().n_basis(),1); }
     double DeltaT() const { return DeltaT_; } 
     const DMatrix<double>& s() const { return s_; }
+    std::size_t n_basis() const { return pde_->domain().dof(); } // number of basis functions
     
     // setters
     void setInitialCondition(const DMatrix<double>& s) { s_ = s; }

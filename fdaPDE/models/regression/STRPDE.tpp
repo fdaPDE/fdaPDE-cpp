@@ -5,7 +5,7 @@
 template <typename PDE, typename SamplingDesign>
 void STRPDE<PDE, SpaceTimeSeparable, SamplingDesign, MonolithicSolver>::init_model() {
   // assemble system matrix for the nonparameteric part of the model
-  if(is_empty(P_)) P_ = Kronecker(Pt(), pde().R0());  
+  if(is_empty(P_)) P_ = Kronecker(Pt(), pde().R0());
   A_ = SparseBlockMatrix<double,2,2>
     (-PsiTD()*W()*Psi()-lambdaT()*P_, lambdaS()*R1().transpose(),
      lambdaS()*R1(),                  lambdaS()*R0()            );
@@ -14,6 +14,15 @@ void STRPDE<PDE, SpaceTimeSeparable, SamplingDesign, MonolithicSolver>::init_mod
   // prepare rhs of linear system
   b_.resize(A_.rows());
   b_.block(A_.rows()/2,0, A_.rows()/2,1) = lambdaS()*u();
+  return;
+}
+
+// updates model in case of a change in the weights matrix
+template <typename PDE, typename SamplingDesign>
+void STRPDE<PDE, SpaceTimeSeparable, SamplingDesign, MonolithicSolver>::update_to_weights() {
+  // adjust north-west block of matrix A_ and factorize 
+  A_.block(0,0) = -PsiTD()*W()*Psi() - lambdaT()*P_;
+  invA_.compute(A_);
   return;
 }
 
@@ -68,6 +77,15 @@ void STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, MonolithicSolver>::init_mod
   return;
 }
 
+// updates model in case of a change in the weights matrix
+template <typename PDE, typename SamplingDesign>
+void STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, MonolithicSolver>::update_to_weights() {
+  // adjust north-west block of matrix A_ and factorize
+  A_.block(0,0) = -PsiTD()*W()*Psi();
+  invA_.compute(A_);
+  return;
+}
+
 // finds a solution to the STR-PDE smoothing problem (parabolic penalization, monolithic solution)
 template <typename PDE, typename SamplingDesign>
 void STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, MonolithicSolver>::solve() {
@@ -107,7 +125,7 @@ double STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, IterativeSolver>::J
   double SSE = 0;
   // SSE = \sum_{k=1}^m (z^k - \Psi*f^k)^T*(z^k - \Psi*f^k)
   for(std::size_t t = 0; t < n_temporal_locs(); ++t){
-    SSE += (y(t) - Psi()*f.block(n_basis()*t,0, n_basis(),1)).squaredNorm();
+    SSE += (y(t) - Psi()*f.block(n_spatial_basis()*t,0, n_spatial_basis(),1)).squaredNorm();
   }
   return SSE + lambdaS()*g.squaredNorm();
 }
@@ -117,7 +135,7 @@ template <typename PDE, typename SamplingDesign>
 void STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, IterativeSolver>::solve
 (std::size_t t, BlockVector<double>& f_new, BlockVector<double>& g_new) const {
   DVector<double> x = invA_.solve(b_);
-  f_new(t) = x.topRows(n_basis()); g_new(t) = x.bottomRows(n_basis());
+  f_new(t) = x.topRows(n_spatial_basis()); g_new(t) = x.bottomRows(n_spatial_basis());
   return;
 }
 
@@ -133,7 +151,7 @@ void STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, IterativeSolver>::solve() {
   b_.resize(A_.rows());
 
   // compute f^(k,0), k = 1 ... m as solution of Ax = b_(k)
-  BlockVector<double> f_old(n_temporal_locs(), n_basis());
+  BlockVector<double> f_old(n_temporal_locs(), n_spatial_basis());
   // solve n_temporal_locs() space only linear systems
   for(std::size_t t = 0; t < n_temporal_locs(); ++t){
     // right hand side at time step t
@@ -150,7 +168,7 @@ void STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, IterativeSolver>::solve() {
   Eigen::SparseLU<SpMatrix<double>, Eigen::COLAMDOrdering<int>> invG0;
   invG0.compute(G0); // compute factorization of matrix G0
   
-  BlockVector<double> g_old(n_temporal_locs(), n_basis());
+  BlockVector<double> g_old(n_temporal_locs(), n_spatial_basis());
   // solve n_temporal_locs() distinct problems (in backward order)
   // at last step g^(t+1,0) is zero
   b_ = PsiTD()*(y(n_temporal_locs()-1) - Psi()*f_old(n_temporal_locs()-1)); 
@@ -175,7 +193,7 @@ void STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, IterativeSolver>::solve() {
   b_.resize(A_.rows());
   
   // internal iteration variables
-  BlockVector<double> f_new(n_temporal_locs(), n_basis()), g_new(n_temporal_locs(), n_basis());
+  BlockVector<double> f_new(n_temporal_locs(), n_spatial_basis()), g_new(n_temporal_locs(), n_spatial_basis());
   // iterative scheme for minimization of functional J
   while(i < max_iter_ && std::abs((Jnew-Jold)/Jnew) > tol_){
     // at step 0 f^(k-1,i-1) is zero    

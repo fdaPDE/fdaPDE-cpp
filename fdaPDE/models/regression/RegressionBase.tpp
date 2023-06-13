@@ -15,8 +15,8 @@ DMatrix<double> RegressionBase<Model>::lmbQ(const DMatrix<double>& x) const {
 
 // initialization stuffs depending on the data
 template <typename Model>
-void RegressionBase<Model>::init_data() {
-  // default to homoscedastic observations
+void RegressionBase<Model>::update_data() {
+  // default to homoskedastic observations
   DVector<double> W = DVector<double>::Ones(Base::n_locs());
   if(hasWeights()) // update observations' weights if provided
     W = df_.template get<double>(WEIGHTS_BLK).col(0);

@@ -53,9 +53,9 @@ namespace models{
     STRPDE() = default;
     STRPDE(const PDE& pde, const DMatrix<double>& time) : Base(pde, time) {};
     
-    // ModelBase interface implementation
-    void init_model();    // update model object in case of **structural** changes in its definition
-    virtual void solve(); // finds a solution to the smoothing problem
+    void init_model();        // update model object in case of **structural** changes in its definition
+    void update_to_weights(); // update model object in case of changes in the weights matrix
+    virtual void solve();     // finds a solution to the smoothing problem
 
     // iGCV interface implementation
     virtual const DMatrix<double>& T() { // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
@@ -125,9 +125,9 @@ namespace models{
     STRPDE() = default;
     STRPDE(const PDE& pde, const DMatrix<double>& time) : Base(pde, time) {};
     
-    // ModelBase interface implementation
-    void init_model();    // update model object in case of **structural** changes in its definition
-    virtual void solve(); // finds a solution to the smoothing problem
+    void init_model();        // update model object in case of **structural** changes in its definition
+    void update_to_weights(); // update model object in case of changes in the weights matrix
+    virtual void solve();     // finds a solution to the smoothing problem
     
     // iGCV interface implementation
     // virtual const DMatrix<double>& T(); // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
@@ -183,9 +183,9 @@ namespace models{
     STRPDE() = default;
     STRPDE(const PDE& pde, const DMatrix<double>& time) : Base(pde, time) {};
     
-    // ModelBase interface implementation
-    void init_model() { return; }
-    virtual void solve(); // finds a solution to the smoothing problem
+    void init_model() { return; };        // update model object in case of **structural** changes in its definition
+    void update_to_weights() { return; }; // update model object in case of changes in the weights matrix
+    virtual void solve();                 // finds a solution to the smoothing problem
 
     // iGCV interface implementation
     // virtual const DMatrix<double>& T(); // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)

@@ -79,38 +79,32 @@ namespace models{
 	  solver.set_temporal_locations(m_.time_locs());
       }
       // solver initialization
-      solver.data() = m_.data();
       solver.setLambda(m_.lambda());
       solver.set_spatial_locations(m_.locs());
-      solver.init_pde();
-      solver.init_regularization();
-      solver.init_sampling();
-      solver.init_nan();
-
+      solver.setData(m_.data());
+      solver.init();
+      
       // algorithm stops when an enought small difference between two consecutive values of the J is recordered
       double J_old = tolerance_+1; double J_new = 0;
       // start loop
       while(k_ < max_iter_ && std::abs(J_new - J_old) > tolerance_){
 	// request weight matrix W and pseudo-observation vector \tilde y from model
-	auto pair = m_.compute(mu_);
-	
+	auto pair = m_.compute(mu_);	
 	// solve weighted least square problem
 	// \argmin_{\beta, f} [ \norm(W^{1/2}(y - X\beta - f_n))^2 + \lambda \int_D (Lf - u)^2 ]
 	solver.data().template insert<double>(OBSERVATIONS_BLK, std::get<1>(pair));
 	solver.data().template insert<double>(WEIGHTS_BLK, std::get<0>(pair));
 	// update solver to change in the weight matrix
-	solver.init_data();
-	solver.init_model();
+	solver.update_data();
+	solver.update_to_weights();
 	solver.solve();
 	
 	// extract estimates from solver
 	f_ = solver.f(); g_ = solver.g();
 	if(m_.hasCovariates()) beta_ = solver.beta();
-	
 	// update value of \mu_
 	DVector<double> fitted = solver.fitted(); // compute fitted values
 	mu_ = distribution_.inv_link(fitted);
-	
 	// compute value of functional J for this pair (\beta, f): \norm{V^{-1/2}(y - \mu)}^2 + \int_D (Lf-u)^2
 	DVector<double> V = distribution_.variance(mu_).array().sqrt().inverse().matrix();
 	double J = (V.asDiagonal()*(m_.y() - mu_)).squaredNorm() + g_.dot(m_.R0()*g_); // \int_D (Lf-u)^2
