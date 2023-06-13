@@ -33,6 +33,8 @@ namespace models {
     typedef typename std::decay<Model>::type Model_;
     std::unique_ptr<ProfilingEstimationStrategy<Model_>> pe_; // pointer to resolution strategy
   public:
+    // constructor
+    ProfilingEstimation() = default;
     ProfilingEstimation(const Model& m, double tol, std::size_t max_iter) {
       if(m.has_nan()) // missing data
 	pe_ = std::make_unique<
@@ -59,48 +61,7 @@ namespace models {
     void compute(const BlockFrame<double,int>& df, const SVector<model_traits<Model_>::n_lambda>& lambda) { pe_->compute(df, lambda); };
     double gcv() { return pe_->gcv(); }; // return gcv index at convergence
   };
-  
-  // base class for profiling estimation resolution strategy
-  template <typename Model>
-  class ProfilingEstimationStrategy {
-  protected:
-    typedef typename std::decay<Model>::type Model_;
-    // algorithm's parameter
-    double tol_ = 1e-6;         // relative tolerance between Jnew and Jold, used as stopping criterion
-    std::size_t max_iter_ = 20; // maximum number of allowed iterations
-    std::size_t k_ = 0;         // iteration index
-    
-    // parameters at convergence
-    DVector<double> s_;   
-    DVector<double> f_n_; 
-    DVector<double> f_; // estimated spatial(spatio-temporal) field at convergence
-    DVector<double> g_; // PDE misfit at convergence
-    double f_norm_;     // L^2 norm of estimated field at converegence
-    double f_n_norm_;   // f_n norm (use euclidean norm if is_sampling_pointwise_at_mesh<Model> evaluates false)
-  public:
-    // constructor
-    ProfilingEstimationStrategy() = default;
-    ProfilingEstimationStrategy(double tol, std::size_t max_iter) :
-      tol_(tol), max_iter_(max_iter) {};
-    
-    // getters
-    const DVector<double>& f_n() const { return f_n_; } 
-    const DVector<double>& f() const { return f_; } 
-    const DVector<double>& g() const { return g_; } 
-    const DVector<double>& s() const { return s_; } 
-    std::size_t n_iter() const { return k_ - 1; }   
-    double f_norm() const { return f_norm_; }
-    double f_n_norm() const { return f_n_norm_; }
-    // setters
-    void set_tolerance(double tol) { tol_ = tol; }
-    void set_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
 
-    // methods discharged on actual resolution strategies
-    virtual void compute(const BlockFrame<double,int>& df, const SVector<model_traits<Model_>::n_lambda>& lambda) = 0;
-    virtual double gcv() = 0;
-  };
-
-  // complete data setting  
   // trait to select model type to use in the internal loop of ProfilingEstimation
   template <typename Model>
   class PE_internal_solver {
@@ -116,23 +77,33 @@ namespace models {
       >::type;
   };
   
-  // finds vectors s,f_n minimizing \norm{X - s*f_n^T}_F^2 + s^T*s P_{\lambda_{\mathcal{D}}, \lambda_T}(f)
-  // being P_{\lambda_{\mathcal{D}}, \lambda_T}(f) the penalty term and \norm{}_F the Frobenius norm
+  // base class for profiling estimation resolution strategy
   template <typename Model>
-  class ProfilingEstimationImpl<Model, complete_data> : public ProfilingEstimationStrategy<Model> {
-  private:
+  class ProfilingEstimationStrategy {
+  protected:
     typedef typename std::decay<Model>::type Model_;
     typedef typename PE_internal_solver<Model_>::type SolverType;
     typedef ProfilingEstimationStrategy<Model> Base;
     SolverType solver_;
     GCV<SolverType, StochasticEDF<SolverType>> gcv_; // gcv index associated to internal solver    
+    
+    // algorithm's parameter
+    double tol_ = 1e-6;         // relative tolerance between Jnew and Jold, used as stopping criterion
+    std::size_t max_iter_ = 20; // maximum number of allowed iterations
+    std::size_t k_ = 0;         // iteration index
+    
+    // parameters at convergence
+    DVector<double> s_;   
+    DVector<double> f_n_; 
+    DVector<double> f_; // estimated spatial(spatio-temporal) field at convergence
+    DVector<double> g_; // PDE misfit at convergence
+    double f_norm_;     // L^2 norm of estimated field at converegence
+    double f_n_norm_;   // f_n norm (use euclidean norm if is_sampling_pointwise_at_mesh<Model> evaluates false)
   public:
-    using Base::f_n_; // spatial (spatio-temporal) field fitted values
-    using Base::s_;   // scores vector
-    using Base::f_;   // estimated spatial (spatio-temporal) field
     // constructor
-    ProfilingEstimationImpl(const Model& m, double tol, std::size_t max_iter)
-      : Base(tol, max_iter), gcv_(solver_, 100) {
+    ProfilingEstimationStrategy() = default;
+    ProfilingEstimationStrategy(const Model& m, double tol, std::size_t max_iter) :
+      tol_(tol), max_iter_(max_iter), gcv_(solver_, 100) {
       // define internal problem solver required for smoothing step
       if constexpr(!is_space_time<Model_>::value) // space-only
 	solver_ = typename PE_internal_solver<Model_>::type(m.pde());
@@ -147,6 +118,37 @@ namespace models {
       solver_.init_regularization();
       solver_.init_sampling();
     };
+    
+    // getters
+    const DVector<double>& f_n() const { return f_n_; } 
+    const DVector<double>& f() const { return f_; } 
+    const DVector<double>& g() const { return g_; } 
+    const DVector<double>& s() const { return s_; } 
+    std::size_t n_iter() const { return k_ - 1; }   
+    double f_norm() const { return f_norm_; }
+    double f_n_norm() const { return f_n_norm_; }
+    // setters
+    void set_tolerance(double tol) { tol_ = tol; }
+    void set_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
+
+    // methods discharged on actual resolution strategies
+    virtual void compute(const BlockFrame<double,int>& df, const SVector<model_traits<Model_>::n_lambda>& lambda) = 0;
+    virtual double gcv() { return gcv_.eval(); } // GCV index at convergence
+  };
+  
+  // finds vectors s,f_n minimizing \norm{X - s*f_n^T}_F^2 + s^T*s P_{\lambda_{\mathcal{D}}, \lambda_T}(f)
+  // being P_{\lambda_{\mathcal{D}}, \lambda_T}(f) the penalty term and \norm{}_F the Frobenius norm
+  template <typename Model>
+  struct ProfilingEstimationImpl<Model, complete_data> : public ProfilingEstimationStrategy<Model> {
+    typedef typename std::decay<Model>::type Model_;
+    typedef ProfilingEstimationStrategy<Model> Base;
+    using Base::f_n_;    // spatial (spatio-temporal) field fitted values
+    using Base::s_;      // scores vector
+    using Base::f_;      // estimated spatial (spatio-temporal) field
+    using Base::solver_; // internal solver used in smoothing step
+    // constructor
+    ProfilingEstimationImpl(const Model& m, double tol, std::size_t max_iter)
+      : Base(m, tol, max_iter) {} ;
 
     // executes the ProfilingEstimation algorithm given data X and smoothing parameter \lambda, assuming no missing data
     virtual void compute(const BlockFrame<double, int>& df, const SVector<model_traits<Model_>::n_lambda>& lambda) {
@@ -160,8 +162,8 @@ namespace models {
       // initialization of f_ using SVD
       Eigen::JacobiSVD<DMatrix<double>> svd(X_, Eigen::ComputeThinU|Eigen::ComputeThinV);
       f_n_ = svd.matrixV().col(0);
-      // start iterative procedure
-	
+      
+      // start iterative procedure	
       double Jold = std::numeric_limits<double>::max(); double Jnew = 1;
       this->k_ = 0; // reset iteration counter
       while(!almost_equal(Jnew, Jold, this->tol_) && this->k_ < this->max_iter_){
@@ -193,158 +195,78 @@ namespace models {
       if constexpr(is_sampling_pointwise_at_mesh<Model_>::value) this->f_n_norm_ = this->f_norm_;
       else this->f_n_norm_ = f_n_.norm(); // use euclidean norm if L^2 norm of f_n vector cannot be computed 
     }
-    
-    // getters
-    virtual double gcv() { return gcv_.eval(); } // GCV index at convergence
   };
 
-  // missing data setting
-  // functional to minimize is different
+  // finds vectors s,f_n minimizing \norm{X - s*f_n^T}_F^2 + s^T*s P_{\lambda_{\mathcal{D}}, \lambda_T}(f)
+  // being P_{\lambda_{\mathcal{D}}, \lambda_T}(f) the penalty term and \norm{}_F the Frobenius norm
+  // X can have NaN. In this case a weighted least square problem has to be solved at each iteration
   template <typename Model>
-  class ProfilingEstimationImpl<Model, missing_data> : public ProfilingEstimationStrategy<Model> {
-  private:
+  struct ProfilingEstimationImpl<Model, missing_data> : public ProfilingEstimationStrategy<Model> {
     typedef typename std::decay<Model>::type Model_;
     typedef ProfilingEstimationStrategy<Model> Base;
-    Model_& m_;
-
-    SpMatrix<double> P_; // Pt \kron R0, [Pt_]_{ij} = \int_{[0,T]} (\phi_i)_tt*(\phi_j)_tt, R0 FEM mass matrix
-  public:
-    using Base::f_n_; // spatial (spatio-temporal) field fitted values
-    using Base::s_;   // scores vector
-    using Base::f_;   // estimated spatial (spatio-temporal) field
-    using Base::g_;   // PDE misfit
+    using Base::f_n_;    // spatial (spatio-temporal) field fitted values
+    using Base::s_;      // scores vector
+    using Base::f_;      // estimated spatial (spatio-temporal) field
+    using Base::solver_; // internal solver used in smoothing step
     // constructor
     ProfilingEstimationImpl(Model& m, double tol, std::size_t max_iter)
-      : Base(tol, max_iter), m_(m) {
-      // initialize P_ if regularization is space-time separable
-      if constexpr(is_space_time<Model>::value) P_ = Kronecker(m_.Pt(), m_.pde().R0());
-    };
+      : Base(m, tol, max_iter) {};
     
-    // executes the ProfilingEstimation algorithm given data X and smoothing parameter \lambda
+    // executes the ProfilingEstimation algorithm given data X and smoothing parameter \lambda, X can have NaN
     virtual void compute(const BlockFrame<double, int>& df, const SVector<model_traits<Model_>::n_lambda>& lambda) {
       // extract missingness pattern
       const DMatrix<double>& X_nan = df.template get<double>(OBSERVATIONS_BLK);
       auto nan_pattern = X_nan.array().isNaN(); 
       DMatrix<double> X_ = nan_pattern.select(0, X_nan); // set NaN to zero
-      
-      // solver initialization
-      std::size_t N = m_.Psi(not_nan()).cols(); // number of basis, but for space-time (separable) problems should be something else....
-      SparseBlockMatrix<double,2,2>
-	A_(SpMatrix<double>(N,N),  lambda[0]*m_.R1().transpose(),
-	   lambda[0]*m_.R1(),      lambda[0]*m_.R0()            );
-      Eigen::SparseLU<SpMatrix<double>> invA_;
-
-      DVector<double> b_;  // right hand side of problem's linear system (1 x 2N vector)
-      b_.resize(2*N);
-      b_.block(N,0, N,1) = DMatrix<double>::Zero(N, 1);
-
+      solver_.setLambda(lambda);
+      solver_.init_model();
+      // reserve space for solution
+      f_n_.resize(X_.cols()); s_.resize(X_.rows());
       // initialization of f_ using SVD
-      f_n_.resize(X_.cols()); s_.resize(X_.rows());      
       Eigen::JacobiSVD<DMatrix<double>> svd(X_, Eigen::ComputeThinU|Eigen::ComputeThinV);
       f_n_ = svd.matrixV().col(0);
       
-      // start iterative procedure
+      // start iterative procedure	
       double Jold = std::numeric_limits<double>::max(); double Jnew = 1;
-      this->k_ = 0; // reset iteration counter
+      this->k_ = 0; // reset iteration counter      
       while(!almost_equal(Jnew, Jold, this->tol_) && this->k_ < this->max_iter_){
-	// compute score vector s as X*f/\norm(X*f)
+	// compute score vector s as Y*f/\norm(Y*f)
 	s_ = X_*f_n_;
 	s_ = s_/s_.norm();
-	// Assembly of matrix [L]_{ij} = \sum_{m=1}^M \sum_{n \in O_m}(s_m^2*\psi_i(p_n)*\psi_j(p_n))
-	// being M : number of considered statistical units, O_l : observation locations' indexes for l-th unit
-	SpMatrix<double> L; L.resize(N,N);
-	for(std::size_t i = 0; i < s_.rows(); ++i){
-	  // data might be possible shuffled (see for instance KFoldCV), recover correct stat unit index
-	  int stat_unit = df.template get<int>(INDEXES_BLK)(i,0);
-	  L += (s_[i]*s_[i])*(m_.PsiTD(stat_unit)*m_.Psi(stat_unit));
-	}
-
-	// set north-west block of system matrix A_ and factorize
-	if constexpr(is_space_only<Model>::value) A_.block(0,0) = -L;
-	else A_.block(0,0) = -L - lambda[1]*P_;
-	invA_.compute(A_);
-	// update rhs of linear system
-	b_.block(0,0, N,1) = -m_.PsiTD(not_nan())*X_.transpose()*s_;
-	// solve linear system and store results
-	DVector<double> solution = invA_.solve(b_);
-	f_ = solution.topRows(N); g_ = solution.bottomRows(N); // estimated field and PDE misfit
-	f_n_ = m_.Psi(not_nan())*f_; // \Psi*f
-	
+	// compute weights matrix W_ = diag(\sum_k s_k^2 o_1^k, ..., \sum_k s_k^2 o_n^k).
+	// o_j^k = 1 \iff data is observed at location j for unit k
+	DMatrix<double> W_(X_.cols(), 1);
+	for(std::size_t i = 0; i < W_.rows(); ++i)
+	  W_(i,0) = nan_pattern.col(i).select(0, s_.array().square()).sum(); // \sum_k s_k^2 o_i^k
+	// adjust observation vector as y_i = (X^T*s)_i/w_i. if w_i = 0, set y_i = 0
+	DMatrix<double> y_ = (W_.array() == 0).select(0, (X_.transpose()*s_).array() / W_.array());
+	// compute loadings by solving a proper **weighted** smoothing problem
+	solver_.data().template insert<double>(OBSERVATIONS_BLK, y_); 
+	solver_.data().template insert<double>(WEIGHTS_BLK, W_);
+	solver_.update_data();
+	solver_.update_to_weights(); // update non-parametric matrix to change in the weights matrix
+	solver_.solve();
 	// prepare for next iteration
 	this->k_++;
 	Jold = Jnew;
-	// Frobenius norm of reconstruction error
-	double Jnew = nan_pattern.select(0, X_nan - s_*f_n_.transpose()).squaredNorm();
+	// update value of discretized functional
+	f_n_ = solver_.fitted(); // \Psi*f
+	Jnew = nan_pattern.select(0, X_nan - s_*f_n_.transpose()).squaredNorm(); // Frobenius norm of reconstruction error
 	if constexpr(is_space_only<Model>::value)
 	  // for a space only problem we can leverage the following identity
 	  // \int_D (Lf-u)^2 = g^\top*R_0*g = f^\top*P*f, being P = R_1^\top*(R_0)^{-1}*R_1
-	  Jnew += lambda[0]*g_.dot(m_.R0()*g_);
+	  Jnew += lambda[0]*solver_.g().dot(solver_.R0()*solver_.g());
 	else
 	  // space-time separable regularization requires to compute the penalty matrix
-	  Jnew += f_.dot(m_.pen()*f_);
+	  Jnew += solver_.f().dot(solver_.pen()*solver_.f());
       }
-      // store results
-      this->f_norm_ = std::sqrt(f_.dot(m_.R0()*f_)); // L^2 norm of estimated field
+      f_ = solver_.f(); // estimated field at convergence
+      this->g_ = solver_.g(); // PDE misfit at convergence
+      this->f_norm_ = std::sqrt(f_.dot(solver_.R0()*f_)); // L^2 norm of estimated field
       // compute norm of loadings vector
       if constexpr(is_sampling_pointwise_at_mesh<Model_>::value) this->f_n_norm_ = this->f_norm_;
       else this->f_n_norm_ = f_n_.norm(); // use euclidean norm if L^2 norm of f_n vector cannot be computed 
     }
-    
-    // **currently not working**
-    // GCV is manually implemented here, should provide a general implementation of GCV model-independent (at least not of GCV
-    // but of trace computation algorithms sure... )
-    virtual double gcv() { return 0.0; };
-    //     // compute trace of smoothing matrix using stochastic approximation
-    //     // std::size_t n = m_.n_basis(); // number of basis functions
-    //     // if(!init_){
-    //     // 	// compute sample from Rademacher distribution
-    //     // 	std::size_t seed = std::random_device()();
-    //     // 	std::default_random_engine rng(seed);
-    //     // 	std::bernoulli_distribution Be(0.5); // bernulli distribution with parameter p = 0.5
-    //     // 	Us_.resize(m_.n_locs(), r_); // preallocate memory for matrix Us
-    //     // 	// fill matrix
-    //     // 	for(std::size_t i = 0; i < m_.n_locs(); ++i){
-    //     // 	  for(std::size_t j = 0; j < r_; ++j){
-    //     // 	    if(Be(rng)) Us_(i,j) =  1.0;
-    //     // 	    else        Us_(i,j) = -1.0;
-    //     // 	  }
-    //     // 	}
-    //     // 	// prepare matrix Bs_
-    //     // 	Bs_ = DMatrix<double>::Zero(2*n, r_);
-    //     // 	Bs_.topRows(n) = -m_.Psi(not_nan_corrected()).transpose()*Us_;
-    //     // 	// prepare matrix Y
-    //     // 	Y_ = Us_.transpose()*m_.Psi(not_nan_corrected());
-    //     // 	init_ = true; // never reinitialize again
-    //     // }
-      
-    //     // DMatrix<double> sol; // room for problem solution
-    //     // sol = invC_.solve(Bs_);
-    //     // // compute approximated Tr[S] using monte carlo mean
-    //     // double MCmean = 0;
-    //     // for(std::size_t i = 0; i < r_; ++i)
-    //     // 	MCmean += Y_.row(i).dot(sol.col(i).head(n));
-      
-    //     // double trS = MCmean/r_;
-
-    //     fdaPDE::SparseLU<SpMatrix<double>> invR0_;
-    //     invR0_.compute(m_.R0());      
-    //     DMatrix<double> T = L_ + lambda_[0]*( m_.R1().transpose() * invR0_.solve(m_.R1()) );
-
-    //     Eigen::PartialPivLU<DMatrix<double>> invT_;
-    //     invT_ = T.partialPivLu();
-
-    //     // if locations are mesh nodes S = T^{-1}
-    //     DMatrix<double> E = m_.Psi(not_nan()).transpose();
-    //     DMatrix<double> S = m_.Psi(not_nan())*invT_.solve(E);
-
-    //     double trS = S.trace();
-      
-    //     std::size_t nn = y_.rows();
-    //     double dor = nn - trS;     // residual degrees of freedom
-      
-    //     // return gcv at point
-    //     return (nn/std::pow(dor, 2))*( (f_n_ - y_).squaredNorm() ) ;
-    //   } // GCV index at convergence
   };
   
 }}
