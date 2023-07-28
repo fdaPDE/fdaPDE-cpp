@@ -1,0 +1,4 @@
+[submodule "fdaPDE/core"]
+	path = fdaPDE/core
+	url = https://github.com/fdaPDE/fdaPDE-core
+	branch = stable

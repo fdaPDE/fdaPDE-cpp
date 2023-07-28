@@ -382,7 +382,8 @@ TEST(GSRPDE, Test6_Laplacian_SemiParametric_GeostatisticalAtLocations_Parabolic_
   // estimate of spatial field \hat f
   SpMatrix<double> expectedSolution;
   Eigen::loadMarket(expectedSolution, "data/models/GSRPDE/2D_test5/sol_parabolic.mtx");
-  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution), computedF, std::pow(0.1, 10)) );
+  EXPECT_TRUE( almost_equal(DMatrix<double>(expectedSolution), computedF, std::pow(0.1, 10)) ) <<
+    (DMatrix<double>(expectedSolution) - computedF).lpNorm<Eigen::Infinity>();
 
   // estimate of coefficient vector \hat \beta
   SpMatrix<double> expectedBeta;

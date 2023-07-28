@@ -160,3 +160,4 @@
 test/fdaPDE_test
 
 !test/CMakeLists.txt
+tmp/

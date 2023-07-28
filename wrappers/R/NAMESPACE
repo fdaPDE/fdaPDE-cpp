@@ -1,5 +1,0 @@
-useDynLib(fdaPDE2, .registration=TRUE)
-import(methods, Rcpp)
-import(RcppEigen)
-importFrom(Rcpp, evalCpp)
-exportPattern("^[[:alpha:]]+")

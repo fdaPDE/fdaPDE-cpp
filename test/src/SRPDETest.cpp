@@ -21,6 +21,9 @@ using fdaPDE::testing::DOUBLE_TOLERANCE;
 #include "../utils/Utils.h"
 using fdaPDE::testing::almost_equal;
 
+using fdaPDE::core::FEM::PDE_ptr;
+using fdaPDE::core::FEM::PDEBase;
+
 /* test 1
    domain:       unit square [1,1] x [1,1]
    sampling:     locations = nodes
@@ -57,6 +60,26 @@ TEST(SRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes) {
   model.init();
   model.solve();
 
+  // PDEBase* a;
+  // a = new PDE<2,2,1, decltype(L), DMatrix<double>>(domain.mesh, L, u);
+
+  // a->init();
+  // std::cout << a->R1().topRows(3) << std::endl;
+
+  // //auto L2 = Laplacian() + Gradient(SVector<2>(1,1));
+  
+  // //a = new PDE<2,2,1, decltype(L2), DMatrix<double>>(domain.mesh, L2, u);
+  // //a->init();
+  // //std::cout << a->R1().topRows(3) << std::endl;
+
+  // SRPDE< PDE<2,2,1, decltype(L), DMatrix<double>>, fdaPDE::models::GeoStatMeshNodes > model2
+  //   (static_cast<PDE<2,2,1, decltype(L), DMatrix<double>>&>(*a));
+  // model2.setLambdaS(lambda);
+  // model2.setData(df);
+  // model2.init();
+  // model2.solve();
+  // std::cout << model2.f() << std::endl;
+  
   /*   **  test correctness of computed results  **   */
   
   // \Psi matrix
