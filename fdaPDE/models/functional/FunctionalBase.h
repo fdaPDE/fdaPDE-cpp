@@ -63,6 +63,8 @@ namespace models {
     const DMatrix<double>& X() const { return df_.template get<double>(OBSERVATIONS_BLK); } // observation matrix y
     std::size_t n_stat_units() const { return X().rows(); }
     const std::vector<std::unordered_set<std::size_t>>& nan_idxs() const { return nan_idxs_; } // missing data indexes
+    std::size_t n_nan() const; // total number of missing data points
+    std::size_t n_obs() const { return X().size() - n_nan(); }; // number of not missing observations
     // access to NaN corrected \Psi and \Psi^T*D matrices of i-th unit
     const SpMatrix<double>& Psi(std::size_t i) const { return has_nan(i) ? B_[i] : Psi(not_nan()); }
     auto PsiTD(std::size_t i) const { return has_nan(i) ? B_[i].transpose()*D() : Psi(not_nan()).transpose()*D();}
@@ -75,11 +77,19 @@ namespace models {
     // utilities
     bool has_nan(std::size_t i) const { return !nan_idxs_[i].empty(); } // true if the i-th unit has missing data
     bool has_nan() const; // true if any of the statistical unit has missing data
-
+    
     // initialization methods
     void update_data() { return; }   
     void init_nan(); // functional models' missing data logic (called by SamplingBase::init_sampling())
   };
+
+  template <typename Model>
+  std::size_t FunctionalBase<Model>::n_nan() const {
+    return std::accumulate(nan_idxs_.begin(), nan_idxs_.end(), 0,
+			   [] (std::size_t n, const std::unordered_set<std::size_t>& stat_unit_nan) {
+			     return n + stat_unit_nan.size();
+			   });
+  }
   
   #include "FunctionalBase.tpp"
   

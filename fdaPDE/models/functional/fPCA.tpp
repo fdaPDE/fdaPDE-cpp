@@ -19,22 +19,36 @@ void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::s
 template <typename PDE, typename RegularizationType,
 	  typename SamplingDesign, typename lambda_selection_strategy>
 void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::solve_(gcv_lambda_selection) {
-  ProfilingEstimation<decltype(*this)> pe(*this, tol_, max_iter_);
+  typedef ProfilingEstimation<decltype(*this)> pe_t;
+  pe_t pe(*this, tol_, max_iter_);
   BlockFrame<double, int> data_ = data();
-  // wrap GCV into a ScalarField accepted by OPT module
+  // wrap objective into a ScalarField accepted by OPT module
   const std::size_t n_lambda = n_smoothing_parameters<RegularizationType>::value;
   ScalarField<n_lambda> f;
-  f = [&pe, &data_](const SVector<n_lambda>& p) -> double {
+  
+  // multithreading support
+  f = [this, &data_](const SVector<n_lambda>& p) mutable -> double {
     // find vectors s,f minimizing \norm_F{Y - s^T*f}^2 + (s^T*s)*P(f) fixed \lambda = p
-    pe.compute(data_, p);
-    return pe.gcv(); // return GCV at convergence
+    thread_map_[std::this_thread::get_id()].compute(data_, p);
+    return thread_map_[std::this_thread::get_id()].gcv(); // return GCV at convergence
   };
+  
+  /* f = [&pe, &data_](const SVector<n_lambda>& p) -> double { */
+  /*   //std::cout << std::this_thread::get_id() << std::endl; */
+  /*   // find vectors s,f minimizing \norm_F{Y - s^T*f}^2 + (s^T*s)*P(f) fixed \lambda = p */
+  /*   pe.compute(data_, p); */
+  /*   return pe.gcv(); // return GCV at convergence */
+  /* }; */
+
   GridOptimizer<n_lambda> opt; // optimization algorithm
   // Principal Components computation
   for(std::size_t i = 0; i < n_pc_; i++){
-    opt.optimize(f, lambdas()); // select optimal \lambda for i-th PC
+    opt.optimize(f, lambdas(), *multithreading()); // select optimal \lambda for i-th PC
     // compute and store results given estimated optimal \lambda
+    std::cout << "pc: " << i << std::endl;
+    std::cout << opt.optimum() << std::endl;
     pe.compute(data_, opt.optimum());
+    //std::cout << opt.optimum() << std::endl;
     loadings_.col(i) = pe.f_n()/pe.f_n_norm(); scores_.col(i) = pe.s()*pe.f_n_norm();
     // subtract computed PC from data
     data_.get<double>(OBSERVATIONS_BLK) -= scores_.col(i)*loadings_.col(i).transpose();
@@ -46,45 +60,82 @@ void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::s
 template <typename PDE, typename RegularizationType,
 	  typename SamplingDesign, typename lambda_selection_strategy>
 void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::solve_(kcv_lambda_selection) {
+  ThreadPool tp(10);
   ProfilingEstimation<decltype(*this)> pe(*this, tol_, max_iter_);
   // number of smoothing parameters
   const std::size_t n_lambda = n_smoothing_parameters<RegularizationType>::value;
 
   // routine executed by the CV-engine to produce the model score
-  std::function<double(DVector<double>, BlockFrame<double, int>, BlockFrame<double, int>)> cv_score = 
-    [&pe, this](const DVector<double>& lambda,
-		const BlockFrame<double, int>& train_df,
-		const BlockFrame<double, int>& test_df) -> double {
+  std::function<double(DVector<double>, BlockFrame<double, int>, BlockFrame<double, int>)> cv_score =
+    [this](const DVector<double>& lambda,
+	   const BlockFrame<double, int>& train_df,
+	   const BlockFrame<double, int>& test_df) -> double {
+    ProfilingEstimation<decltype(*this)> pe_(*this, tol_, max_iter_);
     // get references to train and test sets
     const DMatrix<double>& X_test  = test_df. get<double>(OBSERVATIONS_BLK);
 
     SVector<n_lambda> p(lambda.data());
     // find vectors s,f minimizing \norm_F{Y - s^T*f}^2 + (s^T*s)*P(f)
-    pe.compute(train_df, p);
-    // compute reconstruction error and scores (X_test * f_n)/(\norm{f_n} + \lambda*P(f)) on test set    
+    pe_.compute(train_df, p);
+    // compute reconstruction error and scores (X_test * f_n)/(\norm{f_n} + \lambda*P(f)) on test set
     if(this->has_nan()){
       auto nan_pattern = X_test.array().isNaN(); // missingness pattern
       std::size_t n = nan_pattern.count(); // number of not-NaN points in test set
 
-      // scores vector 
-      DVector<double> s = (nan_pattern.select(0, X_test))*pe.f_n();
-      double pen = p[0]*(pe.g().dot(R0()*pe.g())); // \lambda*P(f)
+      // scores vector
+      DVector<double> s = (nan_pattern.select(0, X_test))*pe_.f_n();
+      double pen = p[0]*(pe_.g().dot(R0()*pe_.g())); // \lambda*P(f)
       for(std::size_t i = 0; i < s.rows(); ++i){
-	// compute \norm{f_n} for i-th subject 
-	double sum_f = (X_test.row(i)).array().isNaN().select(0, pe.f_n().transpose()).squaredNorm();
+	// compute \norm{f_n} for i-th subject
+	double sum_f = (X_test.row(i)).array().isNaN().select(0, pe_.f_n().transpose()).squaredNorm();
 	s[i] /= (sum_f + pen); // normalize i-th score
       }
       
       // evaluate reconstruction error on test set
-      double err = nan_pattern.select(0, X_test - s*pe.f_n().transpose()).squaredNorm();
+      double err = nan_pattern.select(0, X_test - s*pe_.f_n().transpose()).squaredNorm();
       return err/n;
     }else{
-      // scores vector 
-      DVector<double> s = (X_test*pe.f_n())/(pe.f_n().squaredNorm() + p[0]*(pe.g().dot(R0()*pe.g()))); 
+      // scores vector
+      DVector<double> s = (X_test*pe_.f_n())/(pe_.f_n().squaredNorm() + p[0]*(pe_.g().dot(R0()*pe_.g())));
       // evaluate reconstruction error on test set
-      return (X_test - s*pe.f_n().transpose()).squaredNorm()/X_test.size();
+      return (X_test - s*pe_.f_n().transpose()).squaredNorm()/X_test.size();
     }
   };
+
+  /* std::function<double(DVector<double>, BlockFrame<double, int>, BlockFrame<double, int>)> cv_score =  */
+  /*   [&pe, this](const DVector<double>& lambda, */
+  /* 		const BlockFrame<double, int>& train_df, */
+  /* 		const BlockFrame<double, int>& test_df) -> double { */
+  /*   // get references to train and test sets */
+  /*   const DMatrix<double>& X_test  = test_df. get<double>(OBSERVATIONS_BLK); */
+
+  /*   SVector<n_lambda> p(lambda.data()); */
+  /*   // find vectors s,f minimizing \norm_F{Y - s^T*f}^2 + (s^T*s)*P(f) */
+  /*   pe.compute(train_df, p); */
+  /*   // compute reconstruction error and scores (X_test * f_n)/(\norm{f_n} + \lambda*P(f)) on test set     */
+  /*   if(this->has_nan()){ */
+  /*     auto nan_pattern = X_test.array().isNaN(); // missingness pattern */
+  /*     std::size_t n = nan_pattern.count(); // number of not-NaN points in test set */
+
+  /*     // scores vector  */
+  /*     DVector<double> s = (nan_pattern.select(0, X_test))*pe.f_n(); */
+  /*     double pen = p[0]*(pe.g().dot(R0()*pe.g())); // \lambda*P(f) */
+  /*     for(std::size_t i = 0; i < s.rows(); ++i){ */
+  /* 	// compute \norm{f_n} for i-th subject  */
+  /* 	double sum_f = (X_test.row(i)).array().isNaN().select(0, pe.f_n().transpose()).squaredNorm(); */
+  /* 	s[i] /= (sum_f + pen); // normalize i-th score */
+  /*     } */
+      
+  /*     // evaluate reconstruction error on test set */
+  /*     double err = nan_pattern.select(0, X_test - s*pe.f_n().transpose()).squaredNorm(); */
+  /*     return err/n; */
+  /*   }else{ */
+  /*     // scores vector  */
+  /*     DVector<double> s = (X_test*pe.f_n())/(pe.f_n().squaredNorm() + p[0]*(pe.g().dot(R0()*pe.g())));  */
+  /*     // evaluate reconstruction error on test set */
+  /*     return (X_test - s*pe.f_n().transpose()).squaredNorm()/X_test.size(); */
+  /*   } */
+  /* }; */
   
   // define K-fold algorithm
   KFoldCV cv(10); // allow user-defined number of folds!
@@ -94,13 +145,14 @@ void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::s
   // Principal Components computation
   BlockFrame<double, int> data_ = data();
   for(std::size_t i = 0; i < n_pc_; i++){
-    cv.compute(lambdas_, data_, cv_score, false); // select optimal smoothing level
+    cv.compute(lambdas_, data_, cv_score, tp, false); // select optimal smoothing level
     // compute and store results given estimated optimal \lambda
     pe.compute(data_, cv.optimum());
     loadings_.col(i) = pe.f_n()/pe.f_n_norm(); scores_.col(i) = pe.s()*pe.f_n_norm();
     // subtract computed PC from data
     data_.get<double>(OBSERVATIONS_BLK) -= pe.s()*pe.f_n().transpose();
   }
+  tp.shutdown();
   return;
 }
 

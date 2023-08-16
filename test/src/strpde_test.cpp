@@ -1,0 +1,311 @@
+// This file is part of fdaPDE, a C++ library for physics-informed
+// spatial and functional data analysis.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+#include <cstddef>
+#include <gtest/gtest.h>   // testing framework
+
+#include <fdaPDE/core.h>
+using fdapde::core::advection;
+using fdapde::core::diffusion;
+using fdapde::core::dt;
+using fdapde::core::FEM;
+using fdapde::core::laplacian;
+using fdapde::core::MatrixDataWrapper;
+using fdapde::core::PDE;
+using fdapde::core::VectorDataWrapper;
+
+#include "../../fdaPDE/models/regression/strpde.h"
+#include "../../fdaPDE/models/sampling_design.h"
+using fdapde::models::STRPDE;
+using fdapde::models::SpaceTimeSeparable;
+using fdapde::models::SpaceTimeParabolic;
+using fdapde::models::GeoStatMeshNodes;
+using fdapde::models::GeoStatLocations;
+using fdapde::models::Areal;
+using fdapde::models::MonolithicSolver;
+using fdapde::models::IterativeSolver;
+
+#include "utils/constants.h"
+#include "utils/mesh_loader.h"
+#include "utils/utils.h"
+using fdapde::testing::almost_equal;
+using fdapde::testing::MeshLoader;
+using fdapde::testing::read_mtx;
+
+// test 1
+//    domain:       unit square [1,1] x [1,1]
+//    sampling:     locations = nodes
+//    penalization: simple laplacian
+//    covariates:   no
+//    BC:           no
+//    order FE:     1
+//    time penalization: separable (mass penalization)
+TEST(strpde_test, laplacian_nonparametric_samplingatnodes_separable_monolithic) {
+    // define temporal domain
+    DVector<double> time_mesh;
+    time_mesh.resize(11);
+    std::size_t i = 0;
+    for (double x = 0; x <= 2; x += 0.2, ++i) time_mesh[i] = x;
+    // define spatial domain    
+    MeshLoader<Mesh2D<>> domain("unit_square_coarse");
+    // import data from files
+    DMatrix<double> y = read_csv<double>("../data/models/strpde/2D_test1/y.csv");
+    // define regularizing PDE    
+    auto L = -laplacian<FEM>();
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements() * 3 * time_mesh.rows(), 1);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    // define model
+    double lambda_D = 0.01;
+    double lambda_T = 0.01;
+    STRPDE<decltype(problem), SpaceTimeSeparable, GeoStatMeshNodes, MonolithicSolver> model(problem, time_mesh);
+    model.set_lambda_D(lambda_D);
+    model.set_lambda_T(lambda_T);
+    // set model's data
+    BlockFrame<double, int> df;
+    df.stack(OBSERVATIONS_BLK, y);
+    model.set_data(df);
+    // solve smoothing problem
+    model.init();
+    model.solve();
+    // test correctness
+    EXPECT_TRUE(almost_equal(model.Psi(), "../data/models/strpde/2D_test1/Psi.mtx"));
+    EXPECT_TRUE(almost_equal(model.R0() , "../data/models/strpde/2D_test1/R0.mtx" ));
+    EXPECT_TRUE(almost_equal(model.R1() , "../data/models/strpde/2D_test1/R1.mtx" ));
+    EXPECT_TRUE(almost_equal(model.f()  , "../data/models/strpde/2D_test1/sol.mtx"));
+}
+
+// test 2
+//    domain:       c-shaped
+//    sampling:     locations != nodes
+//    penalization: simple laplacian
+//    covariates:   yes
+//    BC:           no
+//    order FE:     1
+//    time penalization: separable (mass penalization)
+TEST(strpde_test, laplacian_semiparametric_samplingatlocations_separable_monolithic) {
+    // define temporal domain
+    DVector<double> time_mesh;
+    time_mesh.resize(5);
+    for (std::size_t i = 0; i < 5; ++i) time_mesh[i] = (fdapde::testing::pi / 4) * i;
+    // define spatial domain
+    MeshLoader<Mesh2D<>> domain("c_shaped");
+    // import data from files
+    DMatrix<double> locs = read_csv<double>("../data/models/strpde/2D_test2/locs.csv");
+    DMatrix<double> y    = read_csv<double>("../data/models/strpde/2D_test2/y.csv");
+    DMatrix<double> X    = read_csv<double>("../data/models/strpde/2D_test2/X.csv");
+    // define regularizing PDE
+    auto L = -laplacian<FEM>();
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements() * 3, 1);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    // define model
+    double lambda_D = 0.01;
+    double lambda_T = 0.01;
+    STRPDE<decltype(problem), SpaceTimeSeparable, GeoStatLocations, MonolithicSolver> model(problem, time_mesh);
+    model.set_lambda_D(lambda_D);
+    model.set_lambda_T(lambda_T);
+    model.set_spatial_locations(locs);
+    // set model's data
+    BlockFrame<double, int> df;
+    df.stack(OBSERVATIONS_BLK, y);
+    df.stack(DESIGN_MATRIX_BLK, X);
+    model.set_data(df);
+    // solve smoothing problem
+    model.init();
+    model.solve();
+    // test correctness
+    EXPECT_TRUE(almost_equal(model.Psi() , "../data/models/strpde/2D_test2/Psi.mtx" ));
+    EXPECT_TRUE(almost_equal(model.R0()  , "../data/models/strpde/2D_test2/R0.mtx"  ));
+    EXPECT_TRUE(almost_equal(model.R1()  , "../data/models/strpde/2D_test2/R1.mtx"  ));
+    EXPECT_TRUE(almost_equal(model.f()   , "../data/models/strpde/2D_test2/sol.mtx" ));
+    EXPECT_TRUE(almost_equal(model.beta(), "../data/models/strpde/2D_test2/beta.mtx"));
+}
+
+// test 3
+//    domain:       quasicircular domain
+//    sampling:     areal
+//    penalization: non-costant coefficients PDE
+//    covariates:   no
+//    BC:           no
+//    order FE:     1
+//    time penalization: parabolic (monolithic solution)
+TEST(strpde_test, noncostantcoefficientspde_nonparametric_samplingareal_parabolic_monolithic) {
+    // define temporal domain
+    DVector<double> time_mesh;
+    time_mesh.resize(11);
+    for (std::size_t i = 0; i < 10; ++i) time_mesh[i] = 0.4 * i;
+    // define spatial domain
+    MeshLoader<Mesh2D<>> domain("quasi_circle");
+    // import data from files
+    DMatrix<double, Eigen::RowMajor> K_data  = read_csv<double>("../data/models/strpde/2D_test3/K.csv");
+    DMatrix<double, Eigen::RowMajor> b_data  = read_csv<double>("../data/models/strpde/2D_test3/b.csv");
+    DMatrix<int> subdomains = read_csv<int>   ("../data/models/strpde/2D_test3/incidence_matrix.csv"  );
+    DMatrix<double> y       = read_csv<double>("../data/models/strpde/2D_test3/y.csv" );
+    DMatrix<double> IC      = read_csv<double>("../data/models/strpde/2D_test3/IC.csv");
+    // define regularizing PDE
+    MatrixDataWrapper<2, 2, 2> K(K_data);
+    VectorDataWrapper<2, 2> b(b_data);
+    auto L = dt<FEM>() - diffusion<FEM>(K) + advection<FEM>(b);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements() * 3, time_mesh.rows());
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    // define model
+    double lambda_D = std::pow(0.1, 6);
+    double lambda_T = std::pow(0.1, 6);
+    STRPDE<decltype(problem), SpaceTimeParabolic, Areal, MonolithicSolver> model(problem, time_mesh);
+    model.set_lambda_D(lambda_D);
+    model.set_lambda_T(lambda_T);
+    model.set_spatial_locations(subdomains);
+    // set model's data
+    BlockFrame<double, int> df;
+    df.stack(OBSERVATIONS_BLK, y);
+    model.set_data(df);
+    model.set_initial_condition(IC);
+    model.shift_time(1);   // shift data one time instant forward
+    // solve smoothing problem
+    model.init();
+    model.solve();
+    // test correctness
+    EXPECT_TRUE(almost_equal(model.f(), "../data/models/strpde/2D_test3/sol.mtx"));
+}
+
+// test 4
+//    domain:       unit square [1,1] x [1,1]
+//    sampling:     locations = nodes
+//    penalization: simple laplacian
+//    covariates:   no
+//    BC:           no
+//    order FE:     1
+//    time penalization: parabolic (iterative solver)
+TEST(strpde_test, laplacian_nonparametric_samplingatnodes_parabolic_iterative) {
+    // define temporal domain
+    DVector<double> time_mesh;
+    time_mesh.resize(11);
+    std::size_t i = 0;
+    for (double x = 0; x <= 2; x += 0.2, ++i) time_mesh[i] = x;
+    // define spatial domain
+    MeshLoader<Mesh2D<>> domain("unit_square_coarse");
+    // import data from files
+    DMatrix<double> y  = read_csv<double>("../data/models/strpde/2D_test4/y.csv" );    
+    DMatrix<double> IC = read_mtx<double>("../data/models/strpde/2D_test4/IC.mtx");
+    // define regularizing PDE
+    auto L = dt<FEM>() - laplacian<FEM>();
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements() * 3, time_mesh.rows());
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    // define model
+    double lambda_D = 1;
+    double lambda_T = 1;
+    STRPDE<decltype(problem), SpaceTimeParabolic, GeoStatMeshNodes, IterativeSolver> model(problem, time_mesh);
+    model.set_lambda_D(lambda_D);
+    model.set_lambda_T(lambda_T);
+    // set model's data
+    BlockFrame<double, int> df;
+    df.stack(OBSERVATIONS_BLK, y);
+    model.set_data(df);
+    model.set_initial_condition(IC);
+    model.shift_time(1);   // shift data one time instant forward
+    // set parameters for iterative method
+    model.set_tolerance(1e-4);
+    model.set_max_iter(50);
+    // solve smoothing problem
+    model.init();
+    model.solve();
+    // test corretness
+    EXPECT_TRUE(almost_equal(model.f(), "../data/models/strpde/2D_test4/sol.mtx"));
+}
+
+// test 5
+//    domain:       unit square [1,1] x [1,1]
+//    sampling:     locations = nodes, time locations != time nodes
+//    penalization: simple laplacian
+//    covariates:   no
+//    BC:           no
+//    order FE:     1
+//    time penalization: separable (mass penalization)
+TEST(strpde_test, laplacian_nonparametric_samplingatnodes_timelocations_separable_monolithic) {
+    // define temporal domain
+    DVector<double> time_mesh;
+    time_mesh.resize(11);
+    std::size_t i = 0;
+    for (double x = 0; x <= 2; x += 0.2, ++i) time_mesh[i] = x;
+    // define spatial domain
+    MeshLoader<Mesh2D<>> domain("unit_square_coarse");
+    // import data from files
+    DMatrix<double> time_locs = read_csv<double>("../data/models/strpde/2D_test5/time_locations.csv");
+    DMatrix<double> y         = read_csv<double>("../data/models/strpde/2D_test5/y.csv");
+    // define regularizing PDE
+    auto L = -laplacian<FEM>();
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements() * 3 * time_mesh.rows(), 1);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    // define model
+    double lambda_D = 0.01;
+    double lambda_T = 0.01;
+    STRPDE<decltype(problem), SpaceTimeSeparable, GeoStatMeshNodes, MonolithicSolver> model(problem, time_mesh);
+    model.set_lambda_D(lambda_D);
+    model.set_lambda_T(lambda_T);
+    model.set_temporal_locations(time_locs);
+    // set model's data
+    BlockFrame<double, int> df;
+    df.stack(OBSERVATIONS_BLK, y);
+    model.set_data(df);
+    // solve smoothing problem
+    model.init();
+    model.solve();
+    // test correctness
+    EXPECT_TRUE(almost_equal(model.f(), "../data/models/strpde/2D_test5/sol.mtx"));
+}
+
+// test 6
+//    domain:         c-shaped
+//    space sampling: locations != nodes
+//    time sampling:  locations != nodes
+//    missing data:   yes
+//    penalization:   simple laplacian
+//    covariates:     no
+//    BC:             no
+//    order FE:       1
+//    time penalization: separable (mass penalization)
+TEST(strpde_test, laplacian_nonparametric_samplingatlocations_timelocations_separable_monolithic_missingdata) {
+    // define temporal domain
+    DVector<double> time_mesh;
+    time_mesh.resize(21);
+    for (std::size_t i = 0; i < 21; ++i) time_mesh[i] = 1.0 / 20 * i;
+    // define spatial domain and regularizing PDE
+    MeshLoader<Mesh2D<>> domain("c_shaped");
+    // import data from files
+    DMatrix<double> time_locs  = read_csv<double>("../data/models/strpde/2D_test6/time_locations.csv");
+    DMatrix<double> space_locs = read_csv<double>("../data/models/strpde/2D_test6/locs.csv");
+    DMatrix<double> y          = read_csv<double>("../data/models/strpde/2D_test6/y.csv"   );
+    // define regularizing PDE
+    auto L = -laplacian<FEM>();
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements() * 3 * time_mesh.rows(), 1);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    // define model
+    double lambda_D = 1e-3;
+    double lambda_T = 1e-3;
+    STRPDE<decltype(problem), SpaceTimeSeparable, GeoStatLocations, MonolithicSolver> model(problem, time_mesh);
+    model.set_lambda_D(lambda_D);
+    model.set_lambda_T(lambda_T);
+    model.set_spatial_locations(space_locs);
+    model.set_temporal_locations(time_locs);
+    // set model's data
+    BlockFrame<double, int> df;
+    df.stack(OBSERVATIONS_BLK, y);
+    model.set_data(df);
+    // solve smoothing problem
+    model.init();
+    model.solve();
+    // test correctness
+    EXPECT_TRUE(almost_equal(model.f(), "../data/models/strpde/2D_test6/sol.mtx"));
+}

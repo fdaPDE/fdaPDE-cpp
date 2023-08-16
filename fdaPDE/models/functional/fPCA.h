@@ -12,22 +12,22 @@ using fdaPDE::calibration::KFoldCV;
 #include "FunctionalBase.h"
 using fdaPDE::models::FunctionalBase;
 #include "ProfilingEstimation.h"
+#include "../../core/utils/multithreading/ThreadPool.h"
+using fdaPDE::multithreading::ThreadPool;
+using fdaPDE::multithreading::ThreadMap;
 
 namespace fdaPDE {
 namespace models {
-
-  struct fixed_lambda {};
-  struct gcv_lambda_selection {};
-  struct kcv_lambda_selection {};
   
   // base class for any FPCA model
   template <typename PDE, typename RegularizationType, typename SamplingDesign, typename lambda_selection_strategy>
   class FPCA :
-    public FunctionalBase< FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>> {
+    public FunctionalBase<FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>> {
     // compile time checks
     static_assert(std::is_base_of<PDEBase, PDE>::value);
   private:
-    typedef FunctionalBase<FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>> Base;
+    typedef FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy> Model;
+    typedef FunctionalBase<Model> Base;
     std::size_t n_pc_ = 3; // default number of principal components
     // ProfilingEstimation parameters
     double tol_ = 1e-6;         // relative tolerance between Jnew and Jold, used as stopping criterion
@@ -37,6 +37,8 @@ namespace models {
     DMatrix<double> loadings_;
     DMatrix<double> scores_;
 
+    ThreadMap<ProfilingEstimation<Model>> thread_map_;
+    
     // tag dispatched private methods for computation of PCs, ** to be removed **
     void solve_(fixed_lambda);
     void solve_(gcv_lambda_selection);
@@ -47,6 +49,7 @@ namespace models {
     using Base::lambdas;
     using Base::X;
     using Base::nan_idxs;
+    using Base::multithreading;
     // constructor
     FPCA() = default;
     // space-only constructor
@@ -58,7 +61,11 @@ namespace models {
 	      typename std::enable_if<!std::is_same<U, SpaceOnly>::value, int>::type = 0> 
     FPCA(const PDE& pde, const DVector<double>& time) : Base(pde, time) {};
     
-    void init_model() { return; };
+    void init_model() {
+      thread_map_ = ThreadMap<ProfilingEstimation<Model>>(*multithreading(), *this, tol_, max_iter_);
+      return;
+
+    };
     virtual void solve(); // compute principal components
     
     // getters

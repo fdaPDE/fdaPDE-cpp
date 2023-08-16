@@ -15,6 +15,9 @@ using fdaPDE::calibration::GCV;
 #include "../../calibration/StochasticEDF.h"
 using fdaPDE::calibration::StochasticEDF;
 
+#include "../../preprocess/SmoothStandardizer.h"
+using fdaPDE::preprocess::StandardImpute;
+
 namespace fdaPDE {
 namespace models {
 
@@ -35,7 +38,7 @@ namespace models {
   public:
     // constructor
     ProfilingEstimation() = default;
-    ProfilingEstimation(const Model& m, double tol, std::size_t max_iter) {
+    ProfilingEstimation(Model& m, double tol, std::size_t max_iter) {
       if(m.has_nan()) // missing data
 	pe_ = std::make_unique<
 	  ProfilingEstimationImpl<Model_, missing_data>
@@ -58,7 +61,8 @@ namespace models {
     void set_max_iter(std::size_t max_iter) { pe_->set_max_iter(max_iter); }
 
     // apply profiling estimation algorithm on data matrix X and smoothing vector \lambda
-    void compute(const BlockFrame<double,int>& df, const SVector<model_traits<Model_>::n_lambda>& lambda) { pe_->compute(df, lambda); };
+    void compute(const BlockFrame<double,int>& df, const SVector<model_traits<Model_>::n_lambda>& lambda) {
+      pe_->compute(df, lambda); };
     double gcv() { return pe_->gcv(); }; // return gcv index at convergence
   };
 
@@ -177,8 +181,8 @@ namespace models {
 	this->k_++;
 	Jold = Jnew;
 	// update value of discretized functional
-	f_n_ = solver_.fitted(); // \Psi*f
-	Jnew = (X_ - s_*f_n_.transpose()).squaredNorm(); // Frobenius norm of reconstruction error
+	f_n_ = solver_.fitted(); // \Psi*f	
+	Jnew = (X_ - s_*f_n_.transpose()).squaredNorm(); // Frobenius norm of reconstruction error	
 	if constexpr(is_space_only<Model>::value)
 	  // for a space only problem we can leverage the following identity
 	  // \int_D (Lf-u)^2 = g^\top*R_0*g = f^\top*P*f, being P = R_1^\top*(R_0)^{-1}*R_1
@@ -225,21 +229,22 @@ namespace models {
       // initialization of f_ using SVD
       Eigen::JacobiSVD<DMatrix<double>> svd(X_, Eigen::ComputeThinU|Eigen::ComputeThinV);
       f_n_ = svd.matrixV().col(0);
-      
+
       // start iterative procedure	
       double Jold = std::numeric_limits<double>::max(); double Jnew = 1;
       this->k_ = 0; // reset iteration counter      
-      while(!almost_equal(Jnew, Jold, this->tol_) && this->k_ < this->max_iter_){
+      while(!almost_equal(Jnew, Jold, this->tol_) && this->k_ < this->max_iter_) {
 	// compute score vector s as Y*f/\norm(Y*f)
 	s_ = X_*f_n_;
 	s_ = s_/s_.norm();
 	// compute weights matrix W_ = diag(\sum_k s_k^2 o_1^k, ..., \sum_k s_k^2 o_n^k).
 	// o_j^k = 1 \iff data is observed at location j for unit k
 	DMatrix<double> W_(X_.cols(), 1);
-	for(std::size_t i = 0; i < W_.rows(); ++i)
+	for(std::size_t i = 0; i < W_.rows(); ++i) {
 	  W_(i,0) = nan_pattern.col(i).select(0, s_.array().square()).sum(); // \sum_k s_k^2 o_i^k
+	}
 	// adjust observation vector as y_i = (X^T*s)_i/w_i. if w_i = 0, set y_i = 0
-	DMatrix<double> y_ = (W_.array() == 0).select(0, (X_.transpose()*s_).array() / W_.array());
+	DMatrix<double> y_ = (W_.array() == 0).select(0, (X_.transpose()*s_).array() / W_.array());	
 	// compute loadings by solving a proper **weighted** smoothing problem
 	solver_.data().template insert<double>(OBSERVATIONS_BLK, y_); 
 	solver_.data().template insert<double>(WEIGHTS_BLK, W_);
@@ -251,7 +256,7 @@ namespace models {
 	Jold = Jnew;
 	// update value of discretized functional
 	f_n_ = solver_.fitted(); // \Psi*f
-	Jnew = nan_pattern.select(0, X_nan - s_*f_n_.transpose()).squaredNorm(); // Frobenius norm of reconstruction error
+	Jnew = nan_pattern.select(0, X_nan - s_*f_n_.transpose()).squaredNorm(); // norm of reconstruction error
 	if constexpr(is_space_only<Model>::value)
 	  // for a space only problem we can leverage the following identity
 	  // \int_D (Lf-u)^2 = g^\top*R_0*g = f^\top*P*f, being P = R_1^\top*(R_0)^{-1}*R_1

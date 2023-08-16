@@ -3,7 +3,8 @@
 
 #include <algorithm>
 #include <vector>
-#include <thread> // multithreading support
+#include "../core/utils/multithreading/ThreadPool.h" // multithreading support
+using fdaPDE::multithreading::ThreadPool;
 #include "../core/utils/Symbols.h"
 #include "../core/utils/DataStructures/BlockFrame.h"
 #include "../models/ModelTraits.h"
@@ -52,15 +53,24 @@ namespace calibration{
     void compute
     (const std::vector<DVector<double>>& lambdas, const BlockFrame<double, int>& data, 
      const std::function<double(DVector<double>, BlockFrame<double, int>, BlockFrame<double, int>)>& F,
-     bool randomize = true){ // if true a randomization of the data is performed before split
+     ThreadPool& tp,
+     bool randomize = true) { // if true a randomization of the data is performed before split 
       // reserve space for CV scores
       scores_.resize(K_, lambdas.size());
       BlockFrame<double, int> data_;
       if(randomize) // perform a first shuffling of the data if required	
 	data_ = data.shuffle();
       else data_ = data;
-      
-      // cycle over all folds
+
+      auto thread_function = [this, F, lambdas](std::size_t fold, const BlockFrame<double, int>& train, const BlockFrame<double,int>& test) -> void {
+	// fixed a data split, cycle over all lambda values
+	for(std::size_t j = 0; j < lambdas.size(); ++j)
+	  scores_.coeffRef(fold, j) = F(lambdas[j], train, test); // compute CV score
+
+	std::cout << "fold " << fold << std::endl;
+      };
+
+      // parallell version
       for(std::size_t fold = 0; fold < K_; ++fold){
 	// create train test partition
 	std::pair<BlockView<Sparse, double, int>, BlockView<Sparse, double, int>> train_test = split(data_, fold);
@@ -68,10 +78,24 @@ namespace calibration{
 	BlockFrame<double, int> train = train_test.first.extract();
 	BlockFrame<double, int> test = train_test.second.extract();
 	
-	// fixed a data split, cycle over all lambda values
-	for(std::size_t j = 0; j < lambdas.size(); ++j)
-	  scores_.coeffRef(fold, j) = F(lambdas[j], train, test); // compute CV score
+	tp.send_async(thread_function, fold, train, test);
       }
+      
+      tp.sync();
+      std::cout << "synched" << std::endl;
+      
+      // // cycle over all folds
+      // for(std::size_t fold = 0; fold < K_; ++fold){
+      // 	// create train test partition
+      // 	std::pair<BlockView<Sparse, double, int>, BlockView<Sparse, double, int>> train_test = split(data_, fold);
+      // 	// decouple training from testing
+      // 	BlockFrame<double, int> train = train_test.first.extract();
+      // 	BlockFrame<double, int> test = train_test.second.extract();
+	
+      // 	// fixed a data split, cycle over all lambda values
+      // 	for(std::size_t j = 0; j < lambdas.size(); ++j)
+      // 	  scores_.coeffRef(fold, j) = F(lambdas[j], train, test); // compute CV score
+      // }
       // reserve space for storing results
       avg_scores_.clear(); std_scores_.clear(); // clear possible previous execution
       avg_scores_.reserve(lambdas.size());
