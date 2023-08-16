@@ -1,7 +1,7 @@
 name: test-workflow
 on:
   push:
-     branches: [ develop ]
+     branches: [ stable, develop ]
      
 jobs:
   build:
@@ -9,15 +9,13 @@ jobs:
     container:
       image: alepalu/fdapde-docker-image:latest
     steps:
-    - uses: actions/checkout@v2
-    - name: Build-Tests
+    - name: checkout repository
+      uses: actions/checkout@v2
+    - name: Checkout submodules
+      run: git submodule update --init --recursive
+    - name: run_tests
       run: |
         cd test/
         export Eigen3_DIR=/usr/share/cmake/Modules # reguired to let eigen3 work with CMake in alpine
-        cmake CMakeLists.txt
-        make
-    - name: Run-Tests 
-      run: |
-        cd test/
-        export Eigen3_DIR=/usr/share/cmake/Modules # reguired to let eigen3 work with CMake in alpine
-        ./fdaPDE_test
+        chmod +x run_tests.sh
+        ./run_tests.sh
