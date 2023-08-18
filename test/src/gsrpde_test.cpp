@@ -268,7 +268,6 @@ TEST(gsrpde_test, laplacian_semiparametric_samplingatlocations_parabolic_monolit
     df.insert(DESIGN_MATRIX_BLK, X);
     model.set_data(df);
     model.set_initial_condition(IC);
-    model.shift_time(1);   // shift time one instant forward
     // solve smoothing problem
     model.init();
     model.solve();

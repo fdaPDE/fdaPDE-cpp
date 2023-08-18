@@ -7,7 +7,7 @@
 #include "src/srpde_test.cpp"
 #include "src/strpde_test.cpp"
 #include "src/gsrpde_test.cpp"
-// #include "models/FPCATest.cpp"
+#include "src/fpca_test.cpp"
 // GCV test suites
 #include "src/gcv_test.cpp"
 // #include "calibration/GCVNewtonTest.cpp"

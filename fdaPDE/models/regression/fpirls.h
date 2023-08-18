@@ -83,7 +83,7 @@ template <typename Model, typename Distribution> class FPIRLS {
             solver = typename FPIRLS_internal_solver<Model>::type(m_.pde(), m_.time_domain());
             // in case of parabolic regularization derive initial condition from input model
             if constexpr (is_space_time_parabolic<Model_>::value)
-	      solver.set_initial_condition(m_.s());
+	      solver.set_initial_condition(m_.s(), false);
             // in case of separable regularization set possible temporal locations
             if constexpr (is_space_time_separable<Model_>::value)
 	      solver.set_temporal_locations(m_.time_locs());

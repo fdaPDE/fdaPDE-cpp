@@ -30,7 +30,6 @@ template <typename Model> class SpaceTimeBase : public ModelBase<Model> {
    protected:
     typedef typename model_traits<Model>::PDE PDE;   // PDE used for regularization in space
     typedef ModelBase<Model> Base;
-    using Base::df_;       // model's data
     using Base::lambda_;   // vector of smoothing parameters
     using Base::model;     // underlying model object
     using Base::pde_;      // regularizing PDE
@@ -52,15 +51,6 @@ template <typename Model> class SpaceTimeBase : public ModelBase<Model> {
     const DVector<double>& time_locs() const { return time_; }             // time locations where we have observations
     inline std::size_t n_temporal_locs() const { return time_.rows(); }    // number of time instants
     std::size_t n_spatial_basis() const { return pde_->domain().dof(); }   // number of basis functions in space
-
-    // remove first n time instants from the problem
-    void shift_time(std::size_t n) {
-        std::size_t m = time_.rows();       // number of time instants
-        time_ = time_.tail(m - n).eval();   // correct time interval [0,T] (eval() to avoid aliasing)
-        pde_->set_forcing(pde_->forcing_data().rightCols(m - n));
-        // remove from data first n time instants, reindex points
-        model().set_data(df_.tail(n * model().n_spatial_locs()).extract(), true);
-    }
 
     // destructor
     virtual ~SpaceTimeBase() = default;

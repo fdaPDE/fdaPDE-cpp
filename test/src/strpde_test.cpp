@@ -172,7 +172,6 @@ TEST(strpde_test, noncostantcoefficientspde_nonparametric_samplingareal_paraboli
     df.stack(OBSERVATIONS_BLK, y);
     model.set_data(df);
     model.set_initial_condition(IC);
-    model.shift_time(1);   // shift data one time instant forward
     // solve smoothing problem
     model.init();
     model.solve();
@@ -214,7 +213,6 @@ TEST(strpde_test, laplacian_nonparametric_samplingatnodes_parabolic_iterative) {
     df.stack(OBSERVATIONS_BLK, y);
     model.set_data(df);
     model.set_initial_condition(IC);
-    model.shift_time(1);   // shift data one time instant forward
     // set parameters for iterative method
     model.set_tolerance(1e-4);
     model.set_max_iter(50);

@@ -60,6 +60,7 @@ template <typename Model> class SpaceTimeParabolicBase<Model, MonolithicSolver> 
     using Base::model;      // underlying model object
     using Base::pde_;       // regularizing term in space
     using Base::time_;      // time interval [0,T]
+    using Base::df_;        // model's data
 
     // constructor
     SpaceTimeParabolicBase() = default;
@@ -121,7 +122,17 @@ template <typename Model> class SpaceTimeParabolicBase<Model, MonolithicSolver> 
         return lambda_D() * (R1() + lambda_T() * penT_).transpose() * invR0_.solve(R1() + lambda_T() * penT_);
     }
     // setters
-    void set_initial_condition(const DMatrix<double>& s) { s_ = s; }
+    // shift = true, cause the removal of the first time instant of data, in case it has been used to estimate the IC
+    void set_initial_condition(const DMatrix<double>& s, bool shift = true) {
+        s_ = s;
+        if (shift) { // left shrink time domain by one
+            std::size_t m = time_.rows();       // number of time instants
+            time_ = time_.tail(m - 1).eval();   // correct time interval [0,T] (eval() to avoid aliasing)
+            pde_->set_forcing(pde_->forcing_data().rightCols(m - 1));
+            // remove from data the first time instant, reindex points
+            model().set_data(df_.tail(model().n_spatial_locs()).extract(), true);
+        }
+    }
 
     // destructor
     virtual ~SpaceTimeParabolicBase() = default;
@@ -136,6 +147,7 @@ template <typename Model> class SpaceTimeParabolicBase<Model, IterativeSolver> :
     typedef typename model_traits<Model>::PDE PDE;                             // PDE used for regularization in space
     typedef typename model_traits<Model>::regularization TimeRegularization;   // regularization in time
     typedef SpaceTimeBase<Model> Base;
+    using Base::df_;     // model's data
     using Base::model;   // underlying model object
     using Base::pde_;    // regularizing term in space
     using Base::time_;   // time interval [0,T]
@@ -171,7 +183,17 @@ template <typename Model> class SpaceTimeParabolicBase<Model, IterativeSolver> :
     std::size_t n_basis() const { return pde_->domain().dof(); }   // number of basis functions
 
     // setters
-    void set_initial_condition(const DMatrix<double>& s) { s_ = s; }
+    // shift = true, cause the removal of the first time instant of data, in case it has been used to estimate the IC
+    void set_initial_condition(const DMatrix<double>& s, bool shift = true) {
+        s_ = s;
+        if (shift) { // left shrink time domain by one
+            std::size_t m = time_.rows();       // number of time instants
+            time_ = time_.tail(m - 1).eval();   // correct time interval [0,T] (eval() to avoid aliasing)
+            pde_->set_forcing(pde_->forcing_data().rightCols(m - 1));
+            // remove from data the first time instant, reindex points
+            model().set_data(df_.tail(model().n_spatial_locs()).extract(), true);
+        }
+    }
     void set_tolerance(double tol) { tol_ = tol; }
     void set_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
 

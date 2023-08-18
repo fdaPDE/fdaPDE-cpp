@@ -24,6 +24,7 @@
 #include "../space_time_base.h"
 #include "../space_time_separable_base.h"
 #include "../space_time_parabolic_base.h"
+#include "../sampling_design.h"
 
 namespace fdapde {
 namespace models {
@@ -132,12 +133,9 @@ template <typename Model> DMatrix<double> RegressionBase<Model>::lmbQ(const DMat
 template <typename Model> void RegressionBase<Model>::update_data() {
     // default to homoskedastic observations
     DVector<double> W = DVector<double>::Ones(Base::n_locs());
-    if (has_weights())   // update observations' weights if provided
+    if (has_weights()) {   // update observations' weights if provided
         W = df_.template get<double>(WEIGHTS_BLK).col(0);
-    for(std::size_t i = 0; i < y().rows(); ++i){
-      if(std::isnan(y()(i,0))) W[i] = 0.0;
     }
-
     W_ = W.asDiagonal();
     // model is semi-parametric
     if (has_covariates()) {
