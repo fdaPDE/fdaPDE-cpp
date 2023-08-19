@@ -25,35 +25,40 @@ using fdapde::core::Grid;
 
 #include "../../calibration/gcv.h"
 #include "../../calibration/kfold_cv.h"
+#include "../../calibration/symbols.h"
 #include "functional_base.h"
 #include "profiling_estimation.h"
 using fdapde::calibration::GCV;
 using fdapde::calibration::KFoldCV;
+using fdapde::calibration::NoCalibration;
+using fdapde::calibration::KCVCalibration;
+using fdapde::calibration::GCVCalibration;
 
 namespace fdapde {
 namespace models {
 
 // Functional Principal Components Analysis
-template <typename PDE, typename RegularizationType, typename SamplingDesign, typename lambda_selection_strategy>
-class FPCA : public FunctionalBase<FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>> {
+template <typename PDE, typename RegularizationType, typename SamplingDesign, typename CalibrationStrategy>
+class FPCA : public FunctionalBase<FPCA<PDE, RegularizationType, SamplingDesign, CalibrationStrategy>> {
     static_assert(std::is_base_of<PDEBase, PDE>::value);
    private:
-    typedef FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy> Model;
+    typedef FPCA<PDE, RegularizationType, SamplingDesign, CalibrationStrategy> Model;
     typedef FunctionalBase<Model> Base;
     std::size_t n_pc_ = 3;   // number of principal components
     // profiling_estimation parameters
-    double tol_ = 1e-6;           // relative tolerance between Jnew and Jold, used as stopping criterion
-    std::size_t max_iter_ = 20;   // maximum number of allowed iterations
-    int seed_ = -1;               // a value of -1 implies a randomly choosen seed
+    double tol_ = 1e-6;               // relative tolerance between Jnew and Jold, used as stopping criterion
+    std::size_t max_iter_ = 20;       // maximum number of allowed iterations
+    int seed_ = fdapde::random_seed;
+    std::size_t n_folds_;   // for KCVCalibration, the number of folds to use
 
     // problem solution
     DMatrix<double> loadings_;
     DMatrix<double> scores_;
 
     // tag dispatched resolution approaches
-    void solve_(fixed_lambda);
-    void solve_(gcv_lambda_selection);
-    void solve_(kcv_lambda_selection);
+    void solve_(NoCalibration);    // fix \lambda for all the components
+    void solve_(GCVCalibration);   // select \lambda for each component minimizing the GCV index
+    void solve_(KCVCalibration);   // select \lambda for each component using a K-fold cross validation approach
    public:
     IMPORT_MODEL_SYMBOLS;
     using Base::lambda;
@@ -73,23 +78,37 @@ class FPCA : public FunctionalBase<FPCA<PDE, RegularizationType, SamplingDesign,
 
     void init_model() { return; };
     virtual void solve();   // compute principal components
-
     // getters
     const DMatrix<double>& loadings() const { return loadings_; }
     const DMatrix<double>& scores() const { return scores_; }
-
     // setters
     void set_tolerance(double tol) { tol_ = tol; }
     void set_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
     void set_npc(std::size_t n_pc) { n_pc_ = n_pc; }
     void set_seed(std::size_t seed) { seed_ = seed; }
+    template <
+      typename U = CalibrationStrategy,
+      typename std::enable_if<std::is_same<U, KCVCalibration>::value, int>::type = 0>
+    void set_nfolds(std::size_t n_folds) {
+        n_folds_ = n_folds;
+    }
 };
 
+// implementative details
+
+// finds solution to FPCA problem, dispatch to solver depending on CalibrationStrategy
+template <typename PDE, typename RegularizationType, typename SamplingDesign, typename CalibrationStrategy>
+void FPCA<PDE, RegularizationType, SamplingDesign, CalibrationStrategy>::solve() {
+    loadings_.resize(X().cols(), n_pc_); scores_.resize(X().rows(), n_pc_);
+    // dispatch to desired solution strategy
+    solve_(CalibrationStrategy());
+    return;
+}
+  
 // solution in case of fixed \lambda
-template <typename PDE, typename RegularizationType, typename SamplingDesign, typename lambda_selection_strategy>
-void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::solve_(fixed_lambda) {
-    ProfilingEstimation<decltype(*this)> pe(*this, tol_, max_iter_);
-    if (seed_ != -1) pe.set_seed(seed_);
+template <typename PDE, typename RegularizationType, typename SamplingDesign, typename CalibrationStrategy>
+void FPCA<PDE, RegularizationType, SamplingDesign, CalibrationStrategy>::solve_(NoCalibration) {
+    ProfilingEstimation<decltype(*this)> pe(*this, tol_, max_iter_, seed_);
     BlockFrame<double, int> data_ = data();
     // Principal Components computation
     for (std::size_t i = 0; i < n_pc_; i++) {
@@ -104,10 +123,9 @@ void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::s
 }
 
 // best \lambda for PC choosen according to GCV index
-template <typename PDE, typename RegularizationType, typename SamplingDesign, typename lambda_selection_strategy>
-void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::solve_(gcv_lambda_selection) {
-    ProfilingEstimation<decltype(*this)> pe(*this, tol_, max_iter_);
-    if (seed_ != -1) pe.set_seed(seed_);
+template <typename PDE, typename RegularizationType, typename SamplingDesign, typename CalibrationStrategy>
+void FPCA<PDE, RegularizationType, SamplingDesign, CalibrationStrategy>::solve_(GCVCalibration) {
+    ProfilingEstimation<decltype(*this)> pe(*this, tol_, max_iter_, seed_);
     BlockFrame<double, int> data_ = data();
     // wrap objective into a ScalarField accepted by OPT module
     const std::size_t n_lambda = n_smoothing_parameters<RegularizationType>::value;
@@ -133,19 +151,17 @@ void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::s
 }
 
 // best \lambda for PC choosen according to K-fold CV strategy, uses the reconstruction error on test set as CV score
-template <typename PDE, typename RegularizationType, typename SamplingDesign, typename lambda_selection_strategy>
-void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::solve_(kcv_lambda_selection) {
-    ProfilingEstimation<decltype(*this)> pe(*this, tol_, max_iter_);
-    if (seed_ != -1) pe.set_seed(seed_);
-    // number of smoothing parameters
+template <typename PDE, typename RegularizationType, typename SamplingDesign, typename CalibrationStrategy>
+void FPCA<PDE, RegularizationType, SamplingDesign, CalibrationStrategy>::solve_(KCVCalibration) {
+    ProfilingEstimation<decltype(*this)> pe(*this, tol_, max_iter_, seed_);
     const std::size_t n_lambda = n_smoothing_parameters<RegularizationType>::value;
-
+    
     // routine executed by the CV-engine to produce the model score
     std::function<double(DVector<double>, BlockFrame<double, int>, BlockFrame<double, int>)> cv_score =
       [this](const DVector<double>& lambda,
 	     const BlockFrame<double, int>& train_df,
 	     const BlockFrame<double, int>& test_df) -> double {
-        ProfilingEstimation<decltype(*this)> pe_(*this, tol_, max_iter_);
+        ProfilingEstimation<decltype(*this)> pe_(*this, tol_, max_iter_, seed_);
         // get references to train and test sets
         const DMatrix<double>& X_test = test_df.get<double>(OBSERVATIONS_BLK);
         SVector<n_lambda> p(lambda.data());
@@ -175,7 +191,7 @@ void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::s
     };
 
     // define K-fold algorithm
-    KFoldCV cv(10);   // allow user-defined number of folds!
+    KFoldCV cv(n_folds_, seed_);
     std::vector<DVector<double>> lambdas_;
     lambdas_.reserve(lambdas().size());
     for (const auto& l : lambdas()) { lambdas_.emplace_back(Eigen::Map<const DVector<double>>(l.data(), n_lambda, 1)); }
@@ -192,18 +208,8 @@ void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::s
     return;
 }
 
-// finds solution to fPCA problem, dispatch to solver depending on \lambda selection criterion
-template <typename PDE, typename RegularizationType, typename SamplingDesign, typename lambda_selection_strategy>
-void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::solve() {
-    loadings_.resize(X().cols(), n_pc_);
-    scores_.resize(X().rows(), n_pc_);
-    // dispatch to desired solution strategy
-    solve_(lambda_selection_strategy());
-    return;
-}
-
-template <typename PDE_, typename SamplingDesign_, typename lambda_selection_strategy>
-struct model_traits<FPCA<PDE_, SpaceOnly, SamplingDesign_, lambda_selection_strategy>> {
+template <typename PDE_, typename SamplingDesign_, typename CalibrationStrategy>
+struct model_traits<FPCA<PDE_, SpaceOnly, SamplingDesign_, CalibrationStrategy>> {
     typedef PDE_ PDE;
     typedef SpaceOnly regularization;
     typedef SamplingDesign_ sampling;
@@ -211,8 +217,8 @@ struct model_traits<FPCA<PDE_, SpaceOnly, SamplingDesign_, lambda_selection_stra
     enum { N = PDE::N, M = PDE::M, R = PDE::R, n_lambda = 1 };
 };
 // specialization for separable regularization
-template <typename PDE_, typename SamplingDesign_, typename lambda_selection_strategy>
-struct model_traits<FPCA<PDE_, SpaceTimeSeparable, SamplingDesign_, lambda_selection_strategy>> {
+template <typename PDE_, typename SamplingDesign_, typename CalibrationStrategy>
+struct model_traits<FPCA<PDE_, SpaceTimeSeparable, SamplingDesign_, CalibrationStrategy>> {
     typedef PDE_ PDE;
     typedef SpaceTimeSeparable regularization;
     typedef SplineBasis<3> TimeBasis;   // use cubic B-splines

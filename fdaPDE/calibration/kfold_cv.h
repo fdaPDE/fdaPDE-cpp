@@ -30,7 +30,8 @@ namespace calibration {
 // general implementation of KFold Cross Validation
 class KFoldCV {
    private:
-    std::size_t K_;   // number of folds
+    std::size_t K_;      // number of folds
+    std::size_t seed_;   // seed used for BlockFrame shuffling
 
     std::vector<double> avg_scores_;   // mean CV score for each \lambda
     std::vector<double> std_scores_;   // CV score standard deviation for each \lambda
@@ -60,8 +61,9 @@ class KFoldCV {
    public:
     // constructor
     KFoldCV() = default;
-    KFoldCV(std::size_t K) : K_(K) {};
-
+    KFoldCV(std::size_t K) : K_(K), seed_(std::random_device()()) {};
+    KFoldCV(std::size_t K, int seed) : K_(K), seed_((seed == fdapde::random_seed) ? std::random_device()() : seed) {};
+  
     // selects best smoothing parameter according to a K-fold cross validation strategy using the output of functor F as
     // CV score F receives, in this order: current smoothing parameter, train set and test set
     void compute(
@@ -72,7 +74,7 @@ class KFoldCV {
         scores_.resize(K_, lambdas.size());
         BlockFrame<double, int> data_;
         if (randomize)   // perform a first shuffling of the data if required
-            data_ = data.shuffle();
+            data_ = data.shuffle(seed_);
         else
             data_ = data;
 

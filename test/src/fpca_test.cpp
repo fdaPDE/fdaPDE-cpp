@@ -22,16 +22,17 @@ using fdapde::core::FEM;
 using fdapde::core::laplacian;
 using fdapde::core::PDE;
 
+#include "../../fdaPDE/calibration/symbols.h"
 #include "../../fdaPDE/models/functional/fpca.h"
 #include "../../fdaPDE/models/model_traits.h"
 #include "../../fdaPDE/models/sampling_design.h"
+using fdapde::calibration::GCVCalibration;
+using fdapde::calibration::KCVCalibration;
+using fdapde::calibration::NoCalibration;
 using fdapde::models::Areal;
-using fdapde::models::fixed_lambda;
 using fdapde::models::FPCA;
-using fdapde::models::gcv_lambda_selection;
 using fdapde::models::GeoStatLocations;
 using fdapde::models::GeoStatMeshNodes;
-using fdapde::models::kcv_lambda_selection;
 using fdapde::models::SpaceOnly;
 
 #include "utils/constants.h"
@@ -48,7 +49,7 @@ using fdapde::testing::read_mtx;
 //    BC:           no
 //    order FE:     1
 //    missing data: no
-TEST(fpca_test, laplacian_samplingatnodes_fixed) {
+TEST(fpca_test, laplacian_samplingatnodes_nocalibration) {
     // define domain
     MeshLoader<Mesh2D<>> domain("unit_square");
     // import data from files
@@ -59,7 +60,7 @@ TEST(fpca_test, laplacian_samplingatnodes_fixed) {
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
     // define model
     double lambda_D = 1e-2;
-    FPCA<decltype(problem), SpaceOnly, GeoStatMeshNodes, fixed_lambda> model(problem);
+    FPCA<decltype(problem), SpaceOnly, GeoStatMeshNodes, NoCalibration> model(problem);
     model.set_lambda_D(lambda_D);
     // set model's data
     BlockFrame<double, int> df;
@@ -81,7 +82,7 @@ TEST(fpca_test, laplacian_samplingatnodes_fixed) {
 //    order FE:     1
 //    missing data: no
 //    GCV smoothing parameter selection
-TEST(fpca_test, laplacian_samplingatlocations_gcv) {
+TEST(fpca_test, laplacian_samplingatlocations_gcvcalibration) {
     // define domain
     MeshLoader<Mesh2D<>> domain("unit_square");
     // import data from files
@@ -92,7 +93,7 @@ TEST(fpca_test, laplacian_samplingatlocations_gcv) {
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
     // define model
-    FPCA<decltype(problem), SpaceOnly, GeoStatLocations, gcv_lambda_selection> model(problem);
+    FPCA<decltype(problem), SpaceOnly, GeoStatLocations, GCVCalibration> model(problem);
     model.set_spatial_locations(locs);
     // grid of smoothing parameters
     std::vector<SVector<1>> lambdas;
@@ -119,63 +120,65 @@ TEST(fpca_test, laplacian_samplingatlocations_gcv) {
 //    order FE:     1
 //    missing data: no
 //    KCV smoothing parameter selection, 10 folds
-// TEST(fpca_test, laplacian_samplingatlocations_kfoldcv) {
-//     // define domain
-//     MeshLoader<Mesh2D<>> domain("unit_square");
-//     // import data from files
-//     DMatrix<double> locs = read_csv<double>("../data/models/fpca/2D_test3/locs.csv");
-//     DMatrix<double> y    = read_csv<double>("../data/models/fpca/2D_test3/y.csv");
-//     // define regularizing PDE
-//     auto L = -laplacian<FEM>();
-//     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements() * 3, 1);
-//     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
-//     // define model
-//     FPCA<decltype(problem), SpaceOnly, GeoStatLocations, kcv_lambda_selection> model(problem);
-//     model.set_spatial_locations(locs);
-//     // grid of smoothing parameters
-//     std::vector<SVector<1>> lambdas;
-//     for (double x = -4; x <= -2; x += 0.1) lambdas.push_back(SVector<1>(std::pow(10, x)));
-//     model.set_lambda(lambdas);
-//     // set model's data
-//     BlockFrame<double, int> df;
-//     df.insert(OBSERVATIONS_BLK, y);
-//     model.set_data(df);
-//     // solve FPCA problem
-//     model.init();
-//     model.solve();
-//     // test correctness
-//     EXPECT_TRUE(almost_equal(model.loadings(), "../data/models/fpca/2D_test3/loadings.mtx"));
-//     EXPECT_TRUE(almost_equal(model.scores(),   "../data/models/fpca/2D_test3/scores.mtx"  ));
-// }
+TEST(fpca_test, laplacian_samplingatlocations_kcvcalibration) {
+    // define domain
+    MeshLoader<Mesh2D<>> domain("unit_square");
+    // import data from files
+    DMatrix<double> locs = read_csv<double>("../data/models/fpca/2D_test3/locs.csv");
+    DMatrix<double> y    = read_csv<double>("../data/models/fpca/2D_test3/y.csv");
+    // define regularizing PDE
+    auto L = -laplacian<FEM>();
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements() * 3, 1);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    // define model
+    FPCA<decltype(problem), SpaceOnly, GeoStatLocations, KCVCalibration> model(problem);
+    model.set_spatial_locations(locs);
+    // grid of smoothing parameters
+    std::vector<SVector<1>> lambdas;
+    for (double x = -4; x <= -2; x += 0.1) lambdas.push_back(SVector<1>(std::pow(10, x)));
+    model.set_lambda(lambdas);
+    model.set_seed(12654);   // for reproducibility purposes in testing
+    model.set_nfolds(10);    // perform a 10 folds cross-validation
+    // set model's data
+    BlockFrame<double, int> df;
+    df.insert(OBSERVATIONS_BLK, y);
+    model.set_data(df);
+    // solve FPCA problem
+    model.init();
+    model.solve();
+    // test correctness
+    EXPECT_TRUE(almost_equal(model.loadings(), "../data/models/fpca/2D_test3/loadings.mtx"));
+    EXPECT_TRUE(almost_equal(model.scores(),   "../data/models/fpca/2D_test3/scores.mtx"  ));
+}
 
-// // test 4
-// //    domain:       unit square [1,1] x [1,1]
-// //    sampling:     locations = nodes
-// //    penalization: simple laplacian
-// //    BC:           no
-// //    order FE:     1
-// //    missing data: yes
-// TEST(fpca_test, laplacian_samplingatnodes_fixed_missingdata) {
-//     // define domain
-//     MeshLoader<Mesh2D<>> domain("unit_square_coarse");
-//     // import data from files
-//     DMatrix<double> y = read_csv<double>("../data/models/fpca/2D_test4/y.csv");
-//     // define regularizing PDE
-//     auto L = -laplacian<FEM>();
-//     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements() * 3, 1);
-//     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
-//     // define model
-//     double lambda_D = 1e-2;
-//     FPCA<decltype(problem), SpaceOnly, GeoStatMeshNodes, fixed_lambda> model(problem);
-//     model.set_lambda_D(lambda_D);
-//     // set model's data
-//     BlockFrame<double, int> df;
-//     df.insert(OBSERVATIONS_BLK, y);
-//     model.set_data(df);
-//     // solve FPCA problem
-//     model.init();
-//     model.solve();
-//     // test correctness
-//     EXPECT_TRUE(almost_equal(model.loadings(), "../data/models/fpca/2D_test4/loadings.mtx"));
-//     EXPECT_TRUE(almost_equal(model.scores(),   "../data/models/fpca/2D_test4/scores.mtx"  ));
-// }
+// test 4
+//    domain:       unit square [1,1] x [1,1]
+//    sampling:     locations = nodes
+//    penalization: simple laplacian
+//    BC:           no
+//    order FE:     1
+//    missing data: yes
+TEST(fpca_test, laplacian_samplingatnodes_nocalibration_missingdata) {
+    // define domain
+    MeshLoader<Mesh2D<>> domain("unit_square_coarse");
+    // import data from files
+    DMatrix<double> y = read_csv<double>("../data/models/fpca/2D_test4/y.csv");
+    // define regularizing PDE
+    auto L = -laplacian<FEM>();
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements() * 3, 1);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    // define model
+    double lambda_D = 1e-2;
+    FPCA<decltype(problem), SpaceOnly, GeoStatMeshNodes, NoCalibration> model(problem);
+    model.set_lambda_D(lambda_D);
+    // set model's data
+    BlockFrame<double, int> df;
+    df.insert(OBSERVATIONS_BLK, y);
+    model.set_data(df);
+    // solve FPCA problem
+    model.init();
+    model.solve();
+    // test correctness
+    EXPECT_TRUE(almost_equal(model.loadings(), "../data/models/fpca/2D_test4/loadings.mtx"));
+    EXPECT_TRUE(almost_equal(model.scores(),   "../data/models/fpca/2D_test4/scores.mtx"  ));
+}

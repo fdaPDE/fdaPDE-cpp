@@ -43,7 +43,8 @@ template <typename Model> class StochasticEDF {
     bool init_ = false;
    public:
     // constructor
-    StochasticEDF(const Model& model, std::size_t r, std::size_t seed) : model_(model), r_(r), seed_(seed) { }
+    StochasticEDF(const Model& model, std::size_t r, std::size_t seed) :
+        model_(model), r_(r), seed_((seed == fdapde::random_seed) ? std::random_device()() : seed) { }
     StochasticEDF(const Model& model, std::size_t r) : StochasticEDF(model, r, std::random_device()()) { }
 
     // evaluate trace of S exploiting a monte carlo approximation

@@ -27,11 +27,6 @@
 namespace fdapde {
 namespace models {
 
-// ** to be moved **
-struct fixed_lambda { };
-struct gcv_lambda_selection { };
-struct kcv_lambda_selection { };
-
 // base class for any *functional* fdaPDE model
 template <typename Model>
 class FunctionalBase :

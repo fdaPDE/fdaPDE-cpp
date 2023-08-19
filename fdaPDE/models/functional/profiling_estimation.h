@@ -48,11 +48,11 @@ template <typename Model> class ProfilingEstimation {   // uses strategy pattern
    public:
     // constructor
     ProfilingEstimation() = default;
-    ProfilingEstimation(Model& m, double tol, std::size_t max_iter) {
+    ProfilingEstimation(Model& m, double tol, std::size_t max_iter, int seed) {
         if (m.has_nan())   // missing data
-            pe_ = std::make_unique<ProfilingEstimationImpl<Model_, missing_data>> (m, tol, max_iter);
+            pe_ = std::make_unique<ProfilingEstimationImpl<Model_, missing_data>> (m, tol, max_iter, seed);
         else   // fallback to complete data setting
-            pe_ = std::make_unique<ProfilingEstimationImpl<Model_, complete_data>>(m, tol, max_iter);
+            pe_ = std::make_unique<ProfilingEstimationImpl<Model_, complete_data>>(m, tol, max_iter, seed);
     }
     // dynamically dispatch calls to instantiated strategy
     const DVector<double>& f_n() const { return pe_->f_n(); }   // vector f_n at convergence
@@ -65,7 +65,6 @@ template <typename Model> class ProfilingEstimation {   // uses strategy pattern
     // setters
     void set_tolerance(double tol) { pe_->set_tolerance(tol); }
     void set_max_iter(std::size_t max_iter) { pe_->set_max_iter(max_iter); }
-    void set_seed(std::size_t seed) { pe_->set_seed(seed); }
   
     // apply profiling estimation algorithm on data matrix X and smoothing vector \lambda
     void compute(const BlockFrame<double, int>& df, const SVector<model_traits<Model_>::n_lambda>& lambda) {
@@ -110,8 +109,8 @@ template <typename Model> class ProfilingEstimationStrategy {
    public:
     // constructor
     ProfilingEstimationStrategy() = default;
-    ProfilingEstimationStrategy(const Model& m, double tol, std::size_t max_iter) :
-        tol_(tol), max_iter_(max_iter), gcv_(solver_, 100) {
+    ProfilingEstimationStrategy(const Model& m, double tol, std::size_t max_iter, int seed) :
+        tol_(tol), max_iter_(max_iter), gcv_(solver_, 100, seed) {
         // define internal problem solver required for smoothing step
         if constexpr (!is_space_time<Model_>::value)   // space-only
             solver_ = typename PE_internal_solver<Model_>::type(m.pde());
@@ -139,7 +138,6 @@ template <typename Model> class ProfilingEstimationStrategy {
     // setters
     void set_tolerance(double tol) { tol_ = tol; }
     void set_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
-    void set_seed(std::size_t seed) { gcv_.set_seed(seed); }
     // methods implemented by resolution schemes
     virtual void compute(const BlockFrame<double, int>& df, const SVector<model_traits<Model_>::n_lambda>& lambda) = 0;
 };
@@ -155,7 +153,7 @@ struct ProfilingEstimationImpl<Model, complete_data> : public ProfilingEstimatio
     using Base::s_;        // scores vector
     using Base::solver_;   // internal solver used in smoothing step
     // constructor
-    ProfilingEstimationImpl(const Model& m, double tol, std::size_t max_iter) : Base(m, tol, max_iter) {};
+    ProfilingEstimationImpl(Model& m, double tol, std::size_t max_iter, int seed) : Base(m, tol, max_iter, seed) {};
 
     // executes the ProfilingEstimation algorithm given data X and smoothing parameter \lambda, assuming no missing data
     virtual void compute(const BlockFrame<double, int>& df, const SVector<model_traits<Model_>::n_lambda>& lambda) {
@@ -220,7 +218,7 @@ struct ProfilingEstimationImpl<Model, missing_data> : public ProfilingEstimation
     using Base::s_;        // scores vector
     using Base::solver_;   // internal solver used in smoothing step
     // constructor
-    ProfilingEstimationImpl(Model& m, double tol, std::size_t max_iter) : Base(m, tol, max_iter) {};
+    ProfilingEstimationImpl(Model& m, double tol, std::size_t max_iter, int seed) : Base(m, tol, max_iter, seed) {};
 
     // executes the ProfilingEstimation algorithm given data X and smoothing parameter \lambda, X can have NaN
     virtual void compute(const BlockFrame<double, int>& df, const SVector<model_traits<Model_>::n_lambda>& lambda) {
