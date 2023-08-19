@@ -44,12 +44,13 @@ class FPCA : public FunctionalBase<FPCA<PDE, RegularizationType, SamplingDesign,
     // profiling_estimation parameters
     double tol_ = 1e-6;           // relative tolerance between Jnew and Jold, used as stopping criterion
     std::size_t max_iter_ = 20;   // maximum number of allowed iterations
+    int seed_ = -1;               // a value of -1 implies a randomly choosen seed
 
     // problem solution
     DMatrix<double> loadings_;
     DMatrix<double> scores_;
 
-    // tag dispatched private methods for computation of PCs, ** to be removed **
+    // tag dispatched resolution approaches
     void solve_(fixed_lambda);
     void solve_(gcv_lambda_selection);
     void solve_(kcv_lambda_selection);
@@ -81,12 +82,14 @@ class FPCA : public FunctionalBase<FPCA<PDE, RegularizationType, SamplingDesign,
     void set_tolerance(double tol) { tol_ = tol; }
     void set_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
     void set_npc(std::size_t n_pc) { n_pc_ = n_pc; }
+    void set_seed(std::size_t seed) { seed_ = seed; }
 };
 
 // solution in case of fixed \lambda
 template <typename PDE, typename RegularizationType, typename SamplingDesign, typename lambda_selection_strategy>
 void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::solve_(fixed_lambda) {
     ProfilingEstimation<decltype(*this)> pe(*this, tol_, max_iter_);
+    if (seed_ != -1) pe.set_seed(seed_);
     BlockFrame<double, int> data_ = data();
     // Principal Components computation
     for (std::size_t i = 0; i < n_pc_; i++) {
@@ -104,6 +107,7 @@ void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::s
 template <typename PDE, typename RegularizationType, typename SamplingDesign, typename lambda_selection_strategy>
 void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::solve_(gcv_lambda_selection) {
     ProfilingEstimation<decltype(*this)> pe(*this, tol_, max_iter_);
+    if (seed_ != -1) pe.set_seed(seed_);
     BlockFrame<double, int> data_ = data();
     // wrap objective into a ScalarField accepted by OPT module
     const std::size_t n_lambda = n_smoothing_parameters<RegularizationType>::value;
@@ -132,6 +136,7 @@ void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::s
 template <typename PDE, typename RegularizationType, typename SamplingDesign, typename lambda_selection_strategy>
 void FPCA<PDE, RegularizationType, SamplingDesign, lambda_selection_strategy>::solve_(kcv_lambda_selection) {
     ProfilingEstimation<decltype(*this)> pe(*this, tol_, max_iter_);
+    if (seed_ != -1) pe.set_seed(seed_);
     // number of smoothing parameters
     const std::size_t n_lambda = n_smoothing_parameters<RegularizationType>::value;
 

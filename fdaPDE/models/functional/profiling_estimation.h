@@ -65,7 +65,8 @@ template <typename Model> class ProfilingEstimation {   // uses strategy pattern
     // setters
     void set_tolerance(double tol) { pe_->set_tolerance(tol); }
     void set_max_iter(std::size_t max_iter) { pe_->set_max_iter(max_iter); }
-
+    void set_seed(std::size_t seed) { pe_->set_seed(seed); }
+  
     // apply profiling estimation algorithm on data matrix X and smoothing vector \lambda
     void compute(const BlockFrame<double, int>& df, const SVector<model_traits<Model_>::n_lambda>& lambda) {
         pe_->compute(df, lambda);
@@ -134,13 +135,13 @@ template <typename Model> class ProfilingEstimationStrategy {
     std::size_t n_iter() const { return k_ - 1; }
     double f_norm() const { return f_norm_; }
     double f_n_norm() const { return f_n_norm_; }
+    double gcv() { return gcv_.eval(); }   // GCV index at convergence
     // setters
     void set_tolerance(double tol) { tol_ = tol; }
     void set_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
-
-    // methods discharged on actual resolution strategies
+    void set_seed(std::size_t seed) { gcv_.set_seed(seed); }
+    // methods implemented by resolution schemes
     virtual void compute(const BlockFrame<double, int>& df, const SVector<model_traits<Model_>::n_lambda>& lambda) = 0;
-    virtual double gcv() { return gcv_.eval(); }   // GCV index at convergence
 };
 
 // finds vectors s,f_n minimizing \norm{X - s*f_n^T}_F^2 + s^T*s P_{\lambda_{\mathcal{D}}, \lambda_T}(f)

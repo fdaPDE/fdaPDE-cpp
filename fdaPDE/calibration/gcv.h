@@ -100,6 +100,11 @@ template <typename M, typename trS_evaluation_strategy = StochasticEDF<M>> class
         return (model_.n_obs() / std::pow(dor, 2)) * (model_.norm(model_.fitted(), model_.y()));
     }
 
+  // set seed if StochasticEDF strategy is selected
+  template <typename U = trS_evaluation_strategy,
+	    typename std::enable_if<std::is_same<U, StochasticEDF<M>>::value, int>::type = 0>
+  void set_seed(std::size_t seed) { trS_.set_seed(seed); }
+  
     // getters
     const std::vector<double>& edfs() const { return *edfs_; }       // equivalent degrees of freedom q + Tr[S]
     const std::vector<double>& values() const { return *values_; }   // computed values of GCV index
