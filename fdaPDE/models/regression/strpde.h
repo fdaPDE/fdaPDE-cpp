@@ -34,7 +34,7 @@ using fdapde::core::Kronecker;
 using fdapde::core::PDEBase;
 using fdapde::core::SMW;
 using fdapde::core::SparseBlockMatrix;
-using fdapde::core::SparseKroneckerProduct;
+using fdapde::core::SparseKroneckerTensorProduct;
 using fdapde::core::SplineBasis;
 
 namespace fdapde {

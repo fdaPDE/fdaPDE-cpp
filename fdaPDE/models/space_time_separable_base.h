@@ -24,7 +24,7 @@ using fdapde::core::Assembler;
 using fdapde::core::bilaplacian;
 using fdapde::core::Kronecker;
 using fdapde::core::reaction;
-using fdapde::core::SparseKroneckerProduct;
+using fdapde::core::SparseKroneckerTensorProduct;
 using fdapde::core::SPLINE;
 
 namespace fdapde {

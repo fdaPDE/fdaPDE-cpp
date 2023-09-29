@@ -22,7 +22,7 @@
 #include <fdaPDE/utils.h>
 using fdapde::core::is_parabolic;
 using fdapde::core::Kronecker;
-using fdapde::core::SparseKroneckerProduct;
+using fdapde::core::SparseKroneckerTensorProduct;
 
 #include "space_time_base.h"
 

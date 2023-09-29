@@ -66,7 +66,7 @@ TEST(gsrpde_test, laplacian_nonparametric_samplingatnodes_poisson) {
     DMatrix<double> y    = read_csv<double>("../data/models/gsrpde/2D_test1/y.csv"   );
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
     // define model
     double lambda_D = 1e-3;
@@ -100,7 +100,7 @@ TEST(gsrpde_test, laplacian_nonparametric_samplingatlocations_bernulli) {
     DMatrix<double> y    = read_csv<double>("../data/models/gsrpde/2D_test2/y.csv"   );
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
     // define model
     double lambda_D = 1e-3;
@@ -134,7 +134,7 @@ TEST(gsrpde_test, laplacian_nonparametric_samplingatlocations_exponential) {
     DMatrix<double> y    = read_csv<double>("../data/models/gsrpde/2D_test3/y.csv"   );
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
     // define model
     double lambda_D = 1e-3;
@@ -168,7 +168,7 @@ TEST(gsrpde_test, laplacian_nonparametric_samplingatlocations_gamma) {
     DMatrix<double> y    = read_csv<double>("../data/models/gsrpde/2D_test4/y.csv"   );
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
     // define model
     double lambda_D = 1e-3;
@@ -208,7 +208,7 @@ TEST(gsrpde_test, laplacian_semiparametric_samplingatlocations_separable_monolit
     DMatrix<double> X    = read_csv<double>("../data/models/gsrpde/2D_test5/X.csv"   );
     // define regularizing PDE    
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
     // define model
     double lambda_D = std::pow(0.1, 2.5);
@@ -253,7 +253,7 @@ TEST(gsrpde_test, laplacian_semiparametric_samplingatlocations_parabolic_monolit
     DMatrix<double> IC   = read_mtx<double>("../data/models/gsrpde/2D_test6/IC.mtx"  );
     // define regularizing PDE    
     auto L = dt<FEM>() - laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements() * 3, time_mesh.rows());
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, time_mesh.rows());
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
     // define model
     double lambda_D = std::pow(0.1, 2.5);

@@ -53,7 +53,7 @@ TEST(srpde_test, laplacian_nonparametric_samplingatnodes) {
     DMatrix<double> y = read_csv<double>("../data/models/srpde/2D_test1/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
     // define model
     double lambda = 5.623413 * std::pow(0.1, 5);
@@ -89,7 +89,7 @@ TEST(srpde_test, laplacian_semiparametric_samplingatlocations) {
     DMatrix<double> X    = read_csv<double>("../data/models/srpde/2D_test2/X.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
     // define statistical model
     double lambda = 0.2201047;
@@ -128,7 +128,7 @@ TEST(srpde_test, costantcoefficientspde_nonparametric_samplingatnodes) {
     SMatrix<2> K;
     K << 1, 0, 0, 4;
     auto L = -diffusion<FEM>(K);   // anisotropic diffusion
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
     // define  model
     double lambda = 10;
