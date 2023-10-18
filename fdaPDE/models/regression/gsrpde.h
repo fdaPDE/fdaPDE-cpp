@@ -137,7 +137,7 @@ struct model_traits<GSRPDE<PDE_, RegularizationType_, SamplingDesign_, Solver_, 
     typedef SamplingDesign_ sampling;
     typedef Solver_ solver;
     typedef DistributionType_ DistributionType;
-    enum { N = PDE::N, M = PDE::M, R = PDE::R, n_lambda = n_smoothing_parameters<RegularizationType_>::value };
+    enum { N = PDE::N, M = PDE::M, n_lambda = n_smoothing_parameters<RegularizationType_>::value };
 };
 // specialization for separable regularization
 template <typename PDE_, typename SamplingDesign_, typename Solver_, typename DistributionType_>
@@ -148,7 +148,7 @@ struct model_traits<GSRPDE<PDE_, fdapde::models::SpaceTimeSeparable, SamplingDes
     typedef SamplingDesign_ sampling;
     typedef Solver_ solver;
     typedef DistributionType_ DistributionType;
-    enum { N = PDE::N, M = PDE::M, R = PDE::R, n_lambda = 2 };
+    enum { N = PDE::N, M = PDE::M, n_lambda = 2 };
 };
 
 // gsrpde trait

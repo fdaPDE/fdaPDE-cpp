@@ -57,13 +57,13 @@ using fdapde::testing::read_mtx;
 //    GCV optimization: grid exact
 TEST(gcv_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridexact) {
     // define domain
-    MeshLoader<Mesh2D<>> domain("unit_square_coarse");
+    MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/gcv/2D_test1/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     SRPDE<decltype(problem), GeoStatMeshNodes> model(problem);
     // set model's data
@@ -95,13 +95,13 @@ TEST(gcv_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridexact) {
 //    GCV optimization: grid stochastic
 TEST(gcv_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridstochastic) {
     // define domain
-    MeshLoader<Mesh2D<>> domain("unit_square_coarse");
+    MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/gcv/2D_test2/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     SRPDE<decltype(problem), GeoStatMeshNodes> model(problem);
     // set model's data
@@ -134,7 +134,7 @@ TEST(gcv_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridstochastic)
 //    GCV optimization: grid exact
 TEST(gcv_test, laplacian_semiparametric_samplingatlocations_gridexact) {
     // define domain
-    MeshLoader<Mesh2D<>> domain("c_shaped");
+    MeshLoader<Mesh2D> domain("c_shaped");
     // import data from files
     DMatrix<double> locs = read_csv<double>("../data/models/gcv/2D_test3/locs.csv");
     DMatrix<double> y    = read_csv<double>("../data/models/gcv/2D_test3/y.csv"   );
@@ -142,7 +142,7 @@ TEST(gcv_test, laplacian_semiparametric_samplingatlocations_gridexact) {
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     SRPDE<decltype(problem), GeoStatLocations> model(problem);
     model.set_spatial_locations(locs);
@@ -176,7 +176,7 @@ TEST(gcv_test, laplacian_semiparametric_samplingatlocations_gridexact) {
 //    GCV optimization: grid stochastic
 TEST(gcv_test, laplacian_semiparametric_samplingatlocations_gridstochastic) {
     // define domain
-    MeshLoader<Mesh2D<>> domain("c_shaped");
+    MeshLoader<Mesh2D> domain("c_shaped");
     // import data from files
     DMatrix<double> locs = read_csv<double>("../data/models/gcv/2D_test4/locs.csv");
     DMatrix<double> y    = read_csv<double>("../data/models/gcv/2D_test4/y.csv"   );
@@ -184,7 +184,7 @@ TEST(gcv_test, laplacian_semiparametric_samplingatlocations_gridstochastic) {
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     SRPDE<decltype(problem), GeoStatLocations> model(problem);
     model.set_spatial_locations(locs);
@@ -219,7 +219,7 @@ TEST(gcv_test, laplacian_semiparametric_samplingatlocations_gridstochastic) {
 //    GCV optimization: grid exact
 TEST(gcv_test, costantcoefficientspde_nonparametric_samplingatnodes_gridexact) {
     // define domain
-    MeshLoader<Mesh2D<>> domain("unit_square_coarse");
+    MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/gcv/2D_test5/y.csv");
     // define regularizing PDE
@@ -227,7 +227,7 @@ TEST(gcv_test, costantcoefficientspde_nonparametric_samplingatnodes_gridexact) {
     K << 1, 0, 0, 4;
     auto L = -diffusion<FEM>(K);   // anisotropic diffusion
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     SRPDE<decltype(problem), GeoStatMeshNodes> model(problem);
     // set model's data
@@ -259,7 +259,7 @@ TEST(gcv_test, costantcoefficientspde_nonparametric_samplingatnodes_gridexact) {
 //    GCV optimization: grid stochastic
 TEST(gcv_test, costantcoefficientspde_nonparametric_samplingatnodes_gridstochastic) {
     // define domain
-    MeshLoader<Mesh2D<>> domain("unit_square_coarse");
+    MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/gcv/2D_test5/y.csv");
     // define regularizing PDE
@@ -267,7 +267,7 @@ TEST(gcv_test, costantcoefficientspde_nonparametric_samplingatnodes_gridstochast
     K << 1, 0, 0, 4;
     auto L = -diffusion<FEM>(K);   // anisotropic diffusion
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     SRPDE<decltype(problem), GeoStatMeshNodes> model(problem);
     // set model's data
@@ -300,7 +300,7 @@ TEST(gcv_test, costantcoefficientspde_nonparametric_samplingatnodes_gridstochast
 //    GCV optimization: grid exact
 TEST(gcv_test, noncostantcoefficientspde_nonparametric_samplingareal_gridexact) {
     // define domain and regularizing PDE
-    MeshLoader<Mesh2D<>> domain("quasi_circle");
+    MeshLoader<Mesh2D> domain("quasi_circle");
     // import data from files
     DMatrix<double, Eigen::RowMajor> K_data = read_csv<double>("../data/models/gcv/2D_test7/K.csv");
     DMatrix<double, Eigen::RowMajor> b_data = read_csv<double>("../data/models/gcv/2D_test7/b.csv");
@@ -311,7 +311,7 @@ TEST(gcv_test, noncostantcoefficientspde_nonparametric_samplingareal_gridexact) 
     MatrixDataWrapper<2, 2, 2> K(K_data);
     VectorDataWrapper<2, 2> b(b_data);
     auto L = -diffusion<FEM>(K) + advection<FEM>(b);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda = std::pow(0.1, 3);
     SRPDE<decltype(problem), Areal> model(problem);
@@ -345,7 +345,7 @@ TEST(gcv_test, noncostantcoefficientspde_nonparametric_samplingareal_gridexact) 
 //    GCV optimization: grid stochastic
 TEST(gcv_test, noncostantcoefficientspde_nonparametric_samplingareal_gridstochastic) {
     // define domain and regularizing PDE
-    MeshLoader<Mesh2D<>> domain("quasi_circle");
+    MeshLoader<Mesh2D> domain("quasi_circle");
     // import data from files
     DMatrix<double, Eigen::RowMajor> K_data = read_csv<double>("../data/models/gcv/2D_test8/K.csv");
     DMatrix<double, Eigen::RowMajor> b_data = read_csv<double>("../data/models/gcv/2D_test8/b.csv");
@@ -356,7 +356,7 @@ TEST(gcv_test, noncostantcoefficientspde_nonparametric_samplingareal_gridstochas
     MatrixDataWrapper<2, 2, 2> K(K_data);
     VectorDataWrapper<2, 2> b(b_data);
     auto L = -diffusion<FEM>(K) + advection<FEM>(b);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda = std::pow(0.1, 3);
     SRPDE<decltype(problem), Areal> model(problem);

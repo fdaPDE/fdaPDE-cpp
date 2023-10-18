@@ -81,7 +81,6 @@ template <typename Model> class SamplingDesign<Model, GeoStatMeshNodes> : public
         Psi_.resize(n, N);
         std::vector<fdapde::Triplet<double>> triplet_list;
         triplet_list.reserve(n);
-
         // if data locations are equal to mesh nodes then \Psi is the identity matrix.
         // \psi_i(p_i) = 1 and \psi_i(p_j) = 0 \forall i \neq j
         for (std::size_t i = 0; i < n; ++i) triplet_list.emplace_back(i, i, 1.0);
@@ -92,9 +91,9 @@ template <typename Model> class SamplingDesign<Model, GeoStatMeshNodes> : public
     }
 
     // getters
-    std::size_t n_spatial_locs() const { return model().domain().dof(); }
+    std::size_t n_spatial_locs() const { return model().domain().n_nodes(); } // this might cause problems for order 2, prefer n_dofs
     auto D() const { return DVector<double>::Ones(Psi_.rows()).asDiagonal(); }
-    DMatrix<double> locs() const { return model().domain().dof_coords(); }
+  DMatrix<double> locs() const { return model().domain().nodes(); } // this might cause problems for order 2, prefer dofs_coords
     // set locations (nothing to do, locations are implicitly set to mesh nodes)
     template <typename Derived> void set_spatial_locations(const DMatrix<Derived>& locs) { return; }
 };
@@ -102,12 +101,12 @@ template <typename Model> class SamplingDesign<Model, GeoStatMeshNodes> : public
 // data sampled at general locations p_1, p_2, ... p_n
 template <typename Model> class SamplingDesign<Model, GeoStatLocations> : public SamplingBase<Model> {
    private:
-    static constexpr std::size_t M = model_traits<Model>::M, N = model_traits<Model>::N, R = model_traits<Model>::R;
+    static constexpr std::size_t M = model_traits<Model>::M, N = model_traits<Model>::N;
     FDAPDE_DEFINE_MODEL_GETTER;   // import model() method (const and non-const access)
     DMatrix<double> locs_;        // matrix of spatial locations p_1, p2_, ... p_n
     // point location strategy over triangulation
     PointLocationStrategy point_location_strategy_;
-    std::shared_ptr<PointLocator<M, N, R>> point_locator_ = nullptr;
+    std::shared_ptr<PointLocator<M, N>> point_locator_ = nullptr;
     typedef SamplingBase<Model> Base;
     using Base::Psi_;
     using Base::tensorize;   // tensorize matrix \Psi for space-time problems
@@ -122,23 +121,23 @@ template <typename Model> class SamplingDesign<Model, GeoStatLocations> : public
         // set-up point location strategy
         switch (point_location_strategy_) {   // strategy pattern
         case PointLocationStrategy::naive_search:
-            point_locator_ = std::make_shared<core::NaiveSearch<M, N, R>>(model().domain());
+            point_locator_ = std::make_shared<core::NaiveSearch<M, N>>(model().domain());
             break;
         case PointLocationStrategy::barycentric_walk:
-            point_locator_ = std::make_shared<core::BarycentricWalk<M, N, R>>(model().domain());
+            point_locator_ = std::make_shared<core::BarycentricWalk<M, N>>(model().domain());
             break;
         case PointLocationStrategy::tree_search:
-            point_locator_ = std::make_shared<core::ADT<M, N, R>>(model().domain());
+            point_locator_ = std::make_shared<core::ADT<M, N>>(model().domain());
             break;
         default:   // default to tree search
-            point_locator_ = std::make_shared<core::ADT<M, N, R>>(model().domain());
+            point_locator_ = std::make_shared<core::ADT<M, N>>(model().domain());
         }
         // preallocate space for Psi matrix
         std::size_t n_locs = locs_.rows();
         std::size_t n_basis = model().n_spatial_basis();
         Psi_.resize(n_locs, n_basis);
         std::vector<fdapde::Triplet<double>> triplet_list;
-        triplet_list.reserve(n_locs * ct_nnodes(M, R));
+        triplet_list.reserve(n_locs * model_traits<Model>::PDE::SolverType::n_dof_per_element);
 
         // cycle over all locations
         for (std::size_t i = 0; i < n_locs; ++i) {
@@ -146,7 +145,7 @@ template <typename Model> class SamplingDesign<Model, GeoStatLocations> : public
             // search element containing the point
             auto e = point_locator_->locate(p_i);
             // update \Psi matrix
-            for (std::size_t j = 0; j < ct_nnodes(M, R); ++j) {
+            for (std::size_t j = 0; j < model_traits<Model>::PDE::SolverType::n_dof_per_element; ++j) {
                 std::size_t h = e->node_ids()[j];   // column index of \Psi matrix
                 // extract \psi_h from basis and evaluate at p_i
                 auto psi_h = model().pde().basis()(*e, j);
@@ -204,7 +203,7 @@ template <typename Model> class SamplingDesign<Model, Areal> : public SamplingBa
                     // get element with this ID
                     auto e = model().domain().element(l);
                     // compute \int_e \psi_h \forall \psi_h defined on e
-		    for (std::size_t j = 0; j < ct_nnodes(Model::M, Model::K); ++j) {
+		    for (std::size_t j = 0; j < model_traits<Model>::PDE::SolverType::n_dof_per_element; ++j) {
 		      std::size_t h = e.node_ids()[j];   // column index of \Psi matrix
 		      auto psi_h = model().pde().basis()(e, j);
 		      triplet_list.emplace_back(k, h, model().pde().integrator().integrate(e, psi_h));

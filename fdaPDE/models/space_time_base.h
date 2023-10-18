@@ -50,7 +50,7 @@ template <typename Model> class SpaceTimeBase : public ModelBase<Model> {
     const DVector<double>& time_domain() const { return time_; }           // number of nodes in time
     const DVector<double>& time_locs() const { return time_; }             // time locations where we have observations
     inline std::size_t n_temporal_locs() const { return time_.rows(); }    // number of time instants
-    std::size_t n_spatial_basis() const { return pde_->domain().dof(); }   // number of basis functions in space
+    std::size_t n_spatial_basis() const { return pde_->n_dofs(); }         // number of basis functions in space
 
     // destructor
     virtual ~SpaceTimeBase() = default;

@@ -147,7 +147,7 @@ template <typename PDE_, typename SamplingDesign_> struct model_traits<SRPDE<PDE
     typedef SpaceOnly regularization;
     typedef SamplingDesign_ sampling;
     typedef MonolithicSolver solver;
-    enum { N = PDE::N, M = PDE::M, R = PDE::R, n_lambda = 1 };
+    enum { N = PDE::N, M = PDE::M, n_lambda = 1 };
 };
 
 // srpde trait

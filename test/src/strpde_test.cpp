@@ -44,6 +44,7 @@ using fdapde::models::IterativeSolver;
 using fdapde::testing::almost_equal;
 using fdapde::testing::MeshLoader;
 using fdapde::testing::read_mtx;
+using fdapde::testing::read_csv;
 
 // test 1
 //    domain:       unit square [1,1] x [1,1]
@@ -60,13 +61,13 @@ TEST(strpde_test, laplacian_nonparametric_samplingatnodes_separable_monolithic) 
     std::size_t i = 0;
     for (double x = 0; x <= 2; x += 0.2, ++i) time_mesh[i] = x;
     // define spatial domain    
-    MeshLoader<Mesh2D<>> domain("unit_square_coarse");
+    MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/strpde/2D_test1/y.csv");
     // define regularizing PDE    
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.rows(), 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda_D = 0.01;
     double lambda_T = 0.01;
@@ -101,7 +102,7 @@ TEST(strpde_test, laplacian_semiparametric_samplingatlocations_separable_monolit
     time_mesh.resize(5);
     for (std::size_t i = 0; i < 5; ++i) time_mesh[i] = (fdapde::testing::pi / 4) * i;
     // define spatial domain
-    MeshLoader<Mesh2D<>> domain("c_shaped");
+    MeshLoader<Mesh2D> domain("c_shaped");
     // import data from files
     DMatrix<double> locs = read_csv<double>("../data/models/strpde/2D_test2/locs.csv");
     DMatrix<double> y    = read_csv<double>("../data/models/strpde/2D_test2/y.csv");
@@ -109,7 +110,7 @@ TEST(strpde_test, laplacian_semiparametric_samplingatlocations_separable_monolit
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda_D = 0.01;
     double lambda_T = 0.01;
@@ -147,7 +148,7 @@ TEST(strpde_test, noncostantcoefficientspde_nonparametric_samplingareal_paraboli
     time_mesh.resize(11);
     for (std::size_t i = 0; i < 10; ++i) time_mesh[i] = 0.4 * i;
     // define spatial domain
-    MeshLoader<Mesh2D<>> domain("quasi_circle");
+    MeshLoader<Mesh2D> domain("quasi_circle");
     // import data from files
     DMatrix<double, Eigen::RowMajor> K_data  = read_csv<double>("../data/models/strpde/2D_test3/K.csv");
     DMatrix<double, Eigen::RowMajor> b_data  = read_csv<double>("../data/models/strpde/2D_test3/b.csv");
@@ -159,7 +160,7 @@ TEST(strpde_test, noncostantcoefficientspde_nonparametric_samplingareal_paraboli
     VectorDataWrapper<2, 2> b(b_data);
     auto L = dt<FEM>() - diffusion<FEM>(K) + advection<FEM>(b);
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, time_mesh.rows());
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda_D = std::pow(0.1, 6);
     double lambda_T = std::pow(0.1, 6);
@@ -194,14 +195,14 @@ TEST(strpde_test, laplacian_nonparametric_samplingatnodes_parabolic_iterative) {
     std::size_t i = 0;
     for (double x = 0; x <= 2; x += 0.2, ++i) time_mesh[i] = x;
     // define spatial domain
-    MeshLoader<Mesh2D<>> domain("unit_square_coarse");
+    MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
     DMatrix<double> y  = read_csv<double>("../data/models/strpde/2D_test4/y.csv" );    
     DMatrix<double> IC = read_mtx<double>("../data/models/strpde/2D_test4/IC.mtx");
     // define regularizing PDE
     auto L = dt<FEM>() - laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, time_mesh.rows());
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda_D = 1;
     double lambda_T = 1;
@@ -238,14 +239,14 @@ TEST(strpde_test, laplacian_nonparametric_samplingatnodes_timelocations_separabl
     std::size_t i = 0;
     for (double x = 0; x <= 2; x += 0.2, ++i) time_mesh[i] = x;
     // define spatial domain
-    MeshLoader<Mesh2D<>> domain("unit_square_coarse");
+    MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
     DMatrix<double> time_locs = read_csv<double>("../data/models/strpde/2D_test5/time_locations.csv");
     DMatrix<double> y         = read_csv<double>("../data/models/strpde/2D_test5/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.rows(), 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda_D = 0.01;
     double lambda_T = 0.01;
@@ -280,7 +281,7 @@ TEST(strpde_test, laplacian_nonparametric_samplingatlocations_timelocations_sepa
     time_mesh.resize(21);
     for (std::size_t i = 0; i < 21; ++i) time_mesh[i] = 1.0 / 20 * i;
     // define spatial domain and regularizing PDE
-    MeshLoader<Mesh2D<>> domain("c_shaped");
+    MeshLoader<Mesh2D> domain("c_shaped");
     // import data from files
     DMatrix<double> time_locs  = read_csv<double>("../data/models/strpde/2D_test6/time_locations.csv");
     DMatrix<double> space_locs = read_csv<double>("../data/models/strpde/2D_test6/locs.csv");
@@ -288,7 +289,7 @@ TEST(strpde_test, laplacian_nonparametric_samplingatlocations_timelocations_sepa
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.rows(), 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda_D = 1e-3;
     double lambda_T = 1e-3;

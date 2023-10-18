@@ -164,7 +164,7 @@ struct model_traits<STRPDE<PDE_, SpaceTimeSeparable, SamplingDesign_, Monolithic
     typedef SplineBasis<3> TimeBasis;   // use cubic B-splines
     typedef SamplingDesign_ sampling;
     typedef MonolithicSolver solver;
-    enum { N = PDE::N, M = PDE::M, R = PDE::R, n_lambda = 2 };
+    enum { N = PDE::N, M = PDE::M, n_lambda = 2 };
 };
 
 // implementation of STRPDE for parabolic space-time regularization, monolithic solver
@@ -270,7 +270,7 @@ struct model_traits<STRPDE<PDE_, SpaceTimeParabolic, SamplingDesign_, Monolithic
     typedef SpaceTimeParabolic regularization;
     typedef SamplingDesign_ sampling;
     typedef MonolithicSolver solver;
-    enum { N = PDE::N, M = PDE::M, R = PDE::R, n_lambda = 2 };
+    enum { N = PDE::N, M = PDE::M, n_lambda = 2 };
 };
 
 // implementation of STRPDE for parabolic space-time regularization, monolithic solver
@@ -436,7 +436,7 @@ struct model_traits<STRPDE<PDE_, SpaceTimeParabolic, SamplingDesign_, IterativeS
     typedef SpaceTimeParabolic regularization;
     typedef SamplingDesign_ sampling;
     typedef IterativeSolver solver;
-    enum { N = PDE::N, M = PDE::M, R = PDE::R, n_lambda = 2 };
+    enum { N = PDE::N, M = PDE::M, n_lambda = 2 };
 };
 
 // strpde trait

@@ -36,7 +36,6 @@ template <typename Model> class ModelBase {
     typedef typename PDE::DomainType DomainType;
     static constexpr std::size_t M = PDE::M;   // tangent space dimension
     static constexpr std::size_t N = PDE::N;   // embedding space dimension
-    static constexpr std::size_t K = PDE::R;   // basis order
 
     // constructors
     ModelBase() = default;
@@ -57,7 +56,7 @@ template <typename Model> class ModelBase {
     BlockFrame<double, int>& data() { return df_; }   // direct write-access to model's internal data storage
     const DMatrix<int>& idx() const { return df_.get<int>(INDEXES_BLK); }   // data indices
     const PDE& pde() const { return *pde_; }   // regularizing term Lf - u (defined on some domain \Omega)
-    const Mesh<M, N, K>& domain() const { return pde_->domain(); }
+    const DomainType& domain() const { return pde_->domain(); }
     std::size_t n_locs() const { return model().n_spatial_locs() * model().n_temporal_locs(); }
     SVector<model_traits<Model>::n_lambda> lambda() const { return lambda_; }
   
@@ -97,6 +96,7 @@ template <typename Model> void ModelBase<Model>::set_data(const BlockFrame<doubl
 }
 
 // set boundary conditions on problem's linear system
+// BUG: not working - fix needed due to SparseBlockMatrix interface
 template <typename Model> void ModelBase<Model>::set_dirichlet_bc(SpMatrix<double>& A, DMatrix<double>& b) {
     std::size_t n = A.rows() / 2;
 

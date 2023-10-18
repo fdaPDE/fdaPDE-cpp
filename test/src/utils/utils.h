@@ -66,6 +66,12 @@ namespace testing {
     Eigen::loadMarket(buff, file_name);
     return buff;
   }
+  // utility to import .csv files
+  template <typename T>
+  DMatrix<T> read_csv(const std::string& file_name) {
+    CSVReader<T> reader {};
+    return reader.template parse_file<DenseStorage>(file_name);
+  }
   
 }}
 

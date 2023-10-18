@@ -101,8 +101,8 @@ template <typename Model> class SpaceTimeSeparableBase<Model, MonolithicSolver> 
     // getters
     const SpMatrix<double>& R0() const { return R0_; }
     const SpMatrix<double>& R1() const { return R1_; }
-    std::size_t n_basis() const { return pde_->domain().dof() * basis_.size(); }   // number of basis functions
-    std::size_t n_temporal_basis() const { return basis_.size(); }                 // number of time basis functions
+    std::size_t n_basis() const { return pde_->n_dofs() * basis_.size(); }   // number of basis functions
+    std::size_t n_temporal_basis() const { return basis_.size(); }           // number of time basis functions
     // matrices proper of separable regularization
     const SpMatrix<double>& P0() const { return P0_; }
     const SpMatrix<double>& P1() const { return P1_; }

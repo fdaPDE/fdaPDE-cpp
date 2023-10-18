@@ -97,7 +97,7 @@ template <typename Model> class SpaceTimeParabolicBase<Model, MonolithicSolver> 
     // getters
     const SpMatrix<double>& R0() const { return R0_; }
     const SpMatrix<double>& R1() const { return R1_; }
-    std::size_t n_basis() const { return pde_->domain().dof(); }   // number of basis functions
+    std::size_t n_basis() const { return pde_->n_dofs(); }   // number of basis functions
     // matrices proper of separable regularization
     const SpMatrix<double>& L() const { return L_; }
     // return discretized force corrected by initial conditions
@@ -179,14 +179,14 @@ template <typename Model> class SpaceTimeParabolicBase<Model, IterativeSolver> :
         return u_.block(model().n_basis() * k, 0, model().n_basis(), 1);
     }
     double DeltaT() const { return DeltaT_; }
-    const DMatrix<double>& s() const { return s_; }                // initial condition
-    std::size_t n_basis() const { return pde_->domain().dof(); }   // number of basis functions
+    const DMatrix<double>& s() const { return s_; }          // initial condition
+    std::size_t n_basis() const { return pde_->n_dofs(); }   // number of basis functions
 
     // setters
     // shift = true, cause the removal of the first time instant of data, in case it has been used to estimate the IC
     void set_initial_condition(const DMatrix<double>& s, bool shift = true) {
         s_ = s;
-        if (shift) { // left shrink time domain by one
+        if (shift) { // left shrink time domain by one node
             std::size_t m = time_.rows();       // number of time instants
             time_ = time_.tail(m - 1).eval();   // correct time interval [0,T] (eval() to avoid aliasing)
             pde_->set_forcing(pde_->forcing_data().rightCols(m - 1));

@@ -214,7 +214,7 @@ struct model_traits<FPCA<PDE_, SpaceOnly, SamplingDesign_, CalibrationStrategy>>
     typedef SpaceOnly regularization;
     typedef SamplingDesign_ sampling;
     typedef MonolithicSolver solver;
-    enum { N = PDE::N, M = PDE::M, R = PDE::R, n_lambda = 1 };
+    enum { N = PDE::N, M = PDE::M, n_lambda = 1 };
 };
 // specialization for separable regularization
 template <typename PDE_, typename SamplingDesign_, typename CalibrationStrategy>
@@ -224,7 +224,7 @@ struct model_traits<FPCA<PDE_, SpaceTimeSeparable, SamplingDesign_, CalibrationS
     typedef SplineBasis<3> TimeBasis;   // use cubic B-splines
     typedef SamplingDesign_ sampling;
     typedef MonolithicSolver solver;
-    enum { N = PDE::N, M = PDE::M, R = PDE::R, n_lambda = 2 };
+    enum { N = PDE::N, M = PDE::M, n_lambda = 2 };
 };
 
 }   // namespace models

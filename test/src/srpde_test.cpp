@@ -21,6 +21,7 @@
 using fdapde::core::advection;
 using fdapde::core::diffusion;
 using fdapde::core::FEM;
+using fdapde::core::fem_order;
 using fdapde::core::laplacian;
 using fdapde::core::MatrixDataWrapper;
 using fdapde::core::PDE;
@@ -38,6 +39,7 @@ using fdapde::models::SRPDE;
 #include "utils/utils.h"
 using fdapde::testing::almost_equal;
 using fdapde::testing::MeshLoader;
+using fdapde::testing::read_csv;
 
 // test 1
 //    domain:       unit square [1,1] x [1,1]
@@ -48,13 +50,13 @@ using fdapde::testing::MeshLoader;
 //    order FE:     1
 TEST(srpde_test, laplacian_nonparametric_samplingatnodes) {
     // define domain 
-    MeshLoader<Mesh2D<>> domain("unit_square");
+    MeshLoader<Mesh2D> domain("unit_square");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/srpde/2D_test1/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda = 5.623413 * std::pow(0.1, 5);
     SRPDE<decltype(problem), GeoStatMeshNodes> model(problem);
@@ -82,7 +84,7 @@ TEST(srpde_test, laplacian_nonparametric_samplingatnodes) {
 //    order FE:     1
 TEST(srpde_test, laplacian_semiparametric_samplingatlocations) {
     // define domain
-    MeshLoader<Mesh2D<>> domain("c_shaped");
+    MeshLoader<Mesh2D> domain("c_shaped");
     // import data from files
     DMatrix<double> locs = read_csv<double>("../data/models/srpde/2D_test2/locs.csv");
     DMatrix<double> y    = read_csv<double>("../data/models/srpde/2D_test2/y.csv");
@@ -90,7 +92,7 @@ TEST(srpde_test, laplacian_semiparametric_samplingatlocations) {
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define statistical model
     double lambda = 0.2201047;
     SRPDE<decltype(problem), GeoStatLocations> model(problem);
@@ -121,7 +123,7 @@ TEST(srpde_test, laplacian_semiparametric_samplingatlocations) {
 //    order FE:     1
 TEST(srpde_test, costantcoefficientspde_nonparametric_samplingatnodes) {
     // define domain
-    MeshLoader<Mesh2D<>> domain("unit_square");
+    MeshLoader<Mesh2D> domain("unit_square");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/srpde/2D_test3/y.csv");
     // define regularizing PDE
@@ -129,7 +131,7 @@ TEST(srpde_test, costantcoefficientspde_nonparametric_samplingatnodes) {
     K << 1, 0, 0, 4;
     auto L = -diffusion<FEM>(K);   // anisotropic diffusion
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define  model
     double lambda = 10;
     SRPDE<decltype(problem), GeoStatMeshNodes> model(problem);
@@ -155,7 +157,7 @@ TEST(srpde_test, costantcoefficientspde_nonparametric_samplingatnodes) {
 //    order FE:     1
 TEST(srpde_test, noncostantcoefficientspde_nonparametric_samplingareal) {
     // define domain
-    MeshLoader<Mesh2D<>> domain("quasi_circle");
+    MeshLoader<Mesh2D> domain("quasi_circle");
     // import data from files
     DMatrix<double, Eigen::RowMajor> K_data  = read_csv<double>("../data/models/srpde/2D_test4/K.csv");
     DMatrix<double, Eigen::RowMajor> b_data  = read_csv<double>("../data/models/srpde/2D_test4/b.csv");
@@ -166,7 +168,7 @@ TEST(srpde_test, noncostantcoefficientspde_nonparametric_samplingareal) {
     MatrixDataWrapper<2, 2, 2> K(K_data);
     VectorDataWrapper<2, 2> b(b_data);
     auto L = -diffusion<FEM>(K) + advection<FEM>(b);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda = std::pow(0.1, 3);
     SRPDE<decltype(problem), Areal> model(problem);

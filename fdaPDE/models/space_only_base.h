@@ -47,7 +47,7 @@ template <typename Model> class SpaceOnlyBase : public ModelBase<Model> {
     const SpMatrix<double>& R1() const { return pde_->R1(); }       // discretization of differential operator L
     const DMatrix<double>& u() const { return pde_->force(); }      // discretization of forcing term u
     inline std::size_t n_temporal_locs() const { return 1; }        // number of time instants
-    std::size_t n_basis() const { return pde_->domain().dof(); };   // number of basis functions
+    std::size_t n_basis() const { return pde_->n_dofs(); };         // number of basis functions
     std::size_t n_spatial_basis() const { return n_basis(); }       // number of basis functions in space
 
     // computes and cache R1^T*R0^{-1}*R1. Returns the discretized penalty P = \lambda_D*(R1^T*R0^{-1}*R1)

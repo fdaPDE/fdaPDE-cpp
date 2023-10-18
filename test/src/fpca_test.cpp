@@ -51,13 +51,13 @@ using fdapde::testing::read_mtx;
 //    missing data: no
 TEST(fpca_test, laplacian_samplingatnodes_nocalibration) {
     // define domain
-    MeshLoader<Mesh2D<>> domain("unit_square");
+    MeshLoader<Mesh2D> domain("unit_square");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/fpca/2D_test1/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda_D = 1e-2;
     FPCA<decltype(problem), SpaceOnly, GeoStatMeshNodes, NoCalibration> model(problem);
@@ -84,14 +84,14 @@ TEST(fpca_test, laplacian_samplingatnodes_nocalibration) {
 //    GCV smoothing parameter selection
 TEST(fpca_test, laplacian_samplingatlocations_gcvcalibration) {
     // define domain
-    MeshLoader<Mesh2D<>> domain("unit_square");
+    MeshLoader<Mesh2D> domain("unit_square");
     // import data from files
     DMatrix<double> locs = read_csv<double>("../data/models/fpca/2D_test2/locs.csv");
     DMatrix<double> y    = read_csv<double>("../data/models/fpca/2D_test2/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     FPCA<decltype(problem), SpaceOnly, GeoStatLocations, GCVCalibration> model(problem);
     model.set_spatial_locations(locs);
@@ -122,14 +122,14 @@ TEST(fpca_test, laplacian_samplingatlocations_gcvcalibration) {
 //    KCV smoothing parameter selection, 10 folds
 TEST(fpca_test, laplacian_samplingatlocations_kcvcalibration) {
     // define domain
-    MeshLoader<Mesh2D<>> domain("unit_square");
+    MeshLoader<Mesh2D> domain("unit_square");
     // import data from files
     DMatrix<double> locs = read_csv<double>("../data/models/fpca/2D_test3/locs.csv");
     DMatrix<double> y    = read_csv<double>("../data/models/fpca/2D_test3/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     FPCA<decltype(problem), SpaceOnly, GeoStatLocations, KCVCalibration> model(problem);
     model.set_spatial_locations(locs);
@@ -160,13 +160,13 @@ TEST(fpca_test, laplacian_samplingatlocations_kcvcalibration) {
 //    missing data: yes
 TEST(fpca_test, laplacian_samplingatnodes_nocalibration_missingdata) {
     // define domain
-    MeshLoader<Mesh2D<>> domain("unit_square_coarse");
+    MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/fpca/2D_test4/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda_D = 1e-2;
     FPCA<decltype(problem), SpaceOnly, GeoStatMeshNodes, NoCalibration> model(problem);
