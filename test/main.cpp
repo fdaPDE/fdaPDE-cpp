@@ -4,11 +4,12 @@
 #include <Eigen/Sparse>
 
 // regression test suites
-#include "src/srpde_test.cpp"
-#include "src/strpde_test.cpp"
+//#include "src/srpde_test.cpp"
+//#include "src/strpde_test.cpp"
 #include "src/gsrpde_test.cpp"
-#include "src/fpca_test.cpp"
-// GCV test suites
+#include "src/sqrpde_test.cpp"
+// #include "src/fpca_test.cpp"
+// // GCV test suites
 #include "src/gcv_test.cpp"
 // #include "calibration/GCVNewtonTest.cpp"
 

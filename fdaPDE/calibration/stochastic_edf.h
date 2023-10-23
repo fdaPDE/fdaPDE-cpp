@@ -64,16 +64,16 @@ template <typename Model> class StochasticEDF {
                         Us_(i, j) = -1.0;
                 }
             }
-            // prepare matrix Bs_
-            Bs_ = DMatrix<double>::Zero(2 * n, r_);
-            if (!model_.has_covariates())   // non-parametric model
-                Bs_.topRows(n) = -model_.PsiTD() * model_.W() * Us_;
-            else   // semi-parametric model
-                Bs_.topRows(n) = -model_.PsiTD() * model_.lmbQ(Us_);
             // prepare matrix Y
             Y_ = Us_.transpose() * model_.Psi();
             init_ = true;   // never reinitialize again
         }
+        // prepare matrix Bs_
+        Bs_ = DMatrix<double>::Zero(2 * n, r_);
+        if (!model_.has_covariates())   // non-parametric model
+            Bs_.topRows(n) = -model_.PsiTD() * model_.W() * Us_;
+        else   // semi-parametric model
+            Bs_.topRows(n) = -model_.PsiTD() * model_.lmbQ(Us_);
 
         DMatrix<double> sol;              // room for problem solution
         if (!model_.has_covariates()) {   // nonparametric case

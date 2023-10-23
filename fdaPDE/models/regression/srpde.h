@@ -45,7 +45,6 @@ template <typename PDE, typename SamplingDesign> class SRPDE : public Regression
     DVector<double> b_ {};                         // right hand side of problem's linear system (1 x 2N vector)
 
     DMatrix<double> T_ {};   // T = \Psi^T*Q*\Psi + \lambda*R
-    DMatrix<double> Q_ {};   // Q_ = I - H, whatever H is for the model
    public:
     IMPORT_REGRESSION_SYMBOLS;
     using Base::lambda_D;   // smoothing parameter in space

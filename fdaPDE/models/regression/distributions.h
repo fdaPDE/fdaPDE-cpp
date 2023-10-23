@@ -150,6 +150,34 @@ class Gamma : public Distribution {
     double deviance(double x, double y) const override { return 2 * ((y - x) / x - std::log(y / x)); };
 };
 
+class Gaussian : public Distribution {
+   private:
+    double mu_;
+    double sigma_;
+   public:
+    // constructor
+    Gaussian() = default;
+    Gaussian(double mu, double sigma) : mu_(mu), sigma_(sigma) {};
+    // density function
+    double pdf(double x) const {
+        return 1 / (std::sqrt(2 * M_PI) * sigma_) * std::exp(-(x - mu_) * (x - mu_) / (2 * sigma_ * sigma_));
+    };
+    double mean() const { return mu_; }
+    void preprocess(DVector<double>& data) const override { return; }
+    // vectorized operations
+    DMatrix<double> variance(const DMatrix<double>& x) const override {
+        return DMatrix<double>::Ones(x.rows(), x.cols());
+    }
+    DMatrix<double> link    (const DMatrix<double>& x) const override { return x; }
+    DMatrix<double> inv_link(const DMatrix<double>& x) const override { return x; }
+    DMatrix<double> der_link(const DMatrix<double>& x) const override {
+        return DMatrix<double>::Ones(x.rows(), x.cols());
+    }
+
+    // deviance function
+    double deviance(double x, double y) const override { return (x - y) * (x - y); };
+};
+
 }   // namespace models
 }   // namespace fdapde
 

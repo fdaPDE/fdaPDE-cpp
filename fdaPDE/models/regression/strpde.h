@@ -273,7 +273,7 @@ struct model_traits<STRPDE<PDE_, SpaceTimeParabolic, SamplingDesign_, Monolithic
     enum { N = PDE::N, M = PDE::M, n_lambda = 2 };
 };
 
-// implementation of STRPDE for parabolic space-time regularization, monolithic solver
+// implementation of STRPDE for parabolic space-time regularization, iterative solver
 template <typename PDE, typename SamplingDesign>
 class STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, IterativeSolver> :
     public RegressionBase<STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, IterativeSolver>> {

@@ -21,7 +21,9 @@
 using fdapde::core::advection;
 using fdapde::core::diffusion;
 using fdapde::core::FEM;
+using fdapde::core::fem_order;
 using fdapde::core::laplacian;
+using fdapde::core::dt;
 using fdapde::core::MatrixDataWrapper;
 using fdapde::core::PDE;
 using fdapde::core::VectorDataWrapper;
@@ -49,6 +51,7 @@ using fdapde::models::Gamma;
 using fdapde::testing::almost_equal;
 using fdapde::testing::MeshLoader;
 using fdapde::testing::read_mtx;
+using fdapde::testing::read_csv;
 
 // test 1
 //    domain:       unit square [1,1] x [1,1]

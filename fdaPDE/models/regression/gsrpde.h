@@ -27,6 +27,8 @@ using fdapde::core::PDEBase;
 #include "../model_base.h"
 #include "../model_macros.h"
 #include "../model_traits.h"
+#include "../sampling_design.h"
+#include "regression_base.h"
 #include "fpirls.h"
 
 namespace fdapde {
@@ -39,19 +41,20 @@ class GSRPDE : public RegressionBase<GSRPDE<PDE, RegularizationType, SamplingDes
     static_assert(std::is_base_of<PDEBase, PDE>::value);
    private:
     typedef RegressionBase<GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>> Base;
-    DiagMatrix<double> W_;
-    Distribution distribution_ {};
+    Distribution distr_ {};
     DVector<double> py_;   // \tilde y^k = G^k(y-u^k) + \theta^k
     DVector<double> pW_;   // diagonal of W^k = ((G^k)^{-2})*((V^k)^{-1})
+    DVector<double> mu_;   // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : mean vector at step k
     DMatrix<double> T_;    // T = \Psi^T*Q*\Psi + P
 
     // FPIRLS parameters (set to default)
-    std::size_t max_iter_ = 15;
-    double tol_ = 0.0002020;
+    std::size_t max_iter_ = 200;
+    double tol_ = 1e-4;
    public:
     IMPORT_REGRESSION_SYMBOLS;
     using Base::lambda_D;   // smoothing parameter in space
     using Base::P;          // discretized penalty
+    using Base::W_;         // weight matrix
     // constructor
     GSRPDE() = default;
     // space-only constructor
@@ -71,8 +74,32 @@ class GSRPDE : public RegressionBase<GSRPDE<PDE, RegularizationType, SamplingDes
     void update_to_weights() { return; };   // update model object in case of changes in the weights matrix
     virtual void solve();                   // finds a solution to the smoothing problem
 
-    // required by FPIRLS: computes W^k = ((G^k)^{-2})*((V^k)^{-1}) and \tilde y^k = G^k(y-u^k) + \theta^k
-    std::tuple<DVector<double>&, DVector<double>&> compute(const DVector<double>& mu);
+    // required by FPIRLS (see fpirls.h for details)
+    // initalizes mean vector \mu
+    void fpirls_init() {
+        mu_ = y();
+        distr_.preprocess(mu_);
+    };
+    // computes W^k = ((G^k)^{-2})*((V^k)^{-1}) and \tilde y^k = G^k(y-u^k) + \theta^k
+    void fpirls_pre_solve_step() {
+        DVector<double> theta_ = distr_.link(mu_);   // \theta^k = (g(\mu^k_1), ..., g(\mu^k_n))
+        DVector<double> G_ = distr_.der_link(mu_);   // G^k = diag(g'(\mu^k_1), ..., g'(\mu^k_n))
+        DVector<double> V_ = distr_.variance(mu_);   // V^k = diag(v(\mu^k_1), ..., v(\mu^k_n))
+        pW_ = ((G_.array().pow(2) * V_.array()).inverse()).matrix();
+        py_ = G_.asDiagonal() * (y() - mu_) + theta_;
+    }
+    // updates mean vector \mu after WLS solution
+    void fpirls_post_solve_step(const DMatrix<double>& hat_f, const DMatrix<double>& hat_beta) {
+        mu_ = distr_.inv_link(hat_f);
+    }
+    // returns the data loss \norm{V^{-1/2}(y - \mu)}^2
+    double data_loss() const {
+        DVector<double> V = distr_.variance(mu_).array().sqrt().inverse().matrix();
+        return (V.asDiagonal() * (y() - mu_)).squaredNorm();
+    }
+    const DVector<double>& py() const { return py_; }
+    const DVector<double>& pW() const { return pW_; }
+
     // GCV support
     const DMatrix<double>& T();                                                  // T = \Psi^T*Q*\Psi + P
     double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const;   // total deviance \sum dev(op1 - op2)
@@ -86,27 +113,14 @@ class GSRPDE : public RegressionBase<GSRPDE<PDE, RegularizationType, SamplingDes
 template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver, typename Distribution>
 void GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>::solve() {
     // execute FPIRLS for minimization of functional \norm{V^{-1/2}(y - \mu)}^2 + \lambda \int_D (Lf - u)^2
-    FPIRLS<decltype(*this), Distribution> fpirls(*this, tol_, max_iter_);   // FPIRLS engine
+    FPIRLS<decltype(*this)> fpirls(*this, tol_, max_iter_);   // FPIRLS engine
     fpirls.compute();
 
-    // fpirls converged: extract matrix P and solution estimates
-    W_ = fpirls.weights().asDiagonal();
-    f_ = fpirls.f();
-    if (has_covariates()) { beta_ = fpirls.beta(); }
+    // fpirls converged: extract matrix W and solution estimates
+    W_ = fpirls.solver().W();
+    f_ = fpirls.solver().f();
+    if (has_covariates()) { beta_ = fpirls.solver().beta(); }
     return;
-}
-
-// required by FPIRLS: computes W^k = ((G^k)^{-2})*((V^k)^{-1}) and \tilde y^k = G^k(y-u^k) + \theta^k
-template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver, typename Distribution>
-std::tuple<DVector<double>&, DVector<double>&>
-GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>::compute(const DVector<double>& mu) {
-    DVector<double> theta_ = distribution_.link(mu);   // \theta^k = [ g(\mu^k_1), ..., g(\mu^k_n) ]
-    DVector<double> G_ = distribution_.der_link(mu);   // G^k = diag(g'(\mu^k_1), ..., g'(\mu^k_n))
-    DVector<double> V_ = distribution_.variance(mu);   // V^k = diag(v(\mu^k_1), ..., v(\mu^k_n))
-    // compute weight matrix and pseudo-observation vector
-    pW_ = ((G_.array().pow(2) * V_.array()).inverse()).matrix();
-    py_ = G_.asDiagonal() * (y() - mu) + theta_;
-    return std::tie(pW_, py_);
 }
 
 template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver, typename Distribution>
@@ -122,10 +136,9 @@ const DMatrix<double>& GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, D
 template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver, typename Distribution>
 double GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>::norm(
   const DMatrix<double>& obs, const DMatrix<double>& fitted) const {
+    DMatrix<double> mu = distr_.inv_link(fitted);
     double result = 0;
-    for (std::size_t i = 0; i < obs.rows(); ++i) {
-        result += distribution_.deviance(obs.coeff(i, 0), fitted.coeff(i, 0));
-    }
+    for (std::size_t i = 0; i < obs.rows(); ++i) { result += distr_.deviance(mu.coeff(i, 0), obs.coeff(i, 0)); }
     return result;
 }
 

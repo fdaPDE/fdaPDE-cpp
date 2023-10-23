@@ -47,96 +47,73 @@ template <typename Model> class FPIRLS_internal_solver {
 };
 
 // a general implementation of the Functional Penalized Iterative Reweighted Least Square (FPIRLS) algorithm
-template <typename Model, typename Distribution> class FPIRLS {
+template <typename Model> class FPIRLS {
    private:
     typedef typename std::decay<Model>::type Model_;
-    // data characterizing the behaviour of the algorithm
-    Distribution distribution_ {};
+    typedef typename FPIRLS_internal_solver<Model_>::type SolverType;
+    static_assert(is_regression_model<Model_>::value);
     Model& m_;
     // algorithm's parameters
-    double tolerance_;
-    std::size_t max_iter_;
-    std::size_t k_ = 0;   // FPIRLS iteration index
-
-    DVector<double> mu_ {};   // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : mean vector at step k
-    // parameters at convergece
-    DVector<double> f_ {};      // estimate of non-parametric spatial field
-    DVector<double> g_ {};      // PDE misfit
-    DVector<double> beta_ {};   // estimate of coefficient vector
-    DVector<double> W_ {};      // weight matrix
+    double tolerance_;       // treshold on objective functional J to convergence
+    std::size_t max_iter_;   // maximum number of iterations before forced stop
+    std::size_t k_ = 0;      // FPIRLS iteration index
+    SolverType solver_;      // internal solver
    public:
     // constructor
     FPIRLS(const Model& m, double tolerance, std::size_t max_iter) :
-        m_(m), tolerance_(tolerance), max_iter_(max_iter) {};
+        m_(m), tolerance_(tolerance), max_iter_(max_iter) {
+        // define internal problem solver
+        if constexpr (!is_space_time<Model_>::value)   // space-only
+            solver_ = SolverType(m_.pde());
+        else {   // space-time
+            solver_ = SolverType(m_.pde(), m_.time_domain());
+            if constexpr (is_space_time_parabolic<Model_>::value) { solver_.set_initial_condition(m_.s(), false); }
+            if constexpr (is_space_time_separable<Model_>::value) { solver_.set_temporal_locations(m_.time_locs()); }
+        }
+        // solver initialization
+        solver_.set_lambda(m_.lambda());
+        solver_.set_spatial_locations(m_.locs());
+        solver_.set_data(m_.data());   // possible covariates are passed from here
+        solver_.init();
+    };
 
     // executes the FPIRLS algorithm
     void compute() {
-        static_assert(is_regression_model<Model>::value);
         // algorithm initialization
-        mu_ = m_.y();
-        distribution_.preprocess(mu_);
-        // define internal problem solver
-        typename FPIRLS_internal_solver<Model>::type solver;
-        if constexpr (!is_space_time<Model>::value)   // space-only
-            solver = typename FPIRLS_internal_solver<Model>::type(m_.pde());
-        else {   // space-time
-            solver = typename FPIRLS_internal_solver<Model>::type(m_.pde(), m_.time_domain());
-            // in case of parabolic regularization derive initial condition from input model
-            if constexpr (is_space_time_parabolic<Model_>::value)
-	      solver.set_initial_condition(m_.s(), false);
-            // in case of separable regularization set possible temporal locations
-            if constexpr (is_space_time_separable<Model_>::value)
-	      solver.set_temporal_locations(m_.time_locs());
-        }
-        // solver initialization
-        solver.set_lambda(m_.lambda());
-        solver.set_spatial_locations(m_.locs());
-        solver.set_data(m_.data());
-        solver.init();
-
-        // algorithm stops when an enought small difference between two consecutive values of the J is recordered
+        //mu_ = m_.initialize_mu();
+        //distr_.preprocess(mu_);
+	m_.fpirls_init();
+        // objective functional value at consecutive iterations
         double J_old = tolerance_ + 1;
         double J_new = 0;
-        // start loop
         while (k_ < max_iter_ && std::abs(J_new - J_old) > tolerance_) {
-            // request weight matrix W and pseudo-observation vector \tilde y from model
-            auto pair = m_.compute(mu_);
+            // compute weight matrix W and pseudo-observations \tilde{y}
+            m_.fpirls_pre_solve_step();
+            //auto pair = m_.compute(mu_);
             // solve weighted least square problem
             // \argmin_{\beta, f} [ \norm(W^{1/2}(y - X\beta - f_n))^2 + \lambda \int_D (Lf - u)^2 ]
-            solver.data().template insert<double>(OBSERVATIONS_BLK, std::get<1>(pair));
-            solver.data().template insert<double>(WEIGHTS_BLK, std::get<0>(pair));
+            solver_.data().template insert<double>(OBSERVATIONS_BLK, m_.py()); //std::get<1>(pair));
+            solver_.data().template insert<double>(WEIGHTS_BLK, m_.pW()); //std::get<0>(pair));
             // update solver to change in the weight matrix
-            solver.update_data();
-            solver.update_to_weights();
-            solver.solve();
+            solver_.update_data();
+            solver_.update_to_weights();
+            solver_.solve();
 
-            // extract estimates from solver
-            f_ = solver.f();
-            g_ = solver.g();
-            if (m_.has_covariates()) beta_ = solver.beta();
-            // update value of \mu_
-            DVector<double> fitted = solver.fitted();   // compute fitted values
-            mu_ = distribution_.inv_link(fitted);
-            // compute value of functional J for this pair (\beta, f): \norm{V^{-1/2}(y - \mu)}^2 + \int_D (Lf-u)^2
-            DVector<double> V = distribution_.variance(mu_).array().sqrt().inverse().matrix();
-            double J = (V.asDiagonal() * (m_.y() - mu_)).squaredNorm() + g_.dot(m_.R0() * g_);   // \int_D (Lf-u)^2
+            // \mu update
+	    m_.fpirls_post_solve_step(solver_.fitted(), solver_.beta());
+            //DVector<double> fitted = solver_.fitted();
+            //mu_ = distr_.inv_link(fitted);
+            // update value of the objective functional J = data_loss + \int_D (Lf-u)^2
+            double J = m_.data_loss() + m_.lambda_D()*solver_.g().dot(m_.R0() * solver_.g());
             // prepare for next iteration
-            k_++;
-            J_old = J_new;
-            J_new = J;
+            k_++; J_old = J_new; J_new = J;
         }
-        // store weight matrix at convergence
-        W_ = std::get<0>(m_.compute(mu_));
         return;
     }
 
     // getters
-    const DVector<double>& mu() const { return mu_; }       // mean vector at convergence
-    const DVector<double>& weights() const { return W_; }   // weights matrix W at convergence
-    const DVector<double>& beta() const { return beta_; }   // estimate of coefficient vector
-    const DVector<double>& f() const { return f_; }         // estimate of spatial field
-    const DVector<double>& g() const { return g_; }         // PDE misfit
-    std::size_t n_iter() const { return k_ - 1; }           // number of iterations
+    std::size_t n_iter() const { return k_; }
+    const SolverType& solver() const { return solver_; }
 };
 
 }   // namespace models
