@@ -97,7 +97,7 @@ template <typename Model> class SpaceTimeSeparableBase<Model, MonolithicSolver> 
         R1_ = Kronecker(P0_, pde_->R1());
     }
     // setters
-    void set_temporal_locations(const DVector<double> time_locations) { time_locs_ = time_locations; }
+    void set_temporal_locations(const DVector<double>& time_locations) { time_locs_ = time_locations; }
     // getters
     const SpMatrix<double>& R0() const { return R0_; }
     const SpMatrix<double>& R1() const { return R1_; }

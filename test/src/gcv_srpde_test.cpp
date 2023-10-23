@@ -14,12 +14,13 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#include <cstddef>
+#include <fdaPDE/core.h>
 #include <gtest/gtest.h>   // testing framework
 
-#include <fdaPDE/core.h>
+#include <cstddef>
 using fdapde::core::advection;
 using fdapde::core::diffusion;
+using fdapde::core::fem_order;
 using fdapde::core::FEM;
 using fdapde::core::Grid;
 using fdapde::core::laplacian;
@@ -33,6 +34,8 @@ using fdapde::models::Areal;
 using fdapde::models::GeoStatLocations;
 using fdapde::models::GeoStatMeshNodes;
 using fdapde::models::SRPDE;
+using fdapde::models::SpaceOnly;
+using fdapde::models::MonolithicSolver;
 
 #include "../../fdaPDE/calibration/gcv.h"
 using fdapde::calibration::ExactEDF;
@@ -46,6 +49,7 @@ using fdapde::calibration::StochasticEDF;
 using fdapde::testing::almost_equal;
 using fdapde::testing::MeshLoader;
 using fdapde::testing::read_mtx;
+using fdapde::testing::read_csv;
 
 // test 1
 //    domain:       unit square [1,1] x [1,1] (coarse)
@@ -55,7 +59,7 @@ using fdapde::testing::read_mtx;
 //    BC:           no
 //    order FE:     1
 //    GCV optimization: grid exact
-TEST(gcv_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridexact) {
+TEST(gcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridexact) {
     // define domain
     MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
@@ -93,7 +97,7 @@ TEST(gcv_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridexact) {
 //    BC:           no
 //    order FE:     1
 //    GCV optimization: grid stochastic
-TEST(gcv_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridstochastic) {
+TEST(gcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridstochastic) {
     // define domain
     MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
@@ -132,7 +136,7 @@ TEST(gcv_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridstochastic)
 //    BC:           no
 //    order FE:     1
 //    GCV optimization: grid exact
-TEST(gcv_test, laplacian_semiparametric_samplingatlocations_gridexact) {
+TEST(gcv_srpde_test, laplacian_semiparametric_samplingatlocations_gridexact) {
     // define domain
     MeshLoader<Mesh2D> domain("c_shaped");
     // import data from files
@@ -174,7 +178,7 @@ TEST(gcv_test, laplacian_semiparametric_samplingatlocations_gridexact) {
 //    BC:           no
 //    order FE:     1
 //    GCV optimization: grid stochastic
-TEST(gcv_test, laplacian_semiparametric_samplingatlocations_gridstochastic) {
+TEST(gcv_srpde_test, laplacian_semiparametric_samplingatlocations_gridstochastic) {
     // define domain
     MeshLoader<Mesh2D> domain("c_shaped");
     // import data from files
@@ -217,7 +221,7 @@ TEST(gcv_test, laplacian_semiparametric_samplingatlocations_gridstochastic) {
 //    BC:           no
 //    order FE:     1
 //    GCV optimization: grid exact
-TEST(gcv_test, costantcoefficientspde_nonparametric_samplingatnodes_gridexact) {
+TEST(gcv_srpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridexact) {
     // define domain
     MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
@@ -257,7 +261,7 @@ TEST(gcv_test, costantcoefficientspde_nonparametric_samplingatnodes_gridexact) {
 //    BC:           no
 //    order FE:     1
 //    GCV optimization: grid stochastic
-TEST(gcv_test, costantcoefficientspde_nonparametric_samplingatnodes_gridstochastic) {
+TEST(gcv_srpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridstochastic) {
     // define domain
     MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
@@ -298,7 +302,7 @@ TEST(gcv_test, costantcoefficientspde_nonparametric_samplingatnodes_gridstochast
 //    BC:           yes
 //    order FE:     1
 //    GCV optimization: grid exact
-TEST(gcv_test, noncostantcoefficientspde_nonparametric_samplingareal_gridexact) {
+TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_gridexact) {
     // define domain and regularizing PDE
     MeshLoader<Mesh2D> domain("quasi_circle");
     // import data from files
@@ -343,7 +347,7 @@ TEST(gcv_test, noncostantcoefficientspde_nonparametric_samplingareal_gridexact) 
 //    BC:           yes
 //    order FE:     1
 //    GCV optimization: grid stochastic
-TEST(gcv_test, noncostantcoefficientspde_nonparametric_samplingareal_gridstochastic) {
+TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_gridstochastic) {
     // define domain and regularizing PDE
     MeshLoader<Mesh2D> domain("quasi_circle");
     // import data from files
