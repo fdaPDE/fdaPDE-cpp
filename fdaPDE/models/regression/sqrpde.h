@@ -79,7 +79,8 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
         // non-parametric and semi-parametric cases coincide here, since beta^(0) = 0
         // assemble srpde non-parametric system matrix and factorize
         SparseBlockMatrix<double, 2, 2> A(
-          PsiTD() * Psi() / n_obs(), 2 * lambda_D() * R1().transpose(), lambda_D() * R1(), -lambda_D() * R0());
+          PsiTD() * Psi() / n_obs(), 2 * lambda_D() * R1().transpose(),
+	  lambda_D() * R1(),         -lambda_D() * R0()               );
         fdapde::SparseLU<SpMatrix<double>> invA;
         invA.compute(A);
         // assemble rhs of srpde problem
@@ -90,7 +91,7 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
         mu_ = Psi(not_nan()) * (invA.solve(b)).head(n_basis());
     }
     // computes W^k = diag(1/(2*n*|y - X*beta - f|)) and y^k = y - (1-2*alpha)|y - X*beta - f|
-    void fpirls_pre_solve_step() {
+    void fpirls_compute_step() {
         DVector<double> abs_res = (y() - mu_).array().abs();
         // W_i = 1/(2*n*(abs_res[i] + tol_weights_)) if abs_res[i] < tol_weights, w_i = 1/(2*n*abs_res[i]) otherwise
         pW_ =
@@ -100,7 +101,7 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
         py_ = y() - (1 - 2. * alpha_) * abs_res;
     }
     // updates mean vector \mu after WLS solution
-    void fpirls_post_solve_step(const DMatrix<double>& hat_f, const DMatrix<double>& hat_beta) { mu_ = hat_f; }
+    void fpirls_update_step(const DMatrix<double>& hat_f, const DMatrix<double>& hat_beta) { mu_ = hat_f; }
     // returns the data loss \norm{diag(W)^{-1/2}(y - \mu)}^2
     double data_loss() const { return (pW_.cwiseSqrt().matrix().asDiagonal() * (py_ - mu_)).squaredNorm(); }
     const DVector<double>& py() const { return py_; }
@@ -133,7 +134,6 @@ void SQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::solve() {
     // execute FPIRLS for minimization of functional \norm{V^{-1/2}(y - \mu)}^2 + \lambda \int_D (Lf - u)^2
     FPIRLS<decltype(*this)> fpirls(*this, tol_, max_iter_);   // FPIRLS engine
     fpirls.compute();
-
     // fpirls converged: extract matrix W and solution estimates
     W_ = fpirls.solver().W();
     f_ = fpirls.solver().f();

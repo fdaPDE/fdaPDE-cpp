@@ -81,7 +81,7 @@ class GSRPDE : public RegressionBase<GSRPDE<PDE, RegularizationType, SamplingDes
         distr_.preprocess(mu_);
     };
     // computes W^k = ((G^k)^{-2})*((V^k)^{-1}) and y^k = G^k(y-u^k) + \theta^k
-    void fpirls_pre_solve_step() {
+    void fpirls_compute_step() {
         DVector<double> theta_ = distr_.link(mu_);   // \theta^k = (g(\mu^k_1), ..., g(\mu^k_n))
         DVector<double> G_ = distr_.der_link(mu_);   // G^k = diag(g'(\mu^k_1), ..., g'(\mu^k_n))
         DVector<double> V_ = distr_.variance(mu_);   // V^k = diag(v(\mu^k_1), ..., v(\mu^k_n))
@@ -89,7 +89,7 @@ class GSRPDE : public RegressionBase<GSRPDE<PDE, RegularizationType, SamplingDes
         py_ = G_.asDiagonal() * (y() - mu_) + theta_;
     }
     // updates mean vector \mu after WLS solution
-    void fpirls_post_solve_step(const DMatrix<double>& hat_f, const DMatrix<double>& hat_beta) {
+    void fpirls_update_step(const DMatrix<double>& hat_f, const DMatrix<double>& hat_beta) {
         mu_ = distr_.inv_link(hat_f);
     }
     // returns the data loss \norm{V^{-1/2}(y - \mu)}^2

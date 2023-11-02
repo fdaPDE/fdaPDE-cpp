@@ -80,16 +80,12 @@ template <typename Model> class FPIRLS {
     // executes the FPIRLS algorithm
     void compute() {
         // algorithm initialization
-        //mu_ = m_.initialize_mu();
-        //distr_.preprocess(mu_);
 	m_.fpirls_init();
         // objective functional value at consecutive iterations
         double J_old = tolerance_ + 1;
         double J_new = 0;
         while (k_ < max_iter_ && std::abs(J_new - J_old) > tolerance_) {
-            // compute weight matrix W and pseudo-observations \tilde{y}
-            m_.fpirls_pre_solve_step();
-            //auto pair = m_.compute(mu_);
+            m_.fpirls_compute_step();   // model specific computation of py_ and pW_
             // solve weighted least square problem
             // \argmin_{\beta, f} [ \norm(W^{1/2}(y - X\beta - f_n))^2 + \lambda \int_D (Lf - u)^2 ]
             solver_.data().template insert<double>(OBSERVATIONS_BLK, m_.py()); //std::get<1>(pair));
@@ -98,11 +94,7 @@ template <typename Model> class FPIRLS {
             solver_.update_data();
             solver_.update_to_weights();
             solver_.solve();
-
-            // \mu update
-	    m_.fpirls_post_solve_step(solver_.fitted(), solver_.beta());
-            //DVector<double> fitted = solver_.fitted();
-            //mu_ = distr_.inv_link(fitted);
+            m_.fpirls_update_step(solver_.fitted(), solver_.beta());   // model specific update step
             // update value of the objective functional J = data_loss + \int_D (Lf-u)^2
             double J = m_.data_loss() + m_.lambda_D()*solver_.g().dot(m_.R0() * solver_.g());
             // prepare for next iteration
