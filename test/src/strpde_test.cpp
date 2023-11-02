@@ -152,9 +152,9 @@ TEST(strpde_test, noncostantcoefficientspde_nonparametric_samplingareal_paraboli
     // import data from files
     DMatrix<double, Eigen::RowMajor> K_data  = read_csv<double>("../data/models/strpde/2D_test3/K.csv");
     DMatrix<double, Eigen::RowMajor> b_data  = read_csv<double>("../data/models/strpde/2D_test3/b.csv");
-    DMatrix<int> subdomains = read_csv<int>   ("../data/models/strpde/2D_test3/incidence_matrix.csv"  );
-    DMatrix<double> y       = read_csv<double>("../data/models/strpde/2D_test3/y.csv" );
-    DMatrix<double> IC      = read_csv<double>("../data/models/strpde/2D_test3/IC.csv");
+    DMatrix<double> subdomains = read_csv<double>("../data/models/strpde/2D_test3/incidence_matrix.csv");
+    DMatrix<double> y  = read_csv<double>("../data/models/strpde/2D_test3/y.csv" );
+    DMatrix<double> IC = read_csv<double>("../data/models/strpde/2D_test3/IC.csv");
     // define regularizing PDE
     MatrixDataWrapper<2, 2, 2> K(K_data);
     VectorDataWrapper<2, 2> b(b_data);

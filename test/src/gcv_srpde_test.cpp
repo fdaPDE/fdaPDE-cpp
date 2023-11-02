@@ -308,9 +308,9 @@ TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_gride
     // import data from files
     DMatrix<double, Eigen::RowMajor> K_data = read_csv<double>("../data/models/gcv/2D_test7/K.csv");
     DMatrix<double, Eigen::RowMajor> b_data = read_csv<double>("../data/models/gcv/2D_test7/b.csv");
-    DMatrix<int> subdomains = read_csv<int>   ("../data/models/gcv/2D_test7/incidence_matrix.csv" );
-    DMatrix<double> u       = read_csv<double>("../data/models/gcv/2D_test7/force.csv");
-    DMatrix<double> y       = read_csv<double>("../data/models/gcv/2D_test7/y.csv"    );
+    DMatrix<double> subdomains = read_csv<double>("../data/models/gcv/2D_test7/incidence_matrix.csv" );
+    DMatrix<double> u = read_csv<double>("../data/models/gcv/2D_test7/force.csv");
+    DMatrix<double> y = read_csv<double>("../data/models/gcv/2D_test7/y.csv"    );
     // define regularizing PDE
     MatrixDataWrapper<2, 2, 2> K(K_data);
     VectorDataWrapper<2, 2> b(b_data);
@@ -353,9 +353,9 @@ TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_grids
     // import data from files
     DMatrix<double, Eigen::RowMajor> K_data = read_csv<double>("../data/models/gcv/2D_test8/K.csv");
     DMatrix<double, Eigen::RowMajor> b_data = read_csv<double>("../data/models/gcv/2D_test8/b.csv");
-    DMatrix<int> subdomains = read_csv<int>("../data/models/gcv/2D_test8/incidence_matrix.csv"    );
-    DMatrix<double> u       = read_csv<double>("../data/models/gcv/2D_test8/force.csv");
-    DMatrix<double> y       = read_csv<double>("../data/models/gcv/2D_test8/y.csv"    );
+    DMatrix<double> subdomains = read_csv<double>("../data/models/gcv/2D_test8/incidence_matrix.csv");
+    DMatrix<double> u = read_csv<double>("../data/models/gcv/2D_test8/force.csv");
+    DMatrix<double> y = read_csv<double>("../data/models/gcv/2D_test8/y.csv"    );
     // define regularizing PDE
     MatrixDataWrapper<2, 2, 2> K(K_data);
     VectorDataWrapper<2, 2> b(b_data);

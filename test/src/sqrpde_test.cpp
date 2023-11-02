@@ -159,7 +159,7 @@ TEST(sqrpde_test, laplacian_semiparametric_samplingareal) {
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/sqrpde/2D_test4/y.csv");
     DMatrix<double> X = read_csv<double>("../data/models/sqrpde/2D_test4/X.csv");
-    DMatrix<int> subdomains = read_csv<int>("../data/models/sqrpde/2D_test4/incidence_matrix.csv");
+    DMatrix<double> subdomains = read_csv<double>("../data/models/sqrpde/2D_test4/incidence_matrix.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);

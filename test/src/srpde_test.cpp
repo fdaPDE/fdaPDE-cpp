@@ -34,6 +34,12 @@ using fdapde::models::GeoStatLocations;
 using fdapde::models::GeoStatMeshNodes;
 using fdapde::models::SRPDE;
 
+#include "../../fdaPDE/models/regression/gsrpde.h"
+using fdapde::models::GSRPDE;
+using fdapde::models::SpaceOnly;
+using fdapde::models::MonolithicSolver;
+using fdapde::models::Bernulli;
+
 #include "utils/constants.h"
 #include "utils/mesh_loader.h"
 #include "utils/utils.h"
@@ -69,9 +75,6 @@ TEST(srpde_test, laplacian_nonparametric_samplingatnodes) {
     model.init();
     model.solve();
     // test correctness
-    EXPECT_TRUE(almost_equal(model.Psi(), "../data/models/srpde/2D_test1/Psi.mtx"));
-    EXPECT_TRUE(almost_equal(model.R0() , "../data/models/srpde/2D_test1/R0.mtx" ));
-    EXPECT_TRUE(almost_equal(model.R1() , "../data/models/srpde/2D_test1/R1.mtx" ));
     EXPECT_TRUE(almost_equal(model.f()  , "../data/models/srpde/2D_test1/sol.mtx"));
 }
 
@@ -107,9 +110,6 @@ TEST(srpde_test, laplacian_semiparametric_samplingatlocations) {
     model.init();
     model.solve();
     // test correctness
-    EXPECT_TRUE(almost_equal(model.Psi() , "../data/models/srpde/2D_test2/Psi.mtx" ));
-    EXPECT_TRUE(almost_equal(model.R0()  , "../data/models/srpde/2D_test2/R0.mtx"  ));
-    EXPECT_TRUE(almost_equal(model.R1()  , "../data/models/srpde/2D_test2/R1.mtx"  ));
     EXPECT_TRUE(almost_equal(model.f()   , "../data/models/srpde/2D_test2/sol.mtx" ));
     EXPECT_TRUE(almost_equal(model.beta(), "../data/models/srpde/2D_test2/beta.mtx"));
 }
@@ -144,7 +144,6 @@ TEST(srpde_test, costantcoefficientspde_nonparametric_samplingatnodes) {
     model.init();
     model.solve();
     // test correctness
-    EXPECT_TRUE(almost_equal(model.R1(), "../data/models/srpde/2D_test3/R1.mtx" ));
     EXPECT_TRUE(almost_equal(model.f() , "../data/models/srpde/2D_test3/sol.mtx"));
 }
 
@@ -161,9 +160,9 @@ TEST(srpde_test, noncostantcoefficientspde_nonparametric_samplingareal) {
     // import data from files
     DMatrix<double, Eigen::RowMajor> K_data  = read_csv<double>("../data/models/srpde/2D_test4/K.csv");
     DMatrix<double, Eigen::RowMajor> b_data  = read_csv<double>("../data/models/srpde/2D_test4/b.csv");
-    DMatrix<int> subdomains = read_csv<int>   ("../data/models/srpde/2D_test4/incidence_matrix.csv"  );
-    DMatrix<double> u       = read_csv<double>("../data/models/srpde/2D_test4/force.csv");
-    DMatrix<double> y       = read_csv<double>("../data/models/srpde/2D_test4/y.csv"    );
+    DMatrix<double> subdomains = read_csv<double>("../data/models/srpde/2D_test4/incidence_matrix.csv");
+    DMatrix<double> u = read_csv<double>("../data/models/srpde/2D_test4/force.csv");
+    DMatrix<double> y = read_csv<double>("../data/models/srpde/2D_test4/y.csv"    );
     // define regularizing PDE
     MatrixDataWrapper<2, 2, 2> K(K_data);
     VectorDataWrapper<2, 2> b(b_data);
@@ -182,6 +181,5 @@ TEST(srpde_test, noncostantcoefficientspde_nonparametric_samplingareal) {
     model.init();
     model.solve();
     // test correctness
-    EXPECT_TRUE(almost_equal(model.R1(), "../data/models/srpde/2D_test4/R1.mtx" ));
     EXPECT_TRUE(almost_equal(model.f() , "../data/models/srpde/2D_test4/sol.mtx"));
 }

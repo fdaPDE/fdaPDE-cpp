@@ -171,7 +171,7 @@ template <typename Model> class SamplingDesign<Model, GeoStatLocations> : public
 template <typename Model> class SamplingDesign<Model, Areal> : public SamplingBase<Model> {
    private:
     FDAPDE_DEFINE_MODEL_GETTER;   // import model() method (const and non-const access)
-    DMatrix<int> subdomains_;     // incidence matrix D = [D]_{ij} = 1 \iff element j belongs to subdomain i.
+    DMatrix<double> subdomains_;  // incidence matrix D = [D]_{ij} = 1 \iff element j belongs to subdomain i.
     DiagMatrix<double> D_;        // diagonal matrix of subdomains' measures
     typedef SamplingBase<Model> Base;
     using Base::Psi_;
@@ -240,9 +240,9 @@ template <typename Model> class SamplingDesign<Model, Areal> : public SamplingBa
     auto PsiTD(not_nan) const { return Psi_.transpose() * D_; }
     std::size_t n_spatial_locs() const { return subdomains_.rows(); }
     const DiagMatrix<double>& D() const { return D_; }
-    const DMatrix<int>& locs() const { return subdomains_; }
+    const DMatrix<double>& locs() const { return subdomains_; }
     // setter
-    void set_spatial_locations(const DMatrix<int>& subdomains) { subdomains_ = subdomains; }
+    void set_spatial_locations(const DMatrix<double>& subdomains) { subdomains_ = subdomains; }
 };
 
 }   // namespace models

@@ -314,7 +314,7 @@ TEST(gcv_sqrpde_test, laplacian_semiparametric_samplingareal_gridexact) {
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/gcv/sqrpde/2D_test7/y.csv");
     DMatrix<double> X = read_csv<double>("../data/gcv/sqrpde/2D_test7/X.csv");
-    DMatrix<int> subdomains = read_csv<int>("../data/gcv/sqrpde/2D_test7/incidence_matrix.csv");
+    DMatrix<double> subdomains = read_csv<double>("../data/gcv/sqrpde/2D_test7/incidence_matrix.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
@@ -358,7 +358,7 @@ TEST(gcv_sqrpde_test, laplacian_semiparametric_samplingareal_gridstochastic) {
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/gcv/sqrpde/2D_test8/y.csv");
     DMatrix<double> X = read_csv<double>("../data/gcv/sqrpde/2D_test8/X.csv");
-    DMatrix<int> subdomains = read_csv<int>("../data/gcv/sqrpde/2D_test8/incidence_matrix.csv");
+    DMatrix<double> subdomains = read_csv<double>("../data/gcv/sqrpde/2D_test8/incidence_matrix.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
