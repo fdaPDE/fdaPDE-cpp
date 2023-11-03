@@ -23,15 +23,11 @@
 #include <random>
 using fdapde::core::SMW;
 
-#include "../models/regression/regression_base.h"
-using fdapde::models::is_regression_model;
-
 namespace fdapde {
-namespace calibration {
+namespace models {
 
 // computes an approximation of the trace of S = \Psi*T^{-1}*\Psi^T*Q using a monte carlo approximation.
 template <typename Model> class StochasticEDF {
-    static_assert(is_regression_model<Model>::value);
    private:
     const Model& model_;
     std::size_t r_ = 100;   // number of monte carlo realizations
@@ -93,7 +89,7 @@ template <typename Model> class StochasticEDF {
     void set_seed(std::size_t seed) { seed_ = seed; }
 };
 
-}   // namespace calibration
+}   // namespace models
 }   // namespace fdapde
 
 #endif   // __STOCHASTIC_EDF_H__

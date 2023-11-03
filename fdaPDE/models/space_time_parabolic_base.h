@@ -182,6 +182,8 @@ template <typename Model> class SpaceTimeParabolicBase<Model, IterativeSolver> :
     const DMatrix<double>& s() const { return s_; }          // initial condition
     std::size_t n_basis() const { return pde_->n_dofs(); }   // number of basis functions
 
+    void P() { return; } // TODO
+  
     // setters
     // shift = true, cause the removal of the first time instant of data, in case it has been used to estimate the IC
     void set_initial_condition(const DMatrix<double>& s, bool shift = true) {

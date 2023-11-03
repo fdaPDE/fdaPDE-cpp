@@ -72,9 +72,6 @@ class STRPDE<PDE, SpaceTimeSeparable, SamplingDesign, MonolithicSolver> :
     void init_model();          // update model object in case of **structural** changes in its definition
     void update_to_weights();   // update model object in case of changes in the weights matrix
     virtual void solve();       // finds a solution to the smoothing problem
-
-    // GCV support
-    const DMatrix<double>& T();  // T = \Psi^T*Q*\Psi + + \lambda_T*(Pt \kron R0) + \lambda_D*(R1^T*R0^{-1}*R1)
     double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const;   // euclidian norm of op1 - op2
 
     // getters
@@ -142,15 +139,6 @@ void STRPDE<PDE, SpaceTimeSeparable, SamplingDesign, MonolithicSolver>::solve() 
     return;
 }
   
-template <typename PDE, typename SamplingDesign>
-const DMatrix<double>& STRPDE<PDE, SpaceTimeSeparable, SamplingDesign, MonolithicSolver>::T() {
-    if (!has_covariates())   // case without covariates, Q is the identity matrix
-        T_ = PsiTD() * W() * Psi() + P();
-    else   // general case with covariates
-        T_ = PsiTD() * lmbQ(Psi()) + P();
-    return T_;
-};
-
 template <typename PDE, typename SamplingDesign>
 double STRPDE<PDE, SpaceTimeSeparable, SamplingDesign, MonolithicSolver>::norm(
   const DMatrix<double>& op1, const DMatrix<double>& op2) const {

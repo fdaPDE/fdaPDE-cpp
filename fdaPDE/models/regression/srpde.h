@@ -43,23 +43,17 @@ template <typename PDE, typename SamplingDesign> class SRPDE : public Regression
     SparseBlockMatrix<double, 2, 2> A_ {};         // system matrix of non-parametric problem (2N x 2N matrix)
     fdapde::SparseLU<SpMatrix<double>> invA_ {};   // factorization of matrix A
     DVector<double> b_ {};                         // right hand side of problem's linear system (1 x 2N vector)
-
-    DMatrix<double> T_ {};   // T = \Psi^T*Q*\Psi + \lambda*R
    public:
     IMPORT_REGRESSION_SYMBOLS;
     using Base::lambda_D;   // smoothing parameter in space
     using Base::n_basis;    // number of spatial basis
-    using Base::P;          // discretized penalty matrix: P = \lambda_D*(R1^T*R0^{-1}*R1)
     // constructor
     SRPDE() = default;
     SRPDE(const PDE& pde) : Base(pde) {};
 
     void init_model();          // update model object in case of **structural** changes in its definition
     void update_to_weights();   // update model object in case of changes in the weights matrix
-    virtual void solve();       // finds a solution to the smoothing problem
-
-    // GCV support
-    const DMatrix<double>& T();   // T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
+    virtual void solve();       // finds a solution to the smoothing problem  
     double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const;   // euclidian norm of op1 - op2
 
     // getters
@@ -123,16 +117,6 @@ template <typename PDE, typename SamplingDesign> void SRPDE<PDE, SamplingDesign>
     // store PDE misfit
     g_ = sol.tail(n_basis());
     return;
-}
-
-// returns matrix T = \Psi^T*Q*\Psi + P, with P = \lambda_D*(R1^T*R0^{-1}*R1)
-template <typename PDE, typename SamplingDesign> const DMatrix<double>& SRPDE<PDE, SamplingDesign>::T() {
-    if (!has_covariates()) {   // case without covariates, Q = I
-        T_ = PsiTD() * W() * Psi() + P();
-    } else {
-        T_ = PsiTD() * lmbQ(Psi()) + P();
-    }
-    return T_;
 }
 
 // returns the euclidean norm of op1 - op2

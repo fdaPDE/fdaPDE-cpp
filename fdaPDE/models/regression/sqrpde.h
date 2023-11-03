@@ -109,7 +109,6 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
     const fdapde::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
 
     // GCV support
-    const DMatrix<double>& T();
     double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {
         double result = 0;
         for (std::size_t i = 0; i < op2.rows(); ++i) { result += pinball_loss(op2.coeff(i, 0) - op1.coeff(i, 0)); }
@@ -148,18 +147,6 @@ void SQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::solve() {
     }
     invA_ = fpirls.solver().invA();
     return;
-}
-
-// required to support GCV based smoothing parameter selection
-// in case of an SRPDE model we have T = \Psi^T*Q*\Psi + \lambda*(R1^T*R0^{-1}*R1)
-template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
-const DMatrix<double>& SQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::T() {
-    if (!has_covariates()) {   // case without covariates, Q = I
-        T_ = PsiTD() * W() * Psi() + P();
-    } else {
-        T_ = PsiTD() * lmbQ(Psi()) + P();
-    }
-    return T_;
 }
 
 }   // namespace models

@@ -25,24 +25,23 @@
 #include <type_traits>
 using fdapde::core::ScalarField;
 using fdapde::core::TwiceDifferentiableScalarField;
-
-#include "../models/model_traits.h"
+#include "../model_traits.h"
+#include "regression_base.h"
+using fdapde::models::SpaceOnly;
 #include "exact_edf.h"
 #include "stochastic_edf.h"
-using fdapde::models::is_regression_model;
 
 namespace fdapde {
-namespace calibration {
+namespace models {
 
 // base functor implementing the expression of GCV index for model M. Use type T for evaluation of the expected degrees
 // of freedoms
 template <typename M, typename trS_evaluation_strategy = StochasticEDF<M>> class GCV {
-    static_assert(is_regression_model<M>::value, "M must be a regression model");
    protected:
     // cache computed values, use pointers to let shallow-copy (optimizers need to access those members)
     typedef std::shared_ptr<std::vector<double>> vect_ptr;
     vect_ptr edfs_ = std::make_shared<std::vector<double>>();
-    vect_ptr values_ = std::make_shared<std::vector<double>>();
+    vect_ptr gcvs_ = std::make_shared<std::vector<double>>();
 
     M& model_;                      // model to calibrate
     trS_evaluation_strategy trS_;   // strategy used to evaluate the trace of smoothing matrix S
@@ -54,19 +53,18 @@ template <typename M, typename trS_evaluation_strategy = StochasticEDF<M>> class
     template <
       typename U = trS_evaluation_strategy,   // fake type to enable substitution
       typename std::enable_if<!std::is_same<U, StochasticEDF<M>>::value, int>::type = 0>
-    GCV(M& model) : model_(model), trS_(model_) {};
-
+    GCV(M& model) : model_(model), trS_(model) {};
     // constructor overloads for stochastic trace approximation
     template <
       typename U = trS_evaluation_strategy,
       typename std::enable_if<std::is_same<U, StochasticEDF<M>>::value, int>::type = 0>
-    GCV(M& model, std::size_t r) : model_(model), trS_(model_, r) {};
+    GCV(M& model, std::size_t r) : model_(model), trS_(model, r) {};
     template <
       typename U = trS_evaluation_strategy,
       typename std::enable_if<std::is_same<U, StochasticEDF<M>>::value, int>::type = 0>
-    GCV(M& model, std::size_t r, std::size_t seed) : model_(model), trS_(model_, r, seed) {};
+    GCV(M& model, std::size_t r, std::size_t seed) : model_(model), trS_(model, r, seed) {};
 
-    // evaluates the analytical expression of gcv at \lambda (called by any type of GCV optimization)
+    // analytical expression of gcv at \lambda
     //
     // edf = n - (q + Tr[S])
     // GCV(\lambda) = n/(edf^2)*norm(y - \hat y)^2
@@ -82,9 +80,10 @@ template <typename M, typename trS_evaluation_strategy = StochasticEDF<M>> class
         std::size_t n = model_.n_obs();   // number of observations
         double dor = n - (q + trS);       // residual degrees of freedom
         edfs_->emplace_back(q + trS);     // store equivalent degrees of freedom
+
         // return gcv at point
         double gcv_value = (n / std::pow(dor, 2)) * (model_.norm(model_.fitted(), model_.y()));
-        values_->emplace_back(gcv_value);
+        gcvs_->emplace_back(gcv_value);
         return gcv_value;
     }
 
@@ -100,16 +99,14 @@ template <typename M, typename trS_evaluation_strategy = StochasticEDF<M>> class
     }
 
     // getters
-    const std::vector<double>& edfs() const { return *edfs_; }       // equivalent degrees of freedom q + Tr[S]
-    const std::vector<double>& values() const { return *values_; }   // computed values of GCV index
+    const std::vector<double>& edfs() const { return *edfs_; }   // equivalent degrees of freedom q + Tr[S]
+    const std::vector<double>& gcvs() const { return *gcvs_; }   // computed values of GCV index
 };
 
-// for the optimization of GCV using finite differences we just need the definition of the GCV functional.
 template <typename M, typename trS_evaluation_strategy = StochasticEDF<M>>
 using FiniteDifferenceGCV = GCV<M, trS_evaluation_strategy>;
 
-// an optimization of GCV using its exact expression requires the analitycal expression of gradient and hessian matrix.
-// this depends on the type of regularization used by the statistical model M
+// provides the analytical expresssion of GCV gradient and hessian, for newton-like optimization methods
 template <typename M, typename RegularizationType> class ExactGCV;
 
 // space only specialization of GCV exact derivatives
@@ -117,21 +114,17 @@ template <typename M, typename RegularizationType> class ExactGCV;
 //    edf = n - (q + Tr[S])
 //    dGCV(\lambda)  = \frac{2n}{edf^2}[ \sigma^2 * Tr[dS] + a ]
 //    ddGCV(\lambda) = \frac{2n}{edf^2}[ \frac{1}{edf}(3*\sigma^2*Tr[dS] + 4*a)*Tr[dS] + \sigma^2*Tr[ddS] + b ]
-template <typename M> class ExactGCV<M, fdapde::models::SpaceOnly> : public GCV<M, ExactEDF<M>> {
+template <typename M> class ExactGCV<M, SpaceOnly> : public GCV<M, ExactEDF<M>> {
    private:
-    // import symbols from base
-    typedef GCV<M, ExactEDF<M>> Base;
-    using Base::model_;
-    using Base::trS_;
-
-    DMatrix<double> L_ {};   // T^{-1}*R
-    DMatrix<double> F_ {};   // (T^{-1}*R)*(T^{-1}*E)
-    DVector<double> h_ {};   // h = (\lambda*L - I)*T^{-1}*R1^T*R0^{-1}*u
-    DVector<double> p_ {};   // p = \Psi*h - dS*y
-
-    DMatrix<double> S_ {};     // S = \Psi*T^{-1}*\Psi^T*Q
-    DMatrix<double> dS_ {};    // dS = -\Psi*(T^{-1}*R)*(T^{-1}*E)
-    DMatrix<double> ddS_ {};   // ddS = 2*\Psi*L*F
+    using GCV<M, ExactEDF<M>>::model_;
+    using GCV<M, ExactEDF<M>>::trS_;
+    DMatrix<double> L_;     // T^{-1}*R
+    DMatrix<double> F_;     // (T^{-1}*R)*(T^{-1}*E)
+    DVector<double> h_;     // h = (\lambda*L - I)*T^{-1}*R1^T*R0^{-1}*u
+    DVector<double> p_;     // p = \Psi*h - dS*y
+    DMatrix<double> S_;     // S = \Psi*T^{-1}*\Psi^T*Q
+    DMatrix<double> dS_;    // dS = -\Psi*(T^{-1}*R)*(T^{-1}*E)
+    DMatrix<double> ddS_;   // ddS = 2*\Psi*L*F
 
     // compute first derivative of matrix S: dS = -\Psi*(T^{-1}*R)*(T^{-1}*E)
     const DMatrix<double>& dS() {
@@ -146,7 +139,7 @@ template <typename M> class ExactGCV<M, fdapde::models::SpaceOnly> : public GCV<
         return ddS_;
     }
 
-    // computes the a term in the dGCV expression, given by
+    // computes the a term in the dGCV expression
     // a = p.dot(y - \hat y)
     //   p = \Psi*h - t
     //     h = (\lambda*L - I)*T^{-1}*g
@@ -162,14 +155,13 @@ template <typename M> class ExactGCV<M, fdapde::models::SpaceOnly> : public GCV<
         return ((model_.y() - model_.fitted()).transpose() * p_).coeff(0, 0);
     }
 
-    // computes the b term in the ddGCV expression, given by
+    // computes the b term in the ddGCV expression
     // b = p.dot(Q*p) + (-ddS*y - 2*\Psi*L*h).dot(y - \hat y)
     //   p = \Psi*h - t
     //     h = (\lambda*L - I)*T^{-1}*g
     //       g = R1^T*R0^{-1}*u
     //     t = dS*y
     double b() {
-        // NB: ddS_ must already contain valid data
         DMatrix<double> C = 2 * L_ * h_;
         // perform efficient multiplication by permutation matrix Psi
         DMatrix<double> D(model_.n_locs(), 1);   // 2*\Psi*L*h
@@ -188,7 +180,7 @@ template <typename M> class ExactGCV<M, fdapde::models::SpaceOnly> : public GCV<
     // constructor
     ExactGCV(M& model) : GCV<M, ExactEDF<M>>(model) {};
 
-    // analytical expression of gcv first derivative (called only by an exact-based GCV optimization)
+    // analytical expression of GCV first derivative
     //
     // edf      = n - (q + Tr[S])
     // \sigma^2 = \frac{norm(y - \hat y)^2}{n - (q + Tr[S])}
@@ -214,13 +206,13 @@ template <typename M> class ExactGCV<M, fdapde::models::SpaceOnly> : public GCV<
         };
     }
 
-    // analytical expression of gcv second derivative (called only by an exact-based GCV optimization)
+    // analytical expression of GCV second derivative
     //
     // edf      = n - (q + Tr[S])
     // \sigma^2 = \frac{norm(y - \hat y)^2}{n - (q + Tr[S])}
     // b        = p.dot(Q*p) + (-ddS*y - 2*\Psi*L*h).dot(y - \hat y)
     // ddGCV(\lambda) = \frac{2n}{edf^2}[ \frac{1}{edf}(3*\sigma^2*Tr[dS] + 4*a)*Tr[dS] + \sigma^2*Tr[ddS] + b ]
-    std::function<SMatrix<1>(SVector<1>)> deriveTwice() {
+    std::function<SMatrix<1>(SVector<1>)> derive_twice() {
         return [*this](SVector<1> lambda) mutable -> SMatrix<1> {
             // fit the model given current lambda
             model_.set_lambda(lambda);
@@ -243,7 +235,7 @@ template <typename M> class ExactGCV<M, fdapde::models::SpaceOnly> : public GCV<
     }
 };
 
-}   // namespace calibration
+}   // namespace models
 }   // namespace fdapde
 
 #endif   // __GCV_H__

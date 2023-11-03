@@ -99,9 +99,6 @@ class GSRPDE : public RegressionBase<GSRPDE<PDE, RegularizationType, SamplingDes
     }
     const DVector<double>& py() const { return py_; }
     const DVector<double>& pW() const { return pW_; }
-
-    // GCV support
-    const DMatrix<double>& T();                                                  // T = \Psi^T*Q*\Psi + P
     double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const;   // total deviance \sum dev(op1 - op2)
 
     virtual ~GSRPDE() = default;
@@ -122,16 +119,7 @@ void GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>::solv
     if (has_covariates()) { beta_ = fpirls.solver().beta(); }
     return;
 }
-
-template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver, typename Distribution>
-const DMatrix<double>& GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>::T() {
-    if (!has_covariates())   // case without covariates, Q is the identity matrix
-        T_ = PsiTD() * W() * Psi() + P();
-    else   // general case with covariates
-        T_ = PsiTD() * lmbQ(Psi()) + P();
-    return T_;
-}
-
+  
 // returns the deviance of y - \hat y induced by the considered distribution
 template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver, typename Distribution>
 double GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>::norm(

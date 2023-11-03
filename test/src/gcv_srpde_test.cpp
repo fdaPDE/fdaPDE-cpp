@@ -29,6 +29,7 @@ using fdapde::core::PDE;
 using fdapde::core::VectorDataWrapper;
 
 #include "../../fdaPDE/models/regression/srpde.h"
+#include "../../fdaPDE/models/regression/gcv.h"
 #include "../../fdaPDE/models/sampling_design.h"
 using fdapde::models::Areal;
 using fdapde::models::GeoStatLocations;
@@ -36,12 +37,9 @@ using fdapde::models::GeoStatMeshNodes;
 using fdapde::models::SRPDE;
 using fdapde::models::SpaceOnly;
 using fdapde::models::MonolithicSolver;
-
-#include "../../fdaPDE/calibration/gcv.h"
-using fdapde::calibration::ExactEDF;
-using fdapde::calibration::ExactGCV;
-using fdapde::calibration::GCV;
-using fdapde::calibration::StochasticEDF;
+using fdapde::models::ExactEDF;
+using fdapde::models::GCV;
+using fdapde::models::StochasticEDF;
 
 #include "utils/constants.h"
 #include "utils/mesh_loader.h"
@@ -76,7 +74,7 @@ TEST(gcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridexact
     model.set_data(df);
     model.init();
     // define GCV function and grid of \lambda_D values
-    GCV<decltype(model), ExactEDF<decltype(model)>> GCV(model);
+    auto GCV = model.gcv<ExactEDF>();
     ScalarField<1, decltype(GCV)> obj(GCV);
     std::vector<SVector<1>> lambdas;
     for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
@@ -85,8 +83,8 @@ TEST(gcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridexact
     opt.optimize(obj, lambdas);
     SVector<1> best_lambda = opt.optimum();
     // test correctness
-    EXPECT_TRUE(almost_equal(GCV.edfs(),   "../data/models/gcv/2D_test1/edfs.mtx"));
-    EXPECT_TRUE(almost_equal(GCV.values(), "../data/models/gcv/2D_test1/gcvs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test1/edfs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test1/gcvs.mtx"));
 }
 
 // test 2
@@ -115,7 +113,7 @@ TEST(gcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridstoch
     model.init();
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 476813;
-    GCV<decltype(model), StochasticEDF<decltype(model)>> GCV(model, 100, seed);
+    auto GCV = model.gcv<StochasticEDF>(100, seed);
     ScalarField<1, decltype(GCV)> obj(GCV);
     std::vector<SVector<1>> lambdas;
     for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
@@ -124,8 +122,8 @@ TEST(gcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridstoch
     opt.optimize(obj, lambdas);
     SVector<1> best_lambda = opt.optimum();
     // test correctness
-    EXPECT_TRUE(almost_equal(GCV.edfs(),   "../data/models/gcv/2D_test2/edfs.mtx"));
-    EXPECT_TRUE(almost_equal(GCV.values(), "../data/models/gcv/2D_test2/gcvs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test2/edfs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test2/gcvs.mtx"));
 }
 
 // test 3
@@ -157,7 +155,7 @@ TEST(gcv_srpde_test, laplacian_semiparametric_samplingatlocations_gridexact) {
     model.set_data(df);
     model.init();
     // define GCV function and grid of \lambda_D values
-    GCV<decltype(model), ExactEDF<decltype(model)>> GCV(model);
+    auto GCV = model.gcv<ExactEDF>();
     ScalarField<1, decltype(GCV)> obj(GCV);
     std::vector<SVector<1>> lambdas;
     for (double x = -3.0; x <= 3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
@@ -166,8 +164,8 @@ TEST(gcv_srpde_test, laplacian_semiparametric_samplingatlocations_gridexact) {
     opt.optimize(obj, lambdas);
     SVector<1> best_lambda = opt.optimum();
     // test correctness
-    EXPECT_TRUE(almost_equal(GCV.edfs(),   "../data/models/gcv/2D_test3/edfs.mtx"));
-    EXPECT_TRUE(almost_equal(GCV.values(), "../data/models/gcv/2D_test3/gcvs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test3/edfs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test3/gcvs.mtx"));
 }
 
 // test 4
@@ -200,7 +198,7 @@ TEST(gcv_srpde_test, laplacian_semiparametric_samplingatlocations_gridstochastic
     model.init();
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 66546513;
-    GCV<decltype(model), StochasticEDF<decltype(model)>> GCV(model, 100, seed);
+    auto GCV = model.gcv<StochasticEDF>(100, seed);
     ScalarField<1, decltype(GCV)> obj(GCV);
     std::vector<SVector<1>> lambdas;
     for (double x = -3.0; x <= 3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
@@ -209,8 +207,8 @@ TEST(gcv_srpde_test, laplacian_semiparametric_samplingatlocations_gridstochastic
     opt.optimize(obj, lambdas);
     SVector<1> best_lambda = opt.optimum();
     // test correctness
-    EXPECT_TRUE(almost_equal(GCV.edfs(),   "../data/models/gcv/2D_test4/edfs.mtx"));
-    EXPECT_TRUE(almost_equal(GCV.values(), "../data/models/gcv/2D_test4/gcvs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test4/edfs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test4/gcvs.mtx"));
 }
 
 // test 5
@@ -240,7 +238,7 @@ TEST(gcv_srpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridex
     model.set_data(df);
     model.init();
     // define GCV function and grid of \lambda_D values
-    GCV<decltype(model), ExactEDF<decltype(model)>> GCV(model);
+    auto GCV = model.gcv<ExactEDF>();
     ScalarField<1, decltype(GCV)> obj(GCV);
     std::vector<SVector<1>> lambdas;
     for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
@@ -249,8 +247,8 @@ TEST(gcv_srpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridex
     opt.optimize(obj, lambdas);   // optimize gcv field
     SVector<1> best_lambda = opt.optimum();
     // test correctness
-    EXPECT_TRUE(almost_equal(GCV.edfs(),   "../data/models/gcv/2D_test5/edfs.mtx"));
-    EXPECT_TRUE(almost_equal(GCV.values(), "../data/models/gcv/2D_test5/gcvs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test5/edfs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test5/gcvs.mtx"));
 }
 
 // test 6
@@ -281,7 +279,7 @@ TEST(gcv_srpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridst
     model.init();
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 4564168;
-    GCV<decltype(model), StochasticEDF<decltype(model)>> GCV(model, 100, seed);
+    auto GCV = model.gcv<StochasticEDF>(100, seed);
     ScalarField<1, decltype(GCV)> obj(GCV);
     std::vector<SVector<1>> lambdas;
     for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
@@ -290,8 +288,8 @@ TEST(gcv_srpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridst
     opt.optimize(obj, lambdas);   // optimize gcv field
     SVector<1> best_lambda = opt.optimum();
     // test correctness
-    EXPECT_TRUE(almost_equal(GCV.edfs(),   "../data/models/gcv/2D_test6/edfs.mtx"));
-    EXPECT_TRUE(almost_equal(GCV.values(), "../data/models/gcv/2D_test6/gcvs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test6/edfs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test6/gcvs.mtx"));
 }
 
 // test 7
@@ -326,7 +324,7 @@ TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_gride
     model.set_data(df);
     model.init();
     // define GCV function and grid of \lambda_D values
-    GCV<decltype(model), ExactEDF<decltype(model)>> GCV(model);
+    auto GCV = model.gcv<ExactEDF>();
     ScalarField<1, decltype(GCV)> obj(GCV);
     std::vector<SVector<1>> lambdas;
     for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
@@ -335,8 +333,8 @@ TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_gride
     opt.optimize(obj, lambdas);   // optimize gcv field
     SVector<1> best_lambda = opt.optimum();
     // test correctness
-    EXPECT_TRUE(almost_equal(GCV.edfs(),   "../data/models/gcv/2D_test7/edfs.mtx"));
-    EXPECT_TRUE(almost_equal(GCV.values(), "../data/models/gcv/2D_test7/gcvs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test7/edfs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test7/gcvs.mtx"));
 }
 
 // test 8
@@ -372,7 +370,7 @@ TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_grids
     model.init();
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 438172;
-    GCV<decltype(model), StochasticEDF<decltype(model)>> GCV(model, 100, seed);
+    auto GCV = model.gcv<StochasticEDF>(100, seed);
     ScalarField<1, decltype(GCV)> obj(GCV);
     std::vector<SVector<1>> lambdas;
     for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
@@ -381,6 +379,6 @@ TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_grids
     opt.optimize(obj, lambdas);
     SVector<1> best_lambda = opt.optimum();
     // test correctness
-    EXPECT_TRUE(almost_equal(GCV.edfs(),   "../data/models/gcv/2D_test8/edfs.mtx"));
-    EXPECT_TRUE(almost_equal(GCV.values(), "../data/models/gcv/2D_test8/gcvs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test8/edfs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test8/gcvs.mtx"));
 }

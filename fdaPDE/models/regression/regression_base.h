@@ -25,6 +25,8 @@
 #include "../space_time_separable_base.h"
 #include "../space_time_parabolic_base.h"
 #include "../sampling_design.h"
+#include "gcv.h"
+#include "stochastic_edf.h"
 
 namespace fdapde {
 namespace models {
@@ -37,6 +39,7 @@ class RegressionBase :
    protected:
     DiagMatrix<double> W_ {};   // diagonal matrix of weights (implements possible heteroscedasticity)
     DMatrix<double> XtWX_ {};   // q x q dense matrix X^T*W*X
+    DMatrix<double> T_ {};      // T = \Psi^T*Q*\Psi + P (required by GCV)
     Eigen::PartialPivLU<DMatrix<double>> invXtWX_ {};   // factorization of the dense q x q matrix XtWX_.
 
     // matrices required for Woodbury decomposition
@@ -59,9 +62,10 @@ class RegressionBase :
     using Base::idx;           // indices of observations
     using Base::n_basis;       // number of basis function over domain D
     using Base::pde_;          // differential operator L
+    using Base::P;             // discretized penalty matrix
     using SamplingBase::D;     // matrix of subdomains measures (for areal sampling)
     using SamplingBase::Psi;   // matrix of spatial basis evaluation at locations p_1 ... p_n
-
+  
     RegressionBase() = default;
     // space-only constructor
     template <
@@ -107,6 +111,12 @@ class RegressionBase :
     bool has_nan() const { return nan_idxs_.size() != 0; }           // true if there are missing data
     DMatrix<double> lmbQ(const DMatrix<double>& x) const;            // efficient multiplication by matrix Q
     DMatrix<double> fitted() const;   // computes fitted values \hat y = \Psi*f_ + X*beta_
+    // GCV support
+    template <template <typename> typename trS_evaluation_strategy, typename... Args>
+    GCV<Model, trS_evaluation_strategy<Model>> gcv(Args&&... args) {
+      return GCV<Model, trS_evaluation_strategy<Model>>(Base::model(), std::forward<Args>(args)...);
+    }
+    const DMatrix<double>& T();
 
     // initialization methods
     void update_data();   // update model's status to data (called by ModelBase::setData())
@@ -152,6 +162,16 @@ template <typename Model> DMatrix<double> RegressionBase<Model>::fitted() const 
     return hat_y;
 }
 
+// computes and returns matrix T = \Psi^T*Q*\Psi + P, with P penalty matrix depending on the regularization type
+template <typename Model> const DMatrix<double>& RegressionBase<Model>::T() {
+    if (!has_covariates()) {   // case without covariates, Q = I
+        T_ = PsiTD() * W() * Psi() + P();
+    } else {
+        T_ = PsiTD() * lmbQ(Psi()) + P();
+    }
+    return T_;
+}
+  
 // missing data logic
 template <typename Model> void RegressionBase<Model>::init_nan() {
     // derive missingness pattern
