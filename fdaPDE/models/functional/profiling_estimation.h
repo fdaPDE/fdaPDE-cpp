@@ -20,14 +20,14 @@
 #include <Eigen/SVD>
 #include <fdaPDE/utils.h>
 
-#include "../../calibration/gcv.h"
-#include "../../calibration/stochastic_edf.h"
+#include "../regression/gcv.h"
+#include "../regression/stochastic_edf.h"
 #include "../model_traits.h"
 #include "../regression/srpde.h"
 #include "../regression/strpde.h"
 #include "../sampling_design.h"
-using fdapde::calibration::GCV;
-using fdapde::calibration::StochasticEDF;
+using fdapde::models::GCV;
+using fdapde::models::StochasticEDF;
 
 namespace fdapde {
 namespace models {

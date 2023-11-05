@@ -14,10 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __FDAPDE_H__
-#define __FDAPDE_H__
+#ifndef __FDAPDE_FUNCTIONAL_H__
+#define __FDAPDE_FUNCTIONAL_H__
 
-#include "core/fdaPDE/core.h"
-#include "models.h"
 
-#endif // __FDAPDE_H__
+#endif // __FDAPDE_FUNCTIONAL_H__
