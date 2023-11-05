@@ -45,6 +45,7 @@ template <typename Model, typename Solver> class SpaceTimeParabolicBase;   // sp
 
 // empty classes for tagging regularization types
 struct SpaceOnly { };
+struct SpaceTime { };   // generic space-time tag
 struct SpaceTimeSeparable { };
 struct SpaceTimeParabolic { };
 

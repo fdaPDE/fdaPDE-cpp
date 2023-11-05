@@ -34,41 +34,48 @@ using fdapde::models::SpaceOnly;
 namespace fdapde {
 namespace models {
 
+// a type erased concept of Generalized Cross Validation
+template <int N> struct GCVConcept {
+    using ScalarType = double;
+    using VectorType = typename static_dynamic_vector_selector<N>::type;
+    using MatrixType = typename static_dynamic_matrix_selector<N, N>::type;
+    using GradientType = std::function<VectorType(VectorType)>;
+    using HessianType = std::function<MatrixType(VectorType)>;
+    template <typename T>
+    using fn_ptrs = fdapde::mem_fn_ptrs<
+      static_cast<double (T::*)(const VectorType&)>(&T::operator()), &T::derive, &T::derive_twice,
+      &T::edfs, &T::gcvs>;   // getters
+
+    // forwardings
+    ScalarType operator()(const VectorType& p) { return fdapde::invoke<ScalarType, 0>(*this, p); }
+    GradientType derive() const { return fdapde::invoke<GradientType, 1>(*this); }
+    HessianType derive_twice() const { return fdapde::invoke<HessianType, 2>(*this); }
+    const std::vector<double>& edfs() const { return fdapde::invoke<const std::vector<double>&, 3>(*this); }
+    const std::vector<double>& gcvs() const { return fdapde::invoke<const std::vector<double>&, 4>(*this); }
+};
+template <int N> using __GCV = fdapde::erase<GCVConcept<N>>;
+
 // base functor implementing the expression of GCV index for model M. Use type T for evaluation of the expected degrees
 // of freedoms
-template <typename M, typename trS_evaluation_strategy = StochasticEDF<M>> class GCV {
-   protected:
-    // cache computed values, use pointers to let shallow-copy (optimizers need to access those members)
-    typedef std::shared_ptr<std::vector<double>> vect_ptr;
-    vect_ptr edfs_ = std::make_shared<std::vector<double>>();
-    vect_ptr gcvs_ = std::make_shared<std::vector<double>>();
-
+template <typename M, template <typename> typename trS_evaluation_strategy_ = StochasticEDF> class GCV {
+   public:
+    using This = GCV<M, trS_evaluation_strategy_>;
+    using trS_evaluation_strategy = trS_evaluation_strategy_<M>;
+    using VectorType = SVector<model_traits<M>::n_lambda>;
+    using MatrixType = SMatrix<model_traits<M>::n_lambda>;
     M& model_;                      // model to calibrate
     trS_evaluation_strategy trS_;   // strategy used to evaluate the trace of smoothing matrix S
-
+    std::vector<double> edfs_;      // equivalent degrees of freedom q + Tr[S]
+    std::vector<double> gcvs_;      // computed values of GCV index
     // cache pairs (lambda, Tr[S]) for fast access if GCV is queried at an already computed point
-    std::map<SVector<model_traits<M>::n_lambda>, double, fdapde::s_vector_compare<model_traits<M>::n_lambda>> cache_;
-   public:
-    // SFINAE selection of constructor depending on trace evaluation strategy
-    template <
-      typename U = trS_evaluation_strategy,   // fake type to enable substitution
-      typename std::enable_if<!std::is_same<U, StochasticEDF<M>>::value, int>::type = 0>
-    GCV(M& model) : model_(model), trS_(model) {};
-    // constructor overloads for stochastic trace approximation
-    template <
-      typename U = trS_evaluation_strategy,
-      typename std::enable_if<std::is_same<U, StochasticEDF<M>>::value, int>::type = 0>
-    GCV(M& model, std::size_t r) : model_(model), trS_(model, r) {};
-    template <
-      typename U = trS_evaluation_strategy,
-      typename std::enable_if<std::is_same<U, StochasticEDF<M>>::value, int>::type = 0>
-    GCV(M& model, std::size_t r, std::size_t seed) : model_(model), trS_(model, r, seed) {};
+    std::map<VectorType, double, fdapde::s_vector_compare<model_traits<M>::n_lambda>> cache_;
 
     // analytical expression of gcv at \lambda
     //
     // edf = n - (q + Tr[S])
     // GCV(\lambda) = n/(edf^2)*norm(y - \hat y)^2
-    double operator()(const SVector<model_traits<M>::n_lambda>& lambda) {
+    ScalarField<model_traits<M>::n_lambda, double (This::*)(const VectorType&)> gcv_;
+    double gcv_impl(const VectorType& lambda) {
         // fit the model given current lambda
         model_.set_lambda(lambda);
         model_.init_model();
@@ -79,32 +86,51 @@ template <typename M, typename trS_evaluation_strategy = StochasticEDF<M>> class
         double q = model_.q();            // number of covariates
         std::size_t n = model_.n_obs();   // number of observations
         double dor = n - (q + trS);       // residual degrees of freedom
-        edfs_->emplace_back(q + trS);     // store equivalent degrees of freedom
-
+        edfs_.emplace_back(q + trS);      // store equivalent degrees of freedom
         // return gcv at point
         double gcv_value = (n / std::pow(dor, 2)) * (model_.norm(model_.fitted(), model_.y()));
-        gcvs_->emplace_back(gcv_value);
+        gcvs_.emplace_back(gcv_value);
         return gcv_value;
     }
+   public:
+    // SFINAE selection of constructor depending on trace evaluation strategy
+    template <
+      typename U = trS_evaluation_strategy,   // fake type to enable substitution
+      typename std::enable_if<!std::is_same<U, StochasticEDF<M>>::value, int>::type = 0>
+    GCV(M& model) : model_(model), trS_(model), gcv_(this, &This::gcv_impl) {};
+    // constructor overloads for stochastic trace approximation
+    template <
+      typename U = trS_evaluation_strategy,
+      typename std::enable_if<std::is_same<U, StochasticEDF<M>>::value, int>::type = 0>
+    GCV(M& model, std::size_t r) : model_(model), trS_(model, r), gcv_(this, &This::gcv_impl) {};
+    template <
+      typename U = trS_evaluation_strategy,
+      typename std::enable_if<std::is_same<U, StochasticEDF<M>>::value, int>::type = 0>
+    GCV(M& model, std::size_t r, std::size_t seed) :
+        model_(model), trS_(model, r, seed), gcv_(this, &This::gcv_impl) {};
+    GCV(const GCV& other) : model_(other.model_), trS_(other.trS_), gcv_(this, &This::gcv_impl) { };
+  
+    // call operator and numerical derivative approximations
+    double operator()(const VectorType& lambda) { return gcv_(lambda); }
+    std::function<VectorType(const VectorType&)> derive() const { return gcv_.derive(); }
+    std::function<MatrixType(const VectorType&)> derive_twice() const { return gcv_.derive_twice(); }
 
-    // returns GCV index of Model in its current state (assume Model already solved)
+    // returns GCV index of Model in its current state
     double eval() {
-        // compute equivalent degrees of freedom given current lambda (if not already cached)
         if (cache_.find(model_.lambda()) == cache_.end()) { cache_[model_.lambda()] = trS_.compute(); }
         double trS = cache_[model_.lambda()];
-
         // GCV(\lambda) = n/((n - (q + Tr[S]))^2)*norm(y - \hat y)^2
         double dor = model_.n_obs() - (model_.q() + trS);   // (n - (q + Tr[S])
         return (model_.n_obs() / std::pow(dor, 2)) * (model_.norm(model_.fitted(), model_.y()));
     }
 
     // getters
-    const std::vector<double>& edfs() const { return *edfs_; }   // equivalent degrees of freedom q + Tr[S]
-    const std::vector<double>& gcvs() const { return *gcvs_; }   // computed values of GCV index
+    const std::vector<double>& edfs() const { return edfs_; }   // equivalent degrees of freedom q + Tr[S]
+    const std::vector<double>& gcvs() const { return gcvs_; }   // computed values of GCV index
 };
 
-template <typename M, typename trS_evaluation_strategy = StochasticEDF<M>>
-using FiniteDifferenceGCV = GCV<M, trS_evaluation_strategy>;
+template <typename M, template <typename> typename trS_evaluation_strategy_ = StochasticEDF>
+using FiniteDifferenceGCV = GCV<M, trS_evaluation_strategy_>;
 
 // provides the analytical expresssion of GCV gradient and hessian, for newton-like optimization methods
 template <typename M, typename RegularizationType> class ExactGCV;
@@ -114,10 +140,10 @@ template <typename M, typename RegularizationType> class ExactGCV;
 //    edf = n - (q + Tr[S])
 //    dGCV(\lambda)  = \frac{2n}{edf^2}[ \sigma^2 * Tr[dS] + a ]
 //    ddGCV(\lambda) = \frac{2n}{edf^2}[ \frac{1}{edf}(3*\sigma^2*Tr[dS] + 4*a)*Tr[dS] + \sigma^2*Tr[ddS] + b ]
-template <typename M> class ExactGCV<M, SpaceOnly> : public GCV<M, ExactEDF<M>> {
+template <typename M> class ExactGCV<M, SpaceOnly> : public GCV<M, ExactEDF> {
    private:
-    using GCV<M, ExactEDF<M>>::model_;
-    using GCV<M, ExactEDF<M>>::trS_;
+    using GCV<M, ExactEDF>::model_;
+    using GCV<M, ExactEDF>::trS_;
     DMatrix<double> L_;     // T^{-1}*R
     DMatrix<double> F_;     // (T^{-1}*R)*(T^{-1}*E)
     DVector<double> h_;     // h = (\lambda*L - I)*T^{-1}*R1^T*R0^{-1}*u
@@ -177,8 +203,7 @@ template <typename M> class ExactGCV<M, SpaceOnly> : public GCV<M, ExactEDF<M>> 
         return ((model_.y() - model_.fitted()).transpose() * (-ddS_ * model_.y() - D)).coeff(0, 0) + p_.dot(Qp_);
     }
    public:
-    // constructor
-    ExactGCV(M& model) : GCV<M, ExactEDF<M>>(model) {};
+    ExactGCV(M& model) : GCV<M, ExactEDF>(model) {};
 
     // analytical expression of GCV first derivative
     //

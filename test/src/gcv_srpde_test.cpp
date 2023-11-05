@@ -75,13 +75,11 @@ TEST(gcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridexact
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    ScalarField<1, decltype(GCV)> obj(GCV);
     std::vector<SVector<1>> lambdas;
     for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
     Grid<1> opt;
-    opt.optimize(obj, lambdas);
-    SVector<1> best_lambda = opt.optimum();
+    opt.optimize(GCV, lambdas);
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test1/edfs.mtx"));
     EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test1/gcvs.mtx"));
@@ -114,13 +112,11 @@ TEST(gcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridstoch
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 476813;
     auto GCV = model.gcv<StochasticEDF>(100, seed);
-    ScalarField<1, decltype(GCV)> obj(GCV);
     std::vector<SVector<1>> lambdas;
     for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
     Grid<1> opt;
-    opt.optimize(obj, lambdas);
-    SVector<1> best_lambda = opt.optimum();
+    opt.optimize(GCV, lambdas);
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test2/edfs.mtx"));
     EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test2/gcvs.mtx"));
@@ -156,13 +152,11 @@ TEST(gcv_srpde_test, laplacian_semiparametric_samplingatlocations_gridexact) {
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    ScalarField<1, decltype(GCV)> obj(GCV);
     std::vector<SVector<1>> lambdas;
     for (double x = -3.0; x <= 3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
     Grid<1> opt;
-    opt.optimize(obj, lambdas);
-    SVector<1> best_lambda = opt.optimum();
+    opt.optimize(GCV, lambdas);
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test3/edfs.mtx"));
     EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test3/gcvs.mtx"));
@@ -199,13 +193,11 @@ TEST(gcv_srpde_test, laplacian_semiparametric_samplingatlocations_gridstochastic
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 66546513;
     auto GCV = model.gcv<StochasticEDF>(100, seed);
-    ScalarField<1, decltype(GCV)> obj(GCV);
     std::vector<SVector<1>> lambdas;
     for (double x = -3.0; x <= 3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
     Grid<1> opt;
-    opt.optimize(obj, lambdas);
-    SVector<1> best_lambda = opt.optimum();
+    opt.optimize(GCV, lambdas);
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test4/edfs.mtx"));
     EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test4/gcvs.mtx"));
@@ -239,13 +231,11 @@ TEST(gcv_srpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridex
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    ScalarField<1, decltype(GCV)> obj(GCV);
     std::vector<SVector<1>> lambdas;
     for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
     Grid<1> opt;
-    opt.optimize(obj, lambdas);   // optimize gcv field
-    SVector<1> best_lambda = opt.optimum();
+    opt.optimize(GCV, lambdas);   // optimize gcv field
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test5/edfs.mtx"));
     EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test5/gcvs.mtx"));
@@ -280,13 +270,11 @@ TEST(gcv_srpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridst
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 4564168;
     auto GCV = model.gcv<StochasticEDF>(100, seed);
-    ScalarField<1, decltype(GCV)> obj(GCV);
     std::vector<SVector<1>> lambdas;
     for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
     Grid<1> opt;
-    opt.optimize(obj, lambdas);   // optimize gcv field
-    SVector<1> best_lambda = opt.optimum();
+    opt.optimize(GCV, lambdas);   // optimize gcv field
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test6/edfs.mtx"));
     EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test6/gcvs.mtx"));
@@ -325,13 +313,11 @@ TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_gride
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    ScalarField<1, decltype(GCV)> obj(GCV);
     std::vector<SVector<1>> lambdas;
     for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
     Grid<1> opt;
-    opt.optimize(obj, lambdas);   // optimize gcv field
-    SVector<1> best_lambda = opt.optimum();
+    opt.optimize(GCV, lambdas);   // optimize gcv field
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test7/edfs.mtx"));
     EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test7/gcvs.mtx"));
@@ -371,13 +357,11 @@ TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_grids
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 438172;
     auto GCV = model.gcv<StochasticEDF>(100, seed);
-    ScalarField<1, decltype(GCV)> obj(GCV);
     std::vector<SVector<1>> lambdas;
     for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
     Grid<1> opt;
-    opt.optimize(obj, lambdas);
-    SVector<1> best_lambda = opt.optimum();
+    opt.optimize(GCV, lambdas);
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test8/edfs.mtx"));
     EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test8/gcvs.mtx"));

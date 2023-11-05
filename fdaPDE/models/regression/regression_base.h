@@ -112,11 +112,14 @@ class RegressionBase :
     DMatrix<double> lmbQ(const DMatrix<double>& x) const;            // efficient multiplication by matrix Q
     DMatrix<double> fitted() const;   // computes fitted values \hat y = \Psi*f_ + X*beta_
     // GCV support
-    template <template <typename> typename trS_evaluation_strategy, typename... Args>
-    GCV<Model, trS_evaluation_strategy<Model>> gcv(Args&&... args) {
-      return GCV<Model, trS_evaluation_strategy<Model>>(Base::model(), std::forward<Args>(args)...);
+    template <template <typename> typename edf_evaluation_strategy, typename... Args>
+    __GCV<model_traits<Model>::n_lambda> gcv(Args&&... args) {
+      return GCV<Model, edf_evaluation_strategy>(Base::model(), std::forward<Args>(args)...);
     }
-    const DMatrix<double>& T();
+    const DMatrix<double>& T() {   // T = \Psi^T*Q*\Psi + P
+        T_ = PsiTD() * lmbQ(Psi()) + P();
+        return T_;
+    }
 
     // initialization methods
     void update_data();   // update model's status to data (called by ModelBase::setData())
@@ -162,16 +165,6 @@ template <typename Model> DMatrix<double> RegressionBase<Model>::fitted() const 
     return hat_y;
 }
 
-// computes and returns matrix T = \Psi^T*Q*\Psi + P, with P penalty matrix depending on the regularization type
-template <typename Model> const DMatrix<double>& RegressionBase<Model>::T() {
-    if (!has_covariates()) {   // case without covariates, Q = I
-        T_ = PsiTD() * W() * Psi() + P();
-    } else {
-        T_ = PsiTD() * lmbQ(Psi()) + P();
-    }
-    return T_;
-}
-  
 // missing data logic
 template <typename Model> void RegressionBase<Model>::init_nan() {
     // derive missingness pattern
