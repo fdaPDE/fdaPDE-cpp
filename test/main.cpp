@@ -8,11 +8,13 @@
 #include "src/strpde_test.cpp"
 #include "src/gsrpde_test.cpp"
 #include "src/sqrpde_test.cpp"
+#include "src/msqrpde_test.cpp"
 #include "src/fpca_test.cpp"
 #include "src/sqrpde_time_test.cpp"
 // GCV test suites
 #include "src/gcv_srpde_test.cpp"
 #include "src/gcv_sqrpde_test.cpp"
+#include "src/gcv_msqrpde_test.cpp"
 #include "src/gcv_sqrpde_time_test.cpp"
 // #include "calibration/GCVNewtonTest.cpp"
 
