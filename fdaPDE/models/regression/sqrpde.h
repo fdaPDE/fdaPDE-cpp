@@ -17,6 +17,9 @@
 #ifndef __SQRPDE_H__
 #define __SQRPDE_H__
 
+#include <memory>
+#include <type_traits>
+
 #include <fdaPDE/pde.h>
 #include <fdaPDE/utils.h>
 using fdapde::core::PDEBase;
@@ -28,6 +31,7 @@ using fdapde::core::PDEBase;
 #include "distributions.h"
 #include "fpirls.h"
 #include "regression_base.h"
+
 
 namespace fdapde {
 namespace models {
@@ -53,15 +57,23 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
    public:
     IMPORT_REGRESSION_SYMBOLS;
     using Base::invXtWX_;
-    using Base::lambda_D;   // smoothing parameter in space
-    using Base::n_basis;    // number of spatial basis
-    using Base::P;          // discretized penalty matrix: P = \lambda_D*(R1^T*R0^{-1}*R1)
-    using Base::W_;         // weight matrix
+    using Base::lambda_D;            // smoothing parameter in space
+    // using Base::lambda_T;            // smoothing parameter in time
+    using Base::n_basis;             // number of spatial basis
+    // using Base::n_temporal_basis;    // number of temporal basis
+    using Base::P;                   // discretized penalty matrix: P = \lambda_D*(R1^T*R0^{-1}*R1)
+    using Base::W_;                  // weight matrix
     using Base::XtWX_;
     // constructor
     SQRPDE() = default;
     // space-only constructor
-    SQRPDE(const PDE& pde, double alpha = 0.5) : Base(pde), alpha_(alpha) {};
+    template <
+      typename U = RegularizationType, typename std::enable_if<std::is_same<U, SpaceOnly>::value, int>::type = 0>
+    SQRPDE(const PDE& pde, double alpha = 0.5) : Base(pde), alpha_(alpha) {}; 
+    // space-time constructor
+    template <
+      typename U = RegularizationType, typename std::enable_if<!std::is_same<U, SpaceOnly>::value, int>::type = 0>
+    SQRPDE(const PDE& pde, const DVector<double>& time, double alpha = 0.5) : Base(pde, time), alpha_(alpha) {};
 
     // setter
     void set_fpirls_tolerance(double tol) { tol_ = tol; }
@@ -77,18 +89,81 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
     // initalizes mean vector \mu
     void fpirls_init() {
         // non-parametric and semi-parametric cases coincide here, since beta^(0) = 0
-        // assemble srpde non-parametric system matrix and factorize
-        SparseBlockMatrix<double, 2, 2> A(
-          PsiTD() * Psi() / n_obs(), 2 * lambda_D() * R1().transpose(), lambda_D() * R1(), -lambda_D() * R0());
-        fdapde::SparseLU<SpMatrix<double>> invA;
-        invA.compute(A);
-        // assemble rhs of srpde problem
-        DVector<double> b(A.rows());
-        b.block(n_basis(), 0, n_basis(), 1) = lambda_D() * u();
-        b.block(0, 0, n_basis(), 1) = PsiTD() * y() / n_obs();
 
-        mu_ = Psi(not_nan()) * (invA.solve(b)).head(n_basis());
+        if constexpr(std::is_same<RegularizationType, SpaceOnly>::value){
+            // assemble srpde non-parametric system matrix and factorize
+            SparseBlockMatrix<double, 2, 2> A(
+            PsiTD() * Psi() / n_obs(), 2 * lambda_D() * R1().transpose(), lambda_D() * R1(), -lambda_D() * R0());
+            fdapde::SparseLU<SpMatrix<double>> invA;
+            invA.compute(A);
+            // assemble rhs of srpde problem
+            DVector<double> b(A.rows());
+            b.block(n_basis(), 0, n_basis(), 1) = lambda_D() * u();
+            b.block(0, 0, n_basis(), 1) = PsiTD() * y() / n_obs();
+
+            mu_ = Psi(not_nan()) * (invA.solve(b)).head(n_basis());
+
+        }
+
+        else{
+            // if constexpr(std::is_same<RegularizationType, SpaceTimeSeparable>::value){  // commentato perchè per ora considero solo Seèarable per il caso SpaceTime
+            SparseBlockMatrix<double,2,2>
+                A(PsiTD()*Psi()/n_obs() - Base::lambda_T()*Kronecker(Base::P1(), pde().R0()), 2*lambda_D()*R1().transpose(),
+                  lambda_D()*R1(),                                                       -lambda_D()*R0()             );
+                
+                // cache non-parametric matrix and its factorization for reuse 
+                fdapde::SparseLU<SpMatrix<double>> invA;
+                invA.compute(A);
+                // assemble rhs of srpde problem
+                DVector<double> b(A.rows());
+
+                b.block(Base::n_temporal_basis()*n_basis(),0, Base::n_temporal_basis()*n_basis(),1) = lambda_D()*u();  
+                b.block(0,0, Base::n_temporal_basis()*n_basis(),1) = PsiTD()*y()/n_obs(); 
+                BLOCK_FRAME_SANITY_CHECKS;
+                mu_ = Psi(not_nan()) * (invA.solve(b)).head(Base::n_temporal_basis()*n_basis());  
+            // }
+
+            // if constexpr(std::is_same<RegularizationType, SpaceTimeParabolic>::value){
+
+            //     if constexpr(std::is_same<Solver, MonolithicSolver>::value){
+            //         SparseBlockMatrix<double,2,2> 
+            //         A(PsiTD()*Psi()/n_obs(),                                              2*lambda_D()*(R1() + Base::lambda_T()*Kronecker(Base::L(), pde().R0())).transpose(),
+            //             lambda_D()*(R1() + Base::lambda_T()*Kronecker(Base::L(), pde().R0())), -lambda_D()*R0());
+
+            //         fdapde::SparseLU<SpMatrix<double>> invA;
+            //         invA.compute(A);
+            //         // assemble rhs of srpde problem
+            //         DVector<double> b(A.rows());        
+            //         b.block(Base::n_temporal_locs()*n_basis(),0, Base::n_temporal_locs()*n_basis(),1) = lambdaS()*u();  
+            //         b.block(0,0, Base::n_temporal_locs()*n_basis(),1) = PsiTD()*y()/n_obs(); 
+            //         BLOCK_FRAME_SANITY_CHECKS;
+            //         mu_ = Psi(not_nan()) * (invA.solve(b)).head(Base::n_temporal_locs()*n_basis());    
+
+            //     } 
+            //     else{
+
+            //         SparseBlockMatrix<double,2,2> 
+            //         A(PsiTD()*Psi()/n_obs(), 2*lambda_D()*R1(),
+            //                 lambda_D()*R1(),         -lambda_D()*R0());       
+
+            //         fdapde::SparseLU<SpMatrix<double>> invA;
+            //         invA.compute(A);
+            //         // assemble rhs of srpde problem
+            //         DVector<double> b(A.rows());        
+            //         // DVector<double> u_init; 
+            //         // u_init.resize(Base::n_temporal_locs()Base::n_basis());
+            //         // for(unsigned int i = 0; i < Base::n_temporal_locs(); ++i)
+            //         //   u_init.block(0,0, model().n_basis(),1) = u(i); 
+
+            //         b.block(n_basis(),0, n_basis(),1) = DVector<double>::Zero(n_basis()); //lambdaS()*u();  
+            //         b.block(0,0, n_basis(),1) = PsiTD()*y()/n_obs(); 
+            //         BLOCK_FRAME_SANITY_CHECKS; 
+            //         mu_ = Psi(not_nan()) * (invA.solve(b)).head(Base::n_temporal_locs()*n_basis()); 
+                            
+            //     } 
     }
+  }
+    
     // computes W^k = diag(1/(2*n*|y - X*beta - f|)) and y^k = y - (1-2*alpha)|y - X*beta - f|
     void fpirls_pre_solve_step() {
         DVector<double> abs_res = (y() - mu_).array().abs();
@@ -118,13 +193,25 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
     virtual ~SQRPDE() = default;
 };
 
-template <typename PDE_, typename RegularizationType_, typename SamplingDesign_, typename Solver_>
+
+template <
+  typename PDE_, typename RegularizationType_, typename SamplingDesign_, typename Solver_>
 struct model_traits<SQRPDE<PDE_, RegularizationType_, SamplingDesign_, Solver_>> {
     typedef PDE_ PDE;
-    typedef SpaceOnly regularization;
+    typedef RegularizationType_ regularization;
     typedef SamplingDesign_ sampling;
-    typedef MonolithicSolver solver;
-    enum { N = PDE::N, M = PDE::M, n_lambda = 1 };
+    typedef Solver_ solver;
+    enum { N = PDE::N, M = PDE::M, n_lambda = n_smoothing_parameters<RegularizationType_>::value };
+};
+// specialization for separable regularization
+template <typename PDE_, typename SamplingDesign_, typename Solver_>
+struct model_traits<SQRPDE<PDE_, fdapde::models::SpaceTimeSeparable, SamplingDesign_, Solver_>> {
+    typedef PDE_ PDE;
+    typedef fdapde::models::SpaceTimeSeparable regularization;
+    typedef SplineBasis<3> TimeBasis;   // use cubic B-splines
+    typedef SamplingDesign_ sampling;
+    typedef Solver_ solver;
+    enum { N = PDE::N, M = PDE::M, n_lambda = 2 };
 };
 
 // finds a solution to the SQR-PDE smoothing problem

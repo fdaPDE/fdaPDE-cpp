@@ -127,8 +127,8 @@ template <typename Model> class SpaceTimeSeparableBase<Model, MonolithicSolver> 
         if (is_empty(P_D_)) {   // compute once and cache result
             fdapde::SparseLU<SpMatrix<double>> invR0_;
             invR0_.compute(pde_->R0());
-            P_D_ = Kronecker(pde_->R1().transpose() * invR0_.solve(pde_->R1()), P0_);   // (R1^T*R0^{-1}*R1) \kron P0
-            P_T_ = Kronecker(pde_->R0(), P1_);                                          // (R0 \kron P1)
+            P_D_ = Kronecker(P0_, pde_->R1().transpose() * invR0_.solve(pde_->R1()));   // (R1^T*R0^{-1}*R1) \kron P0
+            P_T_ = Kronecker(P1_, pde_->R0());                                          // (R0 \kron P1)
         }
         return lambda_D() * P_D_ + lambda_T() * P_T_;
     }
