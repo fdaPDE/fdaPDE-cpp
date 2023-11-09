@@ -93,13 +93,13 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
         if constexpr(std::is_same<RegularizationType, SpaceOnly>::value){
             // assemble srpde non-parametric system matrix and factorize
             SparseBlockMatrix<double, 2, 2> A(
-            PsiTD() * Psi() / n_obs(), 2 * lambda_D() * R1().transpose(), lambda_D() * R1(), -lambda_D() * R0());
+            - PsiTD() * Psi() / (2*n_obs()), lambda_D() * R1().transpose(), lambda_D() * R1(), lambda_D() * R0());
             fdapde::SparseLU<SpMatrix<double>> invA;
             invA.compute(A);
             // assemble rhs of srpde problem
             DVector<double> b(A.rows());
             b.block(n_basis(), 0, n_basis(), 1) = lambda_D() * u();
-            b.block(0, 0, n_basis(), 1) = PsiTD() * y() / n_obs();
+            b.block(0, 0, n_basis(), 1) = - PsiTD() * y() / (2*n_obs());
 
             mu_ = Psi(not_nan()) * (invA.solve(b)).head(n_basis());
 
@@ -108,19 +108,18 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
         else{
             // if constexpr(std::is_same<RegularizationType, SpaceTimeSeparable>::value){  // commentato perchè per ora considero solo Seèarable per il caso SpaceTime
             SparseBlockMatrix<double,2,2>
-                A(PsiTD()*Psi()/n_obs() - Base::lambda_T()*Kronecker(Base::P1(), pde().R0()), 2*lambda_D()*R1().transpose(),
-                  lambda_D()*R1(),                                                       -lambda_D()*R0()             );
+                A( - PsiTD()*Psi()/(2*n_obs()) - Base::lambda_T()*Kronecker(Base::P1(), pde().R0()), lambda_D()*R1().transpose(),
+                     lambda_D()*R1(),                                                                lambda_D()*R0()             );
                 
                 // cache non-parametric matrix and its factorization for reuse 
                 fdapde::SparseLU<SpMatrix<double>> invA;
                 invA.compute(A);
                 // assemble rhs of srpde problem
                 DVector<double> b(A.rows());
-
-                b.block(Base::n_temporal_basis()*n_basis(),0, Base::n_temporal_basis()*n_basis(),1) = lambda_D()*u();  
-                b.block(0,0, Base::n_temporal_basis()*n_basis(),1) = PsiTD()*y()/n_obs(); 
+                b.block(n_basis(),0, n_basis(),1) = lambda_D()*u();  
+                b.block(0,0, n_basis(),1) = - PsiTD()*y()/(2*n_obs()); 
                 BLOCK_FRAME_SANITY_CHECKS;
-                mu_ = Psi(not_nan()) * (invA.solve(b)).head(Base::n_temporal_basis()*n_basis());  
+                mu_ = Psi(not_nan()) * (invA.solve(b)).head(n_basis()); 
             // }
 
             // if constexpr(std::is_same<RegularizationType, SpaceTimeParabolic>::value){

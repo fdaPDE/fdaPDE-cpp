@@ -10,6 +10,6 @@ else
     cd build/
 fi
 
-cmake -Wno-dev ../CMakeLists.txt
+cmake -Wno-dev -H../ -B.
 make
 ./fdapde_test

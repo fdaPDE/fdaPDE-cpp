@@ -51,10 +51,10 @@ using fdapde::testing::read_csv;
 //    covariates:   no
 //    BC:           no
 //    order FE:     1
-TEST(sqrpde_test1, laplacian_nonparametric_samplingatnodes) {
+TEST(msqrpde_test1, laplacian_nonparametric_samplingatnodes) {
 
     // path test  
-    std::string C_path = "/mnt/c/Users/marco/PACS/Project/Code/Cpp/fdaPDE-fork/test/data/models/MSQRPDE/2D_test1"; 
+    std::string C_path = "/mnt/c/Users/marco/PACS/Project/Code/Cpp/fdaPDE-fork/test/data/models/msqrpde/2D_test1"; 
     std::string R_path = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/multiple_quantiles/Tests/Test_1"; 
 
     // define domain
@@ -70,7 +70,7 @@ TEST(sqrpde_test1, laplacian_nonparametric_samplingatnodes) {
     const std::string data_type = "hetero"; 
 
     // Simulations 
-    const unsigned int M = 10; 
+    const unsigned int M = 1; 
     for(auto m = 1; m <= M; ++m){
 
         MSQRPDE<decltype(problem), SpaceOnly, GeoStatMeshNodes, MonolithicSolver> model(problem, alphas);
@@ -78,7 +78,7 @@ TEST(sqrpde_test1, laplacian_nonparametric_samplingatnodes) {
         DMatrix<double> lambdas = read_csv<double>(R_path + "/data_" + data_type + "/sim_" + std::to_string(m) + "/single_est/lambdas_opt.csv");   // the vector should be saved with the "R format"
         model.setLambdas_D(lambdas);
         // load data from .csv files
-        DMatrix<double> y = read_csv<double>(R_path + "/data_" + data_type + "/sim_" + std::to_string(m) + "/y.csv"); 
+        DMatrix<double> y = read_csv<double>(R_path + "/data_" + data_type + "/sim_" + std::to_string(m) + "/z.csv"); 
 
         // set model data
         BlockFrame<double, int> df;
@@ -168,10 +168,10 @@ TEST(sqrpde_test1, laplacian_nonparametric_samplingatnodes) {
 //    covariates:   yes
 //    BC:           no
 //    order FE:     1
-TEST(sqrpde_test2, laplacian_semiparametric_samplingatnodes) {
+TEST(msqrpde_test2, laplacian_semiparametric_samplingatnodes) {
 
     // path test  
-    std::string C_path = "/mnt/c/Users/marco/PACS/Project/Code/Cpp/fdaPDE-fork/test/data/models/MSQRPDE/2D_test2"; 
+    std::string C_path = "/mnt/c/Users/marco/PACS/Project/Code/Cpp/fdaPDE-fork/test/data/models/msqrpde/2D_test2"; 
     std::string R_path = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/multiple_quantiles/Tests/Test_2"; 
 
     // define domain
@@ -190,7 +190,7 @@ TEST(sqrpde_test2, laplacian_semiparametric_samplingatnodes) {
     DMatrix<double> X = read_csv<double>(R_path + "/data_" + data_type + "/X.csv"); 
 
     // Simulations 
-    const unsigned int M = 10; 
+    const unsigned int M = 1; 
     for(auto m = 1; m <= M; ++m){
 
         std::cout << "--------------------Simulation #" << std::to_string(m) << "-------------" << std::endl; 
@@ -200,7 +200,7 @@ TEST(sqrpde_test2, laplacian_semiparametric_samplingatnodes) {
         DMatrix<double> lambdas = read_csv<double>(R_path + "/data_" + data_type + "/sim_" + std::to_string(m) + "/single_est/lambdas_opt.csv");   // the vector should be saved with the "R format"
         model.setLambdas_D(lambdas);
         // load data from .csv files
-        DMatrix<double> y = read_csv<double>(R_path + "/data_" + data_type + "/sim_" + std::to_string(m) + "/y.csv"); 
+        DMatrix<double> y = read_csv<double>(R_path + "/data_" + data_type + "/sim_" + std::to_string(m) + "/z.csv"); 
 
         // set model data
         BlockFrame<double, int> df;
@@ -238,10 +238,10 @@ TEST(sqrpde_test2, laplacian_semiparametric_samplingatnodes) {
 //    covariates:   yes
 //    BC:           no
 //    order FE:     1
-TEST(sqrpde_test3, laplacian_semiparametric_samplingatlocations) {
+TEST(msqrpde_test3, laplacian_semiparametric_samplingatlocations) {
 
     // path test  
-    std::string C_path = "/mnt/c/Users/marco/PACS/Project/Code/Cpp/fdaPDE-fork/test/data/models/MSQRPDE/2D_test3"; 
+    std::string C_path = "/mnt/c/Users/marco/PACS/Project/Code/Cpp/fdaPDE-fork/test/data/models/msqrpde/2D_test3"; 
     std::string R_path = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/multiple_quantiles/Tests/Test_3"; 
 
     // define domain
@@ -261,7 +261,7 @@ TEST(sqrpde_test3, laplacian_semiparametric_samplingatlocations) {
     DMatrix<double> loc = read_csv<double>(R_path + "/data_" + data_type + "/locs.csv"); 
 
     // Simulations 
-    const unsigned int M = 10; 
+    const unsigned int M = 1; 
     for(auto m = 1; m <= M; ++m){
 
         std::cout << "--------------------Simulation #" << std::to_string(m) << "-------------" << std::endl; 
@@ -274,7 +274,7 @@ TEST(sqrpde_test3, laplacian_semiparametric_samplingatlocations) {
         model.setLambdas_D(lambdas);
 
         // load data from .csv files
-        DMatrix<double> y = read_csv<double>(R_path + "/data_" + data_type + "/sim_" + std::to_string(m) + "/y.csv");
+        DMatrix<double> y = read_csv<double>(R_path + "/data_" + data_type + "/sim_" + std::to_string(m) + "/z.csv");
 
         // set model data
         BlockFrame<double, int> df;

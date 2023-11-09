@@ -21,12 +21,14 @@
 #include <fdaPDE/utils.h>
 using fdapde::core::PDEBase;
 
-#include "../model_base.h"
+#include "../model_base.h" 
 #include "../model_macros.h"
 #include "../model_traits.h"
 #include "../sampling_design.h"
 #include "distributions.h"
 #include "fpirls.h"
+#include "sqrpde.h"
+using fdapde::models::SQRPDE;
 #include "regression_base.h"
 
 namespace fdapde{
@@ -290,7 +292,7 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
         return;
     }
 
-    // finds a solution to the SR-PDE smoothing problem
+    // finds a solution 
     template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
         void MSQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::solve() {
 
@@ -307,7 +309,6 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
 
         double crossing_penalty_init = crossing_penalty(); 
 
-        unsigned int count_gamma = 0;
         while(crossing_constraints() && iter_ < max_iter_global_){ 
 
             std::cout << "----------------Gamma = " << gamma0_ << std::endl; 
@@ -315,7 +316,7 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
             double J_old = tolerance_+1; double J_new = 0;
             k_ = 0;
 
-            while(k_ < max_iter_ && std::abs(J_new - J_old) > tolerance_){    // && crossing_constraints()
+            while(k_ < max_iter_ && std::abs(J_new - J_old) > tolerance_){    
 
                 std::cout << "--------------------------  k_ = " << k_ << std::endl; 
 
@@ -356,7 +357,7 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
                 // assemble system matrix for nonparameteric part
                 A_ = SparseBlockMatrix<double,2,2>
                 (-Psi_multiple_.transpose()*W_multiple_*Psi_multiple_,    R1_multiple_.transpose(),
-                R1_multiple_,                                           R0_multiple_            );
+                R1_multiple_,                                             R0_multiple_            );
                 
                 // cache non-parametric matrix factorization for reuse
                 invA_.compute(A_);
@@ -453,27 +454,29 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
         const bool MSQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::crossing_constraints() const {
         // Return true if the current estimate of quantiles is crossing, false otherwise 
 
-        bool crossed = false; 
+        return crossing_penalty() < eps_; 
+
+        // bool crossed = false; 
         
-        unsigned int j = 0;
-        while(!crossed && j < h_-1){ 
-            DVector<double> crossing_value = fitted(j+1)-fitted(j); 
-            unsigned int i = 0; 
-            while(!crossed && i < n_obs()){          
-                if(crossing_value(i) < eps_)
-                    crossed = true;  
-                i++;
-            }
-            j++; 
-        }
+        // unsigned int j = 0;
+        // while(!crossed && j < h_-1){ 
+        //     DVector<double> crossing_value = fitted(j+1)-fitted(j); 
+        //     unsigned int i = 0; 
+        //     while(!crossed && i < n_obs()){          
+        //         if(crossing_value(i) < eps_)
+        //             crossed = true;  
+        //         i++;
+        //     }
+        //     j++; 
+        // }
 
-        if(crossed)
-            std::cout << "crossed = true" << std::endl;
-        else{
-            std::cout << "crossed = false" << std::endl;
-        }
+        // if(crossed)
+        //     std::cout << "crossed = true" << std::endl;
+        // else{
+        //     std::cout << "crossed = false" << std::endl;
+        // }
 
-        return crossed;
+        // return crossed;
     }
 
     template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>

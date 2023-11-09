@@ -106,22 +106,21 @@ template <typename Model> class FPIRLS {
 
             // compute value of functional J for this pair (\beta, f)
             double J = m_.data_loss() ;     
-            if constexpr (is_space_only<Model>::value)
-                // for a space only problem we can leverage the following identity
-                // \int_D (Lf-u)^2 = g^\top*R_0*g = f^\top*P*f, being P = R_1^\top*(R_0)^{-1}*R_1
-                J += m_.lambda_D()*solver_.g().dot(m_.R0() * solver_.g());
-            if constexpr (is_space_time_separable<Model>::value)
+            if constexpr (is_space_time_separable<Model>::value) 
                 // space-time separable regularization requires to compute the penalty matrix
                 // J += solver_.f().dot(m_.P()*solver_.f());  -> equivalente
                 J += m_.lambda_D()*solver_.g().dot(m_.R0()*solver_.g()) + m_.lambda_T()*solver_.f().dot(Kronecker(solver_.P1(), solver_.pde().R0())*solver_.f());  
+            
             else
-                // space-time parabolic regularization requires to compute the penalty matrix
-                J += solver_.f().dot(m_.P()*solver_.f());
+                // for a space only problem and space time parabolic we can leverage the following identity
+                // \int_D (Lf-u)^2 = g^\top*R_0*g = f^\top*P*f, being P = R_1^\top*(R_0)^{-1}*R_1
+                J += m_.lambda_D()*solver_.g().dot(m_.R0() * solver_.g());
 
 
             // prepare for next iteration
             k_++; J_old = J_new; J_new = J;
         }
+        std::cout << "niter fpirls = " << k_ << std::endl ; 
         return;
     }
 
