@@ -64,6 +64,7 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
     using Base::P;                   // discretized penalty matrix: P = \lambda_D*(R1^T*R0^{-1}*R1)
     using Base::W_;                  // weight matrix
     using Base::XtWX_;
+    using Base::nan_idxs;
     // constructor
     SQRPDE() = default;
     // space-only constructor
@@ -101,25 +102,34 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
             b.block(n_basis(), 0, n_basis(), 1) = lambda_D() * u();
             b.block(0, 0, n_basis(), 1) = - PsiTD() * y() / (2*n_obs());
 
-            mu_ = Psi(not_nan()) * (invA.solve(b)).head(n_basis());
+            mu_ = Psi() * (invA.solve(b)).head(n_basis());  // tolto not_nan() da Psi()
 
         }
 
         else{
             // if constexpr(std::is_same<RegularizationType, SpaceTimeSeparable>::value){  // commentato perchè per ora considero solo Seèarable per il caso SpaceTime
+            std::cout << "here 1" << std::endl;
+            std::cout << n_obs() << std::endl;
+            std::cout << " y size = " << y().rows() << std::endl;
+            std::cout << " nan size = " << nan_idxs().size() << std::endl;
             SparseBlockMatrix<double,2,2>
                 A( - PsiTD()*Psi()/(2*n_obs()) - Base::lambda_T()*Kronecker(Base::P1(), pde().R0()), lambda_D()*R1().transpose(),
                      lambda_D()*R1(),                                                                lambda_D()*R0()             );
                 
                 // cache non-parametric matrix and its factorization for reuse 
                 fdapde::SparseLU<SpMatrix<double>> invA;
+                std::cout << "here 2" << std::endl;
                 invA.compute(A);
                 // assemble rhs of srpde problem
                 DVector<double> b(A.rows());
+                std::cout << "here 3" << std::endl;
                 b.block(n_basis(),0, n_basis(),1) = lambda_D()*u();  
                 b.block(0,0, n_basis(),1) = - PsiTD()*y()/(2*n_obs()); 
+                std::cout << "here 4" << std::endl;
                 BLOCK_FRAME_SANITY_CHECKS;
-                mu_ = Psi(not_nan()) * (invA.solve(b)).head(n_basis()); 
+                mu_ = Psi() * (invA.solve(b)).head(n_basis());    // tolto not_nan() da Psi()
+
+                std::cout << "here 5" << std::endl; 
             // }
 
             // if constexpr(std::is_same<RegularizationType, SpaceTimeParabolic>::value){
@@ -171,10 +181,14 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
           (abs_res.array() < tol_weights_)
             .select(
               (2 * n_obs() * (abs_res.array() + tol_weights_)).inverse(), (2 * n_obs() * abs_res.array()).inverse());
+        // overwrites zeros for missing observations   
+        for(std::size_t i : nan_idxs())
+            pW_(i) = 0.;
+
         py_ = y() - (1 - 2. * alpha_) * abs_res;
     }
     // updates mean vector \mu after WLS solution
-    void fpirls_post_solve_step(const DMatrix<double>& hat_f, const DMatrix<double>& hat_beta) { mu_ = hat_f; }
+    void fpirls_post_solve_step(const DMatrix<double>& hat_fitted) { mu_ = hat_fitted; }
     // returns the data loss \norm{diag(W)^{-1/2}(y - \mu)}^2
     double data_loss() const { return (pW_.cwiseSqrt().matrix().asDiagonal() * (py_ - mu_)).squaredNorm(); }
     const DVector<double>& py() const { return py_; }
@@ -185,8 +199,16 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
     const DMatrix<double>& T();
     double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {
         double result = 0;
-        for (std::size_t i = 0; i < op2.rows(); ++i) { result += pinball_loss(op2.coeff(i, 0) - op1.coeff(i, 0)); }
-        return result * result / n_obs();
+        // for (std::size_t i = 0; i < op2.rows(); ++i) { result += pinball_loss(op2.coeff(i, 0) - op1.coeff(i, 0)); }
+        
+        std::set<std::size_t> observation_indexes;
+        for(std::size_t i = 0; i < op2.rows(); ++i) {
+            observation_indexes.insert(i);
+        }
+        observation_indexes.erase(nan_idxs()); 
+        for (std::size_t i : observation_indexes) { result += pinball_loss(op2.coeff(i, 0) - op1.coeff(i, 0)); }
+        
+        return result * result / ( n_obs() );  // n_obs() returns number of not-nan observations
     }
   
     virtual ~SQRPDE() = default;

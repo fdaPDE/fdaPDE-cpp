@@ -93,7 +93,7 @@ class RegressionBase :
     const DVector<double>& g() const { return g_; };         // PDE misfit
     const DVector<double>& beta() const { return beta_; };   // estimate of regression coefficients
     const std::unordered_set<std::size_t>& nan_idxs() const { return nan_idxs_; }   // missing data indexes
-    std::size_t n_obs() const { return y().rows(); }   // number of observations
+    std::size_t n_obs() const { return y().rows() - nan_idxs_.size(); }   // number of observations
     // getters to Woodbury decomposition matrices
     const DMatrix<double>& U() const { return U_; }
     const DMatrix<double>& V() const { return V_; }
@@ -156,8 +156,8 @@ template <typename Model> DMatrix<double> RegressionBase<Model>::fitted() const 
 template <typename Model> void RegressionBase<Model>::init_nan() {
     // derive missingness pattern
     nan_idxs_.clear();   // empty nan indexes set
-    for (std::size_t i = 0; i < df_.template get<double>(OBSERVATIONS_BLK).size(); ++i) {
-        if (std::isnan(y()(i, 0))) {   // requires -ffast-math compiler flag to be disabled
+    for (std::size_t i = 0; i < df_.template get<double>(OBSERVATIONS_BLK).size(); ++i) { 
+        if(std::isnan(y()(i, 0))) {   // requires -ffast-math compiler flag to be disabled
             nan_idxs_.insert(i);
             df_.template get<double>(OBSERVATIONS_BLK)(i, 0) = 0.0;   // zero out NaN
         }

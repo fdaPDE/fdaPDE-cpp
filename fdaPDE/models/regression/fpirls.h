@@ -87,6 +87,7 @@ template <typename Model> class FPIRLS {
         double J_old = tolerance_ + 1;
         double J_new = 0;
         while (k_ < max_iter_ && std::abs(J_new - J_old) > tolerance_) {
+            std::cout << "FPIRLS k = " << k_ << std::endl; 
             // compute weight matrix W and pseudo-observations \tilde{y}
             m_.fpirls_pre_solve_step();
             //auto pair = m_.compute(mu_);
@@ -100,7 +101,7 @@ template <typename Model> class FPIRLS {
             solver_.solve();
 
             // \mu update
-	    m_.fpirls_post_solve_step(solver_.fitted(), solver_.beta());
+	    m_.fpirls_post_solve_step(solver_.fitted());
             //DVector<double> fitted = solver_.fitted();
             //mu_ = distr_.inv_link(fitted);
 

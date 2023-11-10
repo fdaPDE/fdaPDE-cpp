@@ -89,8 +89,8 @@ class GSRPDE : public RegressionBase<GSRPDE<PDE, RegularizationType, SamplingDes
         py_ = G_.asDiagonal() * (y() - mu_) + theta_;
     }
     // updates mean vector \mu after WLS solution
-    void fpirls_post_solve_step(const DMatrix<double>& hat_f, const DMatrix<double>& hat_beta) {
-        mu_ = distr_.inv_link(hat_f);
+    void fpirls_post_solve_step(const DMatrix<double>& hat_fitted) {
+        mu_ = distr_.inv_link(hat_fitted);
     }
     // returns the data loss \norm{V^{-1/2}(y - \mu)}^2
     double data_loss() const {
