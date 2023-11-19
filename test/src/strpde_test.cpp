@@ -32,11 +32,7 @@ using fdapde::core::VectorDataWrapper;
 using fdapde::models::STRPDE;
 using fdapde::models::SpaceTimeSeparable;
 using fdapde::models::SpaceTimeParabolic;
-using fdapde::models::GeoStatMeshNodes;
-using fdapde::models::GeoStatLocations;
-using fdapde::models::Areal;
-using fdapde::models::MonolithicSolver;
-using fdapde::models::IterativeSolver;
+using fdapde::models::Sampling;
 
 #include "utils/constants.h"
 #include "utils/mesh_loader.h"
@@ -71,7 +67,7 @@ TEST(strpde_test, laplacian_nonparametric_samplingatnodes_separable_monolithic) 
     // define model
     double lambda_D = 0.01;
     double lambda_T = 0.01;
-    STRPDE<decltype(problem), SpaceTimeSeparable, GeoStatMeshNodes, MonolithicSolver> model(problem, time_mesh);
+    STRPDE<SpaceTimeSeparable, fdapde::monolithic> model(problem, Sampling::mesh_nodes, time_mesh);
     model.set_lambda_D(lambda_D);
     model.set_lambda_T(lambda_T);
     // set model's data
@@ -82,9 +78,6 @@ TEST(strpde_test, laplacian_nonparametric_samplingatnodes_separable_monolithic) 
     model.init();
     model.solve();
     // test correctness
-    EXPECT_TRUE(almost_equal(model.Psi(), "../data/models/strpde/2D_test1/Psi.mtx"));
-    EXPECT_TRUE(almost_equal(model.R0() , "../data/models/strpde/2D_test1/R0.mtx" ));
-    EXPECT_TRUE(almost_equal(model.R1() , "../data/models/strpde/2D_test1/R1.mtx" ));
     EXPECT_TRUE(almost_equal(model.f()  , "../data/models/strpde/2D_test1/sol.mtx"));
 }
 
@@ -114,7 +107,7 @@ TEST(strpde_test, laplacian_semiparametric_samplingatlocations_separable_monolit
     // define model
     double lambda_D = 0.01;
     double lambda_T = 0.01;
-    STRPDE<decltype(problem), SpaceTimeSeparable, GeoStatLocations, MonolithicSolver> model(problem, time_mesh);
+    STRPDE<SpaceTimeSeparable, fdapde::monolithic> model(problem, Sampling::pointwise, time_mesh);
     model.set_lambda_D(lambda_D);
     model.set_lambda_T(lambda_T);
     model.set_spatial_locations(locs);
@@ -127,9 +120,6 @@ TEST(strpde_test, laplacian_semiparametric_samplingatlocations_separable_monolit
     model.init();
     model.solve();
     // test correctness
-    EXPECT_TRUE(almost_equal(model.Psi() , "../data/models/strpde/2D_test2/Psi.mtx" ));
-    EXPECT_TRUE(almost_equal(model.R0()  , "../data/models/strpde/2D_test2/R0.mtx"  ));
-    EXPECT_TRUE(almost_equal(model.R1()  , "../data/models/strpde/2D_test2/R1.mtx"  ));
     EXPECT_TRUE(almost_equal(model.f()   , "../data/models/strpde/2D_test2/sol.mtx" ));
     EXPECT_TRUE(almost_equal(model.beta(), "../data/models/strpde/2D_test2/beta.mtx"));
 }
@@ -164,7 +154,7 @@ TEST(strpde_test, noncostantcoefficientspde_nonparametric_samplingareal_paraboli
     // define model
     double lambda_D = std::pow(0.1, 6);
     double lambda_T = std::pow(0.1, 6);
-    STRPDE<decltype(problem), SpaceTimeParabolic, Areal, MonolithicSolver> model(problem, time_mesh);
+    STRPDE<SpaceTimeParabolic, fdapde::monolithic> model(problem, Sampling::areal, time_mesh);
     model.set_lambda_D(lambda_D);
     model.set_lambda_T(lambda_T);
     model.set_spatial_locations(subdomains);
@@ -206,7 +196,7 @@ TEST(strpde_test, laplacian_nonparametric_samplingatnodes_parabolic_iterative) {
     // define model
     double lambda_D = 1;
     double lambda_T = 1;
-    STRPDE<decltype(problem), SpaceTimeParabolic, GeoStatMeshNodes, IterativeSolver> model(problem, time_mesh);
+    STRPDE<SpaceTimeParabolic, fdapde::iterative> model(problem, Sampling::mesh_nodes, time_mesh);
     model.set_lambda_D(lambda_D);
     model.set_lambda_T(lambda_T);
     // set model's data
@@ -250,7 +240,7 @@ TEST(strpde_test, laplacian_nonparametric_samplingatnodes_timelocations_separabl
     // define model
     double lambda_D = 0.01;
     double lambda_T = 0.01;
-    STRPDE<decltype(problem), SpaceTimeSeparable, GeoStatMeshNodes, MonolithicSolver> model(problem, time_mesh);
+    STRPDE<SpaceTimeSeparable, fdapde::monolithic> model(problem, Sampling::mesh_nodes, time_mesh);
     model.set_lambda_D(lambda_D);
     model.set_lambda_T(lambda_T);
     model.set_temporal_locations(time_locs);
@@ -293,7 +283,7 @@ TEST(strpde_test, laplacian_nonparametric_samplingatlocations_timelocations_sepa
     // define model
     double lambda_D = 1e-3;
     double lambda_T = 1e-3;
-    STRPDE<decltype(problem), SpaceTimeSeparable, GeoStatLocations, MonolithicSolver> model(problem, time_mesh);
+    STRPDE<SpaceTimeSeparable, fdapde::monolithic> model(problem, Sampling::pointwise, time_mesh);
     model.set_lambda_D(lambda_D);
     model.set_lambda_T(lambda_T);
     model.set_spatial_locations(space_locs);

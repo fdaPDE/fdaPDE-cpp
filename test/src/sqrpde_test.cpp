@@ -18,23 +18,18 @@
 #include <gtest/gtest.h>   // testing framework
 
 #include <cstddef>
-using fdapde::core::advection;
-using fdapde::core::diffusion;
 using fdapde::core::FEM;
 using fdapde::core::fem_order;
 using fdapde::core::laplacian;
-using fdapde::core::MatrixDataWrapper;
 using fdapde::core::PDE;
-using fdapde::core::VectorDataWrapper;
 
 #include "../../fdaPDE/models/regression/sqrpde.h"
 #include "../../fdaPDE/models/sampling_design.h"
-using fdapde::models::Areal;
-using fdapde::models::GeoStatLocations;
-using fdapde::models::GeoStatMeshNodes;
-using fdapde::models::MonolithicSolver;
-using fdapde::models::SpaceOnly;
 using fdapde::models::SQRPDE;
+using fdapde::models::SpaceTimeSeparable;
+using fdapde::models::SpaceTimeParabolic;
+using fdapde::models::SpaceOnly;
+using fdapde::models::Sampling;
 
 #include "utils/constants.h"
 #include "utils/mesh_loader.h"
@@ -62,7 +57,7 @@ TEST(sqrpde_test, laplacian_nonparametric_samplingatnodes) {
     // define model
     double lambda = 1.778279 * std::pow(0.1, 4);
     double alpha = 0.1;
-    SQRPDE<decltype(problem), SpaceOnly, GeoStatMeshNodes, MonolithicSolver> model(problem, alpha);
+    SQRPDE<SpaceOnly> model(problem, Sampling::mesh_nodes, alpha);
     model.set_lambda_D(lambda);
     // set model's data
     BlockFrame<double, int> df;
@@ -96,7 +91,7 @@ TEST(sqrpde_test, laplacian_semiparametric_samplingatlocations) {
     // define statistical model
     double alpha = 0.9;
     double lambda = 3.162277660168379 * std::pow(0.1, 4);   // use optimal lambda to avoid possible numerical issues
-    SQRPDE<decltype(problem), SpaceOnly, GeoStatLocations, MonolithicSolver> model(problem, alpha);
+    SQRPDE<SpaceOnly> model(problem, Sampling::pointwise, alpha);
     model.set_lambda_D(lambda);
     model.set_spatial_locations(locs);
     // set model's data
@@ -133,7 +128,7 @@ TEST(sqrpde_test, costantcoefficientspde_nonparametric_samplingatnodes) {
     // define statistical model
     double alpha = 0.1;
     double lambda = 5.623413251903491 * pow(0.1, 4);
-    SQRPDE<decltype(problem), SpaceOnly, GeoStatMeshNodes, MonolithicSolver> model(problem, alpha);
+    SQRPDE<SpaceOnly> model(problem, Sampling::mesh_nodes, alpha);
     model.set_lambda_D(lambda);
     // set model data
     BlockFrame<double, int> df;
@@ -167,7 +162,7 @@ TEST(sqrpde_test, laplacian_semiparametric_samplingareal) {
     // define statistical model
     double alpha = 0.5;
     double lambda = 5.623413251903491 * std::pow(0.1, 3);   // use optimal lambda to avoid possible numerical issues
-    SQRPDE<decltype(problem), SpaceOnly, Areal, MonolithicSolver> model(problem, alpha);
+    SQRPDE<SpaceOnly> model(problem, Sampling::areal, alpha);
     model.set_lambda_D(lambda);
     model.set_spatial_locations(subdomains);
     // set model data

@@ -29,16 +29,8 @@ using fdapde::core::VectorDataWrapper;
 
 #include "../../fdaPDE/models/regression/srpde.h"
 #include "../../fdaPDE/models/sampling_design.h"
-using fdapde::models::Areal;
-using fdapde::models::GeoStatLocations;
-using fdapde::models::GeoStatMeshNodes;
 using fdapde::models::SRPDE;
-
-#include "../../fdaPDE/models/regression/gsrpde.h"
-using fdapde::models::GSRPDE;
-using fdapde::models::SpaceOnly;
-using fdapde::models::MonolithicSolver;
-using fdapde::models::Bernulli;
+using fdapde::models::Sampling;
 
 #include "utils/constants.h"
 #include "utils/mesh_loader.h"
@@ -65,7 +57,7 @@ TEST(srpde_test, laplacian_nonparametric_samplingatnodes) {
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda = 5.623413 * std::pow(0.1, 5);
-    SRPDE<decltype(problem), GeoStatMeshNodes> model(problem);
+    SRPDE model(problem, Sampling::mesh_nodes);
     model.set_lambda_D(lambda);
     // set model's data
     BlockFrame<double, int> df;
@@ -98,7 +90,7 @@ TEST(srpde_test, laplacian_semiparametric_samplingatlocations) {
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define statistical model
     double lambda = 0.2201047;
-    SRPDE<decltype(problem), GeoStatLocations> model(problem);
+    SRPDE model(problem, Sampling::pointwise);
     model.set_lambda_D(lambda);
     model.set_spatial_locations(locs);
     // set model's data
@@ -134,7 +126,7 @@ TEST(srpde_test, costantcoefficientspde_nonparametric_samplingatnodes) {
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define  model
     double lambda = 10;
-    SRPDE<decltype(problem), GeoStatMeshNodes> model(problem);
+    SRPDE model(problem, Sampling::mesh_nodes);
     model.set_lambda_D(lambda);
     // set model's data
     BlockFrame<double, int> df;
@@ -170,7 +162,7 @@ TEST(srpde_test, noncostantcoefficientspde_nonparametric_samplingareal) {
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda = std::pow(0.1, 3);
-    SRPDE<decltype(problem), Areal> model(problem);
+    SRPDE model(problem, Sampling::areal);
     model.set_lambda_D(lambda);
     model.set_spatial_locations(subdomains);
     // set model's data
