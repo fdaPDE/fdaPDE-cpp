@@ -113,7 +113,7 @@ class RegressionBase :
     DMatrix<double> fitted() const;   // computes fitted values \hat y = \Psi*f_ + X*beta_
     // GCV support
     template <template <typename> typename edf_evaluation_strategy, typename... Args>
-    __GCV<model_traits<Model>::n_lambda> gcv(Args&&... args) {
+    te_GCV<model_traits<Model>::n_lambda> gcv(Args&&... args) {
       return GCV<Model, edf_evaluation_strategy>(Base::model(), std::forward<Args>(args)...);
     }
     const DMatrix<double>& T() {   // T = \Psi^T*Q*\Psi + P

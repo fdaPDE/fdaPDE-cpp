@@ -17,7 +17,6 @@
 #ifndef __FDAPDE_MODELS_H__
 #define __FDAPDE_MODELS_H__
 
-// basic models capabilities
 #include "models/model_base.h"
 #include "models/model_macros.h"
 #include "models/model_traits.h"
@@ -26,7 +25,6 @@
 #include "models/space_time_base.h"
 #include "models/space_time_parabolic_base.h"
 #include "models/space_time_separable_base.h"
-
 #include "regression.h"
 #include "functional.h"
 

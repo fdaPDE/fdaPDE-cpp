@@ -40,7 +40,7 @@ template <int N> struct GCVConcept {
     using VectorType = typename static_dynamic_vector_selector<N>::type;
     using MatrixType = typename static_dynamic_matrix_selector<N, N>::type;
     using GradientType = std::function<VectorType(VectorType)>;
-    using HessianType = std::function<MatrixType(VectorType)>;
+    using HessianType  = std::function<MatrixType(VectorType)>;
     template <typename T>
     using fn_ptrs = fdapde::mem_fn_ptrs<
       static_cast<double (T::*)(const VectorType&)>(&T::operator()), &T::derive, &T::derive_twice,
@@ -53,7 +53,7 @@ template <int N> struct GCVConcept {
     const std::vector<double>& edfs() const { return fdapde::invoke<const std::vector<double>&, 3>(*this); }
     const std::vector<double>& gcvs() const { return fdapde::invoke<const std::vector<double>&, 4>(*this); }
 };
-template <int N> using __GCV = fdapde::erase<GCVConcept<N>>;
+template <int N> using te_GCV = fdapde::erase<GCVConcept<N>>;
 
 // base functor implementing the expression of GCV index for model M. Use type T for evaluation of the expected degrees
 // of freedoms
@@ -128,9 +128,6 @@ template <typename M, template <typename> typename trS_evaluation_strategy_ = St
     const std::vector<double>& edfs() const { return edfs_; }   // equivalent degrees of freedom q + Tr[S]
     const std::vector<double>& gcvs() const { return gcvs_; }   // computed values of GCV index
 };
-
-template <typename M, template <typename> typename trS_evaluation_strategy_ = StochasticEDF>
-using FiniteDifferenceGCV = GCV<M, trS_evaluation_strategy_>;
 
 // provides the analytical expresssion of GCV gradient and hessian, for newton-like optimization methods
 template <typename M, typename RegularizationType> class ExactGCV;

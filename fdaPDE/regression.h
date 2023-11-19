@@ -17,6 +17,7 @@
 #ifndef __FDAPDE_REGRESSION_H__
 #define __FDAPDE_REGRESSION_H__
 
+#include "models.h"
 #include "models/regression/regression_base.h"
 #include "models/regression/distributions.h"
 #include "models/regression/fpirls.h"
@@ -24,7 +25,6 @@
 #include "models/regression/strpde.h"
 #include "models/regression/gsrpde.h"
 #include "models/regression/sqrpde.h"
-// gcv support
 #include "models/regression/gcv.h"
 #include "models/regression/stochastic_edf.h"
 #include "models/regression/exact_edf.h"
