@@ -26,16 +26,15 @@ using fdapde::core::Kronecker;
 using fdapde::core::reaction;
 using fdapde::core::SparseKroneckerTensorProduct;
 using fdapde::core::SPLINE;
+using fdapde::core::SplineBasis;
 
 namespace fdapde {
 namespace models {
 
-// base class for separable regularization solved using either a moholitic or iterative solution strategy
-template <typename Model, typename Solver> class SpaceTimeSeparableBase;
-
 // base class for separable regularization
-template <typename Model> class SpaceTimeSeparableBase<Model, MonolithicSolver> : public SpaceTimeBase<Model> {
-   private:
+template <typename Model>
+class SpaceTimeSeparableBase : public SpaceTimeBase<Model, SpaceTimeSeparable> {
+   protected:
     // let \phi_i the i-th basis function in time
     SpMatrix<double> P0_;    // mass matrix in time: [P0_]_{ij} = \int_{[0,T]} \phi_i*\phi_j
     SpMatrix<double> P1_;    // penalty matrix in time: [P1_]_{ij} = \int_{[0,T]} (\phi_i)_tt*(\phi_j)_tt
@@ -44,15 +43,13 @@ template <typename Model> class SpaceTimeSeparableBase<Model, MonolithicSolver> 
     SpMatrix<double> R0_;    // P0_ \kron R0 (R0: discretization of the identity operator)
     SpMatrix<double> R1_;    // P0_ \kron R1 (R1: discretization of the differential operator L in the regularizing PDE)
 
-    typedef typename model_traits<Model>::TimeBasis TimeBasis;   // basis used for discretization in time
+    using TimeBasis = SplineBasis<3>;   // basis used for discretization in time
     TimeBasis basis_;
     DVector<double> time_locs_;   // time instants t_1, ..., t_m
     SpMatrix<double> P_D_;        // discretization of space regularization: (R1^T*R0^{-1}*R1) \kron Rt
     SpMatrix<double> P_T_;        // discretization of time regularization:  (R0 \kron Pt)
    public:
-    typedef typename model_traits<Model>::PDE PDE;                             // PDE used in space
-    typedef typename model_traits<Model>::regularization TimeRegularization;   // regularization in time
-    typedef SpaceTimeBase<Model> Base;
+    typedef SpaceTimeBase<Model, SpaceTimeSeparable> Base;
     using Base::lambda_D;   // smoothing parameter in space
     using Base::lambda_T;   // smoothing parameter in time
     using Base::model;      // underlying model object
@@ -61,7 +58,7 @@ template <typename Model> class SpaceTimeSeparableBase<Model, MonolithicSolver> 
 
     // constructor
     SpaceTimeSeparableBase() = default;
-    SpaceTimeSeparableBase(const PDE& pde, const DVector<double>& time) : SpaceTimeBase<Model>(pde, time) { }
+    SpaceTimeSeparableBase(const pde_ptr& pde, const DVector<double>& time) : Base(pde, time) { }
     // init data structure related to separable regularization
     void init_regularization() {
         basis_ = TimeBasis(time_);
@@ -93,15 +90,15 @@ template <typename Model> class SpaceTimeSeparableBase<Model, MonolithicSolver> 
         P1_ = assembler.discretize_operator(-bilaplacian<SPLINE>());
 
         // compute tensorized matrices
-        R0_ = Kronecker(P0_, pde_->R0());
-        R1_ = Kronecker(P0_, pde_->R1());
+        R0_ = Kronecker(P0_, pde_.R0());
+        R1_ = Kronecker(P0_, pde_.R1());
     }
     // setters
     void set_temporal_locations(const DVector<double>& time_locations) { time_locs_ = time_locations; }
     // getters
     const SpMatrix<double>& R0() const { return R0_; }
     const SpMatrix<double>& R1() const { return R1_; }
-    std::size_t n_basis() const { return pde_->n_dofs() * basis_.size(); }   // number of basis functions
+    std::size_t n_basis() const { return pde_.n_dofs() * basis_.size(); }   // number of basis functions
     std::size_t n_temporal_basis() const { return basis_.size(); }           // number of time basis functions
     // matrices proper of separable regularization
     const SpMatrix<double>& P0() const { return P0_; }
@@ -116,7 +113,7 @@ template <typename Model> class SpaceTimeSeparableBase<Model, MonolithicSolver> 
             std::size_t N = Base::n_spatial_basis();
             u_.resize(n_basis());
             // in separable regularization PDE doesn't depend on time. stack forcing term m times
-            for (std::size_t i = 0; i < basis_.size(); ++i) { u_.segment(i * N, N) = pde_->force(); }
+            for (std::size_t i = 0; i < basis_.size(); ++i) { u_.segment(i * N, N) = pde_.force(); }
         }
         return u_;
     }
@@ -126,13 +123,13 @@ template <typename Model> class SpaceTimeSeparableBase<Model, MonolithicSolver> 
     auto P() {
         if (is_empty(P_D_)) {   // compute once and cache result
             fdapde::SparseLU<SpMatrix<double>> invR0_;
-            invR0_.compute(pde_->R0());
-            P_D_ = Kronecker(pde_->R1().transpose() * invR0_.solve(pde_->R1()), P0_);   // (R1^T*R0^{-1}*R1) \kron P0
-            P_T_ = Kronecker(pde_->R0(), P1_);                                          // (R0 \kron P1)
+            invR0_.compute(pde_.R0());
+            P_D_ = Kronecker(pde_.R1().transpose() * invR0_.solve(pde_.R1()), P0_);   // (R1^T*R0^{-1}*R1) \kron P0
+            P_T_ = Kronecker(pde_.R0(), P1_);                                          // (R0 \kron P1)
         }
         return lambda_D() * P_D_ + lambda_T() * P_T_;
     }
-
+  
     // destructor
     virtual ~SpaceTimeSeparableBase() = default;
 };

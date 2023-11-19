@@ -19,31 +19,24 @@
 
 #include <fdaPDE/pde.h>
 #include <fdaPDE/utils.h>
-using fdapde::core::PDEBase;
 
-#include "../model_base.h"
 #include "../model_macros.h"
-#include "../model_traits.h"
-#include "../sampling_design.h"
-#include "distributions.h"
 #include "fpirls.h"
 #include "regression_base.h"
 
 namespace fdapde {
 namespace models {
 
-template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
-class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDesign, Solver>> {
-    // compile time checks
-    static_assert(std::is_base_of<PDEBase, PDE>::value);
+template <typename RegularizationType_>
+class SQRPDE : public RegressionBase<GSRPDE<RegularizationType_>, RegularizationType_> {
    private:
-    typedef RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDesign, Solver>> Base;
     double alpha_;            // quantile order
     DVector<double> py_ {};   // y - (1-2*alpha)|y - X*beta - f|
     DVector<double> pW_ {};   // diagonal of W^k = 1/(2*n*|y - X*beta - f|)
     DVector<double> mu_;      // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : mean vector at step k
     DMatrix<double> T_;       // T = \Psi^T*Q*\Psi + P
     fdapde::SparseLU<SpMatrix<double>> invA_;   // factorization of non-parametric system matrix A
+
     // FPIRLS parameters (set to default)
     std::size_t max_iter_ = 200;
     double tol_weights_ = 1e-6;
@@ -51,27 +44,56 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
 
     double pinball_loss(double x) const { return 0.5 * std::abs(x) + (alpha_ - 0.5) * x; };   // quantile check function
    public:
+    using RegularizationType = RegularizationType_;
+    using Base = RegressionBase<GSRPDE<RegularizationType>, RegularizationType>;
+    // import commonly defined symbols from base
     IMPORT_REGRESSION_SYMBOLS;
-    using Base::invXtWX_;
+    using Base::invXtWX_;   // LU factorization of X^T*W*X
     using Base::lambda_D;   // smoothing parameter in space
-    using Base::n_basis;    // number of spatial basis
-    using Base::P;          // discretized penalty matrix: P = \lambda_D*(R1^T*R0^{-1}*R1)
+    using Base::n_basis;    // number of spatial basis functions
+    using Base::P;          // discretized penalty matrix
     using Base::W_;         // weight matrix
-    using Base::XtWX_;
+    using Base::XtWX_;      // q x q matrix X^T*W*X
     // constructor
     SQRPDE() = default;
     // space-only constructor
-    SQRPDE(const PDE& pde, double alpha = 0.5) : Base(pde), alpha_(alpha) {};
+    template <
+      typename U = RegularizationType,
+      typename std::enable_if<std::is_same<U, SpaceOnly>::value, int>::type = 0>
+    SQRPDE(const pde_ptr& pde, Sampling s, double alpha) : Base(pde, s), alpha_(alpha) {};
+    // space-time constructor
+    template <
+      typename U = RegularizationType,
+      typename std::enable_if<!std::is_same<U, SpaceOnly>::value, int>::type = 0>
+    SQRPDE(const pde_ptr& pde, const DVector<double>& time, Sampling s, double alpha) :
+        Base(pde, s, time), alpha_(alpha) {};
 
     // setter
     void set_fpirls_tolerance(double tol) { tol_ = tol; }
     void set_fpirls_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
     void set_alpha(double alpha) { alpha_ = alpha; }
 
-    // ModelBase implementation
+    void init_data()  { return; }
     void init_model() { return; }
-    void update_to_weights() { return; };   // update model object in case of changes in the weights matrix
-    virtual void solve();                   // finds a solution to the smoothing problem
+    void solve() {   // finds a solution to the smoothing problem
+        // execute FPIRLS for minimization of functional \norm{V^{-1/2}(y - \mu)}^2 + \lambda \int_D (Lf - u)^2
+        FPIRLS<decltype(*this)> fpirls(*this, tol_, max_iter_);   // FPIRLS engine
+        fpirls.compute();
+        // fpirls converged: extract matrix W and solution estimates
+        W_ = fpirls.solver().W();
+        f_ = fpirls.solver().f();
+        g_ = fpirls.solver().g();
+        // store parametric part
+        if (has_covariates()) {
+            beta_ = fpirls.solver().beta();
+            XtWX_ = fpirls.solver().XtWX();
+            invXtWX_ = fpirls.solver().invXtWX();
+            U_ = fpirls.solver().U();
+            V_ = fpirls.solver().V();
+        }
+        invA_ = fpirls.solver().invA();
+        return;
+    }
 
     // required by FPIRLS (see fpirls.h for details)
     // initalizes mean vector \mu
@@ -117,37 +139,6 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
   
     virtual ~SQRPDE() = default;
 };
-
-template <typename PDE_, typename RegularizationType_, typename SamplingDesign_, typename Solver_>
-struct model_traits<SQRPDE<PDE_, RegularizationType_, SamplingDesign_, Solver_>> {
-    typedef PDE_ PDE;
-    typedef SpaceOnly regularization;
-    typedef SamplingDesign_ sampling;
-    typedef MonolithicSolver solver;
-    enum { N = PDE::N, M = PDE::M, n_lambda = 1 };
-};
-
-// finds a solution to the SQR-PDE smoothing problem
-template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
-void SQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::solve() {
-    // execute FPIRLS for minimization of functional \norm{V^{-1/2}(y - \mu)}^2 + \lambda \int_D (Lf - u)^2
-    FPIRLS<decltype(*this)> fpirls(*this, tol_, max_iter_);   // FPIRLS engine
-    fpirls.compute();
-    // fpirls converged: extract matrix W and solution estimates
-    W_ = fpirls.solver().W();
-    f_ = fpirls.solver().f();
-    g_ = fpirls.solver().g();
-    // parametric components
-    if (has_covariates()) {
-        beta_ = fpirls.solver().beta();
-        XtWX_ = fpirls.solver().XtWX();
-        invXtWX_ = fpirls.solver().invXtWX();
-        U_ = fpirls.solver().U();
-        V_ = fpirls.solver().V();
-    }
-    invA_ = fpirls.solver().invA();
-    return;
-}
 
 }   // namespace models
 }   // namespace fdapde

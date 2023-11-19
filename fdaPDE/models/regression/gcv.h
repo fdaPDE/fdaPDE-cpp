@@ -61,20 +61,20 @@ template <typename M, template <typename> typename trS_evaluation_strategy_ = St
    public:
     using This = GCV<M, trS_evaluation_strategy_>;
     using trS_evaluation_strategy = trS_evaluation_strategy_<M>;
-    using VectorType = SVector<model_traits<M>::n_lambda>;
-    using MatrixType = SMatrix<model_traits<M>::n_lambda>;
+    using VectorType = SVector<n_smoothing_parameters<M>::value>;
+    using MatrixType = SMatrix<n_smoothing_parameters<M>::value>;
     M& model_;                      // model to calibrate
     trS_evaluation_strategy trS_;   // strategy used to evaluate the trace of smoothing matrix S
     std::vector<double> edfs_;      // equivalent degrees of freedom q + Tr[S]
     std::vector<double> gcvs_;      // computed values of GCV index
     // cache pairs (lambda, Tr[S]) for fast access if GCV is queried at an already computed point
-    std::map<VectorType, double, fdapde::s_vector_compare<model_traits<M>::n_lambda>> cache_;
+    std::map<VectorType, double, fdapde::s_vector_compare<n_smoothing_parameters<M>::value>> cache_;
 
     // analytical expression of gcv at \lambda
     //
     // edf = n - (q + Tr[S])
     // GCV(\lambda) = n/(edf^2)*norm(y - \hat y)^2
-    ScalarField<model_traits<M>::n_lambda, double (This::*)(const VectorType&)> gcv_;
+    ScalarField<n_smoothing_parameters<M>::value, double (This::*)(const VectorType&)> gcv_;
     double gcv_impl(const VectorType& lambda) {
         // fit the model given current lambda
         model_.set_lambda(lambda);

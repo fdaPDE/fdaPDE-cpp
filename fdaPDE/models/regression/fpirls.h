@@ -25,61 +25,51 @@ using fdapde::core::SparseBlockMatrix;
 #include "../model_macros.h"
 #include "../model_traits.h"
 #include "distributions.h"
+#include "regression_wrappers.h"
 #include "srpde.h"
 #include "strpde.h"
 
 namespace fdapde {
 namespace models {
 
-// trait to select model type to use in the internal loop of FPIRLS
-template <typename Model> class FPIRLS_internal_solver {
-   private:
-    typedef typename std::decay<Model>::type Model_;
-    typedef typename model_traits<Model_>::PDE PDE;
-    typedef typename model_traits<Model_>::sampling sampling;
-    typedef typename model_traits<Model_>::solver solver;
-    typedef typename model_traits<Model_>::regularization regularization;
-   public:
-    using type = typename std::conditional<
-      !is_space_time<Model_>::value, SRPDE<PDE, sampling>,   // space-only problem
-      STRPDE<PDE, regularization, sampling, solver>          // space-time problem
-      >::type;
-};
-
 // a general implementation of the Functional Penalized Iterative Reweighted Least Square (FPIRLS) algorithm
-template <typename Model> class FPIRLS {
+template <typename Model_> class FPIRLS {
    private:
-    typedef typename std::decay<Model>::type Model_;
-    typedef typename FPIRLS_internal_solver<Model_>::type SolverType;
-    static_assert(is_regression_model<Model_>::value);
+    using Model = typename std::decay<Model_>::type;
+    using SolverWrapper = RegressionModel<typename std::decay_t<Model_>::RegularizationType>;
     Model& m_;
     // algorithm's parameters
     double tolerance_;       // treshold on objective functional J to convergence
     std::size_t max_iter_;   // maximum number of iterations before forced stop
     std::size_t k_ = 0;      // FPIRLS iteration index
-    SolverType solver_;      // internal solver
+    SolverWrapper solver_;   // internal solver
    public:
     // constructor
-    FPIRLS(const Model& m, double tolerance, std::size_t max_iter) :
+    FPIRLS(Model& m, double tolerance, std::size_t max_iter) :
         m_(m), tolerance_(tolerance), max_iter_(max_iter) {
-        // define internal problem solver
-        if constexpr (!is_space_time<Model_>::value)   // space-only
-            solver_ = SolverType(m_.pde());
-        else {   // space-time
-            solver_ = SolverType(m_.pde(), m_.time_domain());
-            if constexpr (is_space_time_parabolic<Model_>::value) { solver_.set_initial_condition(m_.s(), false); }
-            if constexpr (is_space_time_separable<Model_>::value) { solver_.set_temporal_locations(m_.time_locs()); }
+         if (!solver_) { // default solver initialization
+            using SolverType = typename std::conditional<
+              is_space_only<Model>::value, SRPDE,
+              STRPDE<typename Model::RegularizationType, fdapde::monolithic> >::type;
+            // define internal problem solver
+            if constexpr (!is_space_time<Model_>::value)   // space-only
+                solver_ = SolverType(m_.pde(), m_.sampling());
+            else {   // space-time
+                solver_ = SolverType(m_.pde(), m_.sampling(), m_.time_domain());
+                if constexpr (is_space_time_parabolic<Model_>::value) { solver_.set_initial_condition(m_.s(), false); }
+                if constexpr (is_space_time_separable<Model_>::value) {
+                    solver_.set_temporal_locations(m_.time_locs());
+                }
+            }
+            // solver initialization
+            solver_.set_lambda(m_.lambda());
+            solver_.set_spatial_locations(m_.locs());
+            solver_.set_data(m_.data());   // possible covariates are passed from here	    
         }
-        // solver initialization
-        solver_.set_lambda(m_.lambda());
-        solver_.set_spatial_locations(m_.locs());
-        solver_.set_data(m_.data());   // possible covariates are passed from here
-        solver_.init();
     };
 
     // executes the FPIRLS algorithm
     void compute() {
-        // algorithm initialization
 	m_.fpirls_init();
         // objective functional value at consecutive iterations
         double J_old = tolerance_ + 1;
@@ -88,11 +78,10 @@ template <typename Model> class FPIRLS {
             m_.fpirls_compute_step();   // model specific computation of py_ and pW_
             // solve weighted least square problem
             // \argmin_{\beta, f} [ \norm(W^{1/2}(y - X\beta - f_n))^2 + \lambda \int_D (Lf - u)^2 ]
-            solver_.data().template insert<double>(OBSERVATIONS_BLK, m_.py()); //std::get<1>(pair));
-            solver_.data().template insert<double>(WEIGHTS_BLK, m_.pW()); //std::get<0>(pair));
-            // update solver to change in the weight matrix
-            solver_.update_data();
-            solver_.update_to_weights();
+            solver_.data().template insert<double>(OBSERVATIONS_BLK, m_.py());
+            solver_.data().template insert<double>(WEIGHTS_BLK, m_.pW());
+	    // update solver and solve
+	    solver_.init();
             solver_.solve();
             m_.fpirls_update_step(solver_.fitted(), solver_.beta());   // model specific update step
             // update value of the objective functional J = data_loss + \int_D (Lf-u)^2
@@ -102,10 +91,11 @@ template <typename Model> class FPIRLS {
         }
         return;
     }
-
+    // sets an externally defined solver
+    template <typename T> void set_solver(T&& solver) { solver_ = solver; }
     // getters
     std::size_t n_iter() const { return k_; }
-    const SolverType& solver() const { return solver_; }
+    const SolverWrapper& solver() const { return solver_; }
 };
 
 }   // namespace models

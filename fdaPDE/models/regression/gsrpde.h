@@ -17,30 +17,20 @@
 #ifndef __GSRPDE_H__
 #define __GSRPDE_H__
 
-#include <memory>
-#include <type_traits>
-
 #include <fdaPDE/pde.h>
 #include <fdaPDE/utils.h>
-using fdapde::core::PDEBase;
 
-#include "../model_base.h"
 #include "../model_macros.h"
-#include "../model_traits.h"
-#include "../sampling_design.h"
 #include "regression_base.h"
 #include "fpirls.h"
 
 namespace fdapde {
 namespace models {
-
+  
 // base class for GSRPDE model
-template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver, typename Distribution>
-class GSRPDE : public RegressionBase<GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>> {
-    // compile time checks
-    static_assert(std::is_base_of<PDEBase, PDE>::value);
+template <typename RegularizationType_>
+class GSRPDE : public RegressionBase<GSRPDE<RegularizationType_>, RegularizationType_> {
    private:
-    typedef RegressionBase<GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>> Base;
     Distribution distr_ {};
     DVector<double> py_;   // \tilde y^k = G^k(y-u^k) + \theta^k
     DVector<double> pW_;   // diagonal of W^k = ((G^k)^{-2})*((V^k)^{-1})
@@ -51,6 +41,9 @@ class GSRPDE : public RegressionBase<GSRPDE<PDE, RegularizationType, SamplingDes
     std::size_t max_iter_ = 200;
     double tol_ = 1e-4;
    public:
+    using RegularizationType = RegularizationType_;
+    using Base = RegressionBase<GSRPDE<RegularizationType>, RegularizationType>;
+    // import commonly defined symbols from base
     IMPORT_REGRESSION_SYMBOLS;
     using Base::lambda_D;   // smoothing parameter in space
     using Base::P;          // discretized penalty
@@ -59,27 +52,36 @@ class GSRPDE : public RegressionBase<GSRPDE<PDE, RegularizationType, SamplingDes
     GSRPDE() = default;
     // space-only constructor
     template <
-      typename U = RegularizationType, typename std::enable_if<std::is_same<U, SpaceOnly>::value, int>::type = 0>
-    GSRPDE(const PDE& pde) : Base(pde) {};
+      typename U = RegularizationType,
+      typename std::enable_if<std::is_same<U, SpaceOnly>::value, int>::type = 0>
+    GSRPDE(const pde_ptr& pde, Sampling s, const Distribution& distr) : Base(pde, s), distr_(distr) {};
     // space-time constructor
     template <
-      typename U = RegularizationType, typename std::enable_if<!std::is_same<U, SpaceOnly>::value, int>::type = 0>
-    GSRPDE(const PDE& pde, const DVector<double>& time) : Base(pde, time) {};
+      typename U = RegularizationType,
+      typename std::enable_if<!std::is_same<U, SpaceOnly>::value, int>::type = 0>
+    GSRPDE(const pde_ptr& pde, const DVector<double>& time, Sampling s, const Distribution& distr) :
+        Base(pde, s, time), distr_(distr) {};
 
-    // setter
+    // setters
     void set_fpirls_tolerance(double tol) { tol_ = tol; }
     void set_fpirls_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
 
-    void init_model() { return; };          // update model object in case of **structural** changes in its definition
-    void update_to_weights() { return; };   // update model object in case of changes in the weights matrix
-    virtual void solve();                   // finds a solution to the smoothing problem
+    void init_data()  { return; };
+    void init_model() { return; };
+    void solve() {   // finds a solution to the smoothing problem
+        // execute FPIRLS for minimization of functional \norm{V^{-1/2}(y - \mu)}^2 + \lambda \int_D (Lf - u)^2
+        FPIRLS<decltype(*this)> fpirls(*this, tol_, max_iter_);   // FPIRLS engine
+        fpirls.compute();
 
+        // fpirls converged: extract matrix W and solution estimates
+        W_ = fpirls.solver().W();
+        f_ = fpirls.solver().f();
+        if (has_covariates()) { beta_ = fpirls.solver().beta(); }
+        return;
+    }
     // required by FPIRLS (see fpirls.h for details)
     // initalizes mean vector \mu
-    void fpirls_init() {
-        mu_ = y();
-        distr_.preprocess(mu_);
-    };
+    void fpirls_init() { mu_ = distr_.preprocess(y()); };
     // computes W^k = ((G^k)^{-2})*((V^k)^{-1}) and y^k = G^k(y-u^k) + \theta^k
     void fpirls_compute_step() {
         DVector<double> theta_ = distr_.link(mu_);   // \theta^k = (g(\mu^k_1), ..., g(\mu^k_n))
@@ -99,62 +101,14 @@ class GSRPDE : public RegressionBase<GSRPDE<PDE, RegularizationType, SamplingDes
     }
     const DVector<double>& py() const { return py_; }
     const DVector<double>& pW() const { return pW_; }
-    double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const;   // total deviance \sum dev(op1 - op2)
+    double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {   // total deviance \sum dev(\hat y - y)
+        DMatrix<double> mu = distr_.inv_link(op1);
+        double result = 0;
+        for (std::size_t i = 0; i < op2.rows(); ++i) { result += distr_.deviance(mu.coeff(i, 0), op2.coeff(i, 0)); }
+        return result;
+    }
 
     virtual ~GSRPDE() = default;
-};
-
-// implementative details
-  
-// finds a solution to the GSRPDE smoothing problem
-template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver, typename Distribution>
-void GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>::solve() {
-    // execute FPIRLS for minimization of functional \norm{V^{-1/2}(y - \mu)}^2 + \lambda \int_D (Lf - u)^2
-    FPIRLS<decltype(*this)> fpirls(*this, tol_, max_iter_);   // FPIRLS engine
-    fpirls.compute();
-
-    // fpirls converged: extract matrix W and solution estimates
-    W_ = fpirls.solver().W();
-    f_ = fpirls.solver().f();
-    if (has_covariates()) { beta_ = fpirls.solver().beta(); }
-    return;
-}
-  
-// returns the deviance of y - \hat y induced by the considered distribution
-template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver, typename Distribution>
-double GSRPDE<PDE, RegularizationType, SamplingDesign, Solver, Distribution>::norm(
-  const DMatrix<double>& obs, const DMatrix<double>& fitted) const {
-    DMatrix<double> mu = distr_.inv_link(fitted);
-    double result = 0;
-    for (std::size_t i = 0; i < obs.rows(); ++i) { result += distr_.deviance(mu.coeff(i, 0), obs.coeff(i, 0)); }
-    return result;
-}
-
-template <
-  typename PDE_, typename RegularizationType_, typename SamplingDesign_, typename Solver_, typename DistributionType_>
-struct model_traits<GSRPDE<PDE_, RegularizationType_, SamplingDesign_, Solver_, DistributionType_>> {
-    typedef PDE_ PDE;
-    typedef RegularizationType_ regularization;
-    typedef SamplingDesign_ sampling;
-    typedef Solver_ solver;
-    typedef DistributionType_ DistributionType;
-    enum { N = PDE::N, M = PDE::M, n_lambda = n_smoothing_parameters<RegularizationType_>::value };
-};
-// specialization for separable regularization
-template <typename PDE_, typename SamplingDesign_, typename Solver_, typename DistributionType_>
-struct model_traits<GSRPDE<PDE_, fdapde::models::SpaceTimeSeparable, SamplingDesign_, Solver_, DistributionType_>> {
-    typedef PDE_ PDE;
-    typedef fdapde::models::SpaceTimeSeparable regularization;
-    typedef SplineBasis<3> TimeBasis;   // use cubic B-splines
-    typedef SamplingDesign_ sampling;
-    typedef Solver_ solver;
-    typedef DistributionType_ DistributionType;
-    enum { N = PDE::N, M = PDE::M, n_lambda = 2 };
-};
-
-// gsrpde trait
-template <typename Model> struct is_gsrpde {
-    static constexpr bool value = is_instance_of<Model, GSRPDE>::value;
 };
   
 }   // namespace models

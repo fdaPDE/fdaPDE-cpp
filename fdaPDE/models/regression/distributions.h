@@ -25,6 +25,23 @@
 namespace fdapde {
 namespace models {
 
+  // distribution concept
+struct IDistribution {
+    template <typename D>
+    using fn_ptrs =
+      fdapde::mem_fn_ptrs<&D::preprocess, &D::variance, &D::link, &D::inv_link, &D::der_link, &D::deviance>;
+
+    decltype(auto) preprocess(const DVector<double>& data) const {
+        return fdapde::invoke<DVector<double>, 0>(*this, data);
+    }
+    decltype(auto) variance(const DMatrix<double>& x) const { return fdapde::invoke<DMatrix<double>, 1>(*this, x); }
+    decltype(auto) link(const DMatrix<double>& x)     const { return fdapde::invoke<DMatrix<double>, 2>(*this, x); }
+    decltype(auto) inv_link(const DMatrix<double>& x) const { return fdapde::invoke<DMatrix<double>, 3>(*this, x); }
+    decltype(auto) der_link(const DMatrix<double>& x) const { return fdapde::invoke<DMatrix<double>, 4>(*this, x); }
+    decltype(auto) deviance(double x, double y)       const { return fdapde::invoke<double         , 5>(*this, x, y); }
+};
+using Distribution = fdapde::erase<fdapde::heap_storage, IDistribution>;
+  
 class Bernulli {
    private:
     double p_;   // distribution parameter
@@ -36,10 +53,7 @@ class Bernulli {
     double pdf(std::size_t x) const { return x == 0 ? 1 - p_ : p_; };
     double mean() const { return p_; }
     // preprocess data to work with this distribution
-    virtual void preprocess(DVector<double>& data) const {
-        for (std::size_t i = 0; i < data.rows(); ++i) { data[i] = 0.5 * (data[i] + 0.5); }
-        return;
-    }
+    DVector<double> preprocess(const DVector<double>& data) const { return 0.5 * (data.array() + 0.5); }
     // vectorized operations
     DMatrix<double> variance(const DMatrix<double>& x) const { return x.array() * (1 - x.array()); }
     DMatrix<double> link    (const DMatrix<double>& x) const { return ((1 - x.array()).inverse() * x.array()).log(); }
@@ -69,12 +83,7 @@ class Poisson {
     double pdf(std::size_t k) const { return std::pow(l_, k) * std::exp(-l_) / factorial(k); };
     double mean() const { return l_; }
     // preprocess data to work with this distribution
-    void preprocess(DVector<double>& data) const {
-        for (std::size_t i = 0; i < data.rows(); ++i) {
-            if (data[i] <= 0) data[i] = 1;
-        }
-        return;
-    }
+    DVector<double> preprocess(const DVector<double>& data) const { return (data.array() <= 0).select(1.0, data); }
     // vectorized operations
     DMatrix<double> variance(const DMatrix<double>& x) const { return x; }
     DMatrix<double> link    (const DMatrix<double>& x) const { return x.array().log(); }
@@ -94,7 +103,7 @@ class Exponential {
     // density function
     double pdf(double x) const { return l_ * std::exp(-l_ * x); };
     double mean() const { return 1 / l_; }
-    void preprocess(DVector<double>& data) const { return; }
+    DVector<double> preprocess(const DVector<double>& data) const { return data; }
     // vectorized operations
     DMatrix<double> variance(const DMatrix<double>& x) const { return x.array().pow(2); }
     DMatrix<double> link    (const DMatrix<double>& x) const { return (-x).array().inverse(); }
@@ -117,7 +126,7 @@ class Gamma {
         return 1 / (std::tgamma(k_) * std::pow(theta_, k_)) * std::pow(x, k_ - 1) * std::exp(-x / theta_);
     };
     double mean() const { return k_ * theta_; }
-    void preprocess(DVector<double>& data) const { return; }
+    DVector<double> preprocess(const DVector<double>& data) const { return data; }
     // vectorized operations
     DMatrix<double> variance(const DMatrix<double>& x) const { return x.array().pow(2); }
     DMatrix<double> link    (const DMatrix<double>& x) const { return (-x).array().inverse(); }
@@ -140,7 +149,7 @@ class Gaussian {
         return 1 / (std::sqrt(2 * M_PI) * sigma_) * std::exp(-(x - mu_) * (x - mu_) / (2 * sigma_ * sigma_));
     };
     double mean() const { return mu_; }
-    void preprocess(DVector<double>& data) const { return; }
+    DVector<double> preprocess(const DVector<double>& data) const { return data; }
     // vectorized operations
     DMatrix<double> variance(const DMatrix<double>& x) const { return DMatrix<double>::Ones(x.rows(), x.cols()); }
     DMatrix<double> link    (const DMatrix<double>& x) const { return x; }
