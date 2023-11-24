@@ -64,6 +64,11 @@ template <typename Model> class ModelBase {
         pde_ = pde;
         model().runtime().set(runtime_status::require_pde_init);
     }
+    void set_lambda(const DVector<double>& lambda) {   // dynamic sized version of set_lambda provided by upper layers
+        model().runtime().set(runtime_status::is_lambda_changed);
+	model().set_lambda_D(lambda[0]);
+	if constexpr(is_space_time<Model>::value) model().set_lambda_T(lambda[1]);
+    }
 
     // getters
     const BlockFrame<double, int>& data() const { return df_; }
@@ -71,6 +76,7 @@ template <typename Model> class ModelBase {
     const DMatrix<int>& idx() const { return df_.get<int>(INDEXES_BLK); }   // data indices
     const pde_ptr& pde() const { return pde_; }   // regularizing term Lf - u (defined on some domain D)
     std::size_t n_locs() const { return model().n_spatial_locs() * model().n_temporal_locs(); }
+    DVector<double> lambda(int) const { return model().lambda(); }   // int supposed to be fdapde::Dynamic
     // access to model runtime status
     model_runtime_handler& runtime() { return runtime_; }
     const model_runtime_handler& runtime() const { return runtime_; }

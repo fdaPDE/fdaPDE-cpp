@@ -10,7 +10,7 @@
 #include "src/sqrpde_test.cpp"
 // // #include "src/fpca_test.cpp"
 // // // GCV test suites
-// #include "src/gcv_srpde_test.cpp"
+#include "src/gcv_srpde_test.cpp"
 // #include "src/gcv_sqrpde_test.cpp"
 // #include "calibration/GCVNewtonTest.cpp"
 

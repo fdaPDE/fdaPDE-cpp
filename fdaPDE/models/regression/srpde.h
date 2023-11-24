@@ -90,7 +90,7 @@ class SRPDE : public RegressionBase<SRPDE, SpaceOnly> {
             U_.block(0, 0, n_basis(), q()) = PsiTD() * W() * X();
             V_ = DMatrix<double>::Zero(q(), 2 * n_basis());
             V_.block(0, 0, q(), n_basis()) = X().transpose() * W() * Psi();
-            // solve system (A_ + U_*(X^T*W_*X)*V_)x = b using woodbury formula from NLA module
+            // solve system (A_ + U_*(X^T*W_*X)*V_)x = b using woodbury formula from linear_algebra module
             sol = SMW<>().solve(invA_, U_, XtWX(), V_, b_);
             // store result of smoothing
             f_ = sol.head(n_basis());

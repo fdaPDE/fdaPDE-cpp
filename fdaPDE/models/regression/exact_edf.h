@@ -18,29 +18,33 @@
 #define __EXACT_EDF_H__
 
 #include <fdaPDE/utils.h>
+#include "../model_wrappers.h"
+#include "regression_wrappers.h"
 
 namespace fdapde {
 namespace models {
 
 // Evaluates exactly the trace of matrix S = \Psi*T^{-1}*\Psi^T*Q. Uses the cyclic property of the trace
 // operator: Tr[S] = Tr[\Psi*T^{-1}*\Psi^T*Q] = Tr[Q*\Psi*T^{-1}*\Psi^T]
-template <typename Model> class ExactEDF {
+class ExactEDF {
    private:
-    Model& m_;
+    using ModelType = fdapde::erase<fdapde::non_owning_storage, IStatModel<void>, IRegression>;
+    ModelType model_;
     // computes smoothing matrix S = Q*\Psi*T^{-1}*\Psi^T
     const DMatrix<double>& S() {
         // factorize matrix T
-        invT_ = m_.T().partialPivLu();
-        DMatrix<double> E_ = m_.PsiTD();    // need to cast to dense for PartialPivLU::solve()
-        S_ = m_.lmbQ(m_.Psi() * invT_.solve(E_));   // \Psi*T^{-1}*\Psi^T*Q
+        invT_ = model_.T().partialPivLu();
+        DMatrix<double> E_ = model_.PsiTD();    // need to cast to dense for PartialPivLU::solve()
+        S_ = model_.lmbQ(model_.Psi() * invT_.solve(E_));   // \Psi*T^{-1}*\Psi^T*Q
         return S_;
     };
    public:
     Eigen::PartialPivLU<DMatrix<double>> invT_ {};   // T^{-1}
     DMatrix<double> S_ {};                           // \Psi*T^{-1}*\Psi^T*Q = \Psi*V_
-  
-    explicit ExactEDF(Model& m) : m_(m) {};
+
+    ExactEDF() = default;
     double compute() { return S().trace(); }   // computes Tr[S]
+    void set_model(const ModelType& model) { model_ = model; }
 };
 
 }   // namespace models

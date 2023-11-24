@@ -31,15 +31,12 @@ using fdapde::core::VectorDataWrapper;
 #include "../../fdaPDE/models/regression/srpde.h"
 #include "../../fdaPDE/models/regression/gcv.h"
 #include "../../fdaPDE/models/sampling_design.h"
-using fdapde::models::Areal;
-using fdapde::models::GeoStatLocations;
-using fdapde::models::GeoStatMeshNodes;
 using fdapde::models::SRPDE;
 using fdapde::models::SpaceOnly;
-using fdapde::models::MonolithicSolver;
 using fdapde::models::ExactEDF;
 using fdapde::models::GCV;
 using fdapde::models::StochasticEDF;
+using fdapde::models::Sampling;
 
 #include "utils/constants.h"
 #include "utils/mesh_loader.h"
@@ -67,7 +64,7 @@ TEST(gcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridexact
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
-    SRPDE<decltype(problem), GeoStatMeshNodes> model(problem);
+    SRPDE model(problem, Sampling::mesh_nodes);
     // set model's data
     BlockFrame<double, int> df;
     df.insert(OBSERVATIONS_BLK, y);
@@ -75,10 +72,10 @@ TEST(gcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridexact
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    std::vector<SVector<1>> lambdas;
+    std::vector<DVector<double>> lambdas;
     for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
-    Grid<1> opt;
+    Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test1/edfs.mtx"));
@@ -103,7 +100,7 @@ TEST(gcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridstoch
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
-    SRPDE<decltype(problem), GeoStatMeshNodes> model(problem);
+    SRPDE model(problem, Sampling::mesh_nodes);
     // set model's data
     BlockFrame<double, int> df;
     df.insert(OBSERVATIONS_BLK, y);
@@ -112,10 +109,10 @@ TEST(gcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridstoch
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 476813;
     auto GCV = model.gcv<StochasticEDF>(100, seed);
-    std::vector<SVector<1>> lambdas;
+    std::vector<DVector<double>> lambdas;
     for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
-    Grid<1> opt;
+    Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test2/edfs.mtx"));
@@ -142,7 +139,7 @@ TEST(gcv_srpde_test, laplacian_semiparametric_samplingatlocations_gridexact) {
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
-    SRPDE<decltype(problem), GeoStatLocations> model(problem);
+    SRPDE model(problem, Sampling::pointwise);
     model.set_spatial_locations(locs);
     // set model's data
     BlockFrame<double, int> df;
@@ -152,10 +149,10 @@ TEST(gcv_srpde_test, laplacian_semiparametric_samplingatlocations_gridexact) {
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    std::vector<SVector<1>> lambdas;
+    std::vector<DVector<double>> lambdas;
     for (double x = -3.0; x <= 3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
-    Grid<1> opt;
+    Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test3/edfs.mtx"));
@@ -182,7 +179,7 @@ TEST(gcv_srpde_test, laplacian_semiparametric_samplingatlocations_gridstochastic
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
-    SRPDE<decltype(problem), GeoStatLocations> model(problem);
+    SRPDE model(problem, Sampling::pointwise);
     model.set_spatial_locations(locs);
     // set model's data
     BlockFrame<double, int> df;
@@ -193,10 +190,10 @@ TEST(gcv_srpde_test, laplacian_semiparametric_samplingatlocations_gridstochastic
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 66546513;
     auto GCV = model.gcv<StochasticEDF>(100, seed);
-    std::vector<SVector<1>> lambdas;
+    std::vector<DVector<double>> lambdas;
     for (double x = -3.0; x <= 3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
-    Grid<1> opt;
+    Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test4/edfs.mtx"));
@@ -223,7 +220,7 @@ TEST(gcv_srpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridex
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
-    SRPDE<decltype(problem), GeoStatMeshNodes> model(problem);
+    SRPDE model(problem, Sampling::mesh_nodes);
     // set model's data
     BlockFrame<double, int> df;
     df.insert(OBSERVATIONS_BLK, y);
@@ -231,10 +228,10 @@ TEST(gcv_srpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridex
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    std::vector<SVector<1>> lambdas;
+    std::vector<DVector<double>> lambdas;
     for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
-    Grid<1> opt;
+    Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);   // optimize gcv field
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test5/edfs.mtx"));
@@ -261,7 +258,7 @@ TEST(gcv_srpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridst
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
-    SRPDE<decltype(problem), GeoStatMeshNodes> model(problem);
+    SRPDE model(problem, Sampling::mesh_nodes);
     // set model's data
     BlockFrame<double, int> df;
     df.insert(OBSERVATIONS_BLK, y);
@@ -270,10 +267,10 @@ TEST(gcv_srpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridst
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 4564168;
     auto GCV = model.gcv<StochasticEDF>(100, seed);
-    std::vector<SVector<1>> lambdas;
+    std::vector<DVector<double>> lambdas;
     for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
-    Grid<1> opt;
+    Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);   // optimize gcv field
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test6/edfs.mtx"));
@@ -304,7 +301,7 @@ TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_gride
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda = std::pow(0.1, 3);
-    SRPDE<decltype(problem), Areal> model(problem);
+    SRPDE model(problem, Sampling::areal);
     model.set_spatial_locations(subdomains);
     // set model's data
     BlockFrame<double, int> df;
@@ -313,10 +310,10 @@ TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_gride
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    std::vector<SVector<1>> lambdas;
+    std::vector<DVector<double>> lambdas;
     for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
-    Grid<1> opt;
+    Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);   // optimize gcv field
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test7/edfs.mtx"));
@@ -347,7 +344,7 @@ TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_grids
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda = std::pow(0.1, 3);
-    SRPDE<decltype(problem), Areal> model(problem);
+    SRPDE model(problem, Sampling::areal);
     model.set_spatial_locations(subdomains);
     // set model's data
     BlockFrame<double, int> df;
@@ -357,10 +354,10 @@ TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_grids
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 438172;
     auto GCV = model.gcv<StochasticEDF>(100, seed);
-    std::vector<SVector<1>> lambdas;
+    std::vector<DVector<double>> lambdas;
     for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
-    Grid<1> opt;
+    Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test8/edfs.mtx"));

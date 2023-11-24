@@ -61,6 +61,7 @@ class RegressionBase :
     using Base::P;             // discretized penalty matrix
     using SamplingBase<Model>::D;     // for areal sampling, matrix of subdomains measures, identity matrix otherwise
     using SamplingBase<Model>::Psi;   // matrix of spatial basis evaluation at locations p_1 ... p_n
+    using SamplingBase<Model>::PsiTD; // block \Psi^T*D (not nan-corrected)
     using Base::model;
   
     RegressionBase() = default;
@@ -123,9 +124,8 @@ class RegressionBase :
         return hat_y;
     }
     // GCV support
-    template <template <typename> typename edf_evaluation_strategy, typename... Args>
-    GCV<Model, edf_evaluation_strategy> gcv(Args&&... args) {
-      return GCV<Model, edf_evaluation_strategy>(Base::model(), std::forward<Args>(args)...);
+    template <typename EDFStrategy_, typename... Args> GCV gcv(Args&&... args) {
+        return GCV(Base::model(), EDFStrategy_(std::forward<Args>(args)...));
     }
     const DMatrix<double>& T() {   // T = \Psi^T*Q*\Psi + P
         T_ = PsiTD() * lmbQ(Psi()) + P();

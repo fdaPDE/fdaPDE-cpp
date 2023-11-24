@@ -29,7 +29,7 @@ template <typename RegularizationType> struct IStatModel { };
 
 // base statistical models interface (do not permute fn_ptrs members!)
 #define DEFINE_BASE_STAT_MODEL_INTERFACE                                                                               \
-    void init() { fdapde::invoke<void, 0>(*this); }                                                                    \
+    void init()  { fdapde::invoke<void, 0>(*this); }                                                                   \
     void solve() { fdapde::invoke<void, 1>(*this); }                                                                   \
     void set_lambda_D(double lambda) { fdapde::invoke<void, 2>(*this, lambda); }                                       \
     void set_data(const BlockFrame<double, int>& data, bool reindex = false) {                                         \
@@ -45,7 +45,7 @@ template <> struct IStatModel<SpaceOnly> {
       &M::init, &M::solve,   // initializtion and solution of the regression problem
       &M::set_lambda_D, &M::set_data, &M::set_spatial_locations,
       static_cast<BlockFrame<double, int>& (ModelBase<M>::*)()>(&M::data),
-      &M::set_lambda>;
+      static_cast<void (SpaceOnlyBase<M>::*)(const SVector<1>&)>(&M::set_lambda)>;
     // interface implementation
     DEFINE_BASE_STAT_MODEL_INTERFACE;
     void set_lambda(const SVector<1>& lambda) { fdapde::invoke<void, 6>(*this, lambda); }
@@ -58,7 +58,8 @@ template <> struct IStatModel<SpaceTimeSeparable> {
       &M::init, &M::solve,   // initializtion and solution of the regression problem
       &M::set_lambda_D, &M::set_data, &M::set_spatial_locations,
       static_cast<BlockFrame<double, int>& (ModelBase<M>::*)()>(&M::data),
-      &M::set_lambda, &M::set_lambda_T, &M::set_temporal_locations>;
+      static_cast<void (SpaceTimeBase<M, SpaceTimeSeparable>::*)(const SVector<2>&)>(&M::set_lambda), &M::set_lambda_T,
+      &M::set_temporal_locations>;
     // interface implementation
     DEFINE_BASE_STAT_MODEL_INTERFACE;
     void set_lambda(const SVector<2>& lambda) { fdapde::invoke<void, 6>(*this, lambda); }
@@ -73,7 +74,8 @@ template <> struct IStatModel<SpaceTimeParabolic> {
       &M::init, &M::solve,   // initializtion and solution of the regression problem
       &M::set_lambda_D, &M::set_data, &M::set_spatial_locations,
       static_cast<BlockFrame<double, int>& (ModelBase<M>::*)()>(&M::data),
-      &M::set_lambda, &M::set_lambda_T, &M::set_initial_condition>;
+      static_cast<void (SpaceTimeBase<M, SpaceTimeParabolic>::*)(const SVector<2>&)>(&M::set_lambda), &M::set_lambda_T,
+      &M::set_initial_condition>;
     // interface implementation
     DEFINE_BASE_STAT_MODEL_INTERFACE;
     void set_lambda(const SVector<2>& lambda) { fdapde::invoke<void, 6>(*this, lambda); }
@@ -82,7 +84,24 @@ template <> struct IStatModel<SpaceTimeParabolic> {
         fdapde::invoke<void, 8>(*this, s, shift);
     }
 };
-  
+
+// regularization-independent model interface
+template <> struct IStatModel<void> {
+    template <typename M>
+    using fn_ptrs = fdapde::mem_fn_ptrs<
+      &M::init, &M::solve, static_cast<void (ModelBase<M>::*)(const DVector<double>&)>(&M::set_lambda),
+      static_cast<DVector<double> (ModelBase<M>::*)(int) const>(&M::lambda),
+      static_cast<const SpMatrix<double>& (SamplingBase<M>::*)(not_nan) const>(&M::Psi),
+      static_cast<const SpMatrix<double>& (SamplingBase<M>::*)(not_nan) const>(&M::PsiTD)>;
+    // interface implementation
+    void init()  { fdapde::invoke<void, 0>(*this); }
+    void solve() { fdapde::invoke<void, 1>(*this); }
+    void set_lambda(const DVector<double>& lambda) { fdapde::invoke<void, 2>(*this, lambda); }
+    decltype(auto) lambda() const { return fdapde::invoke<DVector<double>, 3>(*this, fdapde::Dynamic); }
+    decltype(auto) Psi()    const { return fdapde::invoke<const SpMatrix<double>&, 4>(*this, not_nan());}
+    decltype(auto) PsiTD()  const { return fdapde::invoke<const SpMatrix<double>&, 5>(*this, not_nan());}  
+};
+
 }   // namespace models
 }   // namespace fdapde
 

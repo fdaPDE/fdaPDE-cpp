@@ -20,7 +20,9 @@
 #include <fdaPDE/utils.h>
 #include "../model_traits.h"
 #include "../model_wrappers.h"
+#include "../sampling_design.h"
 using fdapde::models::is_space_only;
+using fdapde::models::Sampling;
 
 namespace fdapde {
 namespace models {
@@ -28,8 +30,9 @@ namespace models {
 // type erased wrapper for regression models
 struct IRegression {
     template <typename M>
-    using fn_ptrs =
-      fdapde::mem_fn_ptrs<&M::f, &M::beta, &M::g, &M::fitted, &M::W, &M::XtWX, &M::U, &M::V, &M::invXtWX, &M::invA>;
+    using fn_ptrs = fdapde::mem_fn_ptrs<
+      &M::f, &M::beta, &M::g, &M::fitted, &M::W, &M::XtWX, &M::U, &M::V, &M::invXtWX, &M::invA, &M::q, &M::n_obs,
+      &M::norm, &M::y, &M::T, &M::lmbQ, &M::has_covariates>;
     // interface implementation
     decltype(auto) f()       const { return fdapde::invoke<const DVector<double>&   , 0>(*this); }
     decltype(auto) beta()    const { return fdapde::invoke<const DVector<double>&   , 1>(*this); }
@@ -41,7 +44,16 @@ struct IRegression {
     decltype(auto) V()       const { return fdapde::invoke<const DMatrix<double>&   , 7>(*this); }
     decltype(auto) invXtWX() const { return fdapde::invoke<const Eigen::PartialPivLU<DMatrix<double>>&, 8>(*this); }
     decltype(auto) invA()    const { return fdapde::invoke<const fdapde::SparseLU<SpMatrix<double>>&  , 9>(*this); }
-};
+    decltype(auto) q()       const { return fdapde::invoke<std::size_t, 10>(*this); }
+    decltype(auto) n_obs()   const { return fdapde::invoke<std::size_t, 11>(*this); }
+    decltype(auto) norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {
+        return fdapde::invoke<double, 12> (*this, op1, op2);
+    }
+    decltype(auto) y() const { return fdapde::invoke<const DMatrix<double>&, 13>(*this); }
+    decltype(auto) T() { return fdapde::invoke<const DMatrix<double>&, 14>(*this); }
+    decltype(auto) lmbQ(const DMatrix<double>& x) const { return fdapde::invoke<DMatrix<double>, 15>(*this, x); }
+    decltype(auto) has_covariates() const { return fdapde::invoke<bool, 16>(*this); }
+}; 
 
 template <typename RegularizationType>
 using RegressionModel = fdapde::erase<fdapde::heap_storage, IStatModel<RegularizationType>, IRegression>;

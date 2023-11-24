@@ -28,12 +28,14 @@ template <typename Model> class SpaceOnlyBase : public ModelBase<Model> {
    protected:
     typedef ModelBase<Model> Base;
     using Base::pde_;      // regularizing PDE
-    using Base::model;
+    using Base::model;     // underlying model object
     static constexpr int n_lambda = n_smoothing_parameters<SpaceOnly>::value;
   
     SpMatrix<double> P_;   // discretization of penalty term: R1^T*R0^{-1}*R1
     SVector<n_lambda> lambda_ = SVector<n_lambda>::Zero();
    public:
+    using Base::lambda;       // dynamic sized smoothing parameter vector
+    using Base::set_lambda;   // dynamic sized setter for \lambda
     // constructor
     SpaceOnlyBase() = default;
     SpaceOnlyBase(const pde_ptr& pde) : ModelBase<Model>(pde) {};

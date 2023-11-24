@@ -36,6 +36,8 @@ class SpaceTimeBase : public ModelBase<Model> {
     DVector<double> time_;   // time domain [0, T]
     SVector<n_lambda> lambda_ = SVector<n_lambda>::Zero();
    public:
+    using Base::lambda;       // dynamic sized smoothing parameter vector
+    using Base::set_lambda;   // dynamic sized setter for \lambda
     // constructor
     SpaceTimeBase() = default;
     SpaceTimeBase(const pde_ptr& pde, const DVector<double>& time) : ModelBase<Model>(pde), time_(time) {};

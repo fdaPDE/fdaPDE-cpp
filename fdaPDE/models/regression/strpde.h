@@ -205,7 +205,10 @@ class STRPDE<SpaceTimeParabolic, monolithic> :
     // getters
     const SparseBlockMatrix<double, 2, 2>& A() const { return A_; }
     const fdapde::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
-
+    double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {   // euclidian norm of op1 - op2
+        return (op1 - op2).squaredNorm(); // NB: to check, defined just for compiler
+    }
+  
     virtual ~STRPDE() = default;
 };
 

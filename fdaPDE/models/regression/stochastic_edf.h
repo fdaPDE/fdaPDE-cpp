@@ -27,21 +27,21 @@ namespace fdapde {
 namespace models {
 
 // computes an approximation of the trace of S = \Psi*T^{-1}*\Psi^T*Q using a monte carlo approximation.
-template <typename Model> class StochasticEDF {
+class StochasticEDF {
    private:
-    const Model& model_;
+    using ModelType = fdapde::erase<fdapde::non_owning_storage, IStatModel<void>, IRegression>;
+    ModelType model_;
     std::size_t r_ = 100;   // number of monte carlo realizations
+    DMatrix<double> Us_;    // sample from Rademacher distribution
+    DMatrix<double> Bs_;    // \Psi^T*Q*Us_
+    DMatrix<double> Y_;     // Us_^T*\Psi
     std::size_t seed_;
-    DMatrix<double> Us_;   // sample from Rademacher distribution
-    DMatrix<double> Bs_;   // \Psi^T*Q*Us_
-    DMatrix<double> Y_;    // Us_^T*\Psi
-
     bool init_ = false;
    public:
     // constructor
-    StochasticEDF(const Model& model, std::size_t r, std::size_t seed) :
-        model_(model), r_(r), seed_((seed == fdapde::random_seed) ? std::random_device()() : seed) { }
-    StochasticEDF(const Model& model, std::size_t r) : StochasticEDF(model, r, std::random_device()()) { }
+    StochasticEDF(std::size_t r, std::size_t seed) :
+        r_(r), seed_((seed == fdapde::random_seed) ? std::random_device()() : seed) { }
+    StochasticEDF(std::size_t r) : StochasticEDF(r, std::random_device()()) { }
 
     // evaluate trace of S exploiting a monte carlo approximation
     double compute() {
@@ -84,9 +84,8 @@ template <typename Model> class StochasticEDF {
 
         return MCmean / r_;
     }
-
     // setter
-    void set_seed(std::size_t seed) { seed_ = seed; }
+    void set_model(ModelType& model) { model_ = model; }
 };
 
 }   // namespace models
