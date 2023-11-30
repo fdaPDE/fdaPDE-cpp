@@ -65,7 +65,6 @@ template <typename Model> class ModelBase {
         model().runtime().set(runtime_status::require_pde_init);
     }
     void set_lambda(const DVector<double>& lambda) {   // dynamic sized version of set_lambda provided by upper layers
-        model().runtime().set(runtime_status::is_lambda_changed);
 	model().set_lambda_D(lambda[0]);
 	if constexpr(is_space_time<Model>::value) model().set_lambda_T(lambda[1]);
     }

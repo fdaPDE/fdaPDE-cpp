@@ -36,6 +36,7 @@ class GSRPDE : public RegressionBase<GSRPDE<RegularizationType_>, Regularization
     DVector<double> pW_;   // diagonal of W^k = ((G^k)^{-2})*((V^k)^{-1})
     DVector<double> mu_;   // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : mean vector at step k
     DMatrix<double> T_;    // T = \Psi^T*Q*\Psi + P
+    fdapde::SparseLU<SpMatrix<double>> invA_;   // factorization of non-parametric system matrix A
 
     // FPIRLS parameters (set to default)
     std::size_t max_iter_ = 200;
@@ -45,9 +46,11 @@ class GSRPDE : public RegressionBase<GSRPDE<RegularizationType_>, Regularization
     using Base = RegressionBase<GSRPDE<RegularizationType>, RegularizationType>;
     // import commonly defined symbols from base
     IMPORT_REGRESSION_SYMBOLS;
+    using Base::invXtWX_;   // LU factorization of X^T*W*X
     using Base::lambda_D;   // smoothing parameter in space
     using Base::P;          // discretized penalty
     using Base::W_;         // weight matrix
+    using Base::XtWX_;      // q x q matrix X^T*W*X
     // constructor
     GSRPDE() = default;
     // space-only constructor
@@ -72,11 +75,19 @@ class GSRPDE : public RegressionBase<GSRPDE<RegularizationType_>, Regularization
         // execute FPIRLS for minimization of functional \norm{V^{-1/2}(y - \mu)}^2 + \lambda \int_D (Lf - u)^2
         FPIRLS<decltype(*this)> fpirls(*this, tol_, max_iter_);   // FPIRLS engine
         fpirls.compute();
-
         // fpirls converged: extract matrix W and solution estimates
         W_ = fpirls.solver().W();
         f_ = fpirls.solver().f();
-        if (has_covariates()) { beta_ = fpirls.solver().beta(); }
+        g_ = fpirls.solver().g();
+        // store parametric part
+        if (has_covariates()) {
+            beta_ = fpirls.solver().beta();
+            XtWX_ = fpirls.solver().XtWX();
+            invXtWX_ = fpirls.solver().invXtWX();
+            U_ = fpirls.solver().U();
+            V_ = fpirls.solver().V();
+        }
+        invA_ = fpirls.solver().invA();
         return;
     }
     // required by FPIRLS (see fpirls.h for details)
@@ -101,6 +112,9 @@ class GSRPDE : public RegressionBase<GSRPDE<RegularizationType_>, Regularization
     }
     const DVector<double>& py() const { return py_; }
     const DVector<double>& pW() const { return pW_; }
+    const fdapde::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
+
+    // GCV support
     double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {   // total deviance \sum dev(\hat y - y)
         DMatrix<double> mu = distr_.inv_link(op1);
         double result = 0;

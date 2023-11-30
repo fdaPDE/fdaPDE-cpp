@@ -57,7 +57,9 @@ struct IRegression {
 
 template <typename RegularizationType>
 using RegressionModel = fdapde::erase<fdapde::heap_storage, IStatModel<RegularizationType>, IRegression>;
-  
+template <typename RegularizationType>
+using RegressionView  = fdapde::erase<fdapde::non_owning_storage, IStatModel<RegularizationType>, IRegression>;
+
 }   // namespace models
 
 template <typename Model, typename PDE>

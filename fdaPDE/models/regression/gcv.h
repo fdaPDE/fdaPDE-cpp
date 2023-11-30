@@ -51,7 +51,7 @@ class GCV {
     using This = GCV;
     using VectorType = DVector<double>;
     using MatrixType = DMatrix<double>;
-    using ModelType = fdapde::erase<fdapde::non_owning_storage, IStatModel<void>, IRegression>;
+    using ModelType = RegressionView<void>;
     ModelType model_;               // model to calibrate
     EDFStrategy trS_;               // strategy used to evaluate the trace of smoothing matrix S
     std::vector<double> edfs_;      // equivalent degrees of freedom q + Tr[S]
@@ -84,9 +84,15 @@ class GCV {
    public:
     template <typename ModelType_, typename EDFStrategy_>
     GCV(const ModelType_& model, EDFStrategy_&& trS) : model_(model), trS_(trS), gcv_(this, &This::gcv_impl) {
-      trS_.set_model(model_);
+        // resize gcv input space dimension
+        if constexpr (is_space_only<typename std::decay<ModelType_>::type>::value) gcv_.resize(1);
+        else gcv_.resize(2);
+        // set model pointer in edf computation strategy
+        trS_.set_model(model_);
     };
+    template <typename ModelType_> GCV(const ModelType_& model) : GCV(model, StochasticEDF()) { }
     GCV(const GCV& other) : model_(other.model_), trS_(other.trS_), gcv_(this, &This::gcv_impl) {};
+    GCV() = default;
 
     // call operator and numerical derivative approximations
     double operator()(const VectorType& lambda) { return gcv_(lambda); }
@@ -101,6 +107,15 @@ class GCV {
         double dor = model_.n_obs() - (model_.q() + trS);   // (n - (q + Tr[S])
         return (model_.n_obs() / std::pow(dor, 2)) * (model_.norm(model_.fitted(), model_.y()));
     }
+
+    // set edf_evaluation strategy
+    template <typename EDFStrategy_> void set_edf_strategy(EDFStrategy_&& trS) {
+        trS_ = trS;
+        trS_.set_model(model_);
+	// clear previous status
+	edfs_.clear(); gcvs_.clear(); cache_.clear();
+    }
+    void set_step(double step) { gcv_.set_step(step); }
 
     // getters
     const std::vector<double>& edfs() const { return edfs_; }   // equivalent degrees of freedom q + Tr[S]

@@ -42,7 +42,8 @@ class StochasticEDF {
     StochasticEDF(std::size_t r, std::size_t seed) :
         r_(r), seed_((seed == fdapde::random_seed) ? std::random_device()() : seed) { }
     StochasticEDF(std::size_t r) : StochasticEDF(r, std::random_device()()) { }
-
+    StochasticEDF() : StochasticEDF(100) { }
+  
     // evaluate trace of S exploiting a monte carlo approximation
     double compute() {
         std::size_t n = model_.Psi().cols();   // number of basis functions
@@ -86,6 +87,8 @@ class StochasticEDF {
     }
     // setter
     void set_model(ModelType& model) { model_ = model; }
+    void set_seed(int seed) { seed_ = seed; }
+    void set_n_mc_samples(int r) { r_ = r; }
 };
 
 }   // namespace models
