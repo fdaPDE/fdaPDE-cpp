@@ -80,7 +80,7 @@ template <> struct IStatModel<SpaceTimeParabolic> {
     DEFINE_BASE_STAT_MODEL_INTERFACE;
     void set_lambda(const SVector<2>& lambda) { fdapde::invoke<void, 6>(*this, lambda); }
     void set_lambda_T(double lambda_T) { fdapde::invoke<void, 7>(*this, lambda_T); }
-    void set_initial_condition(const DVector<double>& s, bool shift = true) {
+    void set_initial_condition(const DMatrix<double>& s, bool shift = true) {
         fdapde::invoke<void, 8>(*this, s, shift);
     }
 };

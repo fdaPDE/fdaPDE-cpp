@@ -125,66 +125,6 @@ class SpaceTimeParabolicBase : public SpaceTimeBase<Model, SpaceTimeParabolic> {
     // destructor
     virtual ~SpaceTimeParabolicBase() = default;
 };
-
-  /*
-// base class for parabolic regularization, iterative solver
-template <typename Model>
-class SpaceTimeParabolicBase<Model, Iterative> : public SpaceTimeBase<Model, SpaceTimeParabolic> {
-   protected:
-    typedef SpaceTimeBase<Model, SpaceTimeParabolic> Base;
-    using Base::df_;     // model's data
-    using Base::model;   // underlying model object
-    using Base::pde_;    // regularizing term in space
-    using Base::time_;   // time interval [0,T]
-
-    DMatrix<double> s_;   // N x 1 initial condition vector
-    DMatrix<double> u_;   // discretized forcing [1/DeltaT * (u_1 + R_0*s) \ldots u_n]
-    double DeltaT_;       // time step (assumes equidistant points in time)
-
-   public:
-    // constructor
-    SpaceTimeParabolicBase() = default;
-    SpaceTimeParabolicBase(const pde_ptr& pde, const DVector<double>& time) : Base(pde, time) { }
-    // init data required for iterative solution of parabolic regularization
-    void init_regularization() {
-        // compute time step (assuming equidistant points)
-        DeltaT_ = time_[1] - time_[0];
-        u_ = pde_.force();   // compute forcing term
-        // correct first n rows of discretized force as (u_1 + R0*s/DeltaT)
-        u_.block(0, 0, model().n_basis(), 1) += (1.0 / DeltaT_) * (pde_.R0() * s_);
-    }
-
-    // getters
-    const SpMatrix<double>& R0() const { return pde_.R0(); }   // mass matrix in space
-    const SpMatrix<double>& R1() const { return pde_.R1(); }   // discretization of differential operator L
-    DMatrix<double> u(std::size_t k) const {                    // discretization of forcing term u at time k
-        return u_.block(model().n_basis() * k, 0, model().n_basis(), 1);
-    }
-    double DeltaT() const { return DeltaT_; }
-    const DMatrix<double>& s() const { return s_; }          // initial condition
-    std::size_t n_basis() const { return pde_.n_dofs(); }   // number of basis functions
-
-    void P() { return; } // TODO
-  
-    // setters
-    // shift = true, cause the removal of the first time instant of data, in case it has been used to estimate the IC
-    void set_initial_condition(const DMatrix<double>& s, bool shift = true) {
-        s_ = s;
-        if (shift) { // left shrink time domain by one node
-            std::size_t m = time_.rows();       // number of time instants
-            time_ = time_.tail(m - 1).eval();   // correct time interval [0,T] (eval() to avoid aliasing)
-            pde_.set_forcing(pde_.forcing_data().rightCols(m - 1));
-            // remove from data the first time instant, reindex points
-            model().set_data(df_.tail(model().n_spatial_locs()).extract(), true);
-        }
-    }
-    void set_tolerance(double tol) { tol_ = tol; }
-    void set_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
-
-    // destructor
-    virtual ~SpaceTimeParabolicBase() = default;
-};
-  */
   
 }   // namespace models
 }   // namespace fdapde

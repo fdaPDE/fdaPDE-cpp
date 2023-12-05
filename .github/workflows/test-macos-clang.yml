@@ -1,21 +1,21 @@
-name: test-workflow
+name: test-macos-clang
 on:
   push:
      branches: [ stable, develop ]
      
 jobs:
   build:
-    runs-on: ubuntu-latest
-    container:
-      image: alepalu/fdapde-docker-image:latest
+    runs-on: macos-latest
     steps:
     - name: checkout repository
       uses: actions/checkout@v2
       with:
         submodules: 'recursive'
+    - name: install_deps
+      run: |
+        brew install eigen
     - name: run_tests
       run: |
         cd test/
-        export Eigen3_DIR=/usr/share/cmake/Modules # reguired to let eigen3 work with CMake in alpine
         chmod +x run_tests.sh
-        ./run_tests.sh
+        ./run_tests.sh --compiler clang
