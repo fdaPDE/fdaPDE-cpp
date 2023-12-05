@@ -49,7 +49,7 @@ class StochasticEDF {
         std::size_t n = model_.Psi().cols();   // number of basis functions
         if (!init_) {
             // compute sample from Rademacher distribution
-            std::default_random_engine rng(seed_);
+            std::mt19937 rng(seed_);
             std::bernoulli_distribution Be(0.5);   // bernulli distribution with parameter p = 0.5
             Us_.resize(model_.n_obs(), r_);        // preallocate memory for matrix Us
             // fill matrix

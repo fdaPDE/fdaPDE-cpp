@@ -173,7 +173,7 @@ TEST(gcv_srpde_newton_test, laplacian_nonparametric_samplingatnodes_newton_fd_st
   DVector<double> pt = SVector<1>(6.25e-06);
   opt.optimize(GCV, pt);
   auto best_lambda = opt.optimum();
-  DVector<double> expected_lambda = SVector<1>(0.0000071167457322);   
+  DVector<double> expected_lambda = SVector<1>(0.0000075627208132);
   // check optimal lambda
   EXPECT_TRUE( almost_equal(best_lambda[0], expected_lambda[0]) );
 }

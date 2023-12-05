@@ -81,6 +81,8 @@ if [ "$MEMCHECK" = true ]; then
     valgrind --leak-check=full --track-origins=yes ./fdapde_test
 else
     ./fdapde_test
+    TEST_OUTPUT=$? ## get exit code
 fi
 
 rm fdapde_test
+exit $TEST_OUTPUT

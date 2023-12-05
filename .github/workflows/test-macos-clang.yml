@@ -15,7 +15,11 @@ jobs:
       run: |
         brew install eigen
     - name: run_tests
+      id: test_result
       run: |
         cd test/
         chmod +x run_tests.sh
         ./run_tests.sh --compiler clang
+    - name: check tests passed
+        if: steps.test_result.outputs.result != 0
+        run: exit 1
