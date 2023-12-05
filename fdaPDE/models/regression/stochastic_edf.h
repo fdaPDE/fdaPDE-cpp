@@ -35,11 +35,11 @@ class StochasticEDF {
     DMatrix<double> Us_;    // sample from Rademacher distribution
     DMatrix<double> Bs_;    // \Psi^T*Q*Us_
     DMatrix<double> Y_;     // Us_^T*\Psi
-    std::size_t seed_;
+    int seed_;
     bool init_ = false;
    public:
     // constructor
-    StochasticEDF(std::size_t r, std::size_t seed) :
+    StochasticEDF(std::size_t r, int seed) :
         r_(r), seed_((seed == fdapde::random_seed) ? std::random_device()() : seed) { }
     StochasticEDF(std::size_t r) : StochasticEDF(r, std::random_device()()) { }
     StochasticEDF() : StochasticEDF(100) { }
