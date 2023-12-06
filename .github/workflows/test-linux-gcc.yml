@@ -19,3 +19,11 @@ jobs:
         export Eigen3_DIR=/usr/share/cmake/Modules # reguired to let eigen3 work with CMake in alpine
         chmod +x run_tests.sh
         ./run_tests.sh --compiler gcc
+        echo "TEST_RESULT=$(echo $?)" >> $GITHUB_ENV
+    - name: check_tests_passed
+      run: |
+        if [ "$env.TEST_RESULT" -eq "0" ]; then
+           exit 0
+        else
+           exit 1
+        fi
