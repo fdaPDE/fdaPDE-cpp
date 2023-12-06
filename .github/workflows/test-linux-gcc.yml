@@ -22,7 +22,7 @@ jobs:
         echo "TEST_RESULT=$(echo $?)" >> $GITHUB_ENV
     - name: check_tests_passed
       run: |
-        if [ "$env.TEST_RESULT" -eq "0" ]; then
+        if [ "$TEST_RESULT" -eq "0" ]; then
            exit 0
         else
            exit 1
