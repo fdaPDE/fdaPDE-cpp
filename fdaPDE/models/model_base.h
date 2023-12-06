@@ -78,7 +78,7 @@ template <typename Model> void ModelBase<Model>::init() {
     init_pde();                      // init differential regularization
     model().init_regularization();   // init regularization term
     model().init_sampling(true);     // init \Psi matrix, always force recomputation
-    model().init_nan();              // analyze and set missingness pattern
+    model().init_nan();              // analyze and set missingness patternl; 
     model().init_model();            // specific model's initialization
 }
 

@@ -48,6 +48,370 @@ using fdapde::testing::read_mtx;
 using fdapde::testing::read_csv;
 
 
+// /* test 1 
+//    domain:       unit square [1,1] x [1,1]
+//    sampling:     locations = nodes
+//    penalization: simple laplacian
+//    covariates:   no
+//    BC:           no
+//    order FE:     1
+//    time penalization: separable (mass penalization)
+//  */
+// TEST(sqrpde_time_test, laplacian_nonparametric_samplingatnodes_separable_monolithic) {
+
+//   // Parameters 
+//   const std::string TestNumber = "1"; 
+
+//   std::vector<double> alphas = {0.1, 0.5, 0.9};  
+
+//   // number of simulations
+//   unsigned int n_sim = 1;
+
+//   // Choose missing strategy and proportion
+//   std::string missing = "_missing"; 
+//   // std::string missing = ""; 
+
+//   const std::string p_string = "/p_50";
+  
+//   // Marco
+//   // std::string R_path = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/PACS_project_shared"; 
+//   // Ilenia 
+//   std::string path = "/mnt/c/Users/ileni/OneDrive - Politecnico di Milano/Thesis_shared"; 
+
+//   std::string path_test = path + "/models/space_time/Test_" + TestNumber + p_string ; 
+
+
+//   // define time domain 
+//   DVector<double> time_mesh;
+//   time_mesh.resize(6);
+//   std::size_t i = 0;
+//   for(double x = 0; x <= 2; x+=0.4, ++i) time_mesh[i] = x;
+  
+//   // define spatial domain 
+//   MeshLoader<Mesh2D> domain("unit_square_coarse");
+//   // define regularizing PDE    
+//   auto L = -laplacian<FEM>();
+//   DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.rows(), 1);
+//   PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
+  
+//   // define statistical model
+//   double lambda_D ; // smoothing in space
+//   double lambda_T ; // smoothing in time
+
+//   for(double alpha : alphas){
+
+//     unsigned int alpha_int = alpha*100; 
+
+//     std::cout << "------------------------------------------alpha=" << std::to_string(alpha_int) << "%-------------------------------------------------" << std::endl; 
+
+//     SQRPDE<decltype(problem), SpaceTimeSeparable, GeoStatMeshNodes, MonolithicSolver> model(problem, time_mesh, alpha);
+
+//     for(unsigned int sim = 1; sim <= n_sim; ++sim){
+    
+//     // Read lambda
+//     std::ifstream fileLambdaS(path_test + "/alpha_" + std::to_string(alpha_int) + "/sim_" + std::to_string(sim) + "/GCV/Exact/LambdaS" + missing + ".csv");
+//     if (fileLambdaS.is_open()){
+//       fileLambdaS >> lambda_D; 
+//       fileLambdaS.close();
+//     }
+
+//     std::ifstream fileLambdaT(path_test + "/alpha_" + std::to_string(alpha_int) + "/sim_" + std::to_string(sim) + "/GCV/Exact/LambdaT" + missing + ".csv");
+//     if (fileLambdaT.is_open()){
+//       fileLambdaT >> lambda_T; 
+//       fileLambdaT.close();
+//     }
+
+//     model.set_lambda_D(lambda_D);
+//     model.set_lambda_T(lambda_T);
+
+//     // import data from files
+//     DMatrix<double> y = read_csv<double>(path_test + "/alpha_" + std::to_string(alpha_int) + "/sim_" + std::to_string(sim) + "/y" + missing + ".csv");
+
+//     // set model data
+//     BlockFrame<double, int> df;
+//     df.stack(OBSERVATIONS_BLK, y);
+//     model.set_data(df);
+    
+//     // solve smoothing problem
+//     model.init();
+//     model.solve();
+
+//     // Save C++ solution 
+//     DMatrix<double> computedF = model.f();
+//     const static Eigen::IOFormat CSVFormatf(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+//     // std::ofstream filef(path_test + "/alpha_" + alpha_string + "/fCpp.csv");
+//     std::ofstream filef(path_test + "/alpha_" + std::to_string(alpha_int) + "/sim_" + std::to_string(sim) + "/fCpp" + missing + "_new.csv");
+//     if (filef.is_open()){
+//           filef << computedF.format(CSVFormatf);
+//           filef.close();
+//     }
+
+//     }
+
+//   }
+
+// }
+
+
+// // test 2
+// //    domain:         c-shaped
+// //    space sampling: locations != nodes
+// //    time sampling:  locations = nodes
+// //    missing data:   no
+// //    penalization:   simple laplacian
+// //    covariates:     yes
+// //    BC:             no
+// //    order FE:       1
+// //    time penalization: separable (mass penalization)
+// TEST(sqrpde_time_test, laplacian_semiparametric_samplingatlocations_timelocations_separable_monolithic) {
+
+//     // Marco 
+//     std::string R_path = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/models/space_time/Test_2"; 
+//     //   // Ilenia 
+//     //   std::string path = "/mnt/c/Users/ileni/OneDrive - Politecnico di Milano/Thesis_shared/models/space_time/Test_2"; 
+
+//     std::vector<double> alphas = {0.1, 0.5, 0.9}; 
+
+//     // define temporal domain
+//     DVector<double> time_mesh;
+//     time_mesh.resize(5);
+//     for (std::size_t i = 0; i < 5; ++i) time_mesh[i] = (fdapde::testing::pi / 4) * i;
+//     // define spatial domain and regularizing PDE
+//     MeshLoader<Mesh2D> domain("c_shaped");
+//     // import data from files
+//     DMatrix<double> space_locs = read_csv<double>(R_path + "/locs.csv");
+//     DMatrix<double> X = read_csv<double>(R_path + "/X.csv");
+
+//     // define regularizing PDE
+//     auto L = -laplacian<FEM>();
+//     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.rows(), 1);
+//     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
+
+//     unsigned int n_sim = 10; 
+//     for(unsigned int sim = 1; sim <= n_sim; ++sim){
+//       std::cout << "---------------------------Simulation #" << sim << "--------------------------" << std::endl; 
+//       for(double alpha : alphas){
+
+//         unsigned int alpha_int = alpha*100; 
+//         std::string alpha_string = std::to_string(alpha_int); 
+
+//         // load data from .csv files
+//         DMatrix<double> y = read_csv<double>(R_path + "/sim_" + std::to_string(sim) + "/y.csv");
+
+//         // optima lambdas 
+//         double lambda_D = read_csv<double>(R_path + "/sim_" + std::to_string(sim) + "/alpha_" + alpha_string + "/lambda_opt.csv")(0,0); 
+//         double lambda_T = lambda_D;
+
+//         SQRPDE<decltype(problem), SpaceTimeSeparable, GeoStatLocations, MonolithicSolver> model(problem, time_mesh, alpha);
+//         model.set_lambda_D(lambda_D);
+//         model.set_lambda_T(lambda_T);
+//         model.set_spatial_locations(space_locs);
+//         // set model's data
+//         BlockFrame<double, int> df;
+//         df.stack(OBSERVATIONS_BLK, y);
+//         df.stack(OBSERVATIONS_BLK, X);
+//         model.set_data(df);
+//         // solve smoothing problem
+//         model.init();
+//         model.solve();
+
+//         // Save C++ solution 
+//         DMatrix<double> computedF = model.f();
+//         const static Eigen::IOFormat CSVFormatf(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+//         std::ofstream filef(R_path + "/sim_" + std::to_string(sim) + "/alpha_" + alpha_string + "/f.csv");
+//         if (filef.is_open()){
+//           filef << computedF.format(CSVFormatf);
+//           filef.close();
+//         }
+
+//         DMatrix<double> computedFn = model.Psi()*model.f();
+//         const static Eigen::IOFormat CSVFormatfn(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+//         std::ofstream filefn(R_path + "/sim_" + std::to_string(sim) + "/alpha_" + alpha_string + "/fn.csv");
+//         if (filefn.is_open()){
+//           filefn << computedFn.format(CSVFormatfn);
+//           filefn.close();
+//         }
+
+//         DMatrix<double> computedbeta = model.beta();
+//         const static Eigen::IOFormat CSVFormatbeta(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+//         std::ofstream filebeta(R_path + "/sim_" + std::to_string(sim) + "/alpha_" + alpha_string + "/beta.csv");
+//         if (filebeta.is_open()){
+//           filebeta << computedbeta.format(CSVFormatbeta);
+//           filebeta.close();
+//         } 
+
+//       }
+//     }
+// }
+
+
+
+// test 3
+//    domain:         c-shaped
+//    space sampling: locations != nodes
+//    time sampling:  locations != nodes
+//    missing data:   yes
+//    penalization:   simple laplacian
+//    covariates:     no
+//    BC:             no
+//    order FE:       1
+//    time penalization: separable (mass penalization)
+TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations_separable_monolithic_missingdata) {
+
+    // Marco 
+    std::string R_path = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/models/space_time/Test_3"; 
+    //   // Ilenia 
+    //   std::string path = "/mnt/c/Users/ileni/OneDrive - Politecnico di Milano/Thesis_shared/models/space_time/Test_3"; 
+
+    std::vector<double> alphas = {0.1, 0.5, 0.9}; 
+    //std::string data_type = "all";   // all  d
+    std::vector<std::string> data_types = {"all"}; 
+    std::string p_string = "50";   
+    std::string lambda_selection_type = "gcv";   // gcv gcv_smooth manual 
+
+    // define temporal domain
+    double tf = fdapde::testing::pi;   // final time 
+    DVector<double> time_mesh;
+    unsigned int M = 7; 
+    time_mesh.resize(M);
+    for (std::size_t i = 0; i < M; ++i) time_mesh[i] = (tf / (M-1)) * i;
+    // define spatial domain and regularizing PDE
+    MeshLoader<Mesh2D> domain("c_shaped_adj");
+
+    // import locs from files
+    DMatrix<double> space_locs = read_csv<double>(R_path + "/space_locs.csv");
+    DMatrix<double> time_locs = read_csv<double>(R_path + "/time_locs.csv");
+
+    // define regularizing PDE
+    auto L = -laplacian<FEM>();
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.rows(), 1);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
+
+
+    unsigned int n_sim = 1; 
+
+    // lambdas_d_t for RMSE
+    std::vector<SVector<2>> lambdas_try; 
+    for(double xs = -4.0; xs <= -1.5; xs +=0.5)
+      for(double xt = -7.0; xt <= -6.0; xt +=1.0) 
+        lambdas_try.push_back(SVector<2>(std::pow(10,xs), std::pow(10,xt)));
+
+    for(auto data_type : data_types){
+      if(data_type == "all")
+        std::cout << "----------------------------------------ALL DATA----------------------------" << std::endl; 
+      else 
+        std::cout << "----------------------------------------MISSING DATA----------------------------" << std::endl; 
+      
+
+      for(unsigned int sim = 1; sim <= n_sim; ++sim){
+        
+          std::cout << "---------------------------Simulation #" << sim << "--------------------------" << std::endl; 
+          for(double alpha : alphas){
+
+            std::size_t count_l = 1; 
+            for(SVector<2> l : lambdas_try){
+              const std::string lambda_string = std::to_string(count_l); 
+
+              unsigned int alpha_int = alpha*100; 
+              std::string alpha_string = std::to_string(alpha_int); 
+
+              // load data from .csv files
+              DMatrix<double> y; 
+              if(data_type == "all")
+                y = read_csv<double>(R_path + "/simulations/all/sim_" + std::to_string(sim) + "/y_all.csv");
+              else{
+                y = read_csv<double>(R_path + "/simulations/miss_strategy_" + data_type + "/p_" + p_string + "/sim_" + std::to_string(sim) + "/y.csv");
+              }
+
+              std::string solutions_path; 
+              if(data_type == "all")
+                solutions_path = R_path + "/simulations/all/sim_" + std::to_string(sim) + "/alpha_" + alpha_string + "/lambdas_for_RMSE"; 
+              else
+                solutions_path = R_path + "/simulations/miss_strategy_" + data_type + "/p_" + p_string + "/sim_" + std::to_string(sim) + "/alpha_" + alpha_string;
+              
+              // // optima lambdas 
+              double lambda_D; 
+              double lambda_T; 
+              // if(lambda_selection_type == "gcv"){
+                // std::ifstream fileLambdaS(solutions_path + "/lambda_s_opt.csv");
+                // if(fileLambdaS.is_open()){
+                //  fileLambdaS >> lambda_D; 
+                //  fileLambdaS.close();
+                // }
+                // std::ifstream fileLambdaS(solutions_path + "/lambda_t_opt.csv");
+                // if(fileLambdaS.is_open()){
+                //  fileLambdaS >> lambda_T; 
+                //  fileLambdaS.close();
+                // }
+ 
+              // } 
+              // if(lambda_selection_type == "manual"){
+                // std::ifstream fileLambdaS(solutions_path + "/lambda_s_opt.csv");
+                // if(fileLambdaS.is_open()){
+                //  fileLambdaS >> lambda_D; 
+                //  fileLambdaS.close();
+                // }
+                // std::ifstream fileLambdaS(solutions_path + "/lambda_t_opt.csv");
+                // if(fileLambdaS.is_open()){
+                //  fileLambdaS >> lambda_T; 
+                //  fileLambdaS.close();
+                // }
+              // }
+
+              lambda_D = l[0];
+              lambda_T = l[1];
+
+
+              SQRPDE<decltype(problem), SpaceTimeSeparable, GeoStatLocations, MonolithicSolver> model(problem, time_mesh, alpha);
+              model.set_lambda_D(lambda_D);
+              model.set_lambda_T(lambda_T);
+              model.set_spatial_locations(space_locs);
+              model.set_temporal_locations(time_locs);
+
+              // set model's data
+              BlockFrame<double, int> df;
+              df.stack(OBSERVATIONS_BLK, y);
+              model.set_data(df);
+              // solve smoothing problem
+              model.init();
+              model.solve();
+
+              // Save C++ solution 
+              DMatrix<double> computedF = model.f();
+              const static Eigen::IOFormat CSVFormatf(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+              std::ofstream filef(solutions_path + "/f_" + lambda_string  + ".csv");
+              if (filef.is_open()){
+                filef << computedF.format(CSVFormatf);
+                filef.close();
+              }
+
+              // DMatrix<double> computedFn = model.Psi()*model.f();
+              // const static Eigen::IOFormat CSVFormatfn(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+              // std::ofstream filefn(solutions_path + "/fn.csv");
+              // if (filefn.is_open()){
+              //   filefn << computedFn.format(CSVFormatfn);
+              //   filefn.close();
+              // }
+
+              count_l += 1; 
+            }
+          }
+      }
+
+
+      
+    }
+
+}
+
+
+
+
+
+
+
+// ---------------------------------------------------OLD-----------------------------------------------------------------------
+
 
 // /* test 1 
 //    domain:       unit square [1,1] x [1,1]
@@ -73,7 +437,7 @@ using fdapde::testing::read_csv;
 //   // Ilenia 
 //   std::string path = "/mnt/c/Users/ileni/OneDrive - Politecnico di Milano/Thesis_shared"; 
 
-//   std::string path_test = path + "/space_time/Test_" + TestNumber ;
+//   std::string path_test = path + "/models/space_time/Test_" + TestNumber ;
 
 
 //   // define time domain
@@ -184,7 +548,7 @@ using fdapde::testing::read_csv;
 //   // Ilenia 
 //   std::string path = "/mnt/c/Users/ileni/OneDrive - Politecnico di Milano/Thesis_shared"; 
 
-//   std::string path_test = path + "/space_time/Test_" + TestNumber ;
+//   std::string path_test = path + "/models/space_time/Test_" + TestNumber ;
 
 
 //   // define time domain
@@ -444,11 +808,11 @@ using fdapde::testing::read_csv;
 //   // load sample position
 //   CSVReader<double> reader{};
 //   CSVFile<double> locFile; // locations file
-//   locFile = reader.parseFile("/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/space_time/Test_4/locs.csv");
+//   locFile = reader.parseFile("/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/models/space_time/Test_4/locs.csv");
 //   DMatrix<double> loc = locFile.toEigen();
 
 //   CSVFile<double> XFile; // design matrix
-//   XFile = reader.parseFile("/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/space_time/Test_4/X.csv");
+//   XFile = reader.parseFile("/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/models/space_time/Test_4/X.csv");
 //   DMatrix<double> X = XFile.toEigen();
 
 //   // number of simulations
@@ -462,7 +826,7 @@ using fdapde::testing::read_csv;
 
 //     for(unsigned int sim = 1; sim <= n_sim; ++sim){
 
-//       const std::string path_test = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/space_time/Test_4/results_lambdas_" + lambda_string + "/alpha_" + std::to_string(alpha_int) + "/" + solver + "/sim_" + std::to_string(sim);
+//       const std::string path_test = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/models/space_time/Test_4/results_lambdas_" + lambda_string + "/alpha_" + std::to_string(alpha_int) + "/" + solver + "/sim_" + std::to_string(sim);
 
 //       // load data from .csv files
 //       CSVFile<double> yFile; // observation file
@@ -530,88 +894,3 @@ using fdapde::testing::read_csv;
 
 //   }
 // }
-
-
-// test 6
-//    domain:         c-shaped
-//    space sampling: locations != nodes
-//    time sampling:  locations != nodes
-//    missing data:   yes
-//    penalization:   simple laplacian
-//    covariates:     no
-//    BC:             no
-//    order FE:       1
-//    time penalization: separable (mass penalization)
-TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations_separable_monolithic_missingdata) {
-
-    std::string R_path = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/space_time/Test_6"; 
-    //   // Ilenia 
-    //   std::string path = "/mnt/c/Users/ileni/OneDrive - Politecnico di Milano/Thesis_shared/space_time/Test_6"; 
-
-    // define temporal domain
-    DVector<double> time_mesh;
-    time_mesh.resize(21);
-    for (std::size_t i = 0; i < 21; ++i) time_mesh[i] = 1.0 / 20 * i;
-    // define spatial domain and regularizing PDE
-    MeshLoader<Mesh2D> domain("c_shaped");
-    // import data from files
-    DMatrix<double> space_locs = read_csv<double>(R_path + "/locs.csv");
-    DMatrix<double> y          = read_csv<double>(R_path + "/y.csv");
-
-    std::cout << "dim y = " << y.rows() << " , " << y.cols() << std::endl; 
-    // define regularizing PDE
-    auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.rows(), 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
-    // define model
-    double lambda_D = 1e-3;
-    double lambda_T = 1e-3;
-    double alpha = 0.5;
-    SQRPDE<decltype(problem), SpaceTimeSeparable, GeoStatLocations, MonolithicSolver> model(problem, time_mesh, alpha);
-    model.set_lambda_D(lambda_D);
-    model.set_lambda_T(lambda_T);
-    model.set_spatial_locations(space_locs);
-    // set model's data
-    BlockFrame<double, int> df;
-    std::cout << "stack obs " << std::endl; 
-    df.stack(OBSERVATIONS_BLK, y);
-    std::cout << "set data  " << std::endl; 
-    model.set_data(df);
-    // solve smoothing problem
-    std::cout << "init " << std::endl; 
-    model.init();
-    std::cout << "solve " << std::endl;
-    // DVector<double> idx_nan;
-    // idx_nan.resize(model.nan_idxs().size())
-    // for(auto i : model.nan_idxs()) 
-    // std::cout << i << std::endl; 
-      
-    // Save idx_nan
-    std::ofstream file_idx(R_path + "/idx_nan.csv");
-    for(auto i : model.nan_idxs()) 
-      file_idx << i << "\n" ; 
-
-    file_idx.close(); 
-
-    model.solve();
-    std::cout << "fine solve " << std::endl; 
-
-    // Save C++ solution 
-    DMatrix<double> computedF = model.f();
-    const static Eigen::IOFormat CSVFormatf(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
-    std::ofstream filef(R_path + "/f.csv");
-    if (filef.is_open()){
-        filef << computedF.format(CSVFormatf);
-        filef.close();
-    }
-  
-    // Save C++ solution 
-    DMatrix<double> computedFn = model.Psi()*model.f();
-    const static Eigen::IOFormat CSVFormatfn(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
-    std::ofstream filefn(R_path + "/fn.csv");
-    if (filefn.is_open()){
-          filefn << computedFn.format(CSVFormatfn);
-          filefn.close();
-    }
-
-}

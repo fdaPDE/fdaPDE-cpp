@@ -111,6 +111,7 @@ class RegressionBase :
     // initialization methods
     void update_data();   // update model's status to data (called by ModelBase::setData())
     void init_nan();      // regression models' missing data logic (called by SamplingBase::init_sampling())
+    void init_nan(const std::unordered_set<std::size_t>& nan_idxs_input);
 };
 
 // implementative details
@@ -184,6 +185,36 @@ template <typename Model> void RegressionBase<Model>::init_nan() {
     }
     return;
 }
+
+// missing data logic correction used in fpirls
+template <typename Model> void RegressionBase<Model>::init_nan(const std::unordered_set<std::size_t>& nan_idxs_input) {
+    // derive missingness pattern
+    nan_idxs_.clear();   // empty nan indexes set
+    nan_idxs_ = nan_idxs_input ; 
+        
+    // matrix B assembly logic (set to zero rows corresponding to missing observations)
+    if (has_nan()) {
+        // reserve space
+        std::size_t n = Psi(not_nan()).rows();
+        std::size_t N = Psi(not_nan()).cols();
+        B_.resize(n, N);
+        // triplet list to fill sparse matrix
+        std::vector<fdapde::Triplet<double>> triplet_list;
+        triplet_list.reserve(n * N);
+        for (int k = 0; k < Psi(not_nan()).outerSize(); ++k)
+            for (SpMatrix<double>::InnerIterator it(Psi(not_nan()), k); it; ++it) {
+                if (nan_idxs_.find(it.row()) == nan_idxs_.end()) {
+                    // no missing data at this location
+                    triplet_list.emplace_back(it.row(), it.col(), it.value());
+                }
+            }
+        // finalize construction
+        B_.setFromTriplets(triplet_list.begin(), triplet_list.end());
+        B_.makeCompressed();
+    }
+    return;
+}
+
 
 // trait to detect if a type is a regression model
 template <typename T> struct is_regression_model {

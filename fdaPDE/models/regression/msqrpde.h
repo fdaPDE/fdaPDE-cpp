@@ -281,14 +281,12 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
         g_init_ = g_curr_; 
         if(has_covariates()){
             beta_init_ = beta_curr_;
-            std::cout << "Beta_init_ : " << beta_init_ << std::endl; 
-
         }
 
-        std::cout << "Range f_init_ : " << f_init_.minCoeff() << " , " << f_init_.maxCoeff() << std::endl ; 
-        std::cout << "Range g_init_ : " << g_init_.minCoeff() << " , " << g_init_.maxCoeff() << std::endl ; 
-        std::cout << "Model loss of the initializazion: " << model_loss() << " + penalty = " << g_curr_.dot(R0_multiple_*g_curr_) << std::endl;  
-        std::cout << "----- crossing global at init = " << crossing_penalty() << std::endl;
+        // std::cout << "Range f_init_ : " << f_init_.minCoeff() << " , " << f_init_.maxCoeff() << std::endl ; 
+        // std::cout << "Range g_init_ : " << g_init_.minCoeff() << " , " << g_init_.maxCoeff() << std::endl ; 
+        // std::cout << "Model loss of the initializazion: " << model_loss() << " + penalty = " << g_curr_.dot(R0_multiple_*g_curr_) << std::endl;  
+        // std::cout << "----- crossing global at init = " << crossing_penalty() << std::endl;
         return;
     }
 
@@ -318,7 +316,7 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
 
             while(k_ < max_iter_ && std::abs(J_new - J_old) > tolerance_){    
 
-                std::cout << "--------------------------  k_ = " << k_ << std::endl; 
+                //std::cout << "--------------------------  k_ = " << k_ << std::endl; 
 
                 // assemble W, Delta, z 
                 DVector<double> delta_((h_-1)*n_obs()); 
@@ -379,7 +377,7 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
                     f_curr_ = sol.head(h_*n_basis());
                     fn_curr_ = Psi_multiple_*f_curr_; 
 
-                    } else{ // parametric case
+                } else{ // parametric case
     
                         XtWX_multiple_ = X_multiple_.transpose()*W_multiple_*X_multiple_;
                         invXtWX_multiple_ = XtWX_multiple_.partialPivLu(); 
@@ -399,24 +397,24 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
                         fn_curr_ = Psi_multiple_*f_curr_; 
                         beta_curr_ = invXtWX_multiple_.solve(X_multiple_.transpose()*(W_bar_*z_ - W_multiple_*fn_curr_ + gamma0_*t));
                         
-                        std::cout << "Beta_curr: " << beta_curr_ << std::endl; 
+                        //std::cout << "Beta_curr: " << beta_curr_ << std::endl; 
 
                     }
                     // store PDE misfit
                     g_curr_ = sol.tail(h_*n_basis());
                     
-                    std::cout << "Range g_curr: " << g_curr_.minCoeff() << " , " << g_curr_.maxCoeff() << std::endl;
-                    std::cout << "Range f_curr: " << f_curr_.minCoeff() << " , " << f_curr_.maxCoeff() << std::endl; 
+                    //std::cout << "Range g_curr: " << g_curr_.minCoeff() << " , " << g_curr_.maxCoeff() << std::endl;
+                    //std::cout << "Range f_curr: " << f_curr_.minCoeff() << " , " << f_curr_.maxCoeff() << std::endl; 
                     
                     // update J 
                     J_old = J_new; 
                     J_new = model_loss() + g_curr_.dot(R0_multiple_*g_curr_) + gamma0_*crossing_penalty();   // R0 multiple already contains lambdas!
                     
 
-                    std::cout << "----- crossing global at iter k = " << crossing_penalty() << std::endl;
-                    std::cout << "----- J_old = " << J_old << std::endl;
-                    std::cout << "----- J_new = " << J_new << " = " << model_loss() << " + " << g_curr_.dot(R0_multiple_*g_curr_) << std::endl;  
-                    std::cout << "----- J_old - J_new = " << J_old - J_new << std::endl; 
+                    // std::cout << "----- crossing global at iter k = " << crossing_penalty() << std::endl;
+                    // std::cout << "----- J_old = " << J_old << std::endl;
+                    // std::cout << "----- J_new = " << J_new << " = " << model_loss() << " + " << g_curr_.dot(R0_multiple_*g_curr_) << std::endl;  
+                    // std::cout << "----- J_old - J_new = " << J_old - J_new << std::endl; 
 
                     k_++;  
             }
@@ -424,7 +422,7 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
             double crossing_penalty_new = crossing_penalty(); 
 
             std::cout << "#################### cross new:  " << crossing_penalty_new << " , cross init: " << crossing_penalty_init << std::endl; 
-            std::cout << "#################### cross new-init: " << std::setprecision(10) << (crossing_penalty_new - crossing_penalty_init) << std::endl; 
+            //std::cout << "#################### cross new-init: " << std::setprecision(10) << (crossing_penalty_new - crossing_penalty_init) << std::endl; 
             
             gamma0_ *= C_;  
             iter_++;     
@@ -453,30 +451,7 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
     template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
         const bool MSQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::crossing_constraints() const {
         // Return true if the current estimate of quantiles is crossing, false otherwise 
-
-        return crossing_penalty() < eps_; 
-
-        // bool crossed = false; 
-        
-        // unsigned int j = 0;
-        // while(!crossed && j < h_-1){ 
-        //     DVector<double> crossing_value = fitted(j+1)-fitted(j); 
-        //     unsigned int i = 0; 
-        //     while(!crossed && i < n_obs()){          
-        //         if(crossing_value(i) < eps_)
-        //             crossed = true;  
-        //         i++;
-        //     }
-        //     j++; 
-        // }
-
-        // if(crossed)
-        //     std::cout << "crossed = true" << std::endl;
-        // else{
-        //     std::cout << "crossed = false" << std::endl;
-        // }
-
-        // return crossed;
+        return crossing_penalty() > eps_; 
     }
 
     template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>

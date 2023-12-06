@@ -234,43 +234,46 @@ TEST(gcv_msqrpde_test3, spacevaryingpde_semiparametric_samplingatlocations_space
 
     // path test  
     std::string C_path = "/mnt/c/Users/marco/OneDrive Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/fdaPDE_official-fork/fdaPDE-cpp-sqrpde/test/data/models/msqrpde/2D_test3"; 
-    std::string R_path = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/multiple_quantiles/Tests/Test_3"; 
+    std::string R_path = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/models/multiple_quantiles/Tests/Test_3"; 
     // define domain
-    MeshLoader<Mesh2D> domain("c_shaped_631");
+    MeshLoader<Mesh2D> domain("c_shaped_adj");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define statistical model
-    std::vector<double> alphas = {0.01, 0.05, 0.10, 0.90, 0.95, 0.99}; 
+    std::vector<double> alphas = {0.01, 0.05, 0.10, 0.25, 0.5, 0.75, 0.90, 0.95, 0.99}; 
 
     const std::string data_type = "hetero"; 
 
     // define grid of lambda values
     std::vector<SVector<1>> lambdas;
-    for(double x = -6.9; x <= -5.8; x +=0.1) lambdas.push_back(SVector<1>(std::pow(10,x)));
+    for(double x = -5.0; x <= -0.1; x +=0.2) lambdas.push_back(SVector<1>(std::pow(10,x)));
     DVector<double> best_lambda;
     best_lambda.resize(alphas.size());  
 
     // Read covariates and locations
-    DMatrix<double> X = read_csv<double>(R_path + "/data_" + data_type + "/X.csv"); 
-    DMatrix<double> loc = read_csv<double>(R_path + "/data_" + data_type + "/locs.csv"); 
+    DMatrix<double> X = read_csv<double>(R_path + "/X.csv"); 
+    DMatrix<double> loc = read_csv<double>(R_path + "/locs.csv"); 
 
     // Simulations 
-    const unsigned int M = 1; 
+    const unsigned int M = 10; 
     for(auto m = 1; m <= M; ++m){
         std::cout << "--------------------Simulation #" << std::to_string(m) << "-------------" << std::endl; 
         unsigned int ind = 0; 
-        std::ofstream fileGCV(R_path + "/data_" + data_type + "/sim_" + std::to_string(m) + "/single_est/gcv_scores.csv");
+        std::ofstream fileGCV(R_path + "/data_" + data_type + "/simulations/sim_" + std::to_string(m) + "/single_est/gcv_scores.csv");
         for(auto alpha : alphas){
 
-            std::cout << "------------------alpha=" << std::to_string(alpha) << "-----------------" << std::endl; 
+            unsigned int alpha_int = alpha*100; 
+            std::string alpha_string = std::to_string(alpha_int); 
+
+            std::cout << "------------------alpha=" << alpha_string << "-----------------" << std::endl; 
 
             SQRPDE<decltype(problem), SpaceOnly, GeoStatLocations, MonolithicSolver> model(problem, alpha);
             model.set_spatial_locations(loc);
 
             // load data from .csv files
-            DMatrix<double> y = read_csv<double>(R_path + "/data_" + data_type + "/sim_" + std::to_string(m) + "/z.csv");
+            DMatrix<double> y = read_csv<double>(R_path + "/data_" + data_type + "/simulations/sim_" + std::to_string(m) + "/y.csv");
 
             // set model data
             BlockFrame<double, int> df;
@@ -286,7 +289,6 @@ TEST(gcv_msqrpde_test3, spacevaryingpde_semiparametric_samplingatlocations_space
 
             ScalarField<1, decltype(GCV)> obj(GCV);
             opt.optimize(obj, lambdas); // optimize gcv field
-            std::cout << "opt: " << opt.optimum()[0] << std::endl; 
             best_lambda[ind] = opt.optimum()[0];
             
             std::cout << "Best lambda is: " << std::setprecision(16) << best_lambda[ind] << std::endl; 
@@ -300,7 +302,7 @@ TEST(gcv_msqrpde_test3, spacevaryingpde_semiparametric_samplingatlocations_space
         }
 
         const static Eigen::IOFormat CSVFormatL(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
-        std::ofstream fileL(R_path + "/data_" + data_type + "/sim_" + std::to_string(m) + "/single_est/lambdas_opt.csv");
+        std::ofstream fileL(R_path + "/data_" + data_type + "/simulations/sim_" + std::to_string(m) + "/single_est/lambdas_opt.csv");
         if (fileL.is_open()){
             fileL << best_lambda.format(CSVFormatL);
             fileL.close();

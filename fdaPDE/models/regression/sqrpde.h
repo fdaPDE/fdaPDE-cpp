@@ -53,7 +53,10 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
     double tol_weights_ = 1e-6;
     double tol_ = 1e-6;
 
-    double pinball_loss(double x) const { return 0.5 * std::abs(x) + (alpha_ - 0.5) * x; };   // quantile check function
+    // quantile check function
+    double pinball_loss(double x, double eps = std::pow(10,-1.0)) const { 
+        // return 0.5 * std::abs(x) + (alpha_ - 0.5) * x; 
+        return (alpha_-1) * x + eps * log1pexp(x / eps); };   
    public:
     IMPORT_REGRESSION_SYMBOLS;
     using Base::invXtWX_;
@@ -89,8 +92,7 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
     // required by FPIRLS (see fpirls.h for details)
     // initalizes mean vector \mu
     void fpirls_init() {
-        // non-parametric and semi-parametric cases coincide here, since beta^(0) = 0
-
+        // non-parametric and semi-parametric cases coincide here, since beta^(0) = 0 
         if constexpr(std::is_same<RegularizationType, SpaceOnly>::value){
             // assemble srpde non-parametric system matrix and factorize
             SparseBlockMatrix<double, 2, 2> A(
@@ -108,28 +110,21 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
 
         else{
             // if constexpr(std::is_same<RegularizationType, SpaceTimeSeparable>::value){  // commentato perchè per ora considero solo Seèarable per il caso SpaceTime
-            std::cout << "here 1" << std::endl;
-            std::cout << n_obs() << std::endl;
-            std::cout << " y size = " << y().rows() << std::endl;
-            std::cout << " nan size = " << nan_idxs().size() << std::endl;
             SparseBlockMatrix<double,2,2>
                 A( - PsiTD()*Psi()/(2*n_obs()) - Base::lambda_T()*Kronecker(Base::P1(), pde().R0()), lambda_D()*R1().transpose(),
                      lambda_D()*R1(),                                                                lambda_D()*R0()             );
                 
                 // cache non-parametric matrix and its factorization for reuse 
                 fdapde::SparseLU<SpMatrix<double>> invA;
-                std::cout << "here 2" << std::endl;
                 invA.compute(A);
                 // assemble rhs of srpde problem
                 DVector<double> b(A.rows());
-                std::cout << "here 3" << std::endl;
+
                 b.block(n_basis(),0, n_basis(),1) = lambda_D()*u();  
-                b.block(0,0, n_basis(),1) = - PsiTD()*y()/(2*n_obs()); 
-                std::cout << "here 4" << std::endl;
+                b.block(0,0, n_basis(),1) = - PsiTD()*y()/(2*n_obs());
                 BLOCK_FRAME_SANITY_CHECKS;
                 mu_ = Psi() * (invA.solve(b)).head(n_basis());    // tolto not_nan() da Psi()
 
-                std::cout << "here 5" << std::endl; 
             // }
 
             // if constexpr(std::is_same<RegularizationType, SpaceTimeParabolic>::value){
@@ -199,18 +194,21 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
     const DMatrix<double>& T();
     double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {
         double result = 0;
-        // for (std::size_t i = 0; i < op2.rows(); ++i) { result += pinball_loss(op2.coeff(i, 0) - op1.coeff(i, 0)); }
-        
+
         std::set<std::size_t> observation_indexes;
         for(std::size_t i = 0; i < op2.rows(); ++i) {
             observation_indexes.insert(i);
         }
-        observation_indexes.erase(nan_idxs()); 
-        for (std::size_t i : observation_indexes) { result += pinball_loss(op2.coeff(i, 0) - op1.coeff(i, 0)); }
+        for(auto ind : nan_idxs())
+            observation_indexes.erase(ind); 
+        for(std::size_t i : observation_indexes) { result += pinball_loss(op2.coeff(i, 0) - op1.coeff(i, 0)); }
         
-        return result * result / ( n_obs() );  // n_obs() returns number of not-nan observations
+        return result * result / n_obs();  // n_obs() returns number of not-nan observations
     }
   
+    double log1pexp(double x) const; 
+    // double smoothing_rho(double x, double eps = 1e-3) const;
+    
     virtual ~SQRPDE() = default;
 };
 
@@ -269,6 +267,24 @@ const DMatrix<double>& SQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::
     }
     return T_;
 }
+
+
+// Compute  log(1 + exp(x))  without overflow 
+template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
+double SQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::log1pexp(double x) const{
+    if(x <= -37) return std::exp(x); 
+    if(x <= 18.) return std::log1p(std::exp(x));
+    if(x > 33.3) return x;
+    // else:
+    return x + std::exp(-x);
+}
+
+// // pinball loss smoothing approximation for GCV computation 
+// template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
+// double SQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::smoothing_rho(double x, double eps) const{
+//     // x: misfit 
+//     return (alpha_-1) * x + eps * log1pexp(x / eps); 
+// }
 
 }   // namespace models
 }   // namespace fdapde

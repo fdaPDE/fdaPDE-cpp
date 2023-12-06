@@ -74,20 +74,26 @@ template <typename Model> class FPIRLS {
         solver_.set_lambda(m_.lambda());
         solver_.set_spatial_locations(m_.locs());
         solver_.set_data(m_.data());   // possible covariates are passed from here
-        solver_.init();
+
+        // solver_.init()  ---> rimosso 
+        solver_.init_pde();                      // init differential regularization
+        solver_.init_regularization();   // init regularization term
+        solver_.init_sampling(true);     // init \Psi matrix, always force recomputation
+        solver_.init_nan(m_.nan_idxs());              // analyze and set missingness pattern
+        solver_.init_model();
     };
 
     // executes the FPIRLS algorithm
     void compute() {
         // algorithm initialization
         //mu_ = m_.initialize_mu();
-        //distr_.preprocess(mu_);
-	m_.fpirls_init();
+        //distr_.preprocess(mu_); 
+	m_.fpirls_init(); 
         // objective functional value at consecutive iterations
         double J_old = tolerance_ + 1;
         double J_new = 0;
         while (k_ < max_iter_ && std::abs(J_new - J_old) > tolerance_) {
-            std::cout << "FPIRLS k = " << k_ << std::endl; 
+            //std::cout << "FPIRLS k = " << k_ << std::endl; 
             // compute weight matrix W and pseudo-observations \tilde{y}
             m_.fpirls_pre_solve_step();
             //auto pair = m_.compute(mu_);
@@ -121,7 +127,7 @@ template <typename Model> class FPIRLS {
             // prepare for next iteration
             k_++; J_old = J_new; J_new = J;
         }
-        std::cout << "niter fpirls = " << k_ << std::endl ; 
+        std::cout << "niter fpirls = " << k_ << std::endl; 
         return;
     }
 
