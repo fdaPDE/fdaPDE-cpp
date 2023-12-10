@@ -23,9 +23,9 @@ using fdapde::core::fem_order;
 using fdapde::core::laplacian;
 using fdapde::core::PDE;
 
-#include "../../fdaPDE/models/regression/sqrpde.h"
+#include "../../fdaPDE/models/regression/qsrpde.h"
 #include "../../fdaPDE/models/sampling_design.h"
-using fdapde::models::SQRPDE;
+using fdapde::models::QSRPDE;
 using fdapde::models::SpaceTimeSeparable;
 using fdapde::models::SpaceTimeParabolic;
 using fdapde::models::SpaceOnly;
@@ -45,11 +45,11 @@ using fdapde::testing::read_csv;
 //    covariates:   no
 //    BC:           no
 //    order FE:     1
-TEST(sqrpde_test, laplacian_nonparametric_samplingatnodes) {
+TEST(qsrpde_test, laplacian_nonparametric_samplingatnodes) {
     // define domain
     MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
-    DMatrix<double> y = read_csv<double>("../data/models/sqrpde/2D_test1/y.csv");
+    DMatrix<double> y = read_csv<double>("../data/models/qsrpde/2D_test1/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
@@ -57,7 +57,7 @@ TEST(sqrpde_test, laplacian_nonparametric_samplingatnodes) {
     // define model
     double lambda = 1.778279 * std::pow(0.1, 4);
     double alpha = 0.1;
-    SQRPDE<SpaceOnly> model(problem, Sampling::mesh_nodes, alpha);
+    QSRPDE<SpaceOnly> model(problem, Sampling::mesh_nodes, alpha);
     model.set_lambda_D(lambda);
     // set model's data
     BlockFrame<double, int> df;
@@ -67,7 +67,7 @@ TEST(sqrpde_test, laplacian_nonparametric_samplingatnodes) {
     model.init();
     model.solve();
     // test correctness
-    EXPECT_TRUE(almost_equal(model.f(), "../data/models/sqrpde/2D_test1/sol.mtx"));
+    EXPECT_TRUE(almost_equal(model.f(), "../data/models/qsrpde/2D_test1/sol.mtx"));
 }
 
 // test 2
@@ -77,13 +77,13 @@ TEST(sqrpde_test, laplacian_nonparametric_samplingatnodes) {
 //    covariates:   yes
 //    BC:           no
 //    order FE:     1
-TEST(sqrpde_test, laplacian_semiparametric_samplingatlocations) {
+TEST(qsrpde_test, laplacian_semiparametric_samplingatlocations) {
     // define domain and regularizing PDE
     MeshLoader<Mesh2D> domain("c_shaped");
     // import data from files
-    DMatrix<double> locs = read_csv<double>("../data/models/sqrpde/2D_test2/locs.csv");
-    DMatrix<double> y    = read_csv<double>("../data/models/sqrpde/2D_test2/y.csv");
-    DMatrix<double> X    = read_csv<double>("../data/models/sqrpde/2D_test2/X.csv");
+    DMatrix<double> locs = read_csv<double>("../data/models/qsrpde/2D_test2/locs.csv");
+    DMatrix<double> y    = read_csv<double>("../data/models/qsrpde/2D_test2/y.csv");
+    DMatrix<double> X    = read_csv<double>("../data/models/qsrpde/2D_test2/X.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
@@ -91,7 +91,7 @@ TEST(sqrpde_test, laplacian_semiparametric_samplingatlocations) {
     // define statistical model
     double alpha = 0.9;
     double lambda = 3.162277660168379 * std::pow(0.1, 4);   // use optimal lambda to avoid possible numerical issues
-    SQRPDE<SpaceOnly> model(problem, Sampling::pointwise, alpha);
+    QSRPDE<SpaceOnly> model(problem, Sampling::pointwise, alpha);
     model.set_lambda_D(lambda);
     model.set_spatial_locations(locs);
     // set model's data
@@ -103,8 +103,8 @@ TEST(sqrpde_test, laplacian_semiparametric_samplingatlocations) {
     model.init();
     model.solve();
     // test correctness
-    EXPECT_TRUE(almost_equal(model.f()   , "../data/models/sqrpde/2D_test2/sol.mtx" ));
-    EXPECT_TRUE(almost_equal(model.beta(), "../data/models/sqrpde/2D_test2/beta.mtx"));
+    EXPECT_TRUE(almost_equal(model.f()   , "../data/models/qsrpde/2D_test2/sol.mtx" ));
+    EXPECT_TRUE(almost_equal(model.beta(), "../data/models/qsrpde/2D_test2/beta.mtx"));
 }
 
 // test 3
@@ -114,11 +114,11 @@ TEST(sqrpde_test, laplacian_semiparametric_samplingatlocations) {
 //    covariates:   no
 //    BC:           no
 //    order FE:     1
-TEST(sqrpde_test, costantcoefficientspde_nonparametric_samplingatnodes) {
+TEST(qsrpde_test, costantcoefficientspde_nonparametric_samplingatnodes) {
     // define domain and regularizing PDE
     MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
-    DMatrix<double> y = read_csv<double>("../data/models/sqrpde/2D_test3/y.csv");
+    DMatrix<double> y = read_csv<double>("../data/models/qsrpde/2D_test3/y.csv");
     // define regularizing PDE
     SMatrix<2> K;
     K << 1, 0, 0, 4;
@@ -128,7 +128,7 @@ TEST(sqrpde_test, costantcoefficientspde_nonparametric_samplingatnodes) {
     // define statistical model
     double alpha = 0.1;
     double lambda = 5.623413251903491 * pow(0.1, 4);
-    SQRPDE<SpaceOnly> model(problem, Sampling::mesh_nodes, alpha);
+    QSRPDE<SpaceOnly> model(problem, Sampling::mesh_nodes, alpha);
     model.set_lambda_D(lambda);
     // set model data
     BlockFrame<double, int> df;
@@ -138,7 +138,7 @@ TEST(sqrpde_test, costantcoefficientspde_nonparametric_samplingatnodes) {
     model.init();
     model.solve();
     // test correctness
-    EXPECT_TRUE(almost_equal(model.f(), "../data/models/sqrpde/2D_test3/sol.mtx"));
+    EXPECT_TRUE(almost_equal(model.f(), "../data/models/qsrpde/2D_test3/sol.mtx"));
 }
 
 // test 4
@@ -148,13 +148,13 @@ TEST(sqrpde_test, costantcoefficientspde_nonparametric_samplingatnodes) {
 //    covariates:   yes
 //    BC:           no
 //    order FE:     1
-TEST(sqrpde_test, laplacian_semiparametric_samplingareal) {
+TEST(qsrpde_test, laplacian_semiparametric_samplingareal) {
     // define domain and regularizing PDE
     MeshLoader<Mesh2D> domain("c_shaped_areal");
     // import data from files
-    DMatrix<double> y = read_csv<double>("../data/models/sqrpde/2D_test4/y.csv");
-    DMatrix<double> X = read_csv<double>("../data/models/sqrpde/2D_test4/X.csv");
-    DMatrix<double> subdomains = read_csv<double>("../data/models/sqrpde/2D_test4/incidence_matrix.csv");
+    DMatrix<double> y = read_csv<double>("../data/models/qsrpde/2D_test4/y.csv");
+    DMatrix<double> X = read_csv<double>("../data/models/qsrpde/2D_test4/X.csv");
+    DMatrix<double> subdomains = read_csv<double>("../data/models/qsrpde/2D_test4/incidence_matrix.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
@@ -162,7 +162,7 @@ TEST(sqrpde_test, laplacian_semiparametric_samplingareal) {
     // define statistical model
     double alpha = 0.5;
     double lambda = 5.623413251903491 * std::pow(0.1, 3);   // use optimal lambda to avoid possible numerical issues
-    SQRPDE<SpaceOnly> model(problem, Sampling::areal, alpha);
+    QSRPDE<SpaceOnly> model(problem, Sampling::areal, alpha);
     model.set_lambda_D(lambda);
     model.set_spatial_locations(subdomains);
     // set model data
@@ -174,6 +174,6 @@ TEST(sqrpde_test, laplacian_semiparametric_samplingareal) {
     model.init();
     model.solve();
     // test correctness
-    EXPECT_TRUE(almost_equal(model.f()   , "../data/models/sqrpde/2D_test4/sol.mtx" ));
-    EXPECT_TRUE(almost_equal(model.beta(), "../data/models/sqrpde/2D_test4/beta.mtx"));
+    EXPECT_TRUE(almost_equal(model.f()   , "../data/models/qsrpde/2D_test4/sol.mtx" ));
+    EXPECT_TRUE(almost_equal(model.beta(), "../data/models/qsrpde/2D_test4/beta.mtx"));
 }

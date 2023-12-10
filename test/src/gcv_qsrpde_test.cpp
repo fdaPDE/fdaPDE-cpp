@@ -28,18 +28,15 @@ using fdapde::core::MatrixDataWrapper;
 using fdapde::core::PDE;
 using fdapde::core::VectorDataWrapper;
 
-#include "../../fdaPDE/models/regression/sqrpde.h"
+#include "../../fdaPDE/models/regression/qsrpde.h"
 #include "../../fdaPDE/models/regression/gcv.h"
 #include "../../fdaPDE/models/sampling_design.h"
-using fdapde::models::Areal;
-using fdapde::models::GeoStatLocations;
-using fdapde::models::GeoStatMeshNodes;
-using fdapde::models::SQRPDE;
+using fdapde::models::QSRPDE;
 using fdapde::models::SpaceOnly;
-using fdapde::models::MonolithicSolver;
 using fdapde::models::ExactEDF;
 using fdapde::models::GCV;
 using fdapde::models::StochasticEDF;
+using fdapde::models::Sampling;
 
 #include "utils/constants.h"
 #include "utils/mesh_loader.h"
@@ -57,18 +54,18 @@ using fdapde::testing::read_csv;
 //    BC:           no
 //    order FE:     1
 //    GCV optimization: grid exact
-TEST(gcv_sqrpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridexact) {
+TEST(gcv_qsrpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridexact) {
     // define domain
     MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
-    DMatrix<double> y = read_csv<double>("../data/gcv/sqrpde/2D_test1/y.csv");
+    DMatrix<double> y = read_csv<double>("../data/gcv/qsrpde/2D_test1/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double alpha = 0.1;
-    SQRPDE<decltype(problem), SpaceOnly, GeoStatMeshNodes, MonolithicSolver> model(problem, alpha);
+    QSRPDE<SpaceOnly> model(problem, Sampling::mesh_nodes, alpha);
     // set model's data
     BlockFrame<double, int> df;
     df.insert(OBSERVATIONS_BLK, y);
@@ -76,14 +73,14 @@ TEST(gcv_sqrpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridexac
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    std::vector<SVector<1>> lambdas;
+    std::vector<DVector<double>> lambdas;
     for (double x = -8.0; x <= -5.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
-    Grid<1> opt;
+    Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);
     // test correctness
-    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/sqrpde/2D_test1/edfs.mtx"));
-    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/sqrpde/2D_test1/gcvs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/qsrpde/2D_test1/edfs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/qsrpde/2D_test1/gcvs.mtx"));
 }
 
 // test 2
@@ -94,18 +91,18 @@ TEST(gcv_sqrpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridexac
 //    BC:           no
 //    order FE:     1
 //    GCV optimization: grid stochastic
-TEST(gcv_sqrpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridstochastic) {
+TEST(gcv_qsrpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridstochastic) {
     // define domain
     MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
-    DMatrix<double> y = read_csv<double>("../data/gcv/sqrpde/2D_test2/y.csv");
+    DMatrix<double> y = read_csv<double>("../data/gcv/qsrpde/2D_test2/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double alpha = 0.1;
-    SQRPDE<decltype(problem), SpaceOnly, GeoStatMeshNodes, MonolithicSolver> model(problem, alpha);
+    QSRPDE<SpaceOnly> model(problem, Sampling::mesh_nodes, alpha);
     // set model's data
     BlockFrame<double, int> df;
     df.insert(OBSERVATIONS_BLK, y);
@@ -114,14 +111,14 @@ TEST(gcv_sqrpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridstoc
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 438172;
     auto GCV = model.gcv<StochasticEDF>(1000, seed);
-    std::vector<SVector<1>> lambdas;
+    std::vector<DVector<double>> lambdas;
     for (double x = -8.0; x <= -5.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
-    Grid<1> opt;
+    Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);
     // test correctness
-    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/sqrpde/2D_test2/edfs.mtx"));
-    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/sqrpde/2D_test2/gcvs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/qsrpde/2D_test2/edfs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/qsrpde/2D_test2/gcvs.mtx"));
 }
 
 // test 3
@@ -132,20 +129,20 @@ TEST(gcv_sqrpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridstoc
 //    BC:           no
 //    order FE:     1
 //    GCV optimization: grid exact
-TEST(gcv_sqrpde_test, laplacian_semiparametric_samplingatlocations_gridexact) {
+TEST(gcv_qsrpde_test, laplacian_semiparametric_samplingatlocations_gridexact) {
     // define domain
     MeshLoader<Mesh2D> domain("c_shaped");
     // import data from files
-    DMatrix<double> locs = read_csv<double>("../data/gcv/sqrpde/2D_test3/locs.csv");
-    DMatrix<double> y = read_csv<double>("../data/gcv/sqrpde/2D_test3/y.csv");
-    DMatrix<double> X = read_csv<double>("../data/gcv/sqrpde/2D_test3/X.csv");
+    DMatrix<double> locs = read_csv<double>("../data/gcv/qsrpde/2D_test3/locs.csv");
+    DMatrix<double> y = read_csv<double>("../data/gcv/qsrpde/2D_test3/y.csv");
+    DMatrix<double> X = read_csv<double>("../data/gcv/qsrpde/2D_test3/X.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double alpha = 0.9;
-    SQRPDE<decltype(problem), SpaceOnly, GeoStatLocations, MonolithicSolver> model(problem, alpha);
+    QSRPDE<SpaceOnly> model(problem, Sampling::pointwise, alpha);
     model.set_spatial_locations(locs);
     // set model's data
     BlockFrame<double, int> df;
@@ -155,14 +152,14 @@ TEST(gcv_sqrpde_test, laplacian_semiparametric_samplingatlocations_gridexact) {
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    std::vector<SVector<1>> lambdas;
+    std::vector<DVector<double>> lambdas;
     for (double x = -5.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
-    Grid<1> opt;
+    Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);
     // test correctness
-    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/sqrpde/2D_test3/edfs.mtx"));
-    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/sqrpde/2D_test3/gcvs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/qsrpde/2D_test3/edfs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/qsrpde/2D_test3/gcvs.mtx"));
 }
 
 // test 4
@@ -173,20 +170,20 @@ TEST(gcv_sqrpde_test, laplacian_semiparametric_samplingatlocations_gridexact) {
 //    BC:           no
 //    order FE:     1
 //    GCV optimization: grid stochastic
-TEST(gcv_sqrpde_test, laplacian_semiparametric_samplingatlocations_gridstochastic) {
+TEST(gcv_qsrpde_test, laplacian_semiparametric_samplingatlocations_gridstochastic) {
     // define domain
     MeshLoader<Mesh2D> domain("c_shaped");
     // import data from files
-    DMatrix<double> locs = read_csv<double>("../data/gcv/sqrpde/2D_test4/locs.csv");
-    DMatrix<double> y = read_csv<double>("../data/gcv/sqrpde/2D_test4/y.csv");
-    DMatrix<double> X = read_csv<double>("../data/gcv/sqrpde/2D_test4/X.csv");
+    DMatrix<double> locs = read_csv<double>("../data/gcv/qsrpde/2D_test4/locs.csv");
+    DMatrix<double> y = read_csv<double>("../data/gcv/qsrpde/2D_test4/y.csv");
+    DMatrix<double> X = read_csv<double>("../data/gcv/qsrpde/2D_test4/X.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double alpha = 0.9;
-    SQRPDE<decltype(problem), SpaceOnly, GeoStatLocations, MonolithicSolver> model(problem, alpha);
+    QSRPDE<SpaceOnly> model(problem, Sampling::pointwise, alpha);
     model.set_spatial_locations(locs);
     // set model's data
     BlockFrame<double, int> df;
@@ -197,14 +194,14 @@ TEST(gcv_sqrpde_test, laplacian_semiparametric_samplingatlocations_gridstochasti
     // define GCV function and grid of \lambda_D value
     std::size_t seed = 66546513;
     auto GCV = model.gcv<StochasticEDF>(1000, seed);
-    std::vector<SVector<1>> lambdas;
+    std::vector<DVector<double>> lambdas;
     for (double x = -5.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
-    Grid<1> opt;
+    Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);
     // test correctness
-    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/sqrpde/2D_test4/edfs.mtx"));
-    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/sqrpde/2D_test4/gcvs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/qsrpde/2D_test4/edfs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/qsrpde/2D_test4/gcvs.mtx"));
 }
 
 // test 5
@@ -215,11 +212,11 @@ TEST(gcv_sqrpde_test, laplacian_semiparametric_samplingatlocations_gridstochasti
 //    BC:           no
 //    order FE:     1
 //    GCV optimization: grid exact
-TEST(gcv_sqrpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridexact) {
+TEST(gcv_qsrpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridexact) {
     // define domain
     MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
-    DMatrix<double> y = read_csv<double>("../data/gcv/sqrpde/2D_test5/y.csv");
+    DMatrix<double> y = read_csv<double>("../data/gcv/qsrpde/2D_test5/y.csv");
     // define regularizing PDE
     SMatrix<2> K;
     K << 1, 0, 0, 4;
@@ -228,7 +225,7 @@ TEST(gcv_sqrpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gride
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double alpha = 0.1;
-    SQRPDE<decltype(problem), SpaceOnly, GeoStatMeshNodes, MonolithicSolver> model(problem, alpha);
+    QSRPDE<SpaceOnly> model(problem, Sampling::mesh_nodes, alpha);
     // set model's data
     BlockFrame<double, int> df;
     df.insert(OBSERVATIONS_BLK, y);
@@ -236,14 +233,14 @@ TEST(gcv_sqrpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gride
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    std::vector<SVector<1>> lambdas;
+    std::vector<DVector<double>> lambdas;
     for (double x = -7.0; x <= -5.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
-    Grid<1> opt;
+    Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);   // optimize gcv field
     // test correctness
-    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/sqrpde/2D_test5/edfs.mtx"));
-    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/sqrpde/2D_test5/gcvs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/qsrpde/2D_test5/edfs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/qsrpde/2D_test5/gcvs.mtx"));
 }
 
 // test 6
@@ -254,11 +251,11 @@ TEST(gcv_sqrpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gride
 //    BC:           no
 //    order FE:     1
 //    GCV optimization: grid stochastic
-TEST(gcv_sqrpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridstochastic) {
+TEST(gcv_qsrpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridstochastic) {
     // define domain
     MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
-    DMatrix<double> y = read_csv<double>("../data/gcv/sqrpde/2D_test6/y.csv");
+    DMatrix<double> y = read_csv<double>("../data/gcv/qsrpde/2D_test6/y.csv");
     // define regularizing PDE
     SMatrix<2> K;
     K << 1, 0, 0, 4;
@@ -267,7 +264,7 @@ TEST(gcv_sqrpde_test, costantcoefficientspde_nonparametric_samplingatnodes_grids
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double alpha = 0.1;
-    SQRPDE<decltype(problem), SpaceOnly, GeoStatMeshNodes, MonolithicSolver> model(problem, alpha);
+    QSRPDE<SpaceOnly> model(problem, Sampling::mesh_nodes, alpha);
     // set model's data
     BlockFrame<double, int> df;
     df.insert(OBSERVATIONS_BLK, y);
@@ -276,14 +273,14 @@ TEST(gcv_sqrpde_test, costantcoefficientspde_nonparametric_samplingatnodes_grids
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 438172;
     auto GCV = model.gcv<StochasticEDF>(1000, seed);
-    std::vector<SVector<1>> lambdas;
+    std::vector<DVector<double>> lambdas;
     for (double x = -7.0; x <= -5.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
-    Grid<1> opt;
+    Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);   // optimize gcv field
     // test correctness
-    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/sqrpde/2D_test6/edfs.mtx"));
-    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/sqrpde/2D_test6/gcvs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/qsrpde/2D_test6/edfs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/qsrpde/2D_test6/gcvs.mtx"));
 }
 
 // test 7
@@ -294,20 +291,20 @@ TEST(gcv_sqrpde_test, costantcoefficientspde_nonparametric_samplingatnodes_grids
 //    BC:           yes
 //    order FE:     1
 //    GCV optimization: grid exact
-TEST(gcv_sqrpde_test, laplacian_semiparametric_samplingareal_gridexact) {
+TEST(gcv_qsrpde_test, laplacian_semiparametric_samplingareal_gridexact) {
     // define domain and regularizing PDE
     MeshLoader<Mesh2D> domain("c_shaped_areal");
     // import data from files
-    DMatrix<double> y = read_csv<double>("../data/gcv/sqrpde/2D_test7/y.csv");
-    DMatrix<double> X = read_csv<double>("../data/gcv/sqrpde/2D_test7/X.csv");
-    DMatrix<double> subdomains = read_csv<double>("../data/gcv/sqrpde/2D_test7/incidence_matrix.csv");
+    DMatrix<double> y = read_csv<double>("../data/gcv/qsrpde/2D_test7/y.csv");
+    DMatrix<double> X = read_csv<double>("../data/gcv/qsrpde/2D_test7/X.csv");
+    DMatrix<double> subdomains = read_csv<double>("../data/gcv/qsrpde/2D_test7/incidence_matrix.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double alpha = 0.5;
-    SQRPDE<decltype(problem), SpaceOnly, Areal, MonolithicSolver> model(problem, alpha);
+    QSRPDE<SpaceOnly> model(problem, Sampling::areal, alpha);
     model.set_spatial_locations(subdomains);
     // set model's data
     BlockFrame<double, int> df;
@@ -317,14 +314,14 @@ TEST(gcv_sqrpde_test, laplacian_semiparametric_samplingareal_gridexact) {
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    std::vector<SVector<1>> lambdas;
+    std::vector<DVector<double>> lambdas;
     for (double x = -4.0; x <= -1.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
-    Grid<1> opt;
+    Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);   // optimize gcv field
     // test correctness
-    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/sqrpde/2D_test7/edfs.mtx"));
-    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/sqrpde/2D_test7/gcvs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/qsrpde/2D_test7/edfs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/qsrpde/2D_test7/gcvs.mtx"));
 }
 
 // test 8
@@ -335,21 +332,21 @@ TEST(gcv_sqrpde_test, laplacian_semiparametric_samplingareal_gridexact) {
 //    BC:           yes
 //    order FE:     1
 //    GCV optimization: grid stochastic
-TEST(gcv_sqrpde_test, laplacian_semiparametric_samplingareal_gridstochastic) {
+TEST(gcv_qsrpde_test, laplacian_semiparametric_samplingareal_gridstochastic) {
     // define domain and regularizing PDE
     // define domain and regularizing PDE
     MeshLoader<Mesh2D> domain("c_shaped_areal");
     // import data from files
-    DMatrix<double> y = read_csv<double>("../data/gcv/sqrpde/2D_test8/y.csv");
-    DMatrix<double> X = read_csv<double>("../data/gcv/sqrpde/2D_test8/X.csv");
-    DMatrix<double> subdomains = read_csv<double>("../data/gcv/sqrpde/2D_test8/incidence_matrix.csv");
+    DMatrix<double> y = read_csv<double>("../data/gcv/qsrpde/2D_test8/y.csv");
+    DMatrix<double> X = read_csv<double>("../data/gcv/qsrpde/2D_test8/X.csv");
+    DMatrix<double> subdomains = read_csv<double>("../data/gcv/qsrpde/2D_test8/incidence_matrix.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double alpha = 0.5;
-    SQRPDE<decltype(problem), SpaceOnly, Areal, MonolithicSolver> model(problem, alpha);
+    QSRPDE<SpaceOnly> model(problem, Sampling::areal, alpha);
     model.set_spatial_locations(subdomains);
     // set model's data
     BlockFrame<double, int> df;
@@ -360,12 +357,12 @@ TEST(gcv_sqrpde_test, laplacian_semiparametric_samplingareal_gridstochastic) {
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 438172;
     auto GCV = model.gcv<StochasticEDF>(100, seed);
-    std::vector<SVector<1>> lambdas;
+    std::vector<DVector<double>> lambdas;
     for (double x = -4.0; x <= -1.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
-    Grid<1> opt;
+    Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);
     // test correctness
-    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/sqrpde/2D_test8/edfs.mtx"));
-    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/sqrpde/2D_test8/gcvs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/qsrpde/2D_test8/edfs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/qsrpde/2D_test8/gcvs.mtx"));
 }

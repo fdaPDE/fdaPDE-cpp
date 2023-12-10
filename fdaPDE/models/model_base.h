@@ -41,9 +41,9 @@ template <typename Model> class ModelBase {
         if (model().runtime().query(runtime_status::require_pde_init)) { pde_.init(); }   // init penalty
         if (model().runtime().query(runtime_status::require_penalty_init)) { model().init_regularization(); }        
         if (model().runtime().query(runtime_status::require_functional_basis_evaluation)) {
-	  model().init_sampling(true);   // init \Psi matrix, always force recomputation
-	  model().init_nan();            // analyze and set missingness pattern
-	 }
+            model().init_sampling(true);   // init \Psi matrix, always force recomputation
+            model().init_nan();            // analyze and set missingness pattern
+        }
         
         model().init_data();    // specific data-dependent initialization requested by the model
         model().init_model();   // model initialization

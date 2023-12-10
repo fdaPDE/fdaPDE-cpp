@@ -30,19 +30,9 @@ namespace models {
 // base class for GSRPDE model
 template <typename RegularizationType_>
 class GSRPDE : public RegressionBase<GSRPDE<RegularizationType_>, RegularizationType_> {
-   private:
-    Distribution distr_ {};
-    DVector<double> py_;   // \tilde y^k = G^k(y-u^k) + \theta^k
-    DVector<double> pW_;   // diagonal of W^k = ((G^k)^{-2})*((V^k)^{-1})
-    DVector<double> mu_;   // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : mean vector at step k
-    DMatrix<double> T_;    // T = \Psi^T*Q*\Psi + P
-    fdapde::SparseLU<SpMatrix<double>> invA_;   // factorization of non-parametric system matrix A
-
-    // FPIRLS parameters (set to default)
-    std::size_t max_iter_ = 200;
-    double tol_ = 1e-4;
    public:
-    using RegularizationType = RegularizationType_;
+    using RegularizationType = std::decay_t<RegularizationType_>;
+    using This = GSRPDE<RegularizationType>;
     using Base = RegressionBase<GSRPDE<RegularizationType>, RegularizationType>;
     // import commonly defined symbols from base
     IMPORT_REGRESSION_SYMBOLS;
@@ -57,37 +47,40 @@ class GSRPDE : public RegressionBase<GSRPDE<RegularizationType_>, Regularization
     template <
       typename U = RegularizationType,
       typename std::enable_if<std::is_same<U, SpaceOnly>::value, int>::type = 0>
-    GSRPDE(const pde_ptr& pde, Sampling s, const Distribution& distr) : Base(pde, s), distr_(distr) {};
+    GSRPDE(const pde_ptr& pde, Sampling s, const Distribution& distr) : Base(pde, s), distr_(distr) {
+        fpirls_ = FPIRLS<This>(this, tol_, max_iter_);
+    };
     // space-time constructor
     template <
       typename U = RegularizationType,
       typename std::enable_if<!std::is_same<U, SpaceOnly>::value, int>::type = 0>
     GSRPDE(const pde_ptr& pde, const DVector<double>& time, Sampling s, const Distribution& distr) :
-        Base(pde, s, time), distr_(distr) {};
+        Base(pde, s, time), distr_(distr) {
+        fpirls_ = FPIRLS<This>(this, tol_, max_iter_);
+    };
 
     // setters
     void set_fpirls_tolerance(double tol) { tol_ = tol; }
     void set_fpirls_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
 
     void init_data()  { return; };
-    void init_model() { return; };
+    void init_model() { fpirls_.init(); };
     void solve() {   // finds a solution to the smoothing problem
         // execute FPIRLS for minimization of functional \norm{V^{-1/2}(y - \mu)}^2 + \lambda \int_D (Lf - u)^2
-        FPIRLS<decltype(*this)> fpirls(*this, tol_, max_iter_);   // FPIRLS engine
-        fpirls.compute();
-        // fpirls converged: extract matrix W and solution estimates
-        W_ = fpirls.solver().W();
-        f_ = fpirls.solver().f();
-        g_ = fpirls.solver().g();
+        fpirls_.compute();
+        // fpirls_ converged: extract matrix W and solution estimates
+        W_ = fpirls_.solver().W();
+        f_ = fpirls_.solver().f();
+        g_ = fpirls_.solver().g();
         // store parametric part
         if (has_covariates()) {
-            beta_ = fpirls.solver().beta();
-            XtWX_ = fpirls.solver().XtWX();
-            invXtWX_ = fpirls.solver().invXtWX();
-            U_ = fpirls.solver().U();
-            V_ = fpirls.solver().V();
+            beta_ = fpirls_.solver().beta();
+            XtWX_ = fpirls_.solver().XtWX();
+            invXtWX_ = fpirls_.solver().invXtWX();
+            U_ = fpirls_.solver().U();
+            V_ = fpirls_.solver().V();
         }
-        invA_ = fpirls.solver().invA();
+        invA_ = fpirls_.solver().invA();
         return;
     }
     // required by FPIRLS (see fpirls.h for details)
@@ -123,6 +116,18 @@ class GSRPDE : public RegressionBase<GSRPDE<RegularizationType_>, Regularization
     }
 
     virtual ~GSRPDE() = default;
+   private:
+    Distribution distr_ {};
+    DVector<double> py_;   // \tilde y^k = G^k(y-u^k) + \theta^k
+    DVector<double> pW_;   // diagonal of W^k = ((G^k)^{-2})*((V^k)^{-1})
+    DVector<double> mu_;   // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : mean vector at step k
+    DMatrix<double> T_;    // T = \Psi^T*Q*\Psi + P
+    fdapde::SparseLU<SpMatrix<double>> invA_;   // factorization of non-parametric system matrix A
+
+    // FPIRLS parameters (set to default)
+    FPIRLS<This> fpirls_;
+    std::size_t max_iter_ = 200;
+    double tol_ = 1e-4;
 };
   
 }   // namespace models

@@ -51,8 +51,7 @@ class GCV {
     using This = GCV;
     using VectorType = DVector<double>;
     using MatrixType = DMatrix<double>;
-    using ModelType = RegressionView<void>;
-    ModelType model_;               // model to calibrate
+    RegressionView<void> model_;    // model to calibrate
     EDFStrategy trS_;               // strategy used to evaluate the trace of smoothing matrix S
     std::vector<double> edfs_;      // equivalent degrees of freedom q + Tr[S]
     std::vector<double> gcvs_;      // computed values of GCV index
