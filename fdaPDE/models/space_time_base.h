@@ -43,9 +43,13 @@ class SpaceTimeBase : public ModelBase<Model> {
     SpaceTimeBase(const pde_ptr& pde, const DVector<double>& time) : ModelBase<Model>(pde), time_(time) {};
 
     // setters
-    void set_lambda(const SVector<n_lambda>& lambda) { lambda_ = lambda; }
-    void set_lambda_D(double lambda_D) { lambda_[0] = lambda_D; }
-    void set_lambda_T(double lambda_T) { lambda_[1] = lambda_T; }
+    void set_lambda(const SVector<n_lambda>& lambda) {
+        if(lambda_ == lambda) return;
+        model().runtime().set(runtime_status::is_lambda_changed);
+        lambda_ = lambda;
+    }
+    void set_lambda_D(double lambda_D) { set_lambda(SVector<n_lambda>(lambda_D, lambda_[1])); }
+    void set_lambda_T(double lambda_T) { set_lambda(SVector<n_lambda>(lambda_[0], lambda_T)); }
     void set_time_domain(const DVector<double>& time) { time_ = time; }
     // getters
     SVector<n_lambda> lambda() const { return lambda_; }

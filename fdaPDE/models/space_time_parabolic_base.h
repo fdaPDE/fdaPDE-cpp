@@ -83,11 +83,11 @@ class SpaceTimeParabolicBase : public SpaceTimeBase<Model, SpaceTimeParabolic> {
         L_.setFromTriplets(triplet_list.begin(), triplet_list.end());
         L_.makeCompressed();
         // compute tensorized matrices
-        R0_ = Kronecker(Im_, pde_.R0());
-        R1_ = Kronecker(Im_, pde_.R1());
+        R0_ = Kronecker(Im_, pde_.mass());
+        R1_ = Kronecker(Im_, pde_.stiff());
 	// correct first n rows of discretized force as (u_1 + R0*s/DeltaT)
 	u_ = pde_.force();
-	u_.block(0, 0, model().n_basis(), 1) += (1.0 / DeltaT_) * (pde_.R0() * s_);
+	u_.block(0, 0, model().n_basis(), 1) += (1.0 / DeltaT_) * (pde_.mass() * s_);
     }
 
     // getters
@@ -104,7 +104,7 @@ class SpaceTimeParabolicBase : public SpaceTimeBase<Model, SpaceTimeParabolic> {
     auto P() {
         if (is_empty(pen_)) {   // compute once and cache result
             invR0_.compute(R0());
-            penT_ = Kronecker(L_, pde_.R0());
+            penT_ = Kronecker(L_, pde_.mass());
         }
         return lambda_D() * (R1() + lambda_T() * penT_).transpose() * invR0_.solve(R1() + lambda_T() * penT_);
     }

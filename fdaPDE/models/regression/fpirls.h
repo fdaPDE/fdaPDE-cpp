@@ -58,9 +58,12 @@ template <typename Model_> class FPIRLS {
             if constexpr (!is_space_time<Model_>::value)   // space-only
                 solver_ = SolverType(m_->pde(), m_->sampling());
             else {   // space-time
-                solver_ = SolverType(m_->pde(), m_->sampling(), m_->time_domain());
-                if constexpr (is_space_time_parabolic<Model_>::value) { solver_.set_initial_condition(m_->s(), false); }
+                if constexpr (is_space_time_parabolic<Model_>::value) {
+                    solver_ = SolverType(m_->pde(), m_->sampling(), m_->time_domain());
+                    solver_.set_initial_condition(m_->s(), false);
+                }
                 if constexpr (is_space_time_separable<Model_>::value) {
+                    solver_ = SolverType(m_->pde(), m_->time_penalty(), m_->sampling());
                     solver_.set_temporal_locations(m_->time_locs());
                 }
             }

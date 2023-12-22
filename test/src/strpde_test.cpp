@@ -26,6 +26,8 @@ using fdapde::core::laplacian;
 using fdapde::core::MatrixDataWrapper;
 using fdapde::core::PDE;
 using fdapde::core::VectorDataWrapper;
+using fdapde::core::Mesh;
+using fdapde::core::spline_order;
 
 #include "../../fdaPDE/models/regression/strpde.h"
 #include "../../fdaPDE/models/sampling_design.h"
@@ -51,23 +53,21 @@ using fdapde::testing::read_csv;
 //    order FE:     1
 //    time penalization: separable (mass penalization)
 TEST(strpde_test, laplacian_nonparametric_samplingatnodes_separable_monolithic) {
-    // define temporal domain
-    DVector<double> time_mesh;
-    time_mesh.resize(11);
-    std::size_t i = 0;
-    for (double x = 0; x <= 2; x += 0.2, ++i) time_mesh[i] = x;
-    // define spatial domain    
+    // define temporal and spatial domain
+    Mesh<1, 1> time_mesh(0, 2, 10);
     MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/strpde/2D_test1/y.csv");
-    // define regularizing PDE    
-    auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.rows(), 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
+    // define regularizing PDE in space   
+    auto Ld = -laplacian<FEM>();
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.n_nodes(), 1);
+    PDE<Mesh<2, 2>, decltype(Ld), DMatrix<double>, FEM, fem_order<1>> space_penalty(domain.mesh, Ld, u);
+    // define regularizing PDE in time
+    auto Lt = -bilaplacian<SPLINE>();
+    PDE<Mesh<1, 1>, decltype(Lt), DMatrix<double>, SPLINE, spline_order<3>> time_penalty(time_mesh, Lt);
     // define model
-    double lambda_D = 0.01;
-    double lambda_T = 0.01;
-    STRPDE<SpaceTimeSeparable, fdapde::monolithic> model(problem, Sampling::mesh_nodes, time_mesh);
+    double lambda_D = 0.01, lambda_T = 0.01;
+    STRPDE<SpaceTimeSeparable, fdapde::monolithic> model(space_penalty, time_penalty, Sampling::mesh_nodes);
     model.set_lambda_D(lambda_D);
     model.set_lambda_T(lambda_T);
     // set model's data
@@ -90,24 +90,24 @@ TEST(strpde_test, laplacian_nonparametric_samplingatnodes_separable_monolithic) 
 //    order FE:     1
 //    time penalization: separable (mass penalization)
 TEST(strpde_test, laplacian_semiparametric_samplingatlocations_separable_monolithic) {
-    // define temporal domain
-    DVector<double> time_mesh;
-    time_mesh.resize(5);
-    for (std::size_t i = 0; i < 5; ++i) time_mesh[i] = (fdapde::testing::pi / 4) * i;
-    // define spatial domain
+    // define temporal and spatial domain
+    Mesh<1, 1> time_mesh(0, fdapde::testing::pi, 4);
     MeshLoader<Mesh2D> domain("c_shaped");
     // import data from files
     DMatrix<double> locs = read_csv<double>("../data/models/strpde/2D_test2/locs.csv");
     DMatrix<double> y    = read_csv<double>("../data/models/strpde/2D_test2/y.csv");
     DMatrix<double> X    = read_csv<double>("../data/models/strpde/2D_test2/X.csv");
-    // define regularizing PDE
-    auto L = -laplacian<FEM>();
+    // define regularizing PDE in space
+    auto Ld = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
+    PDE<Mesh<2, 2>, decltype(Ld), DMatrix<double>, FEM, fem_order<1>> space_penalty(domain.mesh, Ld, u);
+    // define regularizing PDE in time
+    auto Lt = -bilaplacian<SPLINE>();
+    PDE<Mesh<1, 1>, decltype(Lt), DMatrix<double>, SPLINE, spline_order<3>> time_penalty(time_mesh, Lt);
     // define model
     double lambda_D = 0.01;
     double lambda_T = 0.01;
-    STRPDE<SpaceTimeSeparable, fdapde::monolithic> model(problem, Sampling::pointwise, time_mesh);
+    STRPDE<SpaceTimeSeparable, fdapde::monolithic> model(space_penalty, time_penalty, Sampling::pointwise);
     model.set_lambda_D(lambda_D);
     model.set_lambda_T(lambda_T);
     model.set_spatial_locations(locs);
@@ -223,24 +223,24 @@ TEST(strpde_test, laplacian_nonparametric_samplingatnodes_parabolic_iterative) {
 //    order FE:     1
 //    time penalization: separable (mass penalization)
 TEST(strpde_test, laplacian_nonparametric_samplingatnodes_timelocations_separable_monolithic) {
-    // define temporal domain
-    DVector<double> time_mesh;
-    time_mesh.resize(11);
-    std::size_t i = 0;
-    for (double x = 0; x <= 2; x += 0.2, ++i) time_mesh[i] = x;
-    // define spatial domain
+    // define temporal and spatial domain
+    Mesh<1, 1> time_mesh(0, 2, 10);
     MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
     DMatrix<double> time_locs = read_csv<double>("../data/models/strpde/2D_test5/time_locations.csv");
     DMatrix<double> y         = read_csv<double>("../data/models/strpde/2D_test5/y.csv");
-    // define regularizing PDE
-    auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.rows(), 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
+    // define regularizing PDE in space
+    auto Ld = -laplacian<FEM>();
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.n_nodes(), 1);
+    PDE<Mesh<2, 2>, decltype(Ld), DMatrix<double>, FEM, fem_order<1>> space_penalty(domain.mesh, Ld, u);
+    // define regularizing PDE in time
+    auto Lt = -bilaplacian<SPLINE>();
+    PDE<Mesh<1, 1>, decltype(Lt), DMatrix<double>, SPLINE, spline_order<3>> time_penalty(time_mesh, Lt);
+
     // define model
     double lambda_D = 0.01;
     double lambda_T = 0.01;
-    STRPDE<SpaceTimeSeparable, fdapde::monolithic> model(problem, Sampling::mesh_nodes, time_mesh);
+    STRPDE<SpaceTimeSeparable, fdapde::monolithic> model(space_penalty, time_penalty, Sampling::mesh_nodes);
     model.set_lambda_D(lambda_D);
     model.set_lambda_T(lambda_T);
     model.set_temporal_locations(time_locs);
@@ -266,26 +266,24 @@ TEST(strpde_test, laplacian_nonparametric_samplingatnodes_timelocations_separabl
 //    order FE:       1
 //    time penalization: separable (mass penalization)
 TEST(strpde_test, laplacian_nonparametric_samplingatlocations_timelocations_separable_monolithic_missingdata) {
-    // define temporal domain
-    DVector<double> time_mesh;
-    time_mesh.resize(21);
-    for (std::size_t i = 0; i < 21; ++i) time_mesh[i] = 1.0 / 20 * i;
-    // define spatial domain and regularizing PDE
+    // define temporal and spatial domain
+    Mesh<1, 1> time_mesh(0, 1, 20);
     MeshLoader<Mesh2D> domain("c_shaped");
     // import data from files
     DMatrix<double> time_locs  = read_csv<double>("../data/models/strpde/2D_test6/time_locations.csv");
     DMatrix<double> space_locs = read_csv<double>("../data/models/strpde/2D_test6/locs.csv");
     DMatrix<double> y          = read_csv<double>("../data/models/strpde/2D_test6/y.csv"   );
-    // define regularizing PDE
-    auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.rows(), 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
+    // define regularizing PDE in space
+    auto Ld = -laplacian<FEM>();
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.n_nodes(), 1);
+    PDE<Mesh<2, 2>, decltype(Ld), DMatrix<double>, FEM, fem_order<1>> space_penalty(domain.mesh, Ld, u);
+    // define regularizing PDE in time
+    auto Lt = -bilaplacian<SPLINE>();
+    PDE<Mesh<1, 1>, decltype(Lt), DMatrix<double>, SPLINE, spline_order<3>> time_penalty(time_mesh, Lt);
     // define model
-    double lambda_D = 1e-3;
-    double lambda_T = 1e-3;
-    STRPDE<SpaceTimeSeparable, fdapde::monolithic> model(problem, Sampling::pointwise, time_mesh);
-    model.set_lambda_D(lambda_D);
-    model.set_lambda_T(lambda_T);
+    STRPDE<SpaceTimeSeparable, fdapde::monolithic> model(space_penalty, time_penalty, Sampling::pointwise);
+    model.set_lambda_D(1e-3);
+    model.set_lambda_T(1e-3);
     model.set_spatial_locations(space_locs);
     model.set_temporal_locations(time_locs);
     // set model's data

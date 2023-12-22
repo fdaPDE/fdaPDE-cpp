@@ -44,18 +44,20 @@ class GSRPDE : public RegressionBase<GSRPDE<RegularizationType_>, Regularization
     // constructor
     GSRPDE() = default;
     // space-only constructor
-    template <
-      typename U = RegularizationType,
-      typename std::enable_if<std::is_same<U, SpaceOnly>::value, int>::type = 0>
-    GSRPDE(const pde_ptr& pde, Sampling s, const Distribution& distr) : Base(pde, s), distr_(distr) {
+    fdapde_enable_constructor_if(is_space_only, This)
+      GSRPDE(const pde_ptr& pde, Sampling s, const Distribution& distr) :
+        Base(pde, s), distr_(distr) {
         fpirls_ = FPIRLS<This>(this, tol_, max_iter_);
     };
-    // space-time constructor
-    template <
-      typename U = RegularizationType,
-      typename std::enable_if<!std::is_same<U, SpaceOnly>::value, int>::type = 0>
-    GSRPDE(const pde_ptr& pde, const DVector<double>& time, Sampling s, const Distribution& distr) :
-        Base(pde, s, time), distr_(distr) {
+    // space-time constructors
+    fdapde_enable_constructor_if(is_space_time_separable, This)
+    GSRPDE(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s, const Distribution& distr) :
+      Base(space_penalty, time_penalty, s), distr_(distr) {
+        fpirls_ = FPIRLS<This>(this, tol_, max_iter_);
+    };
+    fdapde_enable_constructor_if(is_space_time_parabolic, This)
+    GSRPDE(const pde_ptr& space_penalty, const DVector<double>& time, Sampling s, const Distribution& distr) :
+      Base(space_penalty, s, time), distr_(distr) {
         fpirls_ = FPIRLS<This>(this, tol_, max_iter_);
     };
 

@@ -69,31 +69,33 @@ class STRPDE<SpaceTimeSeparable, monolithic> :
     using Base::P1;         // time penalization matrix: [P1_]_{ij} = \int_{[0,T]} (\phi_i)_tt*(\phi_j)_tt
     // constructor
     STRPDE() = default;
-    STRPDE(const pde_ptr& pde, Sampling s, const DMatrix<double>& time) : Base(pde, s, time) {};
+    STRPDE(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s) :
+        Base(space_penalty, time_penalty, s) {};
 
-    void init_model() {   // update model object in case of **structural** changes in its definition
-        // assemble system matrix for the nonparameteric part of the model
-        if (is_empty(K_)) K_ = Kronecker(P1(), pde().R0());
-        A_ = SparseBlockMatrix<double, 2, 2>(
-          -PsiTD() * W() * Psi() - lambda_T() * K_, lambda_D() * R1().transpose(), lambda_D() * R1(),
-          lambda_D() * R0());
-        // cache system matrix for reuse
-        invA_.compute(A_);
-        // prepare rhs of linear system
-        b_.resize(A_.rows());
-        b_.block(A_.rows() / 2, 0, A_.rows() / 2, 1) = lambda_D() * u();
-        return;
-    }
-    void update_to_weights() {   // update model object in case of changes in the weights matrix
-        // adjust north-west block of matrix A_ and factorize
-        A_.block(0, 0) = -PsiTD() * W() * Psi() - lambda_T() * K_;
-        invA_.compute(A_);
-        return;
+    void init_model() {
+        // a change in the smoothing parameter must reset the whole linear system
+        if (runtime().query(runtime_status::is_lambda_changed)) {
+            // assemble system matrix for the nonparameteric part
+            if (is_empty(K_)) K_ = Kronecker(P1(), pde().mass());
+            A_ = SparseBlockMatrix<double, 2, 2>(
+              -PsiTD() * W() * Psi() - lambda_T() * K_, lambda_D() * R1().transpose(),
+	      lambda_D() * R1(),                        lambda_D() * R0()            );
+            invA_.compute(A_);
+            // prepare rhs of linear system
+            b_.resize(A_.rows());
+            b_.block(A_.rows() / 2, 0, A_.rows() / 2, 1) = lambda_D() * u();
+            return;
+        }
+        if (runtime().query(runtime_status::require_W_update)) {
+            // adjust north-west block of matrix A_ and factorize
+            A_.block(0, 0) = -PsiTD() * W() * Psi() - lambda_T() * K_;
+            invA_.compute(A_);
+            return;
+        }
     }
     void solve() {   // finds a solution to the smoothing problem
         BLOCK_FRAME_SANITY_CHECKS;
-        DVector<double> sol;   // room for problem' solution
-
+        DVector<double> sol;             // room for problem' solution
         if (!Base::has_covariates()) {   // nonparametric case
             // update rhs of STR-PDE linear system
             b_.block(0, 0, A_.rows() / 2, 1) = -PsiTD() * W() * y();
@@ -155,7 +157,7 @@ class STRPDE<SpaceTimeParabolic, monolithic> :
 
     void init_model() {   // update model object in case of **structural** changes in its definition
         // assemble system matrix for the nonparameteric part of the model
-        if (is_empty(L_)) L_ = Kronecker(L(), pde().R0());
+        if (is_empty(L_)) L_ = Kronecker(L(), pde().mass());
         A_ = SparseBlockMatrix<double, 2, 2>(
           -PsiTD() * W() * Psi(), lambda_D() * (R1() + lambda_T() * L_).transpose(),
           lambda_D() * (R1() + lambda_T() * L_), lambda_D() * R0());
@@ -265,12 +267,12 @@ class STRPDE<SpaceTimeParabolic, iterative> :
         DeltaT_ = time_[1] - time_[0];
         u_ = pde_.force();   // compute forcing term
         // correct first n rows of discretized force as (u_1 + R0*s/DeltaT)
-        u_.block(0, 0, n_basis(), 1) += (1.0 / DeltaT_) * (pde_.R0() * s_);
+        u_.block(0, 0, n_basis(), 1) += (1.0 / DeltaT_) * (pde_.mass() * s_);
     }
     // getters
-    const SpMatrix<double>& R0() const { return pde_.R0(); }   // mass matrix in space
-    const SpMatrix<double>& R1() const { return pde_.R1(); }   // discretization of differential operator L
-    std::size_t n_basis() const { return pde_.n_dofs(); }      // number of basis functions
+    const SpMatrix<double>& R0() const { return pde_.mass(); }    // mass matrix in space
+    const SpMatrix<double>& R1() const { return pde_.stiff(); }   // discretization of differential operator L
+    std::size_t n_basis() const { return pde_.n_dofs(); }         // number of basis functions
 
     void init_model() { return; };          // update model object in case of **structural** changes in its definition
     void update_to_weights() { return; };   // update model object in case of changes in the weights matrix

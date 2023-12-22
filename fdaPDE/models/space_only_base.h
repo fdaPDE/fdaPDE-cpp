@@ -43,6 +43,7 @@ template <typename Model> class SpaceOnlyBase : public ModelBase<Model> {
 
     // setters
     void set_lambda(const SVector<n_lambda>& lambda) {
+        if(lambda_ == lambda) return;
         model().runtime().set(runtime_status::is_lambda_changed);
         lambda_ = lambda;
     }
@@ -50,8 +51,8 @@ template <typename Model> class SpaceOnlyBase : public ModelBase<Model> {
     // getters
     SVector<n_lambda> lambda() const { return lambda_; }
     double lambda_D() const { return lambda_[0]; }                 // smoothing parameter
-    const SpMatrix<double>& R0() const { return pde_.R0(); }       // mass matrix in space
-    const SpMatrix<double>& R1() const { return pde_.R1(); }       // discretization of differential operator L
+    const SpMatrix<double>& R0() const { return pde_.mass(); }     // mass matrix in space
+    const SpMatrix<double>& R1() const { return pde_.stiff(); }    // discretization of differential operator L
     const DMatrix<double>& u() const { return pde_.force(); }      // discretization of forcing term u
     inline std::size_t n_temporal_locs() const { return 1; }       // number of time instants
     std::size_t n_basis() const { return pde_.n_dofs(); };         // number of basis functions
@@ -61,7 +62,7 @@ template <typename Model> class SpaceOnlyBase : public ModelBase<Model> {
     auto P() {
         if (is_empty(P_)) {
             fdapde::SparseLU<SpMatrix<double>> invR0_;
-            invR0_.compute(pde_.R0());
+            invR0_.compute(pde_.mass());
             P_ = R1().transpose() * invR0_.solve(R1());   // R1^T*R0^{-1}*R1
         }
         return lambda_D() * P_;

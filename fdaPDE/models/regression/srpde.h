@@ -52,24 +52,24 @@ class SRPDE : public RegressionBase<SRPDE, SpaceOnly> {
     SRPDE(const pde_ptr& pde, Sampling s) : Base(pde, s) {};
 
     void init_model() {
-      // a change in the smoothing parameter must reset the whole linear system
-      if(runtime().query(runtime_status::is_lambda_changed)) {
-        // assemble system matrix for nonparameteric part
-        A_ = SparseBlockMatrix<double, 2, 2>(
-          -PsiTD() * W() * Psi(), lambda_D() * R1().transpose(),
-	  lambda_D() * R1(),      lambda_D() * R0()            );
-	invA_.compute(A_);
-        // prepare rhs of linear system
-        b_.resize(A_.rows());
-        b_.block(n_basis(), 0, n_basis(), 1) = lambda_D() * u();
-	return;
-      }
-      if(runtime().query(runtime_status::require_W_update)) {
-        // adjust north-west block of matrix A_ only
-        A_.block(0, 0) = -PsiTD() * W() * Psi();
-	invA_.compute(A_);
-	return;
-      }
+        // a change in the smoothing parameter must reset the whole linear system
+        if (runtime().query(runtime_status::is_lambda_changed)) {
+            // assemble system matrix for nonparameteric part
+            A_ = SparseBlockMatrix<double, 2, 2>(
+              -PsiTD() * W() * Psi(), lambda_D() * R1().transpose(),
+	      lambda_D() * R1(),      lambda_D() * R0()            );
+            invA_.compute(A_);
+            // prepare rhs of linear system
+            b_.resize(A_.rows());
+            b_.block(n_basis(), 0, n_basis(), 1) = lambda_D() * u();
+            return;
+        }
+        if (runtime().query(runtime_status::require_W_update)) {
+            // adjust north-west block of matrix A_ only
+            A_.block(0, 0) = -PsiTD() * W() * Psi();
+            invA_.compute(A_);
+            return;
+        }
     }
     // finds a solution to the smoothing problem
     void solve() {

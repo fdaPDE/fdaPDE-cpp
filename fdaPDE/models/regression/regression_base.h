@@ -66,15 +66,14 @@ class RegressionBase :
   
     RegressionBase() = default;
     // space-only constructor
-    template <
-      typename U = Model,   // fake type to enable substitution in SFINAE
-      typename std::enable_if<std::is_same<typename U::RegularizationType, SpaceOnly>::value, int>::type = 0>
-    RegressionBase(const pde_ptr& pde, Sampling s) : Base(pde), SamplingBase<Model>(s) {};
-    // space-time constructor
-    template <
-      typename U = Model,   // fake type to enable substitution in SFINAE
-      typename std::enable_if<!std::is_same<typename U::RegularizationType, SpaceOnly>::value, int>::type = 0>
-    RegressionBase(const pde_ptr& pde, Sampling s, const DVector<double>& time) :
+    fdapde_enable_constructor_if(is_space_only, Model) RegressionBase(const pde_ptr& pde, Sampling s) :
+        Base(pde), SamplingBase<Model>(s) {};
+    // space-time constructors
+    fdapde_enable_constructor_if(is_space_time_separable, Model)
+      RegressionBase(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s) :
+    Base(space_penalty, time_penalty), SamplingBase<Model>(s) { };
+    fdapde_enable_constructor_if(is_space_time_parabolic, Model)
+      RegressionBase(const pde_ptr& pde, Sampling s, const DVector<double>& time) :
         Base(pde, time), SamplingBase<Model>(s) {};
     // copy constructor, copy only pde object (as a consequence also the problem domain)
     RegressionBase(const RegressionBase& rhs) : Base(rhs), SamplingBase<Model>(rhs) { pde_ = rhs.pde_; }
