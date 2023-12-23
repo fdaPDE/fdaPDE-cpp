@@ -57,7 +57,6 @@ class RegressionBase :
     using Base::df_;           // BlockFrame for problem's data storage
     using Base::idx;           // indices of observations
     using Base::n_basis;       // number of basis function over domain D
-    using Base::pde_;          // differential operator L
     using Base::P;             // discretized penalty matrix
     using SamplingBase<Model>::D;     // for areal sampling, matrix of subdomains measures, identity matrix otherwise
     using SamplingBase<Model>::Psi;   // matrix of spatial basis evaluation at locations p_1 ... p_n
@@ -71,12 +70,10 @@ class RegressionBase :
     // space-time constructors
     fdapde_enable_constructor_if(is_space_time_separable, Model)
       RegressionBase(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s) :
-    Base(space_penalty, time_penalty), SamplingBase<Model>(s) { };
+        Base(space_penalty, time_penalty), SamplingBase<Model>(s) {};
     fdapde_enable_constructor_if(is_space_time_parabolic, Model)
       RegressionBase(const pde_ptr& pde, Sampling s, const DVector<double>& time) :
         Base(pde, time), SamplingBase<Model>(s) {};
-    // copy constructor, copy only pde object (as a consequence also the problem domain)
-    RegressionBase(const RegressionBase& rhs) : Base(rhs), SamplingBase<Model>(rhs) { pde_ = rhs.pde_; }
 
     // getters
     const DMatrix<double>& y() const { return df_.template get<double>(OBSERVATIONS_BLK); }   // observation vector y

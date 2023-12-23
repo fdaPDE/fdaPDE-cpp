@@ -28,7 +28,7 @@
                                  /* space-time problems) */                                                            \
     using Base::R0;              /* mass matrix in space (tensorized for space-time problems) */                       \
     using Base::u;               /* discretization of forcing term */                                                  \
-    using Base::pde;             /* differential operator L (regularizing term) */                                     \
+    using Base::pde;             /* differential operator Lf- u in space */                                            \
     using Base::data;            /* BlockFrame object containing data */
 
 // imports all basic symbols a model can expect from a RegressionBase

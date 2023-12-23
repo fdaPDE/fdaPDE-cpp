@@ -24,7 +24,7 @@
 #include "models/regression/srpde.h"
 #include "models/regression/strpde.h"
 #include "models/regression/gsrpde.h"
-#include "models/regression/sqrpde.h"
+#include "models/regression/qsrpde.h"
 #include "models/regression/gcv.h"
 #include "models/regression/stochastic_edf.h"
 #include "models/regression/exact_edf.h"

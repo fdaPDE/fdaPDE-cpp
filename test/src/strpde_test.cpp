@@ -22,6 +22,8 @@ using fdapde::core::advection;
 using fdapde::core::diffusion;
 using fdapde::core::dt;
 using fdapde::core::FEM;
+using fdapde::core::SPLINE;
+using fdapde::core::bilaplacian;
 using fdapde::core::laplacian;
 using fdapde::core::MatrixDataWrapper;
 using fdapde::core::PDE;

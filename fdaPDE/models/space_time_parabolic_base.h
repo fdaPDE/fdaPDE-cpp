@@ -17,12 +17,11 @@
 #ifndef __SPACE_TIME_PARABOLIC_BASE_H__
 #define __SPACE_TIME_PARABOLIC_BASE_H__
 
-#include <fdaPDE/finite_elements.h>
+#include <fdaPDE/pde.h>
 #include <fdaPDE/linear_algebra.h>
 #include <fdaPDE/utils.h>
-using fdapde::core::is_parabolic;
+using fdapde::core::pde_ptr;
 using fdapde::core::Kronecker;
-using fdapde::core::SparseKroneckerTensorProduct;
 
 #include "space_time_base.h"
 
@@ -33,6 +32,7 @@ namespace models {
 template <typename Model>
 class SpaceTimeParabolicBase : public SpaceTimeBase<Model, SpaceTimeParabolic> {
    protected:
+    pde_ptr pde_ {};   // parabolic differential penalty df/dt + Lf - u
     // let m the number of time points
     DMatrix<double> s_;     // N x 1 initial condition vector
     DMatrix<double> u_;     // discretized forcing [1/DeltaT * (u_1 + R_0*s) \ldots u_n]
@@ -51,22 +51,21 @@ class SpaceTimeParabolicBase : public SpaceTimeBase<Model, SpaceTimeParabolic> {
     using Base::lambda_D;   // smoothing parameter in space
     using Base::lambda_T;   // smoothing parameter in time
     using Base::model;      // underlying model object
-    using Base::pde_;       // regularizing term in space
     using Base::time_;      // time interval [0,T]
     using Base::df_;        // model's data
-
     // constructor
     SpaceTimeParabolicBase() = default;
-    SpaceTimeParabolicBase(const pde_ptr& pde, const DVector<double>& time) : Base(pde, time) { }
+    SpaceTimeParabolicBase(const pde_ptr& parabolic_penalty, const DVector<double>& time) :
+      pde_(parabolic_penalty), Base(time) { }
     // init data structure related to parabolic regularization
     void init_regularization() {
+        pde_.init(); 
         std::size_t m_ = time_.rows();   // number of time points
         DeltaT_ = time_[1] - time_[0];   // time step (assuming equidistant points)
 
         // assemble once the m x m identity matrix and cache for fast access
         Im_.resize(m_, m_);
         Im_.setIdentity();
-
         // assemble matrix associated with derivation in time L_
         // [L_]_{ii} = 1/DeltaT for i \in {1 ... m} and [L_]_{i,i-1} = -1/DeltaT for i \in {1 ... m-1}
         std::vector<fdapde::Triplet<double>> triplet_list;
@@ -78,7 +77,6 @@ class SpaceTimeParabolicBase : public SpaceTimeBase<Model, SpaceTimeParabolic> {
             triplet_list.emplace_back(i, i, invDeltaT);
             triplet_list.emplace_back(i, i - 1, -invDeltaT);
         }
-        // finalize construction
         L_.resize(m_, m_);
         L_.setFromTriplets(triplet_list.begin(), triplet_list.end());
         L_.makeCompressed();
@@ -89,11 +87,29 @@ class SpaceTimeParabolicBase : public SpaceTimeBase<Model, SpaceTimeParabolic> {
 	u_ = pde_.force();
 	u_.block(0, 0, model().n_basis(), 1) += (1.0 / DeltaT_) * (pde_.mass() * s_);
     }
-
+    // setters
+    void set_penalty(const pde_ptr& pde) {
+        pde_ = pde;
+        model().runtime().set(runtime_status::require_penalty_init);
+    }
+    // shift = true, cause the removal of the first time instant of data, in case it has been used to estimate the IC
+    void set_initial_condition(const DMatrix<double>& s, bool shift = true) {
+        s_ = s;
+        if (shift) { // left shrink time domain by one step
+            std::size_t m = time_.rows();       // number of time instants
+            time_ = time_.tail(m - 1).eval();   // correct time interval [0,T] (eval() to avoid aliasing)
+            pde_.set_forcing(pde_.forcing_data().rightCols(m - 1));
+            model().runtime().set(runtime_status::require_penalty_init);   // force pde (re-)initialization
+            // remove from data the first time instant, reindex points
+            model().set_data(df_.tail(model().n_spatial_locs()).extract(), true);
+        }
+    }
     // getters
+    const pde_ptr& pde() const { return pde_; }   // regularizing term df/dt + Lf - u
     const SpMatrix<double>& R0() const { return R0_; }
     const SpMatrix<double>& R1() const { return R1_; }
     std::size_t n_basis() const { return pde_.n_dofs(); }   // number of basis functions
+    std::size_t n_spatial_basis() const { return pde_.n_dofs(); }
     const SpMatrix<double>& L() const { return L_; }
     const DMatrix<double>& u() const { return u_; }   // discretized force corrected by initial conditions
     const DMatrix<double>& s() { return s_; }         // initial condition
@@ -107,19 +123,6 @@ class SpaceTimeParabolicBase : public SpaceTimeBase<Model, SpaceTimeParabolic> {
             penT_ = Kronecker(L_, pde_.mass());
         }
         return lambda_D() * (R1() + lambda_T() * penT_).transpose() * invR0_.solve(R1() + lambda_T() * penT_);
-    }
-    // setters
-    // shift = true, cause the removal of the first time instant of data, in case it has been used to estimate the IC
-    void set_initial_condition(const DMatrix<double>& s, bool shift = true) {
-        s_ = s;
-        if (shift) { // left shrink time domain by one step
-            std::size_t m = time_.rows();       // number of time instants
-            time_ = time_.tail(m - 1).eval();   // correct time interval [0,T] (eval() to avoid aliasing)
-            pde_.set_forcing(pde_.forcing_data().rightCols(m - 1));
-            model().runtime().set(runtime_status::require_pde_init);   // force pde (re-)initialization
-            // remove from data the first time instant, reindex points
-            model().set_data(df_.tail(model().n_spatial_locs()).extract(), true);
-        }
     }
   
     // destructor

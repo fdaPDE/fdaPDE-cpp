@@ -63,7 +63,7 @@ template <typename Model_> class FPIRLS {
                     solver_.set_initial_condition(m_->s(), false);
                 }
                 if constexpr (is_space_time_separable<Model_>::value) {
-                    solver_ = SolverType(m_->pde(), m_->time_penalty(), m_->sampling());
+                    solver_ = SolverType(m_->pde(), m_->time_pde(), m_->sampling());
                     solver_.set_temporal_locations(m_->time_locs());
                 }
             }

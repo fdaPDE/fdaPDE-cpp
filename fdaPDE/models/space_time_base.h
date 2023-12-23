@@ -30,7 +30,6 @@ class SpaceTimeBase : public ModelBase<Model> {
    protected:
     typedef ModelBase<Model> Base;
     using Base::model;     // underlying model object
-    using Base::pde_;      // regularizing PDE
     static constexpr int n_lambda = n_smoothing_parameters<RegularizationType>::value;
 
     DVector<double> time_;   // time domain [0, T]
@@ -40,8 +39,7 @@ class SpaceTimeBase : public ModelBase<Model> {
     using Base::set_lambda;   // dynamic sized setter for \lambda
     // constructor
     SpaceTimeBase() = default;
-    SpaceTimeBase(const pde_ptr& pde, const DVector<double>& time) : ModelBase<Model>(pde), time_(time) {};
-
+    SpaceTimeBase(const DVector<double>& time) : Base(), time_(time) {};
     // setters
     void set_lambda(const SVector<n_lambda>& lambda) {
         if(lambda_ == lambda) return;
@@ -57,9 +55,7 @@ class SpaceTimeBase : public ModelBase<Model> {
     inline double lambda_T() const { return lambda_[1]; }
     const DVector<double>& time_domain() const { return time_; }           // number of nodes in time
     const DVector<double>& time_locs() const { return time_; }             // time locations where we have observations
-    inline std::size_t n_temporal_locs() const { return time_.rows(); }    // number of time instants
-    std::size_t n_spatial_basis() const { return pde_.n_dofs(); }          // number of basis functions in space
-  
+    inline std::size_t n_temporal_locs() const { return time_.rows(); }    // number of time instants  
     // destructor
     virtual ~SpaceTimeBase() = default;
 };

@@ -256,13 +256,15 @@ class STRPDE<SpaceTimeParabolic, iterative> :
     using Base::lambda_D;          // smoothing parameter in space
     using Base::lambda_T;          // smoothing parameter in time
     using Base::n_temporal_locs;   // number of time instants m defined over [0,T]
+    using Base::pde_;              // parabolic differential operator df/dt + Lf - u
     // constructor
     STRPDE() = default;
-    STRPDE(const pde_ptr& pde, Sampling s, const DMatrix<double>& time) : Base(pde, s, time) {};
+    STRPDE(const pde_ptr& pde, Sampling s, const DMatrix<double>& time) : Base(pde, s, time) { pde_.init(); };
 
     // redefine SpaceTimeParabolicBase properties affected by iterative approach
     void tensorize_psi() { return; } // avoid tensorization of \Psi matrix
     void init_regularization() {
+        pde_.init();
         // compute time step (assuming equidistant points)
         DeltaT_ = time_[1] - time_[0];
         u_ = pde_.force();   // compute forcing term
@@ -274,9 +276,8 @@ class STRPDE<SpaceTimeParabolic, iterative> :
     const SpMatrix<double>& R1() const { return pde_.stiff(); }   // discretization of differential operator L
     std::size_t n_basis() const { return pde_.n_dofs(); }         // number of basis functions
 
-    void init_model() { return; };          // update model object in case of **structural** changes in its definition
-    void update_to_weights() { return; };   // update model object in case of changes in the weights matrix
-    void solve() {                          // finds a solution to the smoothing problem
+    void init_model() { return; };
+    void solve() {
         // compute starting point (f^(k,0), g^(k,0)) k = 1 ... m for iterative minimization of functional J(f,g)
         A_ = SparseBlockMatrix<double, 2, 2>(
           PsiTD() * Psi(),   lambda_D() * R1().transpose(),

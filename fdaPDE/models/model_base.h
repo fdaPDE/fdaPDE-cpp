@@ -17,11 +17,8 @@
 #ifndef __MODEL_BASE_H__
 #define __MODEL_BASE_H__
 
-#include <fdaPDE/mesh.h>
 #include <fdaPDE/utils.h>
-#include <fdaPDE/pde.h>
 using fdapde::core::BlockFrame;
-using fdapde::core::pde_ptr;
 
 #include "model_macros.h"
 #include "model_traits.h"
@@ -33,22 +30,18 @@ namespace models {
 // abstract base interface for any fdaPDE statistical model.
 template <typename Model> class ModelBase {
    public:
-    // constructors
     ModelBase() = default;
-    ModelBase(const pde_ptr& pde) : pde_(pde) { pde_.init(); };
     // full model stack initialization
     void init() {
-        if (model().runtime().query(runtime_status::require_pde_init)) { pde_.init(); }   // init penalty
         if (model().runtime().query(runtime_status::require_penalty_init)) { model().init_regularization(); }        
         if (model().runtime().query(runtime_status::require_functional_basis_evaluation)) {
             model().init_sampling(true);   // init \Psi matrix, always force recomputation
             model().init_nan();            // analyze and set missingness pattern
-        }
-        
+        }        
         model().init_data();    // specific data-dependent initialization requested by the model
         model().init_model();   // model initialization
     }
-
+  
     // setters
     void set_data(const BlockFrame<double, int>& df, bool reindex = false) {
         df_ = df;
@@ -60,20 +53,14 @@ template <typename Model> class ModelBase {
             df_.insert(INDEXES_BLK, idx);
         }
     }
-    void set_pde(const pde_ptr& pde) {
-        pde_ = pde;
-        model().runtime().set(runtime_status::require_pde_init);
-    }
     void set_lambda(const DVector<double>& lambda) {   // dynamic sized version of set_lambda provided by upper layers
 	model().set_lambda_D(lambda[0]);
 	if constexpr(is_space_time<Model>::value) model().set_lambda_T(lambda[1]);
     }
-
     // getters
     const BlockFrame<double, int>& data() const { return df_; }
     BlockFrame<double, int>& data() { return df_; }   // direct write-access to model's internal data storage
     const DMatrix<int>& idx() const { return df_.get<int>(INDEXES_BLK); }   // data indices
-    const pde_ptr& pde() const { return pde_; }   // regularizing term Lf - u (defined on some domain D)
     std::size_t n_locs() const { return model().n_spatial_locs() * model().n_temporal_locs(); }
     DVector<double> lambda(int) const { return model().lambda(); }   // int supposed to be fdapde::Dynamic
     // access to model runtime status
@@ -82,7 +69,6 @@ template <typename Model> class ModelBase {
 
     virtual ~ModelBase() = default;
    protected:
-    pde_ptr pde_ {};                     // regularizing term Lf - u
     BlockFrame<double, int> df_ {};      // blockframe for data storage
     model_runtime_handler runtime_ {};   // model's runtime status
 
