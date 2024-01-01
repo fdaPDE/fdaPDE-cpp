@@ -8,11 +8,14 @@
 #include "src/strpde_test.cpp"
 #include "src/gsrpde_test.cpp"
 #include "src/qsrpde_test.cpp"
-// #include "src/fpca_test.cpp"
-// GCV test suites
 #include "src/gcv_srpde_test.cpp"
 #include "src/gcv_qsrpde_test.cpp"
 #include "src/gcv_srpde_newton_test.cpp"
+
+#include "src/kcv_srpde_test.cpp"
+
+// // #include "src/fpca_test.cpp"
+
 
 int main(int argc, char **argv){
   // start testing

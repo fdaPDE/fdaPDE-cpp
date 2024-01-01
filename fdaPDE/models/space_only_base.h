@@ -72,7 +72,11 @@ template <typename Model> class SpaceOnlyBase : public ModelBase<Model> {
             P_ = R1().transpose() * invR0_.solve(R1());   // R1^T*R0^{-1}*R1
         }
         return lambda_D() * P_;
-    }  
+    }
+    // evaluates the field having expansion coefficient vector c \in \mathbb{R}^N at locs
+    // DVector<double> eval_field(const DVector<double>& c, const DMatrix<double>& locs) const {
+
+    // }
     // destructor
     virtual ~SpaceOnlyBase() = default;
 };

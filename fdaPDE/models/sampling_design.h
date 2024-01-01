@@ -20,7 +20,9 @@
 #include <fdaPDE/linear_algebra.h>
 #include <fdaPDE/mesh.h>
 #include <fdaPDE/utils.h>
+#include <fdaPDE/pde.h>
 using fdapde::core::Kronecker;
+using fdapde::core::BinaryVector;
 
 #include "model_base.h"
 #include "model_macros.h"
@@ -94,7 +96,7 @@ template <typename Model> class SamplingBase {
             Psi_ = basis_evaluation->Psi;
             model().tensorize_psi();   // tensorize \Psi for space-time problems
 
-            // here we must be carefull of the type of model (space-only or space-time) we are handling
+            // here we must distinguish between space-only and space-time models
             if constexpr (is_space_time<Model>::value) {
                 // store I_m \kron D
                 std::size_t m = model().n_temporal_locs();
@@ -111,7 +113,7 @@ template <typename Model> class SamplingBase {
 	  } break;
         }
     }
-  
+
     // getters
     const SpMatrix<double>& Psi(not_nan) const { return Psi_; }
     const SpMatrix<double>& PsiTD(not_nan) const { return PsiTD_; }
@@ -127,6 +129,29 @@ template <typename Model> class SamplingBase {
     }
     Sampling sampling() const { return sampling_; }
 };
+
+// sets to zero rows of matrix M corresponding to ones in the bit_mask
+SpMatrix<double> mask_matrix(const SpMatrix<double>& M, const BinaryVector<fdapde::Dynamic>& bit_mask) {
+    fdapde_assert(bit_mask.size() == M.rows());
+    // reserve space
+    std::size_t n = M.rows();
+    std::size_t N = M.cols();
+    SpMatrix<double> B;
+    B.resize(n, N);
+    // triplet list to fill sparse matrix
+    std::vector<fdapde::Triplet<double>> triplet_list;
+    triplet_list.reserve(n * N);
+    for (int k = 0; k < M.outerSize(); ++k)
+        for (SpMatrix<double>::InnerIterator it(M, k); it; ++it) {
+            if (!bit_mask[it.row()]) {   // not masked observation
+                triplet_list.emplace_back(it.row(), it.col(), it.value());
+            }
+        }
+    // finalize construction
+    B.setFromTriplets(triplet_list.begin(), triplet_list.end());
+    B.makeCompressed();
+    return std::move(B);
+}
 
 }   // namespace models
 }   // namespace fdapde

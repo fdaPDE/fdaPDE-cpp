@@ -18,6 +18,7 @@
 #define __REGRESSION_BASE_H__
 
 #include <fdaPDE/utils.h>
+#include <fdaPDE/linear_algebra.h>
 #include "../model_macros.h"
 #include "../model_traits.h"
 #include "../space_only_base.h"
@@ -27,6 +28,7 @@
 #include "../sampling_design.h"
 #include "gcv.h"
 #include "stochastic_edf.h"
+using fdapde::core::BinaryVector;
 
 namespace fdapde {
 namespace models {
@@ -41,8 +43,11 @@ class RegressionBase :
     DMatrix<double> XtWX_ {};   // q x q dense matrix X^T*W*X
     DMatrix<double> T_ {};      // T = \Psi^T*Q*\Psi + P (required by GCV)
     Eigen::PartialPivLU<DMatrix<double>> invXtWX_ {};   // factorization of the dense q x q matrix XtWX_.
-    std::unordered_set<std::size_t> nan_idxs_;   // indexes of missing observations
-    SpMatrix<double> B_;                         // matrix \Psi corrected for NaN observations
+    // missing data and masking logic
+    BinaryVector<fdapde::Dynamic> nan_mask_;   // indicator function over missing observations
+    BinaryVector<fdapde::Dynamic> y_mask_;     // discards i-th observation from the fitting if y_mask_[i] == true
+    std::size_t n_nan_;                        // number of missing entries in observation vector
+    SpMatrix<double> B_;                       // matrix \Psi corrected for NaN and masked observations
 
     // matrices required for Woodbury decomposition
     DMatrix<double> U_;   // [\Psi^T*D*W*X, 0]
@@ -54,15 +59,15 @@ class RegressionBase :
     DVector<double> beta_ {};   // estimate of the coefficient vector (1 x q vector)
    public:
     using Base = typename select_regularization_base<Model, RegularizationType>::type;
-    using Base::df_;           // BlockFrame for problem's data storage
-    using Base::idx;           // indices of observations
-    using Base::n_basis;       // number of basis function over domain D
-    using Base::P;             // discretized penalty matrix
-    using SamplingBase<Model>::D;     // for areal sampling, matrix of subdomains measures, identity matrix otherwise
-    using SamplingBase<Model>::Psi;   // matrix of spatial basis evaluation at locations p_1 ... p_n
-    using SamplingBase<Model>::PsiTD; // block \Psi^T*D (not nan-corrected)
+    using Base::df_;                    // BlockFrame for problem's data storage
+    using Base::idx;                    // indices of observations
+    using Base::n_basis;                // number of basis function over domain D
+    using Base::P;                      // discretized penalty matrix
+    using SamplingBase<Model>::D;       // for areal sampling, matrix of subdomains measures, identity matrix otherwise
+    using SamplingBase<Model>::Psi;     // matrix of spatial basis evaluation at locations p_1 ... p_n
+    using SamplingBase<Model>::PsiTD;   // block \Psi^T*D (not nan-corrected)
     using Base::model;
-  
+
     RegressionBase() = default;
     // space-only constructor
     fdapde_enable_constructor_if(is_space_only, Model) RegressionBase(const pde_ptr& pde, Sampling s) :
@@ -87,19 +92,19 @@ class RegressionBase :
     const DVector<double>& f() const { return f_; };         // estimate of spatial field
     const DVector<double>& g() const { return g_; };         // PDE misfit
     const DVector<double>& beta() const { return beta_; };   // estimate of regression coefficients
-    const std::unordered_set<std::size_t>& nan_idxs() const { return nan_idxs_; }   // missing data indexes
-    std::size_t n_obs() const { return y().rows(); }   // number of observations
+    const BinaryVector<fdapde::Dynamic>& nan_mask() const { return nan_mask_; }
+    std::size_t n_obs() const { return y().rows() - n_nan_; }   // number of observations (nan corrected)
     // getters to Woodbury decomposition matrices
     const DMatrix<double>& U() const { return U_; }
     const DMatrix<double>& V() const { return V_; }
     // access to NaN corrected \Psi and \Psi^T*D matrices
-    const SpMatrix<double>& Psi() const { return has_nan() ? B_ : Psi(not_nan()); }
-    auto PsiTD() const { return has_nan() ? B_.transpose() * D() : Psi(not_nan()).transpose() * D(); }
-  
+    const SpMatrix<double>& Psi() const { return !is_empty(B_) ? B_ : Psi(not_nan()); }
+    auto PsiTD() const { return !is_empty(B_) ? B_.transpose() * D() : Psi(not_nan()).transpose() * D(); }
+
     // utilities
     bool has_covariates() const { return q() != 0; }                 // true if the model has a parametric part
-    bool has_weights() const { return df_.has_block(WEIGHTS_BLK); }  // true if heteroscedastic observation are assumed
-    bool has_nan() const { return nan_idxs_.size() != 0; }           // true if there are missing data
+    bool has_weights() const { return df_.has_block(WEIGHTS_BLK); }  // true if heteroscedastic observation are provided
+    bool has_nan() const { return n_nan_ != 0; }                     // true if there are missing data
 
     // an efficient way to perform a left multiplication by Q implementing the following
     //  given the design matrix X, the weight matrix W and x
@@ -127,55 +132,52 @@ class RegressionBase :
         T_ = PsiTD() * lmbQ(Psi()) + P();
         return T_;
     }
-
-    void init_data() {
-        if (has_weights() && df_.is_dirty(WEIGHTS_BLK)) {   // update observations' weights if provided
+    // data dependent regression models' initialization logic
+    void analyze_data() {
+        // compute q x q dense matrix X^T*W*X and its factorization
+        if (has_weights() && df_.is_dirty(WEIGHTS_BLK)) {
             W_ = df_.template get<double>(WEIGHTS_BLK).col(0).asDiagonal();
-	    model().runtime().set(runtime_status::require_W_update);
+            model().runtime().set(runtime_status::require_W_update);
         } else if (is_empty(W_)) {
             // default to homoskedastic observations
             W_ = DVector<double>::Ones(Base::n_locs()).asDiagonal();
         }
+        // compute q x q dense matrix X^T*W*X and its factorization if covariates are supplied
         if (has_covariates() && (df_.is_dirty(DESIGN_MATRIX_BLK) || df_.is_dirty(WEIGHTS_BLK))) {
-            // compute q x q dense matrix X^T*W*X and its factorization
             XtWX_ = X().transpose() * W_ * X();
             invXtWX_ = XtWX_.partialPivLu();
         }
-	// clear dirty bits
-	df_.clear_dirty_bit(WEIGHTS_BLK);
-	df_.clear_dirty_bit(DESIGN_MATRIX_BLK);
+        // derive missingness pattern from observations vector (if changed)
+        if (df_.is_dirty(OBSERVATIONS_BLK)) {
+            nan_mask_.resize(y().rows());
+            n_nan_ = 0;
+            for (std::size_t i = 0; i < df_.template get<double>(OBSERVATIONS_BLK).size(); ++i) {
+                if (std::isnan(y()(i, 0))) {   // requires -ffast-math compiler flag to be disabled
+                    nan_mask_.set(i);
+                    n_nan_++;
+                    df_.template get<double>(OBSERVATIONS_BLK)(i, 0) = 0.0;   // zero out NaN
+                }
+            }
+            if (has_nan()) model().runtime().set(runtime_status::require_psi_correction);
+        }
         return;
     }
-    void init_nan() {   // regression models' missing data logic (called by SamplingBase::init_sampling())
-        // derive missingness pattern
-        nan_idxs_.clear();   // empty nan indexes set
-        for (std::size_t i = 0; i < df_.template get<double>(OBSERVATIONS_BLK).size(); ++i) {
-            if (std::isnan(y()(i, 0))) {   // requires -ffast-math compiler flag to be disabled
-                nan_idxs_.insert(i);
-                df_.template get<double>(OBSERVATIONS_BLK)(i, 0) = 0.0;   // zero out NaN
-            }
-        }
-        // matrix B assembly logic (set to zero rows corresponding to missing observations)
-        if (has_nan()) {
-            // reserve space
-            std::size_t n = Psi(not_nan()).rows();
-            std::size_t N = Psi(not_nan()).cols();
-            B_.resize(n, N);
-            // triplet list to fill sparse matrix
-            std::vector<fdapde::Triplet<double>> triplet_list;
-            triplet_list.reserve(n * N);
-            for (int k = 0; k < Psi(not_nan()).outerSize(); ++k)
-                for (SpMatrix<double>::InnerIterator it(Psi(not_nan()), k); it; ++it) {
-                    if (nan_idxs_.find(it.row()) == nan_idxs_.end()) {
-                        // no missing data at this location
-                        triplet_list.emplace_back(it.row(), it.col(), it.value());
-                    }
-                }
-            // finalize construction
-            B_.setFromTriplets(triplet_list.begin(), triplet_list.end());
-            B_.makeCompressed();
-        }
+
+    // assembles matrix B (sets to zero \Psi rows corresponding to missing or masked observations)
+    void correct_psi() {
+        BinaryVector<fdapde::Dynamic> mask(y().rows());
+        if (has_nan()) mask = mask | nan_mask_;
+        if (y_mask_.size() != 0) mask = mask | y_mask_;
+        // assemble matrix B_ according to given mask
+        if (mask.any()) { B_ = mask_matrix(Psi(not_nan()), mask); }
         return;
+    }
+    // if mask[i] is true, removes the contribution of the i-th observation from the model's fitting
+    void mask_obs(const BinaryVector<fdapde::Dynamic>& y_mask) {
+        fdapde_assert(y_mask.size() == y().rows());
+        model().runtime().set(runtime_status::require_psi_correction);
+        y_mask_ = y_mask;
+	return;
     }
 };
 

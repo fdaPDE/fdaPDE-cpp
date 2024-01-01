@@ -17,85 +17,76 @@
 #ifndef __K_FOLD_CV__
 #define __K_FOLD_CV__
 
+#include <fdaPDE/utils.h>
+#include <fdaPDE/linear_algebra.h>
+
 #include <algorithm>
 #include <vector>
-#include <fdaPDE/utils.h>
-using fdapde::core::BlockView;
 using fdapde::core::BlockFrame;
-using fdapde::core::Sparse;
+using fdapde::core::BinaryVector;
+using fdapde::Dynamic;
 
 namespace fdapde {
 namespace calibration {
 
 // general implementation of KFold Cross Validation
-class KFoldCV {
+class KCV {
    private:
+    // algorithm's parameters
     std::size_t K_;      // number of folds
     std::size_t seed_;   // seed used for BlockFrame shuffling
+    bool shuffle_;       // whether to shuffle data before splitting into folds
 
-    std::vector<double> avg_scores_;   // mean CV score for each \lambda
-    std::vector<double> std_scores_;   // CV score standard deviation for each \lambda
-    DMatrix<double> scores_;           // matrix of CV scores
-    DVector<double> optimum_;          // optimal smoothing parameter
+    DVector<double> avg_scores_;   // mean CV score for each \lambda
+    DVector<double> std_scores_;   // CV score standard deviation for each \lambda
+    DMatrix<double> scores_;       // matrix of CV scores
+    DVector<double> optimum_;      // optimal smoothing parameter
 
-    // split data in K folds
-    std::pair<BlockView<Sparse, double, int>, BlockView<Sparse, double, int>>
-    split(const BlockFrame<double, int>& data, std::size_t i) {
+    // produces a bit_mask identifying the i-th fold to be supplied to the model via mask_obs
+    using TrainTestPartition = std::pair<BinaryVector<Dynamic>, BinaryVector<Dynamic>>;
+    TrainTestPartition split(const BlockFrame<double, int>& data, std::size_t i) {
         std::size_t n = data.rows();          // number of data points
         std::size_t m = std::floor(n / K_);   // number of data per fold
 
         // create test-train index sets, as function of test fold i
-        std::vector<std::size_t> testIdx(m);
-        std::vector<std::size_t> trainIdx(n - m);
+        BinaryVector<Dynamic> test_mask(n);
+	BinaryVector<Dynamic> train_mask(n);
         for (std::size_t j = 0; j < n; ++j) {
-            if (j >= m * i && j < m * (i + 1))
-                testIdx[j - m * i] = j;
-            else
-                trainIdx[j >= m * (i + 1) ? j - m : j] = j;
+            if (j >= m * i && j < m * (i + 1)) {
+                test_mask.set(j);
+            } else {
+                train_mask.set(j);
+            }
         }
-        // create views
-        BlockView<Sparse, double, int> train = data(trainIdx);
-        BlockView<Sparse, double, int> test = data(testIdx);
-        return std::make_pair(train, test);
+        return std::make_pair(train_mask, test_mask);
     }
    public:
     // constructor
-    KFoldCV() = default;
-    KFoldCV(std::size_t K) : K_(K), seed_(std::random_device()()) {};
-    KFoldCV(std::size_t K, int seed) : K_(K), seed_((seed == fdapde::random_seed) ? std::random_device()() : seed) {};
-  
-    // selects best smoothing parameter according to a K-fold cross validation strategy using the output of functor F as
-    // CV score F receives, in this order: current smoothing parameter, train set and test set
-    void compute(
-      const std::vector<DVector<double>>& lambdas, const BlockFrame<double, int>& data,
-      const std::function<double(DVector<double>, BlockFrame<double, int>, BlockFrame<double, int>)>& F,
-      bool randomize = true) {   // if true a randomization of the data is performed before split
+    KCV() = default;
+    KCV(std::size_t K, bool shuffle = true) : K_(K), seed_(std::random_device()()), shuffle_(shuffle) {};
+    KCV(std::size_t K, int seed, bool shuffle = true) :
+        K_(K), seed_((seed == fdapde::random_seed) ? std::random_device()() : seed), shuffle_(shuffle) {};
+
+    // selects best smoothing parameter of model according to a K-fold cross validation strategy
+    template <typename ModelType, typename ScoreType>
+    void fit(ModelType& model, const std::vector<DVector<double>>& lambdas, ScoreType cv_score) {
         // reserve space for CV scores
         scores_.resize(K_, lambdas.size());
-        BlockFrame<double, int> data_;
-        if (randomize)   // perform a first shuffling of the data if required
-            data_ = data.shuffle(seed_);
-        else
-            data_ = data;
-
-        // cycle over all folds
-        for (std::size_t fold = 0; fold < K_; ++fold) {
-            // create train test partition
-            std::pair<BlockView<Sparse, double, int>, BlockView<Sparse, double, int>> train_test = split(data_, fold);
-            // decouple training from testing
-            BlockFrame<double, int> train = train_test.first.extract();
-            BlockFrame<double, int> test = train_test.second.extract();
-
-            // fixed a data split, cycle over all lambda values
-            for (std::size_t j = 0; j < lambdas.size(); ++j) {
-                scores_.coeffRef(fold, j) = F(lambdas[j], train, test);   // compute CV score
-	    }
+        if (shuffle_) {   // perform a first shuffling of the data if required
+            model.set_data(model.data().shuffle(seed_));
+	}
+	cv_score.set_model(model);
+        // cycle over all tuning parameters
+        for (std::size_t j = 0; j < lambdas.size(); ++j) {
+            for (std::size_t fold = 0; fold < K_; ++fold) {   // fixed a tuning parameter, cycle over all data splits
+                // compute train-test partition and evaluate CV score
+                TrainTestPartition partition_mask = split(model.data(), fold);
+                scores_.coeffRef(fold, j) = cv_score(lambdas[j], partition_mask.first, partition_mask.second);
+            }
         }
         // reserve space for storing results
-        avg_scores_.clear();
-        std_scores_.clear();   // clear possible previous execution
-        avg_scores_.reserve(lambdas.size());
-        std_scores_.reserve(lambdas.size());
+        avg_scores_ = DVector<double>::Zero(lambdas.size());
+        std_scores_ = DVector<double>::Zero(lambdas.size());
         for (std::size_t j = 0; j < lambdas.size(); ++j) {
             // record the average score and its standard deviation computed among the K_ runs
             double avg_score = 0;
@@ -105,22 +96,24 @@ class KFoldCV {
             for (std::size_t i = 0; i < K_; ++i) std_score += std::pow(scores_(i, j) - avg_score, 2);
             std_score = std::sqrt(std_score / (K_ - 1));   // use unbiased sample estimator for standard deviation
             // store results
-            avg_scores_.push_back(avg_score);
-            std_scores_.push_back(std_score);
+            avg_scores_[j] = avg_score;
+            std_scores_[j] = std_score;
         }
 
         // store optimal lambda according to given metric F
-        std::vector<double>::iterator opt_score = std::min_element(avg_scores_.begin(), avg_scores_.end());
-        optimum_ = lambdas[std::distance(avg_scores_.begin(), opt_score)];
+        Eigen::Index opt_score;
+        avg_scores_.minCoeff(&opt_score);
+        optimum_ = lambdas[opt_score];
+	return;
     }
 
     // getters
-    std::vector<double> avg_scores() const { return avg_scores_; }   // mean CV score vector
-    std::vector<double> std_scores() const { return std_scores_; }   // CV score standard deviation vector
-    DMatrix<double> scores() const { return scores_; }               // CV scores
-    DVector<double> optimum() const { return optimum_; }   // optimal smoothing level according to provided CV index
+    const DVector<double>& avg_scores() const { return avg_scores_; }   // mean CV score vector
+    const DVector<double>& std_scores() const { return std_scores_; }   // CV score standard deviation vector
+    const DMatrix<double>& scores() const { return scores_; }           // CV scores
+    const DVector<double>& optimum() const { return optimum_; }         // optimal tuning parameter
     // setters
-    void set_K(std::size_t K) { K_ = K; }
+    void set_n_folds(std::size_t K) { K_ = K; }
 };
 
 }   // namespace calibration

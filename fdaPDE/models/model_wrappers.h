@@ -92,14 +92,17 @@ template <> struct IStatModel<void> {
       &M::init, &M::solve, static_cast<void (ModelBase<M>::*)(const DVector<double>&)>(&M::set_lambda),
       static_cast<DVector<double> (ModelBase<M>::*)(int) const>(&M::lambda),
       static_cast<const SpMatrix<double>& (SamplingBase<M>::*)(not_nan) const>(&M::Psi),
-      static_cast<const SpMatrix<double>& (SamplingBase<M>::*)(not_nan) const>(&M::PsiTD)>;
+      static_cast<const SpMatrix<double>& (SamplingBase<M>::*)(not_nan) const>(&M::PsiTD), &M::set_data>;
     // interface implementation
     void init()  { fdapde::invoke<void, 0>(*this); }
     void solve() { fdapde::invoke<void, 1>(*this); }
     void set_lambda(const DVector<double>& lambda) { fdapde::invoke<void, 2>(*this, lambda); }
     decltype(auto) lambda() const { return fdapde::invoke<DVector<double>, 3>(*this, fdapde::Dynamic); }
-    decltype(auto) Psi()    const { return fdapde::invoke<const SpMatrix<double>&, 4>(*this, not_nan());}
-    decltype(auto) PsiTD()  const { return fdapde::invoke<const SpMatrix<double>&, 5>(*this, not_nan());}  
+    decltype(auto) Psi()    const { return fdapde::invoke<const SpMatrix<double>&, 4>(*this, not_nan()); }
+    decltype(auto) PsiTD()  const { return fdapde::invoke<const SpMatrix<double>&, 5>(*this, not_nan()); }
+    void set_data(const BlockFrame<double, int>& data, bool reindex = false) {
+        fdapde::invoke<void, 6>(*this, data, reindex);
+    }
 };
 
 }   // namespace models

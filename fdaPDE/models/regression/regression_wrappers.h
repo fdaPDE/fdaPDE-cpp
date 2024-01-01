@@ -18,11 +18,14 @@
 #define __REGRESSION_WRAPPERS_H__
 
 #include <fdaPDE/utils.h>
+#include <fdaPDE/linear_algebra.h>
 #include "../model_traits.h"
 #include "../model_wrappers.h"
 #include "../sampling_design.h"
 using fdapde::models::is_space_only;
 using fdapde::models::Sampling;
+using fdapde::core::BinaryVector;
+using fdapde::Dynamic;
 
 namespace fdapde {
 namespace models {
@@ -32,7 +35,7 @@ struct IRegression {
     template <typename M>
     using fn_ptrs = fdapde::mem_fn_ptrs<
       &M::f, &M::beta, &M::g, &M::fitted, &M::W, &M::XtWX, &M::U, &M::V, &M::invXtWX, &M::invA, &M::q, &M::n_obs,
-      &M::norm, &M::y, &M::T, &M::lmbQ, &M::has_covariates>;
+      &M::norm, &M::y, &M::T, &M::lmbQ, &M::has_covariates, &M::nan_mask, &M::mask_obs, &M::X>;
     // interface implementation
     decltype(auto) f()       const { return fdapde::invoke<const DVector<double>&   , 0>(*this); }
     decltype(auto) beta()    const { return fdapde::invoke<const DVector<double>&   , 1>(*this); }
@@ -53,6 +56,9 @@ struct IRegression {
     decltype(auto) T() { return fdapde::invoke<const DMatrix<double>&, 14>(*this); }
     decltype(auto) lmbQ(const DMatrix<double>& x) const { return fdapde::invoke<DMatrix<double>, 15>(*this, x); }
     decltype(auto) has_covariates() const { return fdapde::invoke<bool, 16>(*this); }
+    decltype(auto) nan_mask() const { return fdapde::invoke<const BinaryVector<Dynamic>&, 17>(*this); }
+    decltype(auto) mask_obs(const BinaryVector<Dynamic>& mask) { return fdapde::invoke<void, 18>(*this, mask); }
+    decltype(auto) X() const { return fdapde::invoke<const DMatrix<double>&, 19>(*this); }
 }; 
 
 template <typename RegularizationType>
