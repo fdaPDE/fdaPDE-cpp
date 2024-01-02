@@ -211,15 +211,18 @@ class STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, MonolithicSolver> :
 template <typename PDE, typename SamplingDesign>
 void STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, MonolithicSolver>::init_model() {
     // assemble system matrix for the nonparameteric part of the model
+    std::cout << "STRPDE init model pt 1" << std::endl;
     if (is_empty(L_)) L_ = Kronecker(L(), pde().R0());
     A_ = SparseBlockMatrix<double, 2, 2>(
       -PsiTD() * W() * Psi(),                lambda_D() * (R1() + lambda_T() * L_).transpose(),
       lambda_D() * (R1() + lambda_T() * L_), lambda_D() * R0()                                );
     // cache system matrix for reuse
     invA_.compute(A_);
+    std::cout << "STRPDE init model pt 2" << std::endl;
     // prepare rhs of linear system
     b_.resize(A_.rows());
     b_.block(A_.rows() / 2, 0, A_.rows() / 2, 1) = lambda_D() * u();
+    std::cout << "STRPDE init model pt 3" << std::endl;
     return;
 }
 
@@ -227,8 +230,10 @@ void STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, MonolithicSolver>::init_mod
 template <typename PDE, typename SamplingDesign>
 void STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, MonolithicSolver>::update_to_weights() {
     // adjust north-west block of matrix A_ and factorize
+    std::cout << "STRPDE update weights pt 1" << std::endl;
     A_.block(0, 0) = -PsiTD() * W() * Psi();
     invA_.compute(A_);
+    std::cout << "STRPDE update weights pt 2" << std::endl;
     return;
 }
 
@@ -238,11 +243,15 @@ void STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, MonolithicSolver>::solve() 
     BLOCK_FRAME_SANITY_CHECKS;
     DVector<double> sol;   // room for problem' solution
 
+    std::cout << "STRPDE solve pt 1" << std::endl; 
+
     if (!Base::has_covariates()) {   // nonparametric case
         // update rhs of STR-PDE linear system
         b_.block(0, 0, A_.rows() / 2, 1) = -PsiTD() * W() * y();
+        std::cout << "STRPDE solve pt 2.0" << std::endl;
         // solve linear system A_*x = b_
         sol = invA_.solve(b_);
+        std::cout << "STRPDE solve pt 2.1" << std::endl;
         f_ = sol.head(A_.rows() / 2);
     } else {   // parametric case
         // rhs of STR-PDE linear system
@@ -259,6 +268,7 @@ void STRPDE<PDE, SpaceTimeParabolic, SamplingDesign, MonolithicSolver>::solve() 
         f_ = sol.head(A_.rows() / 2);
         beta_ = invXtWX().solve(X().transpose() * W()) * (y() - Psi() * f_);
     }
+    std::cout << "STRPDE solve pt 3" << std::endl;
     // store PDE misfit
     g_ = sol.tail(A_.rows() / 2);
     return;

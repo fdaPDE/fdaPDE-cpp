@@ -309,7 +309,8 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
     time_mesh.resize(M);
     for (std::size_t i = 0; i < M; ++i) time_mesh[i] = (tf / (M-1)) * i;
     // define spatial domain and regularizing PDE
-    MeshLoader<Mesh2D> domain("c_shaped_adj");
+    //MeshLoader<Mesh2D> domain("c_shaped_adj");
+    MeshLoader<Mesh2D> domain("c_shaped_504");   // mesh fine 
 
     // import locs from files
     DMatrix<double> space_locs = read_csv<double>(R_path + "/space_locs.csv");
@@ -338,15 +339,15 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
       std::vector<SVector<2>> lambdas90_d_t;
       if(data_type == "all"){
         // 10% 
-        for(double xs = -3.6; xs <= -1.4; xs +=0.2)
+        for(double xs = -3.6; xs <= -1.8; xs +=0.05)
           for(double xt = -7.0; xt <= -6.0; xt +=1.0) 
             lambdas10_d_t.push_back(SVector<2>(std::pow(10,xs), std::pow(10,xt)));
         // 50% 
-        for(double xs = -4.0; xs <= -2.0; xs +=0.2)
+        for(double xs = -3.2; xs <= -1.8; xs +=0.05)
           for(double xt = -7.0; xt <= -6.0; xt +=1.0) 
             lambdas50_d_t.push_back(SVector<2>(std::pow(10,xs), std::pow(10,xt)));
         // 90%
-        for(double xs = -3.6; xs <= -1.4; xs +=0.2)
+        for(double xs = -3.8; xs <= -1.8; xs +=0.05)
           for(double xt = -7.0; xt <= -6.0; xt +=1.0) 
             lambdas90_d_t.push_back(SVector<2>(std::pow(10,xs), std::pow(10,xt)));
       }
@@ -412,7 +413,7 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
 
           std::string solutions_path; 
           if(data_type == "all")
-            solutions_path = R_path + "/simulations/all/sim_" + std::to_string(sim) + "/alpha_" + alpha_string + "/gcv_smooth"; 
+            solutions_path = R_path + "/simulations/all/sim_" + std::to_string(sim) + "/alpha_" + alpha_string + "/N_fine"; 
           else
             solutions_path = R_path + "/simulations/miss_strategy_" + data_type + "/p_" + p_string + "/sim_" + std::to_string(sim) + "/alpha_" + alpha_string;
 

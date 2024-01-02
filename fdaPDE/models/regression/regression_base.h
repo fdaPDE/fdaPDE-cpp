@@ -200,7 +200,10 @@ template <typename Model> void RegressionBase<Model>::init_nan(const std::unorde
         B_.resize(n, N);
         // triplet list to fill sparse matrix
         std::vector<fdapde::Triplet<double>> triplet_list;
-        triplet_list.reserve(n * N);
+        std::cout << "regression base init nan pt1" << std::endl;
+        std::cout << "regression base init nan: ndof = " << model_traits<Model>::PDE::SolverType::n_dof_per_element << std::endl;
+        std::cout << "regression base init nan: n*ndof = " << n * model_traits<Model>::PDE::SolverType::n_dof_per_element << std::endl;
+        triplet_list.reserve(n * model_traits<Model>::PDE::SolverType::n_dof_per_element);    // M  --> prima: n*N
         for (int k = 0; k < Psi(not_nan()).outerSize(); ++k)
             for (SpMatrix<double>::InnerIterator it(Psi(not_nan()), k); it; ++it) {
                 if (nan_idxs_.find(it.row()) == nan_idxs_.end()) {

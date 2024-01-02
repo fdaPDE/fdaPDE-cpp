@@ -267,7 +267,7 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
     //std::string data_type = "all";   // all  d
     std::vector<std::string> data_types = {"all"}; 
     std::string p_string = "50";   
-    std::string lambda_selection_type = "gcv";   // gcv gcv_smooth manual 
+    std::string lambda_selection_type = "gcv_smooth";   // gcv gcv_smooth manual 
 
     // define temporal domain
     double tf = fdapde::testing::pi;   // final time 
@@ -288,19 +288,19 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
 
 
-    unsigned int n_sim = 1; 
+    unsigned int n_sim = 5; 
 
-    // lambdas_d_t for RMSE
-    std::vector<SVector<2>> lambdas_try; 
-    for(double xs = -4.0; xs <= -1.5; xs +=0.5)
-      for(double xt = -7.0; xt <= -6.0; xt +=1.0) 
-        lambdas_try.push_back(SVector<2>(std::pow(10,xs), std::pow(10,xt)));
+    // // lambdas_d_t for RMSE
+    // std::vector<SVector<2>> lambdas_try; 
+    // for(double xs = -4.0; xs <= -1.5; xs +=0.5)
+    //   for(double xt = -7.0; xt <= -6.0; xt +=1.0) 
+    //     lambdas_try.push_back(SVector<2>(std::pow(10,xs), std::pow(10,xt)));
 
     for(auto data_type : data_types){
       if(data_type == "all")
-        std::cout << "----------------------------------------ALL DATA----------------------------" << std::endl; 
+        std::cout << "---------------------------------------------ALL DATA----------------------------" << std::endl; 
       else 
-        std::cout << "----------------------------------------MISSING DATA----------------------------" << std::endl; 
+        std::cout << "---------------------------------------------MISSING DATA----------------------------" << std::endl; 
       
 
       for(unsigned int sim = 1; sim <= n_sim; ++sim){
@@ -308,9 +308,9 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
           std::cout << "---------------------------Simulation #" << sim << "--------------------------" << std::endl; 
           for(double alpha : alphas){
 
-            std::size_t count_l = 1; 
-            for(SVector<2> l : lambdas_try){
-              const std::string lambda_string = std::to_string(count_l); 
+            // std::size_t count_l = 1; 
+            // for(SVector<2> l : lambdas_try){
+            //   const std::string lambda_string = std::to_string(count_l); 
 
               unsigned int alpha_int = alpha*100; 
               std::string alpha_string = std::to_string(alpha_int); 
@@ -325,41 +325,42 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
 
               std::string solutions_path; 
               if(data_type == "all")
-                solutions_path = R_path + "/simulations/all/sim_" + std::to_string(sim) + "/alpha_" + alpha_string + "/lambdas_for_RMSE"; 
+                solutions_path = R_path + "/simulations/all/sim_" + std::to_string(sim) + "/alpha_" + alpha_string; 
               else
                 solutions_path = R_path + "/simulations/miss_strategy_" + data_type + "/p_" + p_string + "/sim_" + std::to_string(sim) + "/alpha_" + alpha_string;
               
-              // // optima lambdas 
+              // optima lambdas 
               double lambda_D; 
               double lambda_T; 
-              // if(lambda_selection_type == "gcv"){
-                // std::ifstream fileLambdaS(solutions_path + "/lambda_s_opt.csv");
-                // if(fileLambdaS.is_open()){
-                //  fileLambdaS >> lambda_D; 
-                //  fileLambdaS.close();
-                // }
-                // std::ifstream fileLambdaS(solutions_path + "/lambda_t_opt.csv");
-                // if(fileLambdaS.is_open()){
-                //  fileLambdaS >> lambda_T; 
-                //  fileLambdaS.close();
-                // }
- 
-              // } 
-              // if(lambda_selection_type == "manual"){
-                // std::ifstream fileLambdaS(solutions_path + "/lambda_s_opt.csv");
-                // if(fileLambdaS.is_open()){
-                //  fileLambdaS >> lambda_D; 
-                //  fileLambdaS.close();
-                // }
-                // std::ifstream fileLambdaS(solutions_path + "/lambda_t_opt.csv");
-                // if(fileLambdaS.is_open()){
-                //  fileLambdaS >> lambda_T; 
-                //  fileLambdaS.close();
-                // }
-              // }
+              if(lambda_selection_type == "gcv"){
+                std::ifstream fileLambdaS_gcv(solutions_path + "/lambda_s_opt.csv");
+                if(fileLambdaS_gcv.is_open()){
+                 fileLambdaS_gcv >> lambda_D; 
+                 fileLambdaS_gcv.close();
+                }
+                std::ifstream fileLambdaT(solutions_path + "/lambda_t_opt.csv");
+                if(fileLambdaT.is_open()){
+                 fileLambdaT >> lambda_T; 
+                 fileLambdaT.close();
+                }
+              } 
 
-              lambda_D = l[0];
-              lambda_T = l[1];
+              if(lambda_selection_type == "gcv_smooth"){
+                std::ifstream fileLambdaS_gcv_smooth(solutions_path + "/gcv_smooth/lambda_s_opt.csv");
+                if(fileLambdaS_gcv_smooth.is_open()){
+                  fileLambdaS_gcv_smooth >> lambda_D; 
+                  fileLambdaS_gcv_smooth.close();
+                }
+                std::ifstream fileLambdaT_gcv_smooth(solutions_path + "/gcv_smooth/lambda_t_opt.csv");
+                if(fileLambdaT_gcv_smooth.is_open()){
+                 fileLambdaT_gcv_smooth >> lambda_T; 
+                 fileLambdaT_gcv_smooth.close();
+                }
+              } 
+
+
+              // lambda_D = l[0];
+              // lambda_T = l[1];
 
 
               SQRPDE<decltype(problem), SpaceTimeSeparable, GeoStatLocations, MonolithicSolver> model(problem, time_mesh, alpha);
@@ -379,28 +380,25 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
               // Save C++ solution 
               DMatrix<double> computedF = model.f();
               const static Eigen::IOFormat CSVFormatf(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
-              std::ofstream filef(solutions_path + "/f_" + lambda_string  + ".csv");
+              std::ofstream filef(solutions_path + "/f.csv");
               if (filef.is_open()){
                 filef << computedF.format(CSVFormatf);
                 filef.close();
               }
 
-              // DMatrix<double> computedFn = model.Psi()*model.f();
-              // const static Eigen::IOFormat CSVFormatfn(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
-              // std::ofstream filefn(solutions_path + "/fn.csv");
-              // if (filefn.is_open()){
-              //   filefn << computedFn.format(CSVFormatfn);
-              //   filefn.close();
-              // }
+              DMatrix<double> computedFn = model.Psi()*model.f();
+              const static Eigen::IOFormat CSVFormatfn(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+              std::ofstream filefn(solutions_path + "/fn.csv");
+              if (filefn.is_open()){
+                filefn << computedFn.format(CSVFormatfn);
+                filefn.close();
+              }
 
-              count_l += 1; 
+              //count_l += 1; 
             }
-          }
       }
-
-
-      
     }
+
 
 }
 

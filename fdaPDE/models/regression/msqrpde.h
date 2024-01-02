@@ -44,6 +44,8 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
 
         unsigned int h_;                      // number of quantile orders 
         const std::vector<double> alphas_;    // quantile order 
+        bool do_process = false;
+        bool force_entrance = false; 
 
         // algorithm's parameters 
         double gamma0_ = 1.0;                  // crossing penalty 
@@ -64,7 +66,7 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
         // room for solution 
         DVector<double> f_curr_{};     // current estimate of the spatial field f (1 x h*N vector)
         DVector<double> fn_curr_{};    // current estimate of the spatial field f_n (1 x h*n vector)
-        DVector<double> g_curr_{};     // current PDE misfit
+        DVector<double> g_curr_{};     // current PDE misfit (1 x h*N vector)
         DVector<double> beta_curr_{};  // current estimate of the coefficient vector (1 x h*q vector)
 
         DVector<double> f_init_{}; 
@@ -218,6 +220,8 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
         double crossing_penalty() const;
         double crossing_penalty_f() const; 
         double crossing_penalty_param() const; 
+        void set_preprocess_option(bool preprocess){ do_process = preprocess;}; 
+        void set_forcing_option(bool force){ force_entrance = force;}; 
 
         const DMatrix<double>& H_multiple(); 
         const DMatrix<double>& Q_multiple(); 
@@ -283,6 +287,167 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
             beta_init_ = beta_curr_;
         }
 
+        // Processing 
+        // rmk: media posta a distanza 2*eps e non eps per evitare instabilità numeriche nel caso in cui 
+        // la soluzione postporcessata venga data in input all'algoritmo di MSQRPDE
+
+        std::size_t ind_median = (find(alphas_.begin(), alphas_.end(), 0.5)) - alphas_.begin();
+        //std::cout << "idx median : " << ind_median << std::endl;
+        // DVector<double> fn_new = fn_curr_; // debug
+        // DVector<double> fn_old = fn_curr_;  // debug 
+        if(crossing_constraints() && do_process){  
+
+            unsigned int count_iter = 0;
+            while(crossing_constraints()){
+                count_iter = count_iter +1;
+                // if(count_iter % 1 == 0){
+                //     std::cout << "################## Count_iter in processing : " << count_iter << std::endl; 
+                //     std::cout << "################## crossing value " << std::setprecision(16) << crossing_penalty() << std::endl; 
+                //     std::cout << "################## inf dist fn= " << std::setprecision(16) << (fn_new - fn_old).cwiseAbs().maxCoeff() << std::endl; 
+                // }
+
+                // Tentativo per semi-parametric case 
+                // for(std::size_t j=ind_median; j>1; j--){
+                //     auto fn_j = fn_curr_[(((j-1)*n_obs())+1):((j)*n_obs())];
+                //     auto fn_jm1 = fn_curr_[(((j-2)*n_obs())+1):((j-1)*n_obs())];
+                //     auto beta_j = beta_curr_[(((j-1)*q())+1):((j)*q())];
+                //     auto beta_jm1 = beta_curr_[(((j-2)*q())+1):((j-1)*q())];
+                //     for(std::size_t i=0; i<n_obs(); i++){  //  loop in spatial points 
+                //         if(fitted(j)[i] < (fitted(j-1)[i] + eps_)){  //  if crossing (to be checked on mu!)
+                //             double mean_fn = (fn_jm1[i] + fn_j[i])/2.; 
+                //             fn_jm1[i] = mean_fn + eps_/4;
+                //             fn_j[i] = mean_fn - eps_/4;
+                //         }
+                //     }
+                //     for(std::size_t i=0; i<n_obs(); i++){  //  loop in spatial points 
+                //         if(fitted(j)[i] < (fitted(j-1)[i] + eps_)){  //  if crossing (to be checked on mu!)
+                //             double mean_beta = 0.; 
+                //             for(std::size_t idx = 0; idx < q(); ++idx){
+                //                 mean_beta = (beta_jm1[idx] + beta_j[idx])/2.;   // ?? vogliamo mediare le singole componenti del vettore beta??
+                //                 beta_jm1[idx] = mean_beta + eps_/(4*X().coeff(i, idx));
+                //                 beta_j[idx] = mean_beta - eps_/(4*X().coeff(i, idx));
+                //                 {
+                //                 // PROBLEMA: conta solo l'ultimo nodo di crossing per l'update di beta
+                //                 }                             
+                //             }
+                //         }
+                //     }
+                //     fn_curr_[(((j-1)*n_obs())+1):((j)*n_obs())] = fn_j;
+                //     fn_curr_[(((j-2)*n_obs())+1):((j-1)*n_obs())] = fn_jm1;
+                //     beta_curr_[(((j-1)*q())+1):((j)*q())] = beta_j;
+                //     beta_curr_[(((j-2)*q())+1):((j-1)*q())] = beta_jm1;
+                // }
+                // for(std::size_t j = ind_median; j < h_; j++){
+                //     // ...
+                // }
+
+                for(std::size_t j=ind_median; j>=1; --j){
+                    DVector<double> quantile_jm1;
+                    quantile_jm1.resize(n_obs());  
+                    quantile_jm1 = fitted(j-1);
+                    DVector<double> quantile_j; 
+                    quantile_j.resize(n_obs()); 
+                    quantile_j = fitted(j);
+
+                    DVector<double> quantile_jm1_nodes;
+                    quantile_jm1_nodes.resize(n_basis());  
+                    quantile_jm1_nodes = f_curr_.block((j-1)*n_basis(), 0, n_basis(), 1);
+                    DVector<double> quantile_j_nodes; 
+                    quantile_j_nodes.resize(n_basis()); 
+                    quantile_j_nodes = f_curr_.block(j*n_basis(), 0, n_basis(), 1);
+
+
+                    //  loop on spatial points 
+                    for(std::size_t i=0; i<n_obs(); i++){  
+                        if(quantile_j[i] < (quantile_jm1[i] + eps_)){  //  if crossing 
+                            //idx_debug = i; 
+                            double mean = (quantile_jm1[i] + quantile_j[i])/2;
+                            quantile_jm1[i] = mean - eps_;
+                            quantile_j[i] = mean + eps_;
+                        }
+                    }
+
+                    //  loop on mesh nodes 
+                    for(std::size_t i=0; i<n_basis(); i++){  
+                        if(quantile_j_nodes[i] < (quantile_jm1_nodes[i] + eps_)){  //  if crossing 
+                            double mean = (quantile_jm1_nodes[i] + quantile_j_nodes[i])/2;
+                            quantile_jm1_nodes[i] = mean - eps_;
+                            quantile_j_nodes[i] = mean + eps_;
+                        }
+                    }
+                      
+                    fn_curr_.block((j-1)*n_obs(),0, n_obs(),1) = quantile_jm1;
+                    fn_curr_.block(j*n_obs(),0, n_obs(),1) = quantile_j;
+                    f_curr_.block((j-1)*n_basis(),0, n_basis(),1) = quantile_jm1_nodes;
+                    f_curr_.block(j*n_basis(),0, n_basis(),1) = quantile_j_nodes;
+
+                }
+
+                for(std::size_t j = ind_median; j < h_-1; ++j){  
+                    DVector<double> quantile_jp1;
+                    quantile_jp1.resize(n_obs());  
+                    quantile_jp1 = fitted(j+1);
+                    DVector<double> quantile_j;
+                    quantile_j.resize(n_obs()); 
+                    quantile_j = fitted(j);
+
+                    DVector<double> quantile_jp1_nodes;
+                    quantile_jp1_nodes.resize(n_basis());  
+                    quantile_jp1_nodes = f_curr_.block((j+1)*n_basis(), 0, n_basis(), 1);
+                    DVector<double> quantile_j_nodes;
+                    quantile_j_nodes.resize(n_basis()); 
+                    quantile_j_nodes = f_curr_.block(j*n_basis(), 0, n_basis(), 1);
+
+                    //std::size_t idx_debug = 0; 
+
+                     //  loop on spatial points 
+                    for(std::size_t i=0; i<n_obs(); i++){ 
+                        if(quantile_jp1[i] < (quantile_j[i] + eps_)){  //  if crossing 
+                            double mean = (quantile_jp1[i] + quantile_j[i])/2;                         
+                            quantile_j[i] = mean - eps_;
+                            quantile_jp1[i] = mean + eps_;          
+                        }
+                    }
+
+                    //  loop on mesh points 
+                    for(std::size_t i=0; i<n_basis(); i++){ 
+                        if(quantile_jp1_nodes[i] < (quantile_j_nodes[i] + eps_)){  //  if crossing 
+                            double mean = (quantile_jp1_nodes[i] + quantile_j_nodes[i])/2;
+                            quantile_j_nodes[i] = mean - eps_;
+                            quantile_jp1_nodes[i] = mean + eps_;          
+                        }
+                    }
+                      
+                    fn_curr_.block((j+1)*n_obs(),0, n_obs(),1) = quantile_jp1; 
+                    fn_curr_.block(j*n_obs(),0, n_obs(),1) = quantile_j; 
+                    f_curr_.block((j+1)*n_basis(),0, n_basis(),1) = quantile_jp1_nodes; 
+                    f_curr_.block(j*n_basis(),0, n_basis(),1) = quantile_j_nodes; 
+
+                    
+                }
+
+
+                //std::cout << "------dim fn = " << fn_curr_.size() << std::endl;
+
+                // fn_old = fn_new; 
+                // fn_new = fn_curr_; 
+
+
+            }
+
+            // init <- curr 
+            fn_init_ = fn_curr_;   
+            f_init_ = f_curr_;     
+            // fn_curr è l'unica quantità modificata (e l'unica che viene usata come inizializzazione)  
+            
+        }
+
+        if(!crossing_constraints() && do_process)
+            std::cout << "No crossing at the end of the processing" << std::endl ; 
+        if(crossing_constraints() && do_process)
+            std::cout << "---ATT: CROSSING at the end of the processing" << std::endl ; 
+
+
         // std::cout << "Range f_init_ : " << f_init_.minCoeff() << " , " << f_init_.maxCoeff() << std::endl ; 
         // std::cout << "Range g_init_ : " << g_init_.minCoeff() << " , " << g_init_.maxCoeff() << std::endl ; 
         // std::cout << "Model loss of the initializazion: " << model_loss() << " + penalty = " << g_curr_.dot(R0_multiple_*g_curr_) << std::endl;  
@@ -307,13 +472,19 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
 
         double crossing_penalty_init = crossing_penalty(); 
 
-        while(crossing_constraints() && iter_ < max_iter_global_){ 
+        //bool force_entrance = do_process;   
+
+        while(force_entrance || (crossing_constraints() && iter_ < max_iter_global_)){ 
+
+            if(force_entrance)
+                std::cout << "In the MSQRPDE algorithm with forced entrance" << std::endl;
+
+            force_entrance = false; 
 
             std::cout << "----------------Gamma = " << gamma0_ << std::endl; 
             // algorithm stops when an enought small difference between two consecutive values of the J is recordered
             double J_old = tolerance_+1; double J_new = 0;
             k_ = 0;
-
             while(k_ < max_iter_ && std::abs(J_new - J_old) > tolerance_){    
 
                 //std::cout << "--------------------------  k_ = " << k_ << std::endl; 
@@ -331,8 +502,9 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
 
                     if(j < h_-1) {
                         delta_j = (2*(eps_*DVector<double>::Ones(n_obs()) - D_script_.block(j*n_obs(), 0, n_obs(), h_*n_obs())*fitted())).cwiseAbs().cwiseInverse(); 
+                        //std::cout << "L inf norm abs delta j = " << (delta_j).cwiseAbs().maxCoeff() << std::endl;
                     }
-                    
+                             
                     z_j = y() - (1 - 2*alphas_[j])*abs_res_j; 
 
                     abs_res_adj(abs_res_j);
@@ -423,7 +595,8 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
 
             std::cout << "#################### cross new:  " << crossing_penalty_new << " , cross init: " << crossing_penalty_init << std::endl; 
             //std::cout << "#################### cross new-init: " << std::setprecision(10) << (crossing_penalty_new - crossing_penalty_init) << std::endl; 
-            
+            std::cout << "#################### number of inner iterations = " << k_ << std::endl;
+
             gamma0_ *= C_;  
             iter_++;     
             
@@ -445,6 +618,7 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
 
     template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
         DVector<double> MSQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::fitted(unsigned int j) const{
+        // index j \in {0, ..., h-1}
         return fitted().block(j*n_obs(), 0, n_obs(), 1); 
     }
 

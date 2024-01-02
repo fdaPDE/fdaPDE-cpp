@@ -52,11 +52,21 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
     std::size_t max_iter_ = 200;
     double tol_weights_ = 1e-6;
     double tol_ = 1e-6;
+    bool exact_gcv = true; 
+    double eps_power = -1.0; 
 
     // quantile check function
-    double pinball_loss(double x, double eps = std::pow(10,-1.0)) const { 
-        // return 0.5 * std::abs(x) + (alpha_ - 0.5) * x; 
-        return (alpha_-1) * x + eps * log1pexp(x / eps); };   
+    double pinball_loss(double x, double eps) const { 
+        //if constexpr(std::is_same<RegularizationType, SpaceOnly>::value)
+        if(exact_gcv){
+            //std::cout << "exact GCV computation" << std::endl; 
+            return 0.5 * std::abs(x) + (alpha_ - 0.5) * x;      // exact 
+        } else{
+            // std::cout << "approximate GCV computation" << std::endl;
+            return (alpha_-1) * x + eps * log1pexp(x / eps);    // approximation
+        }
+            
+    };   
    public:
     IMPORT_REGRESSION_SYMBOLS;
     using Base::invXtWX_;
@@ -83,7 +93,9 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
     void set_fpirls_tolerance(double tol) { tol_ = tol; }
     void set_fpirls_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
     void set_alpha(double alpha) { alpha_ = alpha; }
-
+    void set_exact_gcv(bool exact) { exact_gcv = exact; }
+    void set_eps_power(double power) { eps_power = power; }
+    
     // ModelBase implementation
     void init_model() { return; }
     void update_to_weights() { return; };   // update model object in case of changes in the weights matrix
@@ -201,7 +213,7 @@ class SQRPDE : public RegressionBase<SQRPDE<PDE, RegularizationType, SamplingDes
         }
         for(auto ind : nan_idxs())
             observation_indexes.erase(ind); 
-        for(std::size_t i : observation_indexes) { result += pinball_loss(op2.coeff(i, 0) - op1.coeff(i, 0)); }
+        for(std::size_t i : observation_indexes) { result += pinball_loss(op2.coeff(i, 0) - op1.coeff(i, 0), std::pow(10, eps_power)); }
         
         return result * result / n_obs();  // n_obs() returns number of not-nan observations
     }
