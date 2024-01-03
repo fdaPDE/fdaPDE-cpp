@@ -74,7 +74,7 @@ else
     cd build/
 fi
 
-cmake -Wno-dev ../CMakeLists.txt
+cmake -Wno-dev -H../ -B.
 make
 
 if [ "$MEMCHECK" = true ]; then

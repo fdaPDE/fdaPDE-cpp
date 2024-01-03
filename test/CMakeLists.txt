@@ -1,20 +1,18 @@
 cmake_minimum_required(VERSION 3.14)
-
 project(TEST)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_FLAGS "-g -O2 -march=x86-64 -std=c++17 -I${CMAKE_CURRENT_SOURCE_DIR}/../ -I${CMAKE_CURRENT_SOURCE_DIR}/../fdaPDE/core/")
-
+set(Eigen3_DIR "/u/sw/toolchains/gcc-glibc/11.2.0/pkgs/eigen/3.3.9/share/eigen3/cmake/")
 find_package (Eigen3 3.3 REQUIRED NO_MODULE)
-
 include_directories(../src/)
 include_directories(../../fdaPDE/)
-
 # enable testing functionality using gtest
 include(FetchContent)
 FetchContent_Declare(
   googletest
-  URL https://github.com/google/googletest/archive/609281088cfefc76f9d0ce82e1ff6c30cc3591e5.zip
+  # URL https://github.com/google/googletest/archive/609281088cfefc76f9d0ce82e1ff6c30cc3591e5.zip
+  SOURCE_DIR "../../../googletest-609281088cfefc76f9d0ce82e1ff6c30cc3591e5"
 )
 
 # For Windows: Prevent overriding the parent project's compiler/linker settings
