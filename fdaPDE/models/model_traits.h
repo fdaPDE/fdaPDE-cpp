@@ -22,29 +22,17 @@ using fdapde::is_base_of_template;
 
 namespace fdapde {
 namespace models {
-
-// base class for model traits
-template <typename B> struct model_traits;
-
-// supported resolution strategies for the smoothing problem
-struct MonolithicSolver { };
-template <typename Model> struct is_solver_monolithic {
-    static constexpr bool value = std::is_same<typename model_traits<Model>::solver, MonolithicSolver>::value;
-};
-struct IterativeSolver { };
-template <typename Model> struct is_solver_iterative {
-    static constexpr bool value = std::is_same<typename model_traits<Model>::solver, IterativeSolver>::value;
-};
-
+  
 // supported regularization strategies, forward declarations
-template <typename Model> class ModelBase;       // base class for any fdaPDE statistical model
-template <typename Model> class SpaceOnlyBase;   // base class for any spatial model
-template <typename Model> class SpaceTimeBase;   // base class for any spatio-temporal model
-template <typename Model, typename Solver> class SpaceTimeSeparableBase;   // spatio-temporal, separable regularization
-template <typename Model, typename Solver> class SpaceTimeParabolicBase;   // spatio-temporal, parabolic regularization
+template <typename Model> class ModelBase;                             // base class for any fdaPDE statistical model
+template <typename Model> class SpaceOnlyBase;                         // base class for any spatial model
+template <typename Model, typename PenaltyType> class SpaceTimeBase;   // base class for any spatio-temporal model
+template <typename Model> class SpaceTimeSeparableBase;                // spatio-temporal, separable regularization
+template <typename Model> class SpaceTimeParabolicBase;                // spatio-temporal, parabolic regularization
 
 // empty classes for tagging regularization types
 struct SpaceOnly { };
+struct SpaceTime { };   // generic space-time tag
 struct SpaceTimeSeparable { };
 struct SpaceTimeParabolic { };
 
@@ -54,57 +42,43 @@ template <typename T> struct is_stat_model {
 };
 
 template <typename Model> struct is_space_only {
+    using ModelType = typename std::decay<Model>::type;
     static constexpr bool value =
-      std::is_same<typename model_traits<typename std::decay<Model>::type>::regularization, SpaceOnly>::value;
+      std::is_same<typename ModelType::RegularizationType, SpaceOnly>::value;
 };
 template <typename Model> struct is_space_time {
     static constexpr bool value = !is_space_only<Model>::value;
 };
 // specific traits for space-time regularizations
 template <typename Model> struct is_space_time_separable {   // separable regularization
+    using ModelType = typename std::decay<Model>::type;
     static constexpr bool value =
-      std::is_same<typename model_traits<typename std::decay<Model>::type>::regularization, SpaceTimeSeparable>::value;
+      std::is_same<typename ModelType::RegularizationType, SpaceTimeSeparable>::value;
 };
 template <typename Model> struct is_space_time_parabolic {   // parabolic regularization
+    using ModelType = typename std::decay<Model>::type;
     static constexpr bool value =
-      std::is_same<typename model_traits<typename std::decay<Model>::type>::regularization, SpaceTimeParabolic>::value;
+      std::is_same<typename ModelType::RegularizationType, SpaceTimeParabolic>::value;
 };
 
 // selects the regularization base depending on the Model regularization type
-template <typename Model> struct select_regularization_type {
+template <typename Model, typename RegularizationType> struct select_regularization_base {
     using type = typename std::conditional<
-      is_space_only<Model>::value, SpaceOnlyBase<Model>,
+      std::is_same<RegularizationType, SpaceOnly>::value, SpaceOnlyBase<Model>,
       typename std::conditional<
-        is_space_time_separable<Model>::value, SpaceTimeSeparableBase<Model, typename model_traits<Model>::solver>,
-        SpaceTimeParabolicBase<Model, typename model_traits<Model>::solver>>::type>::type;
+        std::is_same<RegularizationType, SpaceTimeSeparable>::value, SpaceTimeSeparableBase<Model>,
+        SpaceTimeParabolicBase<Model>>::type>::type;
 };
 
 // selects the number of smoothing parameters
-template <typename Regularization> class n_smoothing_parameters {
-    static constexpr int compute() {
-        if constexpr (std::is_same<typename std::decay<Regularization>::type, SpaceOnly>::value) {
+template <typename RegularizationType> struct n_smoothing_parameters {
+    static constexpr int value = []() constexpr -> int {
+        if constexpr (std::is_same<RegularizationType, SpaceOnly>::value) {
             return 1;
         } else {
             return 2;
-        }
-    }
-   public:
-    static constexpr int value = n_smoothing_parameters<Regularization>::compute();
-};
-
-// allowed sampling strategies
-struct GeoStatLocations { };   // general sampling locations p_1, ..., p_n
-struct GeoStatMeshNodes { };   // sampling locations p_1, ..., p_n coincide with mesh nodes
-struct Areal { };              // areal sampling at subdomains D_1, ..., D_n
-// traits for sampling design in space
-template <typename Model> struct is_sampling_areal {
-    static constexpr bool value = std::is_same<typename model_traits<Model>::sampling, Areal>::value;
-};
-template <typename Model> struct is_sampling_pointwise_at_mesh {
-    static constexpr bool value = std::is_same<typename model_traits<Model>::sampling, GeoStatMeshNodes>::value;
-};
-template <typename Model> struct is_sampling_pointwise_at_locs {
-    static constexpr bool value = std::is_same<typename model_traits<Model>::sampling, GeoStatLocations>::value;
+        }    
+    }();
 };
 
 }   // namespace models

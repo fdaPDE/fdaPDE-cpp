@@ -1,4 +1,4 @@
-name: test-workflow
+name: test-linux-gcc
 on:
   push:
      branches: [ stable, develop ]
@@ -7,7 +7,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: alepalu/fdapde-docker-image:latest
+      image: alepalu/fdapde-docker-linux:latest
     steps:
     - name: checkout repository
       uses: actions/checkout@v2
@@ -18,4 +18,12 @@ jobs:
         cd test/
         export Eigen3_DIR=/usr/share/cmake/Modules # reguired to let eigen3 work with CMake in alpine
         chmod +x run_tests.sh
-        ./run_tests.sh
+        ./run_tests.sh --compiler gcc
+        echo "TEST_RESULT=$(echo $?)" >> $GITHUB_ENV
+    - name: check_tests_passed
+      run: |
+        if [ "$TEST_RESULT" -eq "0" ]; then
+           exit 0
+        else
+           exit 1
+        fi

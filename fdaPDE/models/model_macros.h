@@ -17,10 +17,6 @@
 #ifndef __MODEL_MACROS_H__
 #define __MODEL_MACROS_H__
 
-#include "model_traits.h"
-using fdapde::models::is_stat_model;
-using fdapde::models::model_traits;
-
 // imports all basic symbols a model type can expect independently on its specific module membership
 #define IMPORT_MODEL_SYMBOLS                                                                                           \
     using Base::n_spatial_basis; /* number of basis function for discretization in space N */                          \
@@ -32,7 +28,7 @@ using fdapde::models::model_traits;
                                  /* space-time problems) */                                                            \
     using Base::R0;              /* mass matrix in space (tensorized for space-time problems) */                       \
     using Base::u;               /* discretization of forcing term */                                                  \
-    using Base::pde;             /* differential operator L (regularizing term) */                                     \
+    using Base::pde;             /* differential operator Lf- u in space */                                            \
     using Base::data;            /* BlockFrame object containing data */
 
 // imports all basic symbols a model can expect from a RegressionBase

@@ -23,36 +23,33 @@
 #include <random>
 using fdapde::core::SMW;
 
-#include "../models/regression/regression_base.h"
-using fdapde::models::is_regression_model;
-
 namespace fdapde {
-namespace calibration {
+namespace models {
 
 // computes an approximation of the trace of S = \Psi*T^{-1}*\Psi^T*Q using a monte carlo approximation.
-template <typename Model> class StochasticEDF {
-    static_assert(is_regression_model<Model>::value);
+class StochasticEDF {
    private:
-    const Model& model_;
+    using ModelType = fdapde::erase<fdapde::non_owning_storage, IStatModel<void>, IRegression>;
+    ModelType model_;
     std::size_t r_ = 100;   // number of monte carlo realizations
-    std::size_t seed_;
-    DMatrix<double> Us_;   // sample from Rademacher distribution
-    DMatrix<double> Bs_;   // \Psi^T*Q*Us_
-    DMatrix<double> Y_;    // Us_^T*\Psi
-
+    DMatrix<double> Us_;    // sample from Rademacher distribution
+    DMatrix<double> Bs_;    // \Psi^T*Q*Us_
+    DMatrix<double> Y_;     // Us_^T*\Psi
+    int seed_;
     bool init_ = false;
    public:
     // constructor
-    StochasticEDF(const Model& model, std::size_t r, std::size_t seed) :
-        model_(model), r_(r), seed_((seed == fdapde::random_seed) ? std::random_device()() : seed) { }
-    StochasticEDF(const Model& model, std::size_t r) : StochasticEDF(model, r, std::random_device()()) { }
-
+    StochasticEDF(std::size_t r, int seed) :
+        r_(r), seed_((seed == fdapde::random_seed) ? std::random_device()() : seed) { }
+    StochasticEDF(std::size_t r) : StochasticEDF(r, std::random_device()()) { }
+    StochasticEDF() : StochasticEDF(100) { }
+  
     // evaluate trace of S exploiting a monte carlo approximation
     double compute() {
         std::size_t n = model_.Psi().cols();   // number of basis functions
         if (!init_) {
             // compute sample from Rademacher distribution
-            std::default_random_engine rng(seed_);
+            std::mt19937 rng(seed_);
             std::bernoulli_distribution Be(0.5);   // bernulli distribution with parameter p = 0.5
             Us_.resize(model_.n_obs(), r_);        // preallocate memory for matrix Us
             // fill matrix
@@ -88,12 +85,13 @@ template <typename Model> class StochasticEDF {
 
         return MCmean / r_;
     }
-
     // setter
-    void set_seed(std::size_t seed) { seed_ = seed; }
+    void set_model(ModelType& model) { model_ = model; }
+    void set_seed(int seed) { seed_ = seed; }
+    void set_n_mc_samples(int r) { r_ = r; }
 };
 
-}   // namespace calibration
+}   // namespace models
 }   // namespace fdapde
 
 #endif   // __STOCHASTIC_EDF_H__

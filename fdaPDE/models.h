@@ -14,10 +14,18 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __FDAPDE_H__
-#define __FDAPDE_H__
+#ifndef __FDAPDE_MODELS_H__
+#define __FDAPDE_MODELS_H__
 
-#include "core/fdaPDE/core.h"
-#include "models.h"
+#include "models/model_base.h"
+#include "models/model_macros.h"
+#include "models/model_traits.h"
+#include "models/sampling_design.h"
+#include "models/space_only_base.h"
+#include "models/space_time_base.h"
+#include "models/space_time_parabolic_base.h"
+#include "models/space_time_separable_base.h"
+#include "regression.h"
+#include "functional.h"
 
-#endif // __FDAPDE_H__
+#endif // __FDAPDE_MODELS_H__

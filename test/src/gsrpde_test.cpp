@@ -18,15 +18,11 @@
 #include <gtest/gtest.h>   // testing framework
 
 #include <fdaPDE/core.h>
-using fdapde::core::advection;
-using fdapde::core::diffusion;
 using fdapde::core::FEM;
 using fdapde::core::fem_order;
 using fdapde::core::laplacian;
 using fdapde::core::dt;
-using fdapde::core::MatrixDataWrapper;
 using fdapde::core::PDE;
-using fdapde::core::VectorDataWrapper;
 
 #include "../../fdaPDE/models/regression/distributions.h"
 #include "../../fdaPDE/models/regression/gsrpde.h"
@@ -35,11 +31,7 @@ using fdapde::models::GSRPDE;
 using fdapde::models::SpaceTimeSeparable;
 using fdapde::models::SpaceTimeParabolic;
 using fdapde::models::SpaceOnly;
-using fdapde::models::GeoStatMeshNodes;
-using fdapde::models::GeoStatLocations;
-using fdapde::models::Areal;
-using fdapde::models::MonolithicSolver;
-using fdapde::models::IterativeSolver;
+using fdapde::models::Sampling;
 using fdapde::models::Poisson;
 using fdapde::models::Bernulli;
 using fdapde::models::Exponential;
@@ -73,7 +65,7 @@ TEST(gsrpde_test, laplacian_nonparametric_samplingatnodes_poisson) {
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda_D = 1e-3;
-    GSRPDE<decltype(problem), SpaceOnly, GeoStatLocations, MonolithicSolver, Poisson> model(problem);
+    GSRPDE<SpaceOnly> model(problem, Sampling::pointwise, Poisson());
     model.set_lambda_D(lambda_D);
     model.set_spatial_locations(locs);
     // set model's data
@@ -107,7 +99,7 @@ TEST(gsrpde_test, laplacian_nonparametric_samplingatlocations_bernulli) {
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda_D = 1e-3;
-    GSRPDE<decltype(problem), SpaceOnly, GeoStatLocations, MonolithicSolver, Bernulli> model(problem);
+    GSRPDE<SpaceOnly> model(problem, Sampling::pointwise, Bernulli());
     model.set_lambda_D(lambda_D);
     model.set_spatial_locations(locs);
     // set model's data
@@ -141,7 +133,7 @@ TEST(gsrpde_test, laplacian_nonparametric_samplingatlocations_exponential) {
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda_D = 1e-3;
-    GSRPDE<decltype(problem), SpaceOnly, GeoStatLocations, MonolithicSolver, Exponential> model(problem);
+    GSRPDE<SpaceOnly> model(problem, Sampling::pointwise, Exponential());
     model.set_lambda_D(lambda_D);
     model.set_spatial_locations(locs);
     // set model's data
@@ -175,7 +167,7 @@ TEST(gsrpde_test, laplacian_nonparametric_samplingatlocations_gamma) {
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda_D = 1e-3;
-    GSRPDE<decltype(problem), SpaceOnly, GeoStatLocations, MonolithicSolver, Gamma> model(problem);
+    GSRPDE<SpaceOnly> model(problem, Sampling::pointwise, Gamma());
     model.set_lambda_D(lambda_D);
     model.set_spatial_locations(locs);
     // set model's data
@@ -199,24 +191,24 @@ TEST(gsrpde_test, laplacian_nonparametric_samplingatlocations_gamma) {
 //    time penalization: separable (mass penalization)
 //    distribution: gamma
 TEST(gsrpde_test, laplacian_semiparametric_samplingatlocations_separable_monolithic_gamma) {
-    // define temporal domain
-    DVector<double> time_mesh;
-    time_mesh.resize(4);
-    for (std::size_t i = 0; i < 4; ++i) time_mesh[i] = (1. / 3) * i;
-    // define spatial domain
+    // define temporal and spatial domain
+    Mesh<1, 1> time_mesh(0, 1, 3);
     MeshLoader<Mesh2D> domain("c_shaped");
     // import data from files
     DMatrix<double> locs = read_csv<double>("../data/models/gsrpde/2D_test5/locs.csv");
     DMatrix<double> y    = read_csv<double>("../data/models/gsrpde/2D_test5/y.csv"   );
     DMatrix<double> X    = read_csv<double>("../data/models/gsrpde/2D_test5/X.csv"   );
-    // define regularizing PDE    
-    auto L = -laplacian<FEM>();
+    // define regularizing PDE in space
+    auto Ld = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
+    PDE<Mesh<2, 2>, decltype(Ld), DMatrix<double>, FEM, fem_order<1>> space_penalty(domain.mesh, Ld, u);
+    // define regularizing PDE in time
+    auto Lt = -bilaplacian<SPLINE>();
+    PDE<Mesh<1, 1>, decltype(Lt), DMatrix<double>, SPLINE, spline_order<3>> time_penalty(time_mesh, Lt);
     // define model
     double lambda_D = std::pow(0.1, 2.5);
     double lambda_T = std::pow(0.1, 2.5);
-    GSRPDE<decltype(problem), SpaceTimeSeparable, GeoStatLocations, MonolithicSolver, Gamma> model(problem, time_mesh);
+    GSRPDE<SpaceTimeSeparable> model(space_penalty, time_penalty, Sampling::pointwise, Gamma());
     model.set_lambda_D(lambda_D);
     model.set_lambda_T(lambda_T);
     model.set_spatial_locations(locs);
@@ -261,7 +253,7 @@ TEST(gsrpde_test, laplacian_semiparametric_samplingatlocations_parabolic_monolit
     // define model
     double lambda_D = std::pow(0.1, 2.5);
     double lambda_T = std::pow(0.1, 2.5);
-    GSRPDE<decltype(problem), SpaceTimeParabolic, GeoStatLocations, MonolithicSolver, Gamma> model(problem, time_mesh);
+    GSRPDE<SpaceTimeParabolic> model(problem, time_mesh, Sampling::pointwise, Gamma());
     model.set_lambda_D(lambda_D);
     model.set_lambda_T(lambda_T);
     model.set_spatial_locations(locs);

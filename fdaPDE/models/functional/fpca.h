@@ -23,12 +23,10 @@
 #include <Eigen/SVD>
 using fdapde::core::Grid;
 
-#include "../../calibration/gcv.h"
 #include "../../calibration/kfold_cv.h"
 #include "../../calibration/symbols.h"
 #include "functional_base.h"
 #include "profiling_estimation.h"
-using fdapde::calibration::GCV;
 using fdapde::calibration::KFoldCV;
 using fdapde::calibration::NoCalibration;
 using fdapde::calibration::KCVCalibration;

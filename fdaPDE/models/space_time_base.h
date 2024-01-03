@@ -25,33 +25,37 @@ namespace models {
 
 // abstract base interface for any *space-time* fdaPDE statistical model. This class is not directly usable from
 // models since the type of time regularization is not yet defined at this point
-template <typename Model> class SpaceTimeBase : public ModelBase<Model> {
-    static_assert(is_space_time<Model>::value);
+template <typename Model, typename RegularizationType>
+class SpaceTimeBase : public ModelBase<Model> {
    protected:
-    typedef typename model_traits<Model>::PDE PDE;   // PDE used for regularization in space
     typedef ModelBase<Model> Base;
-    using Base::lambda_;   // vector of smoothing parameters
     using Base::model;     // underlying model object
-    using Base::pde_;      // regularizing PDE
+    static constexpr int n_lambda = n_smoothing_parameters<RegularizationType>::value;
 
     DVector<double> time_;   // time domain [0, T]
+    SVector<n_lambda> lambda_ = SVector<n_lambda>::Zero();
    public:
+    using Base::lambda;       // dynamic sized smoothing parameter vector
+    using Base::set_lambda;   // dynamic sized setter for \lambda
     // constructor
     SpaceTimeBase() = default;
-    SpaceTimeBase(const PDE& pde, const DVector<double>& time) : ModelBase<Model>(pde), time_(time) {};
-
+    SpaceTimeBase(const DVector<double>& time) : Base(), time_(time) {};
     // setters
-    void set_lambda_D(double lambda_D) { lambda_[0] = lambda_D; }
-    void set_lambda_T(double lambda_T) { lambda_[1] = lambda_T; }
+    void set_lambda(const SVector<n_lambda>& lambda) {
+        if(lambda_ == lambda) return;
+        model().runtime().set(runtime_status::is_lambda_changed);
+        lambda_ = lambda;
+    }
+    void set_lambda_D(double lambda_D) { set_lambda(SVector<n_lambda>(lambda_D, lambda_[1])); }
+    void set_lambda_T(double lambda_T) { set_lambda(SVector<n_lambda>(lambda_[0], lambda_T)); }
     void set_time_domain(const DVector<double>& time) { time_ = time; }
     // getters
+    SVector<n_lambda> lambda() const { return lambda_; }
     inline double lambda_D() const { return lambda_[0]; }
     inline double lambda_T() const { return lambda_[1]; }
     const DVector<double>& time_domain() const { return time_; }           // number of nodes in time
     const DVector<double>& time_locs() const { return time_; }             // time locations where we have observations
-    inline std::size_t n_temporal_locs() const { return time_.rows(); }    // number of time instants
-    std::size_t n_spatial_basis() const { return pde_->n_dofs(); }         // number of basis functions in space
-
+    inline std::size_t n_temporal_locs() const { return time_.rows(); }    // number of time instants  
     // destructor
     virtual ~SpaceTimeBase() = default;
 };

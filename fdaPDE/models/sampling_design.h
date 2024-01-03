@@ -20,10 +20,7 @@
 #include <fdaPDE/linear_algebra.h>
 #include <fdaPDE/mesh.h>
 #include <fdaPDE/utils.h>
-using fdapde::core::ct_nnodes;
 using fdapde::core::Kronecker;
-using fdapde::core::PointLocationStrategy;
-using fdapde::core::PointLocator;
 
 #include "model_base.h"
 #include "model_macros.h"
@@ -32,217 +29,103 @@ using fdapde::core::PointLocator;
 namespace fdapde {
 namespace models {
 
-// base classes for the implemetation of the different sampling designs.
-// Here is computed the matrix of spatial basis evaluations \Psi = [\Psi]_{ij} = \psi_i(p_j)
-template <typename Model, typename S> class SamplingDesign { };
+struct not_nan { };                               // tag to request the not-NaN corrected version of matrix \Psi
+enum Sampling { mesh_nodes, pointwise, areal };   // supported sampling strategies
 
-// tag to request the not-NaN corrected version of matrix \Psi
-struct not_nan { };
-
-// base class for all sampling strategies implementing common operations on \Psi matrix
+// base class for the implemetation of the different sampling designs.
+// Here is computed the matrix of spatial basis evaluations \Psi = [\Psi]_{ij} = \psi_i(p_j) or its tensorization
+// (for space-time problems)
 template <typename Model> class SamplingBase {
+    Sampling sampling_;
    protected:
-    FDAPDE_DEFINE_MODEL_GETTER;   // import model() method (const and non-const access)
-    SpMatrix<double> Psi_;        // n x N matrix \Psi = [\psi_{ij}] = \psi_j(p_i)
+    FDAPDE_DEFINE_MODEL_GETTER;    // import model() method (const and non-const access)
+    SpMatrix<double> Psi_;         // n x N matrix \Psi = [\psi_{ij}] = \psi_j(p_i)
+    SpMatrix<double> PsiTD_;       // N x n block \Psi^T*D, being D the matrix of subdomain measures
+    DiagMatrix<double> D_;         // for areal sampling, diagonal matrix of subdomains' measures, D_ = I_n otherwise
+    DMatrix<double> locs_;         // matrix of spatial locations p_1, p2_, ... p_n, or subdomains D_1, D_2, ..., D_n
+
+    // for space-time models, perform a proper tensorization of matrix \Psi
+    void tensorize_psi() {
+        if constexpr (is_space_time_separable<Model>::value) Psi_ = Kronecker(model().Phi(), Psi_);
+	if constexpr (is_space_time_parabolic<Model>::value) {
+	    SpMatrix<double> Im(model().n_temporal_locs(), model().n_temporal_locs());   // m x m identity matrix
+            Im.setIdentity();
+            Psi_ = Kronecker(Im, Psi_);
+	}
+    }
    public:
-    // if the model is space-time, perform a proper tensorization of matrix \Psi
-    void tensorize() {
-        if constexpr (is_solver_monolithic<Model>::value) {
-            if constexpr (is_space_time_separable<Model>::value) Psi_ = Kronecker(model().Phi(), Psi_);
-            if constexpr (is_space_time_parabolic<Model>::value) {
-                SpMatrix<double> Im(model().n_temporal_locs(), model().n_temporal_locs());   // m x m identity matrix
-                Im.setIdentity();
-                Psi_ = Kronecker(Im, Psi_);
+    SamplingBase() = default;
+    SamplingBase(Sampling sampling) : sampling_(sampling) { };
+    SamplingBase(const SamplingBase& other) : sampling_(other.sampling_) { };
+  
+    void init_sampling(bool forced = false) {
+        // compute once if not forced to recompute
+        if (!is_empty(Psi_) && forced == false) return;
+	
+        switch (sampling_) {
+        case Sampling::mesh_nodes: {  // data sampled at mesh nodes: \Psi is the identity matrix
+            // preallocate space for Psi matrix
+            std::size_t n = model().n_spatial_basis();
+            std::size_t N = model().n_spatial_basis();
+            Psi_.resize(n, N);
+            std::vector<fdapde::Triplet<double>> triplet_list;
+            triplet_list.reserve(n);
+            // if data locations are equal to mesh nodes then \Psi is the identity matrix.
+            // \psi_i(p_i) = 1 and \psi_i(p_j) = 0 \forall i \neq j
+            for (std::size_t i = 0; i < n; ++i) triplet_list.emplace_back(i, i, 1.0);
+            // finalize construction
+            Psi_.setFromTriplets(triplet_list.begin(), triplet_list.end());
+            Psi_.makeCompressed();
+            model().tensorize_psi();   // tensorize \Psi for space-time problems
+            PsiTD_ = Psi_.transpose();
+            D_ = DVector<double>::Ones(Psi_.rows()).asDiagonal();
+  	  } return;
+        case Sampling::pointwise: {   // data sampled at general locations p_1, p_2, ... p_n
+            // query pde to evaluate functional basis at given locations
+            auto basis_evaluation = model().pde().eval_basis(core::eval::pointwise, locs_);
+            Psi_ = basis_evaluation->Psi;
+            model().tensorize_psi();   // tensorize \Psi for space-time problems
+            D_ = DVector<double>::Ones(Psi_.rows()).asDiagonal();
+	    PsiTD_ = Psi_.transpose();
+	  } break;
+        case Sampling::areal: {   // data sampled at subdomains D_1, D_2, ... D_d
+            // query pde to evaluate functional basis at given locations
+            auto basis_evaluation = model().pde().eval_basis(core::eval::areal, locs_);
+            Psi_ = basis_evaluation->Psi;
+            model().tensorize_psi();   // tensorize \Psi for space-time problems
+
+            // here we must be carefull of the type of model (space-only or space-time) we are handling
+            if constexpr (is_space_time<Model>::value) {
+                // store I_m \kron D
+                std::size_t m = model().n_temporal_locs();
+                std::size_t n = n_spatial_locs();
+                DVector<double> IkronD(n * m);
+                for (std::size_t i = 0; i < m; ++i) IkronD.segment(i * n, n) = basis_evaluation->D;
+                // compute and store result
+                D_ = IkronD.asDiagonal();
+            } else {
+                // for space-only problems store diagonal matrix D_ = diag(D_1, D_2, ... ,D_d) as it is
+                D_ = basis_evaluation->D.asDiagonal();
             }
+            PsiTD_ = Psi_.transpose() * D_;
+	  } break;
         }
     }
-    // getters to not NaN corrected \Psi and \Psi^T*D matrices (\Psi^T*D redefined for Areal sampling)
+  
+    // getters
     const SpMatrix<double>& Psi(not_nan) const { return Psi_; }
-    auto PsiTD(not_nan) const { return Psi_.transpose(); }
-};
-
-// data sampled at mesh nodes
-template <typename Model> class SamplingDesign<Model, GeoStatMeshNodes> : public SamplingBase<Model> {
-   private:
-    FDAPDE_DEFINE_MODEL_GETTER;   // import model() method (const and non-const access)
-    typedef SamplingBase<Model> Base;
-    using Base::Psi_;
-    using Base::tensorize;   // tensorize matrix \Psi for space-time problems
-   public:
-    // constructor
-    SamplingDesign() = default;
-    // init sampling data structures
-    void init_sampling(bool forced = false) {
-        // compute once if not forced to recompute
-        if (!is_empty(Psi_) && forced == false) return;
-        // preallocate space for Psi matrix
-        std::size_t n = model().n_spatial_basis();
-        std::size_t N = model().n_spatial_basis();
-        Psi_.resize(n, N);
-        std::vector<fdapde::Triplet<double>> triplet_list;
-        triplet_list.reserve(n);
-        // if data locations are equal to mesh nodes then \Psi is the identity matrix.
-        // \psi_i(p_i) = 1 and \psi_i(p_j) = 0 \forall i \neq j
-        for (std::size_t i = 0; i < n; ++i) triplet_list.emplace_back(i, i, 1.0);
-        // finalize construction
-        Psi_.setFromTriplets(triplet_list.begin(), triplet_list.end());
-        Psi_.makeCompressed();
-        tensorize();   // tensorize \Psi for space-time problems
+    const SpMatrix<double>& PsiTD(not_nan) const { return PsiTD_; }
+    std::size_t n_spatial_locs() const {
+        return sampling_ == Sampling::mesh_nodes ? model().pde().n_dofs() : locs_.rows();
     }
-
-    // getters
-    std::size_t n_spatial_locs() const { return model().domain().n_nodes(); } // this might cause problems for order 2, prefer n_dofs
-    auto D() const { return DVector<double>::Ones(Psi_.rows()).asDiagonal(); }
-  DMatrix<double> locs() const { return model().domain().nodes(); } // this might cause problems for order 2, prefer dofs_coords
-    // set locations (nothing to do, locations are implicitly set to mesh nodes)
-    template <typename Derived> void set_spatial_locations(const DMatrix<Derived>& locs) { return; }
-};
-
-// data sampled at general locations p_1, p_2, ... p_n
-template <typename Model> class SamplingDesign<Model, GeoStatLocations> : public SamplingBase<Model> {
-   private:
-    static constexpr std::size_t M = model_traits<Model>::M, N = model_traits<Model>::N;
-    FDAPDE_DEFINE_MODEL_GETTER;   // import model() method (const and non-const access)
-    DMatrix<double> locs_;        // matrix of spatial locations p_1, p2_, ... p_n
-    // point location strategy over triangulation
-    PointLocationStrategy point_location_strategy_;
-    std::shared_ptr<PointLocator<M, N>> point_locator_ = nullptr;
-    typedef SamplingBase<Model> Base;
-    using Base::Psi_;
-    using Base::tensorize;   // tensorize matrix \Psi for space-time problems
-   public:
-    // constructor
-    SamplingDesign() = default;
-    // init sampling data structures
-    void init_sampling(bool forced = false) {
-        fdapde_assert(locs_.size() != 0);   // enable custom message
-        // compute once if not forced to recompute
-        if (!is_empty(Psi_) && forced == false) return;
-        // set-up point location strategy
-        switch (point_location_strategy_) {   // strategy pattern
-        case PointLocationStrategy::naive_search:
-            point_locator_ = std::make_shared<core::NaiveSearch<M, N>>(model().domain());
-            break;
-        case PointLocationStrategy::barycentric_walk:
-            point_locator_ = std::make_shared<core::BarycentricWalk<M, N>>(model().domain());
-            break;
-        case PointLocationStrategy::tree_search:
-            point_locator_ = std::make_shared<core::ADT<M, N>>(model().domain());
-            break;
-        default:   // default to tree search
-            point_locator_ = std::make_shared<core::ADT<M, N>>(model().domain());
-        }
-        // preallocate space for Psi matrix
-        std::size_t n_locs = locs_.rows();
-        std::size_t n_basis = model().n_spatial_basis();
-        Psi_.resize(n_locs, n_basis);
-        std::vector<fdapde::Triplet<double>> triplet_list;
-        triplet_list.reserve(n_locs * model_traits<Model>::PDE::SolverType::n_dof_per_element);
-
-        // cycle over all locations
-        for (std::size_t i = 0; i < n_locs; ++i) {
-            SVector<N> p_i(locs_.row(i));
-            // search element containing the point
-            auto e = point_locator_->locate(p_i);
-            // update \Psi matrix
-            for (std::size_t j = 0; j < model_traits<Model>::PDE::SolverType::n_dof_per_element; ++j) {
-                std::size_t h = e->node_ids()[j];   // column index of \Psi matrix
-                // extract \psi_h from basis and evaluate at p_i
-                auto psi_h = model().pde().basis()(*e, j);
-                triplet_list.emplace_back(i, h, psi_h(p_i));
-            }
-        }
-        // finalize construction
-        Psi_.setFromTriplets(triplet_list.begin(), triplet_list.end());
-        Psi_.makeCompressed();
-        tensorize();   // tensorize \Psi for space-time problems
-    };
-
-    // getters
-    std::size_t n_spatial_locs() const { return locs_.rows(); }
-    auto D() const { return DVector<double>::Ones(Psi_.rows()).asDiagonal(); }
-    const DMatrix<double>& locs() const { return locs_; }
-    // setter
-    void set_spatial_locations(const DMatrix<double>& locs) { locs_ = locs; }
-    void set_point_location_strategy(PointLocationStrategy strategy) { point_location_strategy_ = strategy; }
-};
-
-// data sampled at subdomains D_1, D_2, ... D_d
-template <typename Model> class SamplingDesign<Model, Areal> : public SamplingBase<Model> {
-   private:
-    FDAPDE_DEFINE_MODEL_GETTER;   // import model() method (const and non-const access)
-    DMatrix<int> subdomains_;     // incidence matrix D = [D]_{ij} = 1 \iff element j belongs to subdomain i.
-    DiagMatrix<double> D_;        // diagonal matrix of subdomains' measures
-    typedef SamplingBase<Model> Base;
-    using Base::Psi_;
-    using Base::tensorize;   // tensorize matrix \Psi for space-time problems
-   public:
-    // constructor
-    SamplingDesign() = default;
-    // init sampling data structures
-    void init_sampling(bool forced = false) {
-        fdapde_assert(subdomains_.size() != 0);   // allow for custom message
-        // compute once if not forced to recompute
-        if (!is_empty(Psi_) && forced == false) return;
-        // preallocate space for Psi matrix
-        std::size_t n = subdomains_.rows();
-        std::size_t N = model().n_spatial_basis();
-        Psi_.resize(n, N);
-        std::vector<fdapde::Triplet<double>> triplet_list;
-        triplet_list.reserve(n * N);   // n is small, should not cause any bad_alloc
-
-        DVector<double> D;   // store measure of subdomains, this will be ported to a diagonal matrix at the end
-        D.resize(subdomains_.rows());
-        // start construction of \Psi matrix
-        std::size_t tail = 0;
-        for (std::size_t k = 0; k < n; ++k) {
-            std::size_t head = 0;
-            double Di = 0;   // measure of subdomain D_i
-            for (std::size_t l = 0; l < subdomains_.cols(); ++l) {
-                if (subdomains_(k, l) == 1) {   // element with ID l belongs to k-th subdomain
-                    // get element with this ID
-                    auto e = model().domain().element(l);
-                    // compute \int_e \psi_h \forall \psi_h defined on e
-		    for (std::size_t j = 0; j < model_traits<Model>::PDE::SolverType::n_dof_per_element; ++j) {
-		      std::size_t h = e.node_ids()[j];   // column index of \Psi matrix
-		      auto psi_h = model().pde().basis()(e, j);
-		      triplet_list.emplace_back(k, h, model().pde().integrator().integrate(e, psi_h));
-		      head++;
-                    }
-                    Di += e.measure();   // update measure of subdomain D_i
-                }
-            }
-            // divide each \int_{D_i} \psi_j by the measure of subdomain D_i
-            for (std::size_t j = 0; j < head; ++j) { triplet_list[tail + j].value() /= Di; }
-            D[k] = Di;   // store measure of subdomain
-            tail += head;
-        }
-        // here we must be carefull of the type of model (space-only or space-time) we are handling
-        if constexpr (is_space_time<Model>::value) {
-            // store I_m \kron D
-            std::size_t m = model().n_temporal_locs();
-            std::size_t n = n_spatial_locs();
-            DVector<double> IkronD(n * m);
-            for (std::size_t i = 0; i < m; ++i) IkronD.segment(i * n, n) = D;
-            // compute and store result
-            D_ = IkronD.asDiagonal();
-        } else {
-            // for space-only problems store diagonal matrix D_ = diag(D_1, D_2, ... ,D_d) as it is
-            D_ = D.asDiagonal();
-        }
-        // finalize construction
-        Psi_.setFromTriplets(triplet_list.begin(), triplet_list.end());
-        Psi_.makeCompressed();
-        tensorize();   // tensorize \Psi for space-time problems
-    };
-
-    // getters
-    auto PsiTD(not_nan) const { return Psi_.transpose() * D_; }
-    std::size_t n_spatial_locs() const { return subdomains_.rows(); }
     const DiagMatrix<double>& D() const { return D_; }
-    const DMatrix<int>& locs() const { return subdomains_; }
-    // setter
-    void set_spatial_locations(const DMatrix<int>& subdomains) { subdomains_ = subdomains; }
+    DMatrix<double> locs() const { return sampling_ == Sampling::mesh_nodes ? model().pde().dof_coords() : locs_; }
+    // settters
+    void set_spatial_locations(const DMatrix<double>& locs) {
+        if (sampling_ == Sampling::mesh_nodes) { return; }   // avoid a useless copy
+        locs_ = locs;
+    }
+    Sampling sampling() const { return sampling_; }
 };
 
 }   // namespace models
