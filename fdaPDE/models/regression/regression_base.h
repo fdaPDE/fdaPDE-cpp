@@ -99,8 +99,7 @@ class RegressionBase :
     // utilities
     bool has_covariates() const { return q() != 0; }                 // true if the model has a parametric part
     bool has_weights() const { return df_.has_block(WEIGHTS_BLK); }  // true if heteroscedastic observation are assumed
-    bool has_nan() const { return nan_idxs_.size() != 0; }  
-    void init_nan(const std::unordered_set<std::size_t>& nan_idxs_input);         // true if there are missing data
+    bool has_nan() const { return nan_idxs_.size() != 0; }           // true if there are missing data
 
     // an efficient way to perform a left multiplication by Q implementing the following
     //  given the design matrix X, the weight matrix W and x

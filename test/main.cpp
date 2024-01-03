@@ -4,17 +4,15 @@
 #include <Eigen/Sparse>
 
 // regression test suites
-// #include "src/srpde_test.cpp"
-// #include "src/strpde_test.cpp"
-// #include "src/gsrpde_test.cpp"
-//#include "src/qsrpde_test.cpp"
-// #include "src/mqsrpde_test.cpp"
+#include "src/srpde_test.cpp"
+#include "src/strpde_test.cpp"
+#include "src/gsrpde_test.cpp"
+#include "src/qsrpde_test.cpp"
 // #include "src/fpca_test.cpp"
-// #include "src/qstrpde_test.cpp"
 // GCV test suites
 #include "src/gcv_srpde_test.cpp"
 #include "src/gcv_qsrpde_test.cpp"
-// #include "calibration/GCVNewtonTest.cpp"
+#include "src/gcv_srpde_newton_test.cpp"
 
 int main(int argc, char **argv){
   // start testing
