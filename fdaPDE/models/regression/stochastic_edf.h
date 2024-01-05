@@ -19,13 +19,15 @@
 
 #include <fdaPDE/linear_algebra.h>
 #include <fdaPDE/utils.h>
+#include "../model_wrappers.h"
+#include "regression_wrappers.h"
 
 #include <random>
 using fdapde::core::SMW;
 
 namespace fdapde {
 namespace models {
-
+  
 // computes an approximation of the trace of S = \Psi*T^{-1}*\Psi^T*Q using a monte carlo approximation.
 class StochasticEDF {
    private:

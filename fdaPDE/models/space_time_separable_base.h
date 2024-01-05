@@ -33,13 +33,13 @@ class SpaceTimeSeparableBase : public SpaceTimeBase<Model, SpaceTimeSeparable> {
     pde_ptr space_pde_ {};   // regularizing term in space Lf - u
     pde_ptr time_pde_ {};    // regularizing term in time
     // let \phi_i the i-th basis function in time
-    SpMatrix<double> Phi_;        // [Phi_]_{ij} = \phi_i(t_j)
-    DVector<double> u_;           // stacked discretized forcing [u_1 \ldots u_n, \ldots, u_1 \ldots u_n]
-    SpMatrix<double> R0_;         // P0 \kron R0 (R0: mass matrix in space)
-    SpMatrix<double> R1_;         // P0 \kron R1 (R1: stiff matrix in space)
-    DVector<double> time_locs_;   // time instants t_1, ..., t_m
-    SpMatrix<double> P_D_;        // discretization of space regularization: (R1^T*R0^{-1}*R1) \kron P0
-    SpMatrix<double> P_T_;        // discretization of time regularization:  (R0 \kron P1)
+    SpMatrix<double> Phi_;          // [Phi_]_{ij} = \phi_i(t_j)
+    DVector<double> u_;             // stacked discretized forcing [u_1 \ldots u_n, \ldots, u_1 \ldots u_n]
+    SpMatrix<double> R0_;           // P0 \kron R0 (R0: mass matrix in space)
+    SpMatrix<double> R1_;           // P0 \kron R1 (R1: stiff matrix in space)
+    DVector<double> time_locs_;     // time instants t_1, ..., t_m
+    mutable SpMatrix<double> PD_;   // discretization of space regularization: (R1^T*R0^{-1}*R1) \kron P0
+    mutable SpMatrix<double> PT_;   // discretization of time regularization:  (R0 \kron P1)
    public:
     typedef SpaceTimeBase<Model, SpaceTimeSeparable> Base;
     using Base::lambda_D;   // smoothing parameter in space
@@ -98,19 +98,21 @@ class SpaceTimeSeparableBase : public SpaceTimeBase<Model, SpaceTimeSeparable> {
         return u_;
     }
 
-    // computes and cache matrices (R1^T*R0^{-1}*R1) \kron Rt and R0 \kron Pt.
-    // returns the discretized penalty P = \lambda_D*((R1^T*R0^{-1}*R1) \kron Rt) + \lambda_T*(R0 \kron Pt)
-    auto P() {
-        if (is_empty(P_D_)) {   // compute once and cache result
+    const SpMatrix<double>& PT() const {   // time-penalty component (R0 \kron P1)
+        if (is_empty(PT_)) { PT_ = Kronecker(space_pde_.mass(), P1()); }
+        return PT_;
+    }
+    const SpMatrix<double>& PD() const {   // space-penalty component ((R1^T*R0^{-1}*R1) \kron P0)
+        if (is_empty(PD_)) {
             fdapde::SparseLU<SpMatrix<double>> invR0_;
             invR0_.compute(space_pde_.mass());
-            P_D_ = Kronecker(   // (R1^T*R0^{-1}*R1) \kron P0
-              space_pde_.stiff().transpose() * invR0_.solve(space_pde_.stiff()), P0());
-            P_T_ = Kronecker(space_pde_.mass(), P1());   // (R0 \kron P1)
+            PD_ = Kronecker(space_pde_.stiff().transpose() * invR0_.solve(space_pde_.stiff()), P0());
         }
-        return lambda_D() * P_D_ + lambda_T() * P_T_;
+        return PD_;
     }
-  
+    // discretized penalty P = \lambda_D*((R1^T*R0^{-1}*R1) \kron Rt) + \lambda_T*(R0 \kron Pt)
+    auto P() const { return lambda_D() * PD() + lambda_T() * PT(); }
+
     // destructor
     virtual ~SpaceTimeSeparableBase() = default;
 };

@@ -60,8 +60,6 @@
 
 // macro for runtime sanity checks on data, should be the first instruction in a solve() implementation
 #define BLOCK_FRAME_SANITY_CHECKS                                                                                      \
-    /* raise error if data comes without index block */                                                                \
-    if (!data().has_block(INDEXES_BLK)) throw std::logic_error("bad BlockFrame, no index block found");                \
     /* stop if incoming data has no observations */                                                                    \
     if (!data().has_block(OBSERVATIONS_BLK))                                                                           \
         throw std::logic_error("bad BlockFrame, model without observations is ill-formed");

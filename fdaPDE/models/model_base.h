@@ -25,6 +25,12 @@ using fdapde::core::BlockFrame;
 #include "model_runtime.h"
 
 namespace fdapde {
+
+// supported resolution strategies
+struct monolithic {};
+struct iterative {};
+struct sequential {};
+  
 namespace models {
 
 // abstract base interface for any fdaPDE statistical model.

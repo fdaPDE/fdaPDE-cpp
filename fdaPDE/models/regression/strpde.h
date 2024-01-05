@@ -37,11 +37,6 @@ using fdapde::core::SparseKroneckerTensorProduct;
 using fdapde::core::SplineBasis;
 
 namespace fdapde {
-
-// supported resolution strategies
-struct monolithic { };
-struct iterative { };
-
 namespace models {
 
 // STRPDE model signature

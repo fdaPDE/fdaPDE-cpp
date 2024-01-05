@@ -23,7 +23,7 @@
 
 namespace fdapde {
 namespace models {
-
+  
 // Evaluates exactly the trace of matrix S = \Psi*T^{-1}*\Psi^T*Q. Uses the cyclic property of the trace
 // operator: Tr[S] = Tr[\Psi*T^{-1}*\Psi^T*Q] = Tr[Q*\Psi*T^{-1}*\Psi^T]
 class ExactEDF {

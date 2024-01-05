@@ -27,16 +27,11 @@ namespace models {
 
 // abstract base interface for any *space-only* fdaPDE statistical model.
 template <typename Model> class SpaceOnlyBase : public ModelBase<Model> {
-   protected:
-    typedef ModelBase<Model> Base;
-    using Base::model;   // underlying model object
-    static constexpr int n_lambda = n_smoothing_parameters<SpaceOnly>::value;
-
-    pde_ptr pde_ {};       // differential penalty in space Lf - u
-    SpMatrix<double> P_;   // discretization of penalty term: R1^T*R0^{-1}*R1
-    SVector<n_lambda> lambda_ = SVector<n_lambda>::Zero();
    public:
+    using Base = ModelBase<Model>;
+    static constexpr int n_lambda = n_smoothing_parameters<SpaceOnly>::value;
     using Base::lambda;       // dynamic sized smoothing parameter vector
+    using Base::model;        // underlying model object
     using Base::set_lambda;   // dynamic sized setter for \lambda
     // constructor
     SpaceOnlyBase() = default;
@@ -64,21 +59,23 @@ template <typename Model> class SpaceOnlyBase : public ModelBase<Model> {
     std::size_t n_spatial_basis() const { return n_basis(); }      // number of basis functions in space
     const pde_ptr& pde() const { return pde_; }                    // regularizing term Lf - u
 
-    // computes and cache R1^T*R0^{-1}*R1. Returns the discretized penalty P = \lambda_D*(R1^T*R0^{-1}*R1)
-    auto P() {
+    const SpMatrix<double>& PD() const {   // space-penalty component (R1^T*R0^{-1}*R1)
         if (is_empty(P_)) {
-            fdapde::SparseLU<SpMatrix<double>> invR0_;
+            fdapde::SparseLU<SpMatrix<double>> invR0_; // cache this
             invR0_.compute(pde_.mass());
-            P_ = R1().transpose() * invR0_.solve(R1());   // R1^T*R0^{-1}*R1
+            P_ = R1().transpose() * invR0_.solve(R1());
         }
-        return lambda_D() * P_;
+	return P_;
     }
-    // evaluates the field having expansion coefficient vector c \in \mathbb{R}^N at locs
-    // DVector<double> eval_field(const DVector<double>& c, const DMatrix<double>& locs) const {
+    // discretized penalty P = \lambda_D*(R1^T*R0^{-1}*R1)
+    auto P() { return lambda_D() * PD(); }
 
-    // }
     // destructor
     virtual ~SpaceOnlyBase() = default;
+   protected:
+    pde_ptr pde_ {};               // differential penalty in space Lf - u
+    mutable SpMatrix<double> P_;   // discretization of penalty term: R1^T*R0^{-1}*R1
+    SVector<n_lambda> lambda_ = SVector<n_lambda>::Zero();
 };
 
 }   // namespace models

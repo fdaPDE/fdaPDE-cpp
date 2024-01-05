@@ -18,28 +18,24 @@
 #include <gtest/gtest.h>   // testing framework
 
 #include <cstddef>
+
+#include <fdaPDE/core.h>
 using fdapde::core::FEM;
+using fdapde::core::fem_order;
 using fdapde::core::laplacian;
 using fdapde::core::PDE;
 
-#include "../../fdaPDE/calibration/symbols.h"
 #include "../../fdaPDE/models/functional/fpca.h"
-#include "../../fdaPDE/models/model_traits.h"
 #include "../../fdaPDE/models/sampling_design.h"
-using fdapde::calibration::GCVCalibration;
-using fdapde::calibration::KCVCalibration;
-using fdapde::calibration::NoCalibration;
-using fdapde::models::Areal;
 using fdapde::models::FPCA;
-using fdapde::models::GeoStatLocations;
-using fdapde::models::GeoStatMeshNodes;
-using fdapde::models::SpaceOnly;
+using fdapde::models::Sampling;
 
 #include "utils/constants.h"
 #include "utils/mesh_loader.h"
 #include "utils/utils.h"
 using fdapde::testing::almost_equal;
 using fdapde::testing::MeshLoader;
+using fdapde::testing::read_csv;
 using fdapde::testing::read_mtx;
 
 // test 1
@@ -49,7 +45,8 @@ using fdapde::testing::read_mtx;
 //    BC:           no
 //    order FE:     1
 //    missing data: no
-TEST(fpca_test, laplacian_samplingatnodes_nocalibration) {
+//    solver: sequential (power iteration)
+TEST(fpca_test, laplacian_samplingatnodes_sequential) {
     // define domain
     MeshLoader<Mesh2D> domain("unit_square");
     // import data from files
@@ -58,9 +55,9 @@ TEST(fpca_test, laplacian_samplingatnodes_nocalibration) {
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
-    // define model
+  // define model
     double lambda_D = 1e-2;
-    FPCA<decltype(problem), SpaceOnly, GeoStatMeshNodes, NoCalibration> model(problem);
+    FPCA<SpaceOnly, fdapde::sequential> model(problem, Sampling::mesh_nodes);
     model.set_lambda_D(lambda_D);
     // set model's data
     BlockFrame<double, int> df;
@@ -70,9 +67,45 @@ TEST(fpca_test, laplacian_samplingatnodes_nocalibration) {
     model.init();
     model.solve();
     // test correctness
-    EXPECT_TRUE(almost_equal(model.loadings(), "../data/models/fpca/2D_test1/loadings.mtx"));
-    EXPECT_TRUE(almost_equal(model.scores(),   "../data/models/fpca/2D_test1/scores.mtx"  ));
+    EXPECT_TRUE(almost_equal(model.loadings(), "../data/models/fpca/2D_test1/loadings_seq.mtx"));
+    EXPECT_TRUE(almost_equal(model.scores(),   "../data/models/fpca/2D_test1/scores_seq.mtx"));
 }
+
+// test 2
+//    domain:       unit square [1,1] x [1,1]
+//    sampling:     locations = nodes
+//    penalization: simple laplacian
+//    BC:           no
+//    order FE:     1
+//    missing data: no
+//    solver: monolithic (rsvd)
+TEST(fpca_test, laplacian_samplingatnodes_monolithic) {
+    // define domain
+    MeshLoader<Mesh2D> domain("unit_square");
+    // import data from files
+    DMatrix<double> y = read_csv<double>("../data/models/fpca/2D_test1/y.csv");
+    // define regularizing PDE
+    auto L = -laplacian<FEM>();
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
+  // define model
+    double lambda_D = 1e-2;
+    FPCA<SpaceOnly, fdapde::monolithic> model(problem, Sampling::mesh_nodes);
+    model.set_lambda_D(lambda_D);
+    // set model's data
+    BlockFrame<double, int> df;
+    df.insert(OBSERVATIONS_BLK, y);
+    model.set_data(df);
+    // solve FPCA problem
+    model.init();
+    model.solve();
+    // test correctness
+    EXPECT_TRUE(almost_equal(model.loadings(), "../data/models/fpca/2D_test1/loadings_mon.mtx"));
+    EXPECT_TRUE(almost_equal(model.scores(),   "../data/models/fpca/2D_test1/scores_mon.mtx"));
+}
+
+
+/*
 
 // test 2
 //    domain:       unit square [1,1] x [1,1]
@@ -182,3 +215,4 @@ TEST(fpca_test, laplacian_samplingatnodes_nocalibration_missingdata) {
     EXPECT_TRUE(almost_equal(model.loadings(), "../data/models/fpca/2D_test4/loadings.mtx"));
     EXPECT_TRUE(almost_equal(model.scores(),   "../data/models/fpca/2D_test4/scores.mtx"  ));
 }
+*/

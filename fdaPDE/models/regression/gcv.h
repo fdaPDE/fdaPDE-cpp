@@ -26,7 +26,6 @@
 using fdapde::core::ScalarField;
 using fdapde::core::TwiceDifferentiableScalarField;
 #include "../model_traits.h"
-#include "regression_base.h"
 using fdapde::models::SpaceOnly;
 #include "exact_edf.h"
 #include "stochastic_edf.h"
