@@ -29,6 +29,7 @@ using fdapde::core::PDE;
 #include "../../fdaPDE/models/sampling_design.h"
 using fdapde::models::FPCA;
 using fdapde::models::Sampling;
+using fdapde::models::Calibration;
 
 #include "utils/constants.h"
 #include "utils/mesh_loader.h"
@@ -55,9 +56,9 @@ TEST(fpca_test, laplacian_samplingatnodes_sequential) {
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
-  // define model
+    // define model
     double lambda_D = 1e-2;
-    FPCA<SpaceOnly, fdapde::sequential> model(problem, Sampling::mesh_nodes);
+    FPCA<SpaceOnly, fdapde::sequential> model(problem, Sampling::mesh_nodes, Calibration::off);
     model.set_lambda_D(lambda_D);
     // set model's data
     BlockFrame<double, int> df;
@@ -88,7 +89,7 @@ TEST(fpca_test, laplacian_samplingatnodes_monolithic) {
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
-  // define model
+    // define model
     double lambda_D = 1e-2;
     FPCA<SpaceOnly, fdapde::monolithic> model(problem, Sampling::mesh_nodes);
     model.set_lambda_D(lambda_D);
@@ -104,9 +105,6 @@ TEST(fpca_test, laplacian_samplingatnodes_monolithic) {
     EXPECT_TRUE(almost_equal(model.scores(),   "../data/models/fpca/2D_test1/scores_mon.mtx"));
 }
 
-
-/*
-
 // test 2
 //    domain:       unit square [1,1] x [1,1]
 //    sampling:     locations != nodes
@@ -114,8 +112,8 @@ TEST(fpca_test, laplacian_samplingatnodes_monolithic) {
 //    BC:           no
 //    order FE:     1
 //    missing data: no
-//    GCV smoothing parameter selection
-TEST(fpca_test, laplacian_samplingatlocations_gcvcalibration) {
+//    solver: sequential (power iteration) + GCV \lambda selection
+TEST(fpca_test, laplacian_samplingatlocations_sequential_gcv) {
     // define domain
     MeshLoader<Mesh2D> domain("unit_square");
     // import data from files
@@ -126,12 +124,12 @@ TEST(fpca_test, laplacian_samplingatlocations_gcvcalibration) {
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
-    FPCA<decltype(problem), SpaceOnly, GeoStatLocations, GCVCalibration> model(problem);
+    FPCA<SpaceOnly, fdapde::sequential> model(problem, Sampling::pointwise, Calibration::gcv);
     model.set_spatial_locations(locs);
     // grid of smoothing parameters
-    std::vector<SVector<1>> lambdas;
-    for (double x = -4; x <= -2; x += 0.1) { lambdas.push_back(SVector<1>(std::pow(10, x))); }
-    model.set_lambda(lambdas);
+    std::vector<DVector<double>> lambda_grid;
+    for (double x = -4; x <= -2; x += 0.1) { lambda_grid.push_back(SVector<1>(std::pow(10, x))); }
+    model.set_lambda(lambda_grid);
     model.set_seed(78965);   // for reproducibility purposes in testing
     // set model's data
     BlockFrame<double, int> df;
@@ -145,6 +143,7 @@ TEST(fpca_test, laplacian_samplingatlocations_gcvcalibration) {
     EXPECT_TRUE(almost_equal(model.scores(),   "../data/models/fpca/2D_test2/scores.mtx"  ));
 }
 
+/*
 // test 3
 //    domain:       unit square [1,1] x [1,1]
 //    sampling:     locations != nodes

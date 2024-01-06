@@ -30,7 +30,9 @@ namespace models {
 
 // FPCA (Functional Principal Components Analysis) model signature
 template <typename RegularizationType, typename SolutionPolicy> class FPCA;
-  
+
+enum Calibration { off, gcv, kcv };
+
 // implementation of FPCA for sequential approach, see e.g.
 // Lila, E., Aston, J.A.D., Sangalli, L.M. (2016), Smooth Principal Component Analysis over two-dimensional manifolds
 // with an application to Neuroimaging, Annals of Applied Statistics, 10 (4), 1854-1879.
@@ -47,10 +49,11 @@ class FPCA<RegularizationType_, sequential> :
 
     // constructors
     FPCA() = default;
-    fdapde_enable_constructor_if(is_space_only, This) FPCA(const pde_ptr& pde, Sampling s) : Base(pde, s) {};
+    fdapde_enable_constructor_if(is_space_only, This) FPCA(const pde_ptr& pde, Sampling s, Calibration c) :
+        Base(pde, s), calibration_(c) {};
     fdapde_enable_constructor_if(is_space_time_separable, This)
-      FPCA(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s) :
-        Base(space_penalty, time_penalty, s) {};
+      FPCA(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s, Calibration c) :
+        Base(space_penalty, time_penalty, s), calibration_(c) {};
 
     void init_model() { return; };
     void solve() {
@@ -58,19 +61,39 @@ class FPCA<RegularizationType_, sequential> :
         scores_.resize(X().rows(), n_pc_);
         DMatrix<double> X_ = X();   // copy original data to avoid side effects
 
-        // first guess of PCs set to a multivariate PCs (SVD)
-        Eigen::JacobiSVD<DMatrix<double>> svd(X_, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        // first guess of PCs set to a multivariate PCA (SVD)
+        // Eigen::JacobiSVD<DMatrix<double>> svd(X_, Eigen::ComputeThinU | Eigen::ComputeThinV);
         PowerIteration<This> solver(this, tolerance_, max_iter_);   // power iteration solver
+	solver.set_seed(seed_);
         solver.init();
+
         // sequential extraction of principal components
         for (std::size_t i = 0; i < n_pc_; i++) {
-            // find vectors s,f minimizing \norm_F{Y - s^T*f}^2 + (s^T*s)*P(f) fixed \lambda, using the multivariate
-            // estimate of f as starting point
-            solver.compute(X_, lambda(), svd.matrixV().col(i));
-	    // store results and deflate
+            // TODO: place the SVD outside the loop, for a non-fixed \lambda calibration, makes the algorithm converge
+            // to a different solution (selects a different \lambda). must check if the difference is significant
+            Eigen::JacobiSVD<DMatrix<double>> svd(X_, Eigen::ComputeThinU | Eigen::ComputeThinV);
+
+            switch (calibration_) {
+            case Calibration::off: {
+                // find vectors s,f minimizing \norm_F{Y - s^T*f}^2 + (s^T*s)*P(f) fixed \lambda
+                solver.compute(X_, lambda(), svd.matrixV().col(0));
+		// solver.compute(X_, lambda(), svd.matrixV().col(i));		
+            } break;
+            case Calibration::gcv: {
+                // select \lambda minimizing the GCV index
+                // DVector<double> f0 = svd.matrixV().col(i);
+                DVector<double> f0 = svd.matrixV().col(0);
+                ScalarField<Dynamic> gcv([&solver, &X_, &f0](const DVector<double>& lambda) -> double {
+                    solver.compute(X_, lambda, f0);
+                    return solver.gcv();   // return GCV index at convergence
+                });
+                solver.compute(X_, core::Grid<Dynamic>{}.optimize(gcv, lambda_grid_), f0);
+            } break;
+            }
+            // store results
             loadings_.col(i) = solver.fn() / solver.fn_norm();
             scores_.col(i) = solver.s() * solver.fn_norm();
-            X_ -= scores_.col(i) * loadings_.col(i).transpose();
+            X_ -= solver.s() * solver.fn().transpose();   // deflation
         }
         return;
     }
@@ -83,8 +106,14 @@ class FPCA<RegularizationType_, sequential> :
     void set_tolerance(double tolerance) { tolerance_ = tolerance; }
     void set_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
     void set_seed(std::size_t seed) { seed_ = seed; }
+    void set_lambda(const std::vector<DVector<double>>& lambda_grid) {
+        fdapde_assert(calibration_ != Calibration::off);
+        lambda_grid_ = lambda_grid;
+    }
    private:
-    std::size_t n_pc_ = 3;   // number of principal components
+    std::size_t n_pc_ = 3;      // number of principal components
+    Calibration calibration_;   // PC function's smoothing parameter selection strategy
+    std::vector<DVector<double>> lambda_grid_;
     // power iteration parameters
     double tolerance_ = 1e-6;     // relative tolerance between Jnew and Jold, used as stopping criterion
     std::size_t max_iter_ = 20;   // maximum number of allowed iterations

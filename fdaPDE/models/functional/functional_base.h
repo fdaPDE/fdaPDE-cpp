@@ -37,9 +37,6 @@ class FunctionalBase : public select_regularization_base<Model, RegularizationTy
    public:
     using Base = typename select_regularization_base<Model, RegularizationType>::type;
     using Base::df_;                    // BlockFrame for problem's data storage
-    using Base::n_locs;                 // number of spatial (spatio-temporal) data locations
-    using Base::pde_;                   // differential operator L
-    using SamplingBase<Model>::D;       // matrix of subdomains measures (for areal sampling)
     using SamplingBase<Model>::Psi;     // matrix of basis evaluations at locations p_1 ... p_n
     using SamplingBase<Model>::PsiTD;   // block \Psi^T*D
 
@@ -47,6 +44,7 @@ class FunctionalBase : public select_regularization_base<Model, RegularizationTy
     // space-only constructor
     fdapde_enable_constructor_if(is_space_only, Model) FunctionalBase(const pde_ptr& pde, Sampling s) :
         Base(pde), SamplingBase<Model>(s) {};
+    // space-time constructors
     fdapde_enable_constructor_if(is_space_time_separable, Model)
       FunctionalBase(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s) :
         Base(space_penalty, time_penalty), SamplingBase<Model>(s) {};
@@ -55,9 +53,9 @@ class FunctionalBase : public select_regularization_base<Model, RegularizationTy
         Base(pde, time), SamplingBase<Model>(s) {};
 
     // getters
-    const DMatrix<double>& X() const { return df_.template get<double>(OBSERVATIONS_BLK); }   // observation matrix y
+    const DMatrix<double>& X() const { return df_.template get<double>(OBSERVATIONS_BLK); }   // observation matrix X
     std::size_t n_stat_units() const { return X().rows(); }
-    std::size_t n_obs() const { return X().size(); };   // number of not missing observations
+    std::size_t n_obs() const { return X().size(); };
     const SpMatrix<double>& Psi() const { return Psi(not_nan()); }
     const SpMatrix<double>& PsiTD() const { return PsiTD(not_nan()); }
 
