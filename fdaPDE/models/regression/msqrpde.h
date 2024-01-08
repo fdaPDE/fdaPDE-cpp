@@ -17,30 +17,39 @@
 #ifndef __MSQRPDE_H__
 #define __MSQRPDE_H__
 
+#include <fdaPDE/linear_algebra.h>
 #include <fdaPDE/pde.h>
 #include <fdaPDE/utils.h>
-using fdapde::core::PDEBase;
+// using fdapde::core::PDEBase;
+
+#include <memory>
+#include <type_traits>
 
 #include "../model_base.h" 
 #include "../model_macros.h"
-#include "../model_traits.h"
+#include "../model_traits.h" 
 #include "../sampling_design.h"
 #include "distributions.h"
 #include "fpirls.h"
-#include "sqrpde.h"
-using fdapde::models::SQRPDE;
+#include "qsrpde.h"
+using fdapde::models::QSRPDE;
 #include "regression_base.h"
+
 
 namespace fdapde{
 namespace models{
 	    
   
-template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
-    class MSQRPDE : public RegressionBase<MSQRPDE<PDE, RegularizationType, SamplingDesign, Solver>> {  
-        // compile time checks
-        static_assert(std::is_base_of<PDEBase, PDE>::value);
+template <typename RegularizationType_>
+    class MSQRPDE : public RegressionBase<MSQRPDE<RegularizationType_>, RegularizationType_> {  
+    
+    public:
+        using RegularizationType = std::decay_t<RegularizationType_>;
+        using This = MSQRPDE<RegularizationType>;
+        using Base = RegressionBase<MSQRPDE<RegularizationType>, RegularizationType>;
+
     private:
-        typedef RegressionBase<MSQRPDE<PDE, RegularizationType, SamplingDesign, Solver>> Base;
+        // typedef RegressionBase<MSQRPDE<PDE_, RegularizationType, SamplingDesign_, Solver_>> Base;
 
         unsigned int h_;                      // number of quantile orders 
         const std::vector<double> alphas_;    // quantile order 
@@ -110,12 +119,25 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
 
         // constructor
         MSQRPDE() = default;
-        MSQRPDE(const PDE& pde, std::vector<double>& alphas = {0.1, 0.5, 0.9}) : Base(pde), alphas_(alphas) {
-            // // Check if the provided quantile orders are an increasing sequence 
-            // auto i = std::adjacent_find(alphas.begin(), alphas.end(), std::greater_equal<int>());
-            // assert(i == alphas.end(), "Quantile orders must be an increasing sequence"); 
+
+        // MSQRPDE(const PDE_& pde, std::vector<double>& alphas = {0.1, 0.5, 0.9}) : Base(pde), alphas_(alphas) {
+        //     // // Check if the provided quantile orders are an increasing sequence 
+        //     // auto i = std::adjacent_find(alphas.begin(), alphas.end(), std::greater_equal<int>());
+        //     // assert(i == alphas.end(), "Quantile orders must be an increasing sequence"); 
+        //     h_ = alphas_.size();
+        // }; 
+
+        // space-only constructor
+        template <
+            typename U = RegularizationType,
+            typename std::enable_if<std::is_same<U, SpaceOnly>::value, int>::type = 0>
+        MSQRPDE(const pde_ptr& pde, Sampling s, std::vector<double>& alphas = {0.1, 0.5, 0.9}) : Base(pde, s), alphas_(alphas) {
+            auto i = std::adjacent_find(alphas.begin(), alphas.end(), std::greater_equal<int>());
+            if(i != alphas.end()){
+                throw std::logic_error("Quantile orders are not in strictly ascending order");
+            }
             h_ = alphas_.size();
-        }; 
+        };
 
         // getters
         const DVector<double>& f() const { return f_curr_; };            // estimate of spatial field
@@ -229,45 +251,45 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
         virtual ~MSQRPDE() = default;
     };
 
-    template <typename PDE_, typename RegularizationType_, typename SamplingDesign_, typename Solver_>
-        struct model_traits<MSQRPDE<PDE_, RegularizationType_, SamplingDesign_, Solver_>> {
-        typedef PDE_ PDE;
-        typedef SpaceOnly regularization;
-        typedef SamplingDesign_ sampling;
-        typedef MonolithicSolver solver;
-        enum { N = PDE::N, M = PDE::M, n_lambda = 1 };
-    };
+    // template <typename PDE_, typename RegularizationType_, typename SamplingDesign_, typename Solver_>
+    //     struct model_traits<MSQRPDE<PDE_, RegularizationType_, SamplingDesign_, Solver_>> {
+    //     typedef PDE_ PDE;
+    //     typedef SpaceOnly regularization;
+    //     typedef SamplingDesign_ sampling;
+    //     typedef MonolithicSolver solver;
+    //     enum { N = PDE::N, M = PDE::M, n_lambda = 1 };
+    // };
 
-
-    // msqrpde trait
-    template <typename Model>
-    struct is_msqrpde { static constexpr bool value = is_instance_of<Model, MSQRPDE>::value; };
+    // // msqrpde trait
+    // template <typename Model>
+    // struct is_msqrpde { static constexpr bool value = is_instance_of<Model, MSQRPDE>::value; };
 
 
     // perform proper initialization and update of model. Computes quantites which can be reused
     // across many calls to solve() and are **not affected by a change in the data**.
     // It is implicitly called by ModelBase::init() as part of the initialization process.
     // NB: a change in the smoothing parameter must trigger a re-initialization of the model
-    template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
-    void MSQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::init_model() {
+    template <typename RegularizationType>
+    void MSQRPDE<RegularizationType>::init_model() {
 
         // Assemble matrices
         assemble_matrices();  
 
         // Definition of h SQRPDE models for initialization 
         for(std::size_t j = 0; j < h_; ++j){
-            SQRPDE<PDE, fdapde::models::SpaceOnly, SamplingDesign, fdapde::models::MonolithicSolver> 
-                model_j(pde(), alphas_[j]);
+            Sampling s = SamplingBase<This>::sampling(); 
+            QSRPDE<SpaceOnly> model_j(pde(), s, alphas_[j]);
 
             // solver initialization
             model_j.data() = data();
             model_j.set_lambda_D(lambdas_D[j]);     
             model_j.set_spatial_locations(this->locs());
-            model_j.init_pde();
-            model_j.init_regularization();
-            model_j.init_sampling();    
-            model_j.init_nan();
-            model_j.init_model();
+            // model_j.init_pde();
+            // model_j.init_regularization();
+            // model_j.init_sampling();    
+            // model_j.init_nan();
+            // model_j.init_model();
+            model_j.init(); 
             model_j.solve();
 
             f_curr_.block(j*n_basis(), 0, n_basis(), 1) = model_j.f();
@@ -456,8 +478,8 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
     }
 
     // finds a solution 
-    template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
-        void MSQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::solve() {
+    template <typename RegularizationType>
+        void MSQRPDE<RegularizationType>::solve() {
 
         w_.resize(h_*n_obs()); 
         W_bar_.resize(h_*n_obs());    
@@ -606,9 +628,8 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
     }   
 
     // Utilities 
-
-    template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
-        DVector<double> MSQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::fitted() const{
+    template <typename RegularizationType>
+        DVector<double> MSQRPDE<RegularizationType>::fitted() const{
 
         DVector<double> fit = fn_curr_; 
         if(has_covariates())
@@ -616,20 +637,20 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
         return fit; 
     }
 
-    template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
-        DVector<double> MSQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::fitted(unsigned int j) const{
+    template <typename RegularizationType>
+        DVector<double> MSQRPDE<RegularizationType>::fitted(unsigned int j) const{
         // index j \in {0, ..., h-1}
         return fitted().block(j*n_obs(), 0, n_obs(), 1); 
     }
 
-    template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
-        const bool MSQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::crossing_constraints() const {
+    template <typename RegularizationType>
+        const bool MSQRPDE<RegularizationType>::crossing_constraints() const {
         // Return true if the current estimate of quantiles is crossing, false otherwise 
         return crossing_penalty() > eps_; 
     }
 
-    template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
-        double MSQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::model_loss() const{
+    template <typename RegularizationType>
+        double MSQRPDE<RegularizationType>::model_loss() const{
 
         double loss = 0.; 
         for(auto j = 0; j < h_; ++j)
@@ -638,8 +659,8 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
 
     }
 
-    template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
-        double MSQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::crossing_penalty() const{
+    template <typename RegularizationType>
+        double MSQRPDE<RegularizationType>::crossing_penalty() const{
   
         // compute value of the unpenalized unconstrained functional J: 
         double pen = 0.; 
@@ -650,8 +671,8 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
 
     }
 
-    template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
-        double MSQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::crossing_penalty_f() const{
+    template <typename RegularizationType>
+        double MSQRPDE<RegularizationType>::crossing_penalty_f() const{
   
         // compute value of the unpenalized unconstrained functional J: 
         double pen = 0.; 
@@ -662,8 +683,8 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
         return pen; 
     }
 
-    template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
-        double MSQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::crossing_penalty_param() const{
+    template <typename RegularizationType>
+        double MSQRPDE<RegularizationType>::crossing_penalty_param() const{
   
         // compute value of the unpenalized unconstrained functional J: 
         double pen = 0.; 
@@ -675,16 +696,16 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
         return pen; 
     }
 
-    template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
-        const DMatrix<double>& MSQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::H_multiple() {
+    template <typename RegularizationType>
+        const DMatrix<double>& MSQRPDE<RegularizationType>::H_multiple() {
         // compute H = X*(X^T*W*X)^{-1}*X^T*W
         H_multiple_ = X_multiple_*(invXtWX_multiple_.solve(X_multiple_.transpose()*W_multiple_));
 
         return H_multiple_;
     }
 
-    template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
-        const DMatrix<double>& MSQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::Q_multiple() {
+    template <typename RegularizationType>
+        const DMatrix<double>& MSQRPDE<RegularizationType>::Q_multiple() {
         // compute Q = W(I - H) = W ( I - X*(X^T*W*X)^{-1}*X^T*W ) 
         Q_multiple_ = W_multiple_*(DMatrix<double>::Identity(n_obs()*h_, n_obs()*h_) - H_multiple());
 
@@ -692,13 +713,13 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
     }
 
     // returns the pinball loss at a specific x 
-    template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
-    DVector<double> MSQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::rho_alpha(const double& alpha, const DVector<double>& x) const{ 
+    template <typename RegularizationType>
+    DVector<double> MSQRPDE<RegularizationType>::rho_alpha(const double& alpha, const DVector<double>& x) const{ 
         return 0.5*x.cwiseAbs() + (alpha - 0.5)*x; 
     }
 
-    template <typename PDE, typename RegularizationType, typename SamplingDesign, typename Solver>
-        void MSQRPDE<PDE, RegularizationType, SamplingDesign, Solver>::abs_res_adj(DVector<double>& res) {
+    template <typename RegularizationType>
+        void MSQRPDE<RegularizationType>::abs_res_adj(DVector<double>& res) {
             unsigned int count_debug = 1; 
             for(int i = 0; i < res.size(); ++i) {
                 if(res(i) < tol_weights_) {
@@ -707,7 +728,6 @@ template <typename PDE, typename RegularizationType, typename SamplingDesign, ty
                 }            
             }
     }
-
 
 
 } // namespace models

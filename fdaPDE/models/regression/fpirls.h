@@ -92,6 +92,13 @@ template <typename Model_> class FPIRLS {
             m_->fpirls_update_step(solver_.fitted(), solver_.beta());   // model specific update step
             // update value of the objective functional J = data_loss + \int_D (Lf-u)^2
             double J = m_->data_loss() + m_->lambda_D()*solver_.g().dot(m_->R0() * solver_.g());
+
+            // M 
+            if constexpr (is_space_time_separable<Model>::value){
+                J += m_->lambda_T()*solver_.f().dot(Kronecker(solver_.P1(), m_->pde().mass())*solver_.f());
+            } 
+                
+
             // prepare for next iteration
             k_++; J_old = J_new; J_new = J;
         }

@@ -163,7 +163,14 @@ class RegressionBase :
             B_.resize(n, N);
             // triplet list to fill sparse matrix
             std::vector<fdapde::Triplet<double>> triplet_list;
-            triplet_list.reserve(n * N);
+            std::cout << "regression_base.h init_nan pt1" << std::endl; 
+            triplet_list.reserve(n * N); 
+            // triplet_list.reserve(5*n);
+
+            // pietro: triplet_list.reserve(n * model_traits<Model>::PDE::SolverType::n_dof_per_element);
+                                             // --> model().n_dofs()
+            // std::cout << "ndof = " << space_penalty->n_dofs() << std::endl; 
+            std::cout << "regression_base.h init_nan pt2" << std::endl;
             for (int k = 0; k < Psi(not_nan()).outerSize(); ++k)
                 for (SpMatrix<double>::InnerIterator it(Psi(not_nan()), k); it; ++it) {
                     if (nan_idxs_.find(it.row()) == nan_idxs_.end()) {

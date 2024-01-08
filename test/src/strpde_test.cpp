@@ -22,6 +22,7 @@ using fdapde::core::advection;
 using fdapde::core::diffusion;
 using fdapde::core::dt;
 using fdapde::core::FEM;
+using fdapde::core::fem_order;
 using fdapde::core::SPLINE;
 using fdapde::core::bilaplacian;
 using fdapde::core::laplacian;

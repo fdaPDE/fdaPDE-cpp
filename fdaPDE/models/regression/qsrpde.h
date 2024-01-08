@@ -41,6 +41,7 @@ class QSRPDE : public RegressionBase<QSRPDE<RegularizationType_>, Regularization
     using Base::P;          // discretized penalty matrix
     using Base::W_;         // weight matrix
     using Base::XtWX_;      // q x q matrix X^T*W*X
+
     // constructor
     QSRPDE() = default;
     // space-only constructor
@@ -50,12 +51,15 @@ class QSRPDE : public RegressionBase<QSRPDE<RegularizationType_>, Regularization
     QSRPDE(const pde_ptr& pde, Sampling s, double alpha = 0.5) : Base(pde, s), alpha_(alpha) {
         fpirls_ = FPIRLS<This>(this, tol_, max_iter_);
     };
-    // space-time constructor
-    template <
-      typename U = RegularizationType,
-      typename std::enable_if<!std::is_same<U, SpaceOnly>::value, int>::type = 0>
-    QSRPDE(const pde_ptr& pde, const DVector<double>& time, Sampling s, double alpha = 0.5) :
-        Base(pde, s, time), alpha_(alpha) {
+    // space-time constructors
+    fdapde_enable_constructor_if(is_space_time_separable, This)
+    QSRPDE(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s, double alpha) :
+      Base(space_penalty, time_penalty, s), alpha_(alpha) {
+        fpirls_ = FPIRLS<This>(this, tol_, max_iter_);
+    };
+    fdapde_enable_constructor_if(is_space_time_parabolic, This)
+    QSRPDE(const pde_ptr& space_penalty, const DVector<double>& time, Sampling s, double alpha) :
+      Base(space_penalty, s, time), alpha_(alpha) {
         fpirls_ = FPIRLS<This>(this, tol_, max_iter_);
     };
 
@@ -63,6 +67,8 @@ class QSRPDE : public RegressionBase<QSRPDE<RegularizationType_>, Regularization
     void set_fpirls_tolerance(double tol) { tol_ = tol; }
     void set_fpirls_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
     void set_alpha(double alpha) { alpha_ = alpha; }
+    void set_exact_gcv(bool exact) { exact_gcv = exact; }
+    void set_eps_power(double power) { eps_power = power; }
 
     void init_data()  { return; }
     void init_model() { fpirls_.init(); }
@@ -118,30 +124,53 @@ class QSRPDE : public RegressionBase<QSRPDE<RegularizationType_>, Regularization
     const DVector<double>& py() const { return py_; }
     const DVector<double>& pW() const { return pW_; }
     const fdapde::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
+    const SpMatrix<double>& P1() const { return P1_; }   // ficticious (otherwise compile error in regression_wrappers)
 
     // GCV support
     double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {
         double result = 0;
-        for (std::size_t i = 0; i < op2.rows(); ++i) { result += pinball_loss(op2.coeff(i, 0) - op1.coeff(i, 0)); }
+        for (std::size_t i = 0; i < op2.rows(); ++i) { result += pinball_loss(op2.coeff(i, 0) - op1.coeff(i, 0), std::pow(10, eps_power)); }
         return result * result / n_obs();
     }
-  
+
+    // Compute  log(1 + exp(x))  without overflow 
+    double log1pexp(double x) const{
+      if(x <= -37) return std::exp(x); 
+      if(x <= 18.) return std::log1p(std::exp(x));
+      if(x > 33.3) return x;
+      // else:
+      return x + std::exp(-x);
+  }  
+
+
     virtual ~QSRPDE() = default;
    private:
     double alpha_ = 0.5;      // quantile order (default to median)
     DVector<double> py_ {};   // y - (1-2*alpha)|y - X*beta - f|
     DVector<double> pW_ {};   // diagonal of W^k = 1/(2*n*|y - X*beta - f|)
-    DVector<double> mu_;      // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : mean vector at step k
+    DVector<double> mu_;      // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : quantile vector at step k
     DMatrix<double> T_;       // T = \Psi^T*Q*\Psi + P
     fdapde::SparseLU<SpMatrix<double>> invA_;   // factorization of non-parametric system matrix A
+    SpMatrix<double> P1_{}; // ficticious 
 
     // FPIRLS algorithm
     FPIRLS<This> fpirls_;
     std::size_t max_iter_ = 200;
     double tol_weights_ = 1e-6;
     double tol_ = 1e-6;
+    bool exact_gcv = true; 
+    double eps_power = -1.0; 
 
-    double pinball_loss(double x) const { return 0.5 * std::abs(x) + (alpha_ - 0.5) * x; };   // quantile check function
+    double pinball_loss(double x, double eps) const {  // quantile check function
+        //if constexpr(std::is_same<RegularizationType, SpaceOnly>::value)
+        if(exact_gcv){
+            //std::cout << "exact GCV computation" << std::endl; 
+            return 0.5 * std::abs(x) + (alpha_ - 0.5) * x;      // exact 
+        } else{
+            // std::cout << "approximate GCV computation" << std::endl;
+            return (alpha_-1) * x + eps * log1pexp(x / eps);    // approximation
+        }
+    };   
 };
 
 }   // namespace models

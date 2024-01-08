@@ -1,34 +1,35 @@
-#include <cstddef>
+#include <fdaPDE/core.h>
 #include <gtest/gtest.h>   // testing framework
 
-#include <fdaPDE/core.h>
+#include <cstddef>
 using fdapde::core::advection;
 using fdapde::core::diffusion;
-using fdapde::core::dt;
-using fdapde::core::FEM;
-using fdapde::core::fem_order;
 using fdapde::core::laplacian;
+using fdapde::core::bilaplacian;
+using fdapde::core::fem_order;
+using fdapde::core::FEM;
+using fdapde::core::Grid; 
+using fdapde::core::Mesh; 
+using fdapde::core::SPLINE;
+using fdapde::core::spline_order;
 using fdapde::core::MatrixDataWrapper;
 using fdapde::core::PDE;
 using fdapde::core::VectorDataWrapper;
 
-#include "../../fdaPDE/models/regression/strpde.h"
 #include "../../fdaPDE/models/sampling_design.h"
+#include "../../fdaPDE/models/regression/strpde.h"
+#include "../../fdaPDE/models/regression/qsrpde.h"
 using fdapde::models::STRPDE;
+using fdapde::models::QSRPDE;
 using fdapde::models::SpaceTimeSeparable;
 using fdapde::models::SpaceTimeParabolic;
-using fdapde::models::GeoStatMeshNodes;
-using fdapde::models::GeoStatLocations;
-using fdapde::models::Areal;
-using fdapde::models::MonolithicSolver;
-using fdapde::models::IterativeSolver;
 
-#include "../../fdaPDE/calibration/gcv.h"
-using fdapde::calibration::ExactEDF;
-using fdapde::calibration::ExactGCV;
-using fdapde::calibration::GCV;
-using fdapde::calibration::StochasticEDF;
-using fdapde::core::Grid; 
+#include "../../fdaPDE/models/regression/gcv.h"
+using fdapde::models::ExactEDF;
+using fdapde::models::GCV;
+using fdapde::models::StochasticEDF;
+using fdapde::models::Sampling;
+
 
 #include "utils/constants.h"
 #include "utils/mesh_loader.h"
@@ -39,8 +40,157 @@ using fdapde::testing::read_mtx;
 using fdapde::testing::read_csv;
 
 
-// Test case study  (gcv)
-// TEST(gcv_sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations_separable_monolithic_missingdata) {
+// // gcv  
+// TEST(strpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations_separable_monolithic_missingdata) {
+
+//     std::string pollutant = "NO2";   // PM10 NO2
+
+//     // Marco 
+//     std::string path_data = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/case_study/ARPA/Lombardia/dati_Cpp/" + pollutant; 
+//     std::string solutions_path = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/case_study/ARPA/Lombardia/STRPDE/" + pollutant + "/gcv_Cpp"; 
+//     // Ilenia 
+//     // std::string path_data = "/mnt/c/Users/ileni/OneDrive - Politecnico di Milano/Thesis_shared/case_study/ARPA/Lombardia/dati_Cpp/NO2";
+
+//     const std::string type_locs = "all";   // "reduced" "all"
+
+//     // lambdas sequence 
+//     std::vector<DVector<double>> lambdas_d_t;
+//     std::vector<double> lambdas_d;
+//     std::vector<double> lambdas_t;
+//     if(pollutant == "PM10" && type_locs == "reduced"){ 
+//         for(double xs = -6.0; xs <= -3.0; xs += 0.05)
+//             lambdas_d.push_back(std::pow(10,xs));
+
+//         for(double xt = -2.5; xt <= -1.5; xt += 0.5)
+//             lambdas_t.push_back(std::pow(10,xt));    
+
+//         for(auto i = 0; i < lambdas_d.size(); ++i)
+//             for(auto j = 0; j < lambdas_t.size(); ++j) 
+//                 lambdas_d_t.push_back(SVector<2>(lambdas_d[i], lambdas_t[j]));
+//     }
+//     if(pollutant == "PM10" && type_locs == "all"){ 
+//         for(double xs = -6.0; xs <= -3.0; xs += 0.05)
+//             lambdas_d.push_back(std::pow(10,xs));
+
+//         for(double xt = -2.5; xt <= -1.5; xt += 0.5)
+//             lambdas_t.push_back(std::pow(10,xt));    
+
+//         for(auto i = 0; i < lambdas_d.size(); ++i)
+//             for(auto j = 0; j < lambdas_t.size(); ++j) 
+//                 lambdas_d_t.push_back(SVector<2>(lambdas_d[i], lambdas_t[j]));
+//     }
+
+//     if(pollutant == "NO2" && type_locs == "all"){ 
+//         for(double xs = -6.0; xs <= -3.0; xs += 0.05)
+//             lambdas_d.push_back(std::pow(10,xs));
+
+//         for(double xt = -2.5; xt <= -1.5; xt += 0.5)
+//             lambdas_t.push_back(std::pow(10,xt));    
+
+//         for(auto i = 0; i < lambdas_d.size(); ++i)
+//             for(auto j = 0; j < lambdas_t.size(); ++j) 
+//                 lambdas_d_t.push_back(SVector<2>(lambdas_d[i], lambdas_t[j]));
+//     }
+
+
+//     // define temporal domain
+//     unsigned int M = 5; 
+//     std::string M_string = std::to_string(M);
+//     double tf = 364.0;    // final time 
+//     Mesh<1, 1> time_mesh(0, tf, M-1);
+//     // define spatial domain and regularizing PDE
+//     MeshLoader<Mesh2D> domain("mesh_lombardia_coarse");
+
+//     // import data and locs from files
+//     DMatrix<double> y; DMatrix<double> space_locs; DMatrix<double> time_locs; 
+//     if(type_locs == "reduced"){
+//         if(pollutant == "NO2"){
+//             y = read_csv<double>(path_data + "/NO2_max_2022_Cpp_reduced.csv");
+//         } else{
+//             y = read_csv<double>(path_data + "/PM10_2022_Cpp_reduced.csv");
+//         }
+//         time_locs = read_csv<double>(path_data + "/time_locations_reduced.csv");
+//     } else{
+//         if(pollutant == "NO2"){
+//             y = read_csv<double>(path_data + "/NO2_max_2022_Cpp.csv");
+//             time_locs = read_csv<double>(path_data + "/time_locations.csv");
+//         } else{
+//             y = read_csv<double>(path_data + "/PM10_2022.csv");  
+//             time_locs = read_csv<double>(path_data + "/time_locs.csv"); 
+//         }     
+//     }
+//     space_locs = read_csv<double>(path_data + "/locs.csv");
+    
+//     std::cout << "dim space loc " << space_locs.rows() << " " << space_locs.cols() << std::endl;
+//     std::cout << "dim time loc " << time_locs.rows() << " " << time_locs.cols() << std::endl;
+//     std::cout << "dim y " << y.rows() << " " << y.cols() << std::endl;
+   
+//     // define regularizing PDE in space 
+//     auto Ld = -laplacian<FEM>();
+//     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.n_nodes(), 1);
+//     PDE<Mesh<2, 2>, decltype(Ld), DMatrix<double>, FEM, fem_order<1>> space_penalty(domain.mesh, Ld, u);
+
+//     // define regularizing PDE in time
+//     auto Lt = -bilaplacian<SPLINE>();
+//     PDE<Mesh<1, 1>, decltype(Lt), DMatrix<double>, SPLINE, spline_order<3>> time_penalty(time_mesh, Lt);
+
+//     STRPDE<SpaceTimeSeparable, fdapde::monolithic> model(space_penalty, time_penalty, Sampling::pointwise);
+    
+//     // set model's data
+//     model.set_spatial_locations(space_locs);
+//     model.set_temporal_locations(time_locs);
+    
+//     BlockFrame<double, int> df;
+//     df.stack(OBSERVATIONS_BLK, y);
+//     model.set_data(df);
+//     model.init();
+
+//     // define GCV function and grid of \lambda_D values
+//     auto GCV = model.gcv<ExactEDF>();
+//     // optimize GCV
+//     Grid<fdapde::Dynamic> opt;
+//     opt.optimize(GCV, lambdas_d_t);
+//     SVector<2> best_lambda = opt.optimum();
+
+//     // Save lambda sequence 
+//     std::ofstream fileLambda_S_Seq(solutions_path + "/" + type_locs + "/lambdas_S_seq.csv");
+//     for(std::size_t i = 0; i < lambdas_d.size(); ++i) 
+//         fileLambda_S_Seq << std::setprecision(16) << lambdas_d[i] << "\n"; 
+//     fileLambda_S_Seq.close();
+
+//     for(std::size_t i = 0; i < lambdas_t.size(); ++i) 
+//         std::cout << lambdas_t[i] << "\n"; 
+
+//     std::ofstream fileLambda_T_Seq(solutions_path + "/" + type_locs + "/lambdas_T_seq.csv");
+//     for(std::size_t i = 0; i < lambdas_t.size(); ++i) 
+//         fileLambda_T_Seq << std::setprecision(16) << lambdas_t[i] << "\n"; 
+//     fileLambda_T_Seq.close();
+
+//     // Save Lambda opt
+//     std::ofstream fileLambdaoptS(solutions_path + "/" + type_locs + "/lambda_s_opt.csv");
+//     if(fileLambdaoptS.is_open()){
+//         fileLambdaoptS << std::setprecision(16) << best_lambda[0];
+//         fileLambdaoptS.close();
+//     }
+//     std::ofstream fileLambdaoptT(solutions_path + "/" + type_locs + "/lambda_t_opt.csv");
+//     if (fileLambdaoptT.is_open()){
+//         fileLambdaoptT << std::setprecision(16) << best_lambda[1];
+//         fileLambdaoptT.close();
+//     }
+//     // Save GCV scores
+//     std::ofstream fileGCV_scores(solutions_path + "/" + type_locs + "/gcv_scores.csv");
+//     for(std::size_t i = 0; i < GCV.gcvs().size(); ++i) 
+//         fileGCV_scores << std::setprecision(16) << GCV.gcvs()[i] << "\n"; 
+
+//     fileGCV_scores.close();
+
+        
+// }
+
+
+
+// // run 
+// TEST(sqrpde_case_study_test, laplacian_nonparametric_samplingatlocations_timelocations_separable_monolithic_missingdata) {
 
 //     // Marco 
 //     std::string path_data = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/case_study/ARPA/Lombardia/dati_Cpp/PM10"; 
@@ -123,68 +273,86 @@ using fdapde::testing::read_csv;
 // }
 
 
-// run 
-TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations_separable_monolithic_missingdata) {
 
-    // Marco 
-    std::string path_data = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/case_study/ARPA/Lombardia/dati_Cpp/PM10"; 
-    std::string solutions_path = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/case_study/ARPA/Lombardia/STRPDE/PM10"; 
+
+// Lake victoria -> anche lui crasha per dimensione
+TEST(strpde_case_study, laplacian_nonparametric_samplingatlocations_timelocations_separable_monolithic_missingdata) {
+
+    // Marco
+    const std::string path_data = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/models/space_time/Arnone_Vicini/dati_LakeVictoria"; 
+
     // Ilenia 
-    // std::string path_data = "/mnt/c/Users/ileni/OneDrive - Politecnico di Milano/Thesis_shared/case_study/ARPA/Lombardia/dati_Cpp/NO2";
+    // std::string path_data = "/mnt/c/Users/ileni/OneDrive - Politecnico di Milano/Thesis_shared/models/space_time/Arnone_Vicini/dati_LakeVictoria";
+ 
+    // define temporal domain
+    std::cout << "read " << std::endl;
+    DMatrix<double> time_points  = read_csv<double>(path_data + "/time_mesh.csv");
+    std::cout << "ok " << std::endl;
+    std::cout << time_points.rows() << " , " << time_points.cols() <<  std::endl;
+    std::cout << " value=" << time_points.coeff(0,0) <<  std::endl; 
 
     // define temporal domain
-    double tf = 364.0;   // final time 
-    DVector<double> time_mesh;
-    unsigned int M = 5;    
-    time_mesh.resize(M);
-    for(std::size_t i = 0; i < M; ++i){
-        time_mesh[i] = (tf / (M-1)) * i;
-    }
+    unsigned int M = 80; 
+    std::string M_string = std::to_string(M);
+    double tf = 6119;    // final time 
+    Mesh<1, 1> time_mesh(0, tf, M-1);
+
+    // unsigned int M = 2;
+    // time_mesh.resize(M);
+    // time_mesh[0] = 0.00;
+    // time_mesh[0] = 182.00;
+    // time_mesh[0] = 364.00;
+
+
     // define spatial domain and regularizing PDE
-    MeshLoader<Mesh2D> domain("mesh_lombardia_coarse");
-
-    // import data and locs from files
-    DMatrix<double> y = read_csv<double>(path_data + "/PM10_2022.csv");
+    MeshLoader<Mesh2D> domain("lake_victoria");
+    // import data from files
+    DMatrix<double> time_locs  = read_csv<double>(path_data + "/time_locations.csv");
     DMatrix<double> space_locs = read_csv<double>(path_data + "/locs.csv");
-    DMatrix<double> time_locs = read_csv<double>(path_data + "/time_locs.csv");
+    DMatrix<double> y          = read_csv<double>(path_data + "/y.csv");
+    std::cout << "dim space loc " << space_locs.rows() << " " << space_locs.cols() << std::endl;
+    std::cout << "dim time loc " << time_locs.rows() << " " << time_locs.cols() << std::endl;
+    std::cout << "dim y " << y.rows() << " " << y.cols() << std::endl;
 
-    // std::cout << "dim space loc " << space_locs.rows() << " " << space_locs.cols() << std::endl;
-    // std::cout << "dim time loc " << time_locs.rows() << " " << time_locs.cols() << std::endl;
-    // std::cout << "dim y " << y.rows() << " " << y.cols() << std::endl;
-   
-    // define regularizing PDE
-    auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.rows(), 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
+    // define regularizing PDE in space 
+    auto Ld = -laplacian<FEM>();
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.n_nodes(), 1);
+    PDE<Mesh<2, 2>, decltype(Ld), DMatrix<double>, FEM, fem_order<1>> space_penalty(domain.mesh, Ld, u);
 
-    // lambdas sequence 
-    std::vector<SVector<2>> lambdas_d_t;
-
-    for(double xs = -10.0; xs <= -4.0; xs +=1.0)
-        for(double xt = -3.0; xt <= -1.0; xt +=1.0) 
-            lambdas_d_t.push_back(SVector<2>(std::pow(10,xs), std::pow(10,xt)));
-
-    STRPDE<decltype(problem), SpaceTimeSeparable, GeoStatLocations, MonolithicSolver> model(problem, time_mesh);
-
-    // set model's data
-    model.set_spatial_locations(space_locs);
-    model.set_temporal_locations(time_locs);
+    // define regularizing PDE in time
+    auto Lt = -bilaplacian<SPLINE>();
+    PDE<Mesh<1, 1>, decltype(Lt), DMatrix<double>, SPLINE, spline_order<3>> time_penalty(time_mesh, Lt);
     
-    BlockFrame<double, int> df;
-    df.stack(OBSERVATIONS_BLK, y);
-    model.set_data(df);
-    model.init();
+    // ----GCV---
+
+    std::vector<DVector<double>> lambdas_d_t;
+    for(double xs = -5.0; xs <= -2.8; xs +=0.05)
+        for(double xt = -7.0; xt <= -6.0; xt +=1.0) 
+            lambdas_d_t.push_back(SVector<2>(std::pow(10,xs), std::pow(10,xt)));
+    
+    // define model
+    STRPDE<SpaceTimeSeparable, fdapde::monolithic> model_gcv(space_penalty, time_penalty, Sampling::pointwise);
+
+    model_gcv.set_spatial_locations(space_locs);
+    model_gcv.set_temporal_locations(time_locs);
+    std::cout << "here 4" << std::endl;
+
+    BlockFrame<double, int> df_gcv;
+    df_gcv.stack(OBSERVATIONS_BLK, y);
+    model_gcv.set_data(df_gcv);
+    model_gcv.init();
 
     // define GCV function and grid of \lambda_D values
-    GCV<decltype(model), ExactEDF<decltype(model)>> GCV(model);
-    ScalarField<2, decltype(GCV)> obj(GCV);  
+    auto GCV = model_gcv.gcv<ExactEDF>();
     // optimize GCV
-    Grid<2> opt;
-    std::cout << "GCV optmize" << std::endl;
-    opt.optimize(obj, lambdas_d_t);
-    std::cout << "fine GCV optmize" << std::endl;
+    Grid<fdapde::Dynamic> opt;
+    opt.optimize(GCV, lambdas_d_t);
     SVector<2> best_lambda = opt.optimum();
+    std::cout << "here 10" << std::endl;
 
+    // std::string solutions_path = "C:/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/case_study/ARPA/Lombardia/STRPDE/NO2/gcv_3";
+
+    std::string solutions_path = path_data;
     // Save Lambda opt
     std::ofstream fileLambdaoptS(solutions_path + "/lambda_s_opt.csv");
     if(fileLambdaoptS.is_open()){
@@ -192,109 +360,46 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
         fileLambdaoptS.close();
     }
     std::ofstream fileLambdaoptT(solutions_path + "/lambda_t_opt.csv");
-    if(fileLambdaoptT.is_open()){
+    if (fileLambdaoptT.is_open()){
         fileLambdaoptT << std::setprecision(16) << best_lambda[1];
         fileLambdaoptT.close();
     }
+
     // Save GCV scores
     std::ofstream fileGCV_scores(solutions_path + "/gcv_scores.csv");
-    for(std::size_t i = 0; i < GCV.values().size(); ++i) 
-        fileGCV_scores << std::setprecision(16) << GCV.values()[i] << "\n";   // gcv score of STRPDE
+    for(std::size_t i = 0; i < GCV.gcvs().size(); ++i) 
+        fileGCV_scores << std::setprecision(16) << GCV.gcvs()[i] << "\n" ; 
 
-    fileGCV_scores.close();
 
-        
+
+    // ----RUN---
+
+    double lambda_D = read_csv<double>(solutions_path + "/lambda_s_opt.csv")(0,0); 
+    double lambda_T = read_csv<double>(solutions_path + "/lambda_t_opt.csv")(0,0);
+
+    STRPDE<SpaceTimeSeparable, fdapde::monolithic> model(space_penalty, time_penalty, Sampling::pointwise);
+    model.set_lambda_D(lambda_D);
+    model.set_lambda_T(lambda_T);
+    model.set_spatial_locations(space_locs);
+    model.set_temporal_locations(time_locs);
+    // set model's data
+    BlockFrame<double, int> df;
+    df.stack(OBSERVATIONS_BLK, y);
+    model.set_data(df);
+    // solve smoothing problem
+    model.init();
+    model.solve();
+
+    // Save C++ solution 
+    DMatrix<double> computedF = model.f();
+    const static Eigen::IOFormat CSVFormatf(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+    std::ofstream filef(solutions_path + "/f_STRPDE.csv");
+    if (filef.is_open()){
+        filef << computedF.format(CSVFormatf);
+        filef.close();
+    }
+
 }
-
-
-
-
-
-
-
-// // Test case study  (ilenia)
-// TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations_separable_monolithic_missingdata) {
-
-//     // Marco 
-//     std::string path_data = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/case_study/ARPA/Lombardia/dati_Cpp/NO2"; 
-//     std::string solutions_path = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/case_study/ARPA/Lombardia/STRPDE/NO2"; 
-//     // Ilenia 
-//     // std::string path_data = "/mnt/c/Users/ileni/OneDrive - Politecnico di Milano/Thesis_shared/case_study/ARPA/Lombardia/dati_Cpp/NO2";
-
-//     // define temporal domain
-//     double tf = 364.0;   // final time 
-//     DVector<double> time_mesh;
-//     unsigned int M = 5;  // -> da cambiare a seconda del caso  
-//     time_mesh.resize(M);
-//     for (std::size_t i = 0; i < M; ++i) {
-//         time_mesh[i] = (tf / (M-1)) * i;
-//         std::cout << "time mesh[i] = " << time_mesh[i] << std::endl; 
-//     }
-//     // define spatial domain and regularizing PDE
-//     MeshLoader<Mesh2D> domain("mesh_lombardia_coarse");
-
-//     // import data and locs from files
-//     DMatrix<double> y = read_csv<double>(path_data + "/NO2_max_2022_Cpp.csv");
-//     DMatrix<double> space_locs = read_csv<double>(path_data + "/locs.csv");
-//     DMatrix<double> time_locs = read_csv<double>(path_data + "/time_locations.csv");
-
-//     std::cout << "dim space loc " << space_locs.rows() << " " << space_locs.cols() << std::endl;
-//     std::cout << "dim time loc " << time_locs.rows() << " " << time_locs.cols() << std::endl;
-//     std::cout << "dim y " << y.rows() << " " << y.cols() << std::endl;
-   
-//     // define regularizing PDE
-//     auto L = -laplacian<FEM>();
-//     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.rows(), 1);
-//     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
-
-//     // lambdas sequence 
-//     std::vector<SVector<2>> lambdas_d_t;
-
-//     for(double xs = -10.0; xs <= -4.0; xs +=1.0)
-//         for(double xt = -3.0; xt <= -1.0; xt +=1.0) 
-//         lambdas_d_t.push_back(SVector<2>(std::pow(10,xs), std::pow(10,xt)));
-
-//     STRPDE<decltype(problem), SpaceTimeSeparable, GeoStatLocations, MonolithicSolver> model(problem, time_mesh);
-    
-//     // set model's data
-//     model.set_spatial_locations(space_locs);
-//     model.set_temporal_locations(time_locs);
-    
-//     BlockFrame<double, int> df;
-//     df.stack(OBSERVATIONS_BLK, y);
-//     model.set_data(df);
-//     model.init();
-
-//     // define GCV function and grid of \lambda_D values
-//     GCV<decltype(model), ExactEDF<decltype(model)>> GCV(model);
-//     ScalarField<2, decltype(GCV)> obj(GCV);  
-//     // optimize GCV
-//     Grid<2> opt;
-//     std::cout << "here 8" << std::endl;
-//     opt.optimize(obj, lambdas_d_t);
-//     std::cout << "here 9" << std::endl;
-//     SVector<2> best_lambda = opt.optimum();
-
-//     // Save Lambda opt
-//     std::ofstream fileLambdaoptS(solutions_path + "/lambda_s_opt.csv");
-//     if(fileLambdaoptS.is_open()){
-//         fileLambdaoptS << std::setprecision(16) << best_lambda[0];
-//         fileLambdaoptS.close();
-//     }
-//     std::ofstream fileLambdaoptT(solutions_path + "/lambda_t_opt.csv");
-//     if (fileLambdaoptT.is_open()){
-//         fileLambdaoptT << std::setprecision(16) << best_lambda[1];
-//         fileLambdaoptT.close();
-//     }
-//     // Save GCV scores
-//     std::ofstream fileGCV_scores(solutions_path + "/gcv_scores.csv");
-//     for(std::size_t i = 0; i < GCV.values().size(); ++i) 
-//         fileGCV_scores << std::setprecision(16) << std::sqrt(GCV.values()[i]) << "\n" ; 
-
-//     fileGCV_scores.close();
-
-        
-// }
 
 
 

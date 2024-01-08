@@ -30,18 +30,14 @@ using fdapde::core::VectorDataWrapper;
 
 #include "../../fdaPDE/models/regression/msqrpde.h"
 #include "../../fdaPDE/models/sampling_design.h"
-using fdapde::models::Areal;
-using fdapde::models::GeoStatLocations;
-using fdapde::models::GeoStatMeshNodes;
 using fdapde::models::MSQRPDE;
 using fdapde::models::SpaceOnly;
-using fdapde::models::MonolithicSolver;
 
-#include "../../fdaPDE/calibration/gcv.h"
-using fdapde::calibration::ExactEDF;
-using fdapde::calibration::ExactGCV;
-using fdapde::calibration::GCV;
-using fdapde::calibration::StochasticEDF;
+#include "../../fdaPDE/models/regression/gcv.h"
+using fdapde::models::ExactEDF;
+using fdapde::models::GCV;
+using fdapde::models::StochasticEDF;
+using fdapde::models::Sampling;
 
 #include "utils/constants.h"
 #include "utils/mesh_loader.h"
@@ -429,8 +425,6 @@ double RMSE(DVector<double> v1, DVector<double> v2){
 
 
 
-
-
 // New test 6
 // test 6
 //    domain:       unit square
@@ -475,15 +469,15 @@ TEST(gcv_msqrpde_test6, pde_nonparametric_samplingatlocations_spaceonly_gridexac
     std::vector<std::string> lambda_selection_types = {"gcv", "gcv_smooth_eps1e-3", "gcv_smooth_eps1e-2", "gcv_smooth_eps1e-1.5", "gcv_smooth_eps1e-1"}; // {"gcv", "gcv_smooth_eps1e-3", "gcv_smooth_eps1e-2", "gcv_smooth_eps1e-1.5", "gcv_smooth_eps1e-1"};     
     bool compute_rmse = false; 
     bool compute_gcv = true; 
-    std::vector<SVector<1>> lambdas_1;
-    std::vector<SVector<1>> lambdas_5;
-    std::vector<SVector<1>> lambdas_10;
-    std::vector<SVector<1>> lambdas_25;
-    std::vector<SVector<1>> lambdas_50;
-    std::vector<SVector<1>> lambdas_75;
-    std::vector<SVector<1>> lambdas_90;
-    std::vector<SVector<1>> lambdas_95;
-    std::vector<SVector<1>> lambdas_99;
+    std::vector<DVector<double>> lambdas_1;
+    std::vector<DVector<double>> lambdas_5;
+    std::vector<DVector<double>> lambdas_10;
+    std::vector<DVector<double>> lambdas_25;
+    std::vector<DVector<double>> lambdas_50;
+    std::vector<DVector<double>> lambdas_75;
+    std::vector<DVector<double>> lambdas_90;
+    std::vector<DVector<double>> lambdas_95;
+    std::vector<DVector<double>> lambdas_99;
     std::vector<double> lambdas_rmse;
     for(double x = -7.5; x <= -3.5; x += 0.05) lambdas_1.push_back(SVector<1>(std::pow(10, x)));
     for(double x = -8.0; x <= -4.0; x += 0.05) lambdas_5.push_back(SVector<1>(std::pow(10, x))); 
@@ -527,10 +521,10 @@ TEST(gcv_msqrpde_test6, pde_nonparametric_samplingatlocations_spaceonly_gridexac
                     
                     std::string solutions_path_gcv = R_path + "/data_" + data_type + "/simulations/sim_" + std::to_string(sim) + "/single_est" + pde_type + "/" + lambda_selection_type; 
                     
-                    SQRPDE<decltype(problem), SpaceOnly, GeoStatLocations, MonolithicSolver> model_gcv(problem, alpha);
+                    QSRPDE<SpaceOnly> model_gcv(problem, Sampling::pointwise, alpha);
                     model_gcv.set_spatial_locations(loc);
 
-                    std::vector<SVector<1>> lambdas;
+                    std::vector<DVector<double>> lambdas;
                     if(almost_equal(alpha, 0.01)){
                         lambdas = lambdas_1; 
                     }  
@@ -579,13 +573,11 @@ TEST(gcv_msqrpde_test6, pde_nonparametric_samplingatlocations_spaceonly_gridexac
                     model_gcv.init();
 
                     // define GCV function and grid of \lambda_D values
-                    GCV<decltype(model_gcv), ExactEDF<decltype(model_gcv)>> GCV(model_gcv);
-                    ScalarField<1, decltype(GCV)> obj(GCV);  
+                    auto GCV = model_gcv.gcv<ExactEDF>();
                     // optimize GCV
-                    Grid<1> opt;
-                    opt.optimize(obj, lambdas);
+                    Grid<fdapde::Dynamic> opt;
+                    opt.optimize(GCV, lambdas);
                     
-
                     best_lambda = opt.optimum()(0,0);
             
                     std::cout << "Best lambda is: " << std::setprecision(16) << best_lambda << std::endl; 
@@ -603,10 +595,10 @@ TEST(gcv_msqrpde_test6, pde_nonparametric_samplingatlocations_spaceonly_gridexac
                         fileLambdaoptS.close();
                     }
 
-                    // Save lambda GCV 
+                    // Save GCV 
                     std::ofstream fileGCV_scores(solutions_path_gcv + "/score_alpha_" + alpha_string + ".csv");
-                    for(std::size_t i = 0; i < GCV.values().size(); ++i) 
-                        fileGCV_scores << std::setprecision(16) << std::sqrt(GCV.values()[i]) << "\n"; 
+                    for(std::size_t i = 0; i < GCV.gcvs().size(); ++i) 
+                        fileGCV_scores << std::setprecision(16) << std::sqrt(GCV.gcvs()[i]) << "\n"; 
                     fileGCV_scores.close();
                 }
 
@@ -624,7 +616,7 @@ TEST(gcv_msqrpde_test6, pde_nonparametric_samplingatlocations_spaceonly_gridexac
                 rmse_score.resize(lambdas_rmse.size()); 
                 double count_l = 0; 
                 for(auto lambda : lambdas_rmse){
-                    SQRPDE<decltype(problem), SpaceOnly, GeoStatLocations, MonolithicSolver> model(problem, alpha);
+                    QSRPDE<SpaceOnly> model(problem, Sampling::pointwise, alpha);
                     // set model's data
                     model.set_spatial_locations(loc);
                     model.set_lambda_D(lambda);           

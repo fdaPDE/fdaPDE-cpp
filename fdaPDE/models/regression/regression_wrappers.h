@@ -21,6 +21,7 @@
 #include "../model_traits.h"
 #include "../model_wrappers.h"
 #include "../sampling_design.h"
+using fdapde::models::SpaceOnly;
 using fdapde::models::is_space_only;
 using fdapde::models::Sampling;
 
@@ -32,7 +33,7 @@ struct IRegression {
     template <typename M>
     using fn_ptrs = fdapde::mem_fn_ptrs<
       &M::f, &M::beta, &M::g, &M::fitted, &M::W, &M::XtWX, &M::U, &M::V, &M::invXtWX, &M::invA, &M::q, &M::n_obs,
-      &M::norm, &M::y, &M::T, &M::lmbQ, &M::has_covariates>;
+      &M::norm, &M::y, &M::T, &M::lmbQ, &M::has_covariates, &M::P1, &M::R0>;
     // interface implementation
     decltype(auto) f()       const { return fdapde::invoke<const DVector<double>&   , 0>(*this); }
     decltype(auto) beta()    const { return fdapde::invoke<const DVector<double>&   , 1>(*this); }
@@ -53,6 +54,10 @@ struct IRegression {
     decltype(auto) T() { return fdapde::invoke<const DMatrix<double>&, 14>(*this); }
     decltype(auto) lmbQ(const DMatrix<double>& x) const { return fdapde::invoke<DMatrix<double>, 15>(*this, x); }
     decltype(auto) has_covariates() const { return fdapde::invoke<bool, 16>(*this); }
+    // M
+    decltype(auto) P1() const {return fdapde::invoke<const SpMatrix<double>&, 17>(*this);  }
+
+    decltype(auto) R0() const {return fdapde::invoke<const SpMatrix<double>&, 18>(*this);  }
 }; 
 
 template <typename RegularizationType>

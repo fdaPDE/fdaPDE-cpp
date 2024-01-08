@@ -40,6 +40,7 @@ class SRPDE : public RegressionBase<SRPDE, SpaceOnly> {
     SparseBlockMatrix<double, 2, 2> A_ {};         // system matrix of non-parametric problem (2N x 2N matrix)
     fdapde::SparseLU<SpMatrix<double>> invA_ {};   // factorization of matrix A
     DVector<double> b_ {};                         // right hand side of problem's linear system (1 x 2N vector)
+    SpMatrix<double> P1_{}; // ficticious 
    public:
     IMPORT_REGRESSION_SYMBOLS;
     using Base::lambda_D;   // smoothing parameter in space
@@ -107,6 +108,8 @@ class SRPDE : public RegressionBase<SRPDE, SpaceOnly> {
     // getters
     const SparseBlockMatrix<double, 2, 2>& A() const { return A_; }
     const fdapde::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
+    const SpMatrix<double>& P1() const { return P1_; }   // ficticious (otherwise compile error in regression_wrappers)
+
     virtual ~SRPDE() = default;
 };
 

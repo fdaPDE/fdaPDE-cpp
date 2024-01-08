@@ -22,6 +22,7 @@ using fdapde::core::advection;
 using fdapde::core::diffusion;
 using fdapde::core::FEM;
 using fdapde::core::fem_order;
+
 using fdapde::core::laplacian;
 using fdapde::core::MatrixDataWrapper;
 using fdapde::core::PDE;
@@ -29,10 +30,6 @@ using fdapde::core::VectorDataWrapper;
 
 #include "../../fdaPDE/models/regression/msqrpde.h"
 #include "../../fdaPDE/models/sampling_design.h"
-using fdapde::models::Areal;
-using fdapde::models::GeoStatLocations;
-using fdapde::models::GeoStatMeshNodes;
-using fdapde::models::MonolithicSolver;
 using fdapde::models::SpaceOnly;
 using fdapde::models::MSQRPDE;
 
@@ -618,7 +615,7 @@ TEST(msqrpde_test6, laplacian_nonparametric_samplingatlocations) {
                 unsigned int idx = 0; 
 
                 for(double alpha : alphas){
-                    SQRPDE<decltype(problem), SpaceOnly, GeoStatLocations, MonolithicSolver> model(problem, alpha);
+                    QSRPDE<SpaceOnly> model(problem, Sampling::pointwise, alpha);
                     model.set_spatial_locations(loc);
                     unsigned int alpha_int = alphas[idx]*100;  
                     double lambda; 
@@ -689,7 +686,7 @@ TEST(msqrpde_test6, laplacian_nonparametric_samplingatlocations) {
 
                 std::cout << "--------------------Simulation #" << std::to_string(sim) << "-------------" << std::endl; 
 
-                MSQRPDE<decltype(problem), SpaceOnly, GeoStatLocations, MonolithicSolver> model(problem, alphas);
+                MSQRPDE<SpaceOnly> model(problem, Sampling::pointwise, alphas);
                 model.set_spatial_locations(loc);
                 model.set_preprocess_option(processing); 
                 model.set_forcing_option(force);

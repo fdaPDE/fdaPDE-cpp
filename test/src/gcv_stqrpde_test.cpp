@@ -24,27 +24,26 @@ using fdapde::core::diffusion;
 using fdapde::core::fem_order;
 using fdapde::core::FEM;
 using fdapde::core::Grid;
+using fdapde::core::Mesh; 
 using fdapde::core::laplacian;
+using fdapde::core::bilaplacian;
+using fdapde::core::SPLINE;
+using fdapde::core::spline_order;
 using fdapde::core::MatrixDataWrapper;
 using fdapde::core::PDE;
 using fdapde::core::VectorDataWrapper;
 
-#include "../../fdaPDE/models/regression/sqrpde.h"
 #include "../../fdaPDE/models/sampling_design.h"
-using fdapde::models::SQRPDE;
+#include "../../fdaPDE/models/regression/qsrpde.h"
+using fdapde::models::QSRPDE;
 using fdapde::models::SpaceTimeSeparable;
 using fdapde::models::SpaceTimeParabolic;
-using fdapde::models::GeoStatMeshNodes;
-using fdapde::models::GeoStatLocations;
-using fdapde::models::Areal;
-using fdapde::models::MonolithicSolver;
-using fdapde::models::IterativeSolver;
 
-#include "../../fdaPDE/calibration/gcv.h"
-using fdapde::calibration::ExactEDF;
-using fdapde::calibration::ExactGCV;
-using fdapde::calibration::GCV;
-using fdapde::calibration::StochasticEDF;
+#include "../../fdaPDE/models/regression/gcv.h"
+using fdapde::models::ExactEDF;
+using fdapde::models::GCV;
+using fdapde::models::StochasticEDF;
+using fdapde::models::Sampling;
 
 #include "utils/constants.h"
 #include "utils/mesh_loader.h"
@@ -284,7 +283,7 @@ using namespace std::chrono;
    time sampling:  locations != nodes
    penalization: simple laplacian
    missing:      yes
-   covariates:   yes
+   covariates:   no
    BC:           no
    order FE:     1
    GCV optimization: grid exact
@@ -303,26 +302,29 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
     std::string p_string = "50";   
 
     // define temporal domain
+    unsigned int M = 3; 
+    std::string M_string = std::to_string(M);
     double tf = fdapde::testing::pi;   // final time 
-    DVector<double> time_mesh;
-    unsigned int M = 7; 
-    time_mesh.resize(M);
-    for (std::size_t i = 0; i < M; ++i) time_mesh[i] = (tf / (M-1)) * i;
+    Mesh<1, 1> time_mesh(0, tf, M-1);
     // define spatial domain and regularizing PDE
-    //MeshLoader<Mesh2D> domain("c_shaped_adj");
-    MeshLoader<Mesh2D> domain("c_shaped_504");   // mesh fine 
+    MeshLoader<Mesh2D> domain("c_shaped_adj");
+    // MeshLoader<Mesh2D> domain("c_shaped_504");   // mesh fine 
 
     // import locs from files
     DMatrix<double> space_locs = read_csv<double>(R_path + "/space_locs.csv");
     DMatrix<double> time_locs = read_csv<double>(R_path + "/time_locs.csv");
 
-    // define regularizing PDE
-    auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.rows(), 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
+    // define regularizing PDE in space 
+    auto Ld = -laplacian<FEM>();
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.n_nodes(), 1);
+    PDE<Mesh<2, 2>, decltype(Ld), DMatrix<double>, FEM, fem_order<1>> space_penalty(domain.mesh, Ld, u);
+
+    // define regularizing PDE in time
+    auto Lt = -bilaplacian<SPLINE>();
+    PDE<Mesh<1, 1>, decltype(Lt), DMatrix<double>, SPLINE, spline_order<3>> time_penalty(time_mesh, Lt);
 
     // lambdas sequence 
-    std::vector<SVector<2>> lambdas_d_t;
+    std::vector<DVector<double>> lambdas_d_t;
 
     unsigned int n_sim = 5; 
     std::string eps_string = ""; 
@@ -333,10 +335,9 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
       else 
         std::cout << "---------------------------------------MISSING DATA----------------------------" << std::endl;
 
-
-      std::vector<SVector<2>> lambdas10_d_t;
-      std::vector<SVector<2>> lambdas50_d_t;
-      std::vector<SVector<2>> lambdas90_d_t;
+      std::vector<DVector<double>> lambdas10_d_t;
+      std::vector<DVector<double>> lambdas50_d_t;
+      std::vector<DVector<double>> lambdas90_d_t;
       if(data_type == "all"){
         // 10% 
         for(double xs = -3.6; xs <= -1.8; xs +=0.05)
@@ -375,7 +376,7 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
           std::string alpha_string = std::to_string(alpha_int);
           std::cout << "--------alpha=" << alpha_string << "%" << std::endl;  
 
-          SQRPDE<decltype(problem), SpaceTimeSeparable, GeoStatLocations, MonolithicSolver> model(problem, time_mesh, alpha);
+          QSRPDE<SpaceTimeSeparable> model(space_penalty, time_penalty, Sampling::pointwise, alpha);
 
           // load data from .csv files
           DMatrix<double> y; 
@@ -404,16 +405,15 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
           model.init();
 
           // define GCV function and grid of \lambda_D values
-          GCV<decltype(model), ExactEDF<decltype(model)>> GCV(model);
-          ScalarField<2, decltype(GCV)> obj(GCV);  
+          auto GCV = model.gcv<ExactEDF>();
           // optimize GCV
-          Grid<2> opt;
-          opt.optimize(obj, lambdas_d_t);
+          Grid<fdapde::Dynamic> opt;
+          opt.optimize(GCV, lambdas_d_t);
           SVector<2> best_lambda = opt.optimum();
 
           std::string solutions_path; 
           if(data_type == "all")
-            solutions_path = R_path + "/simulations/all/sim_" + std::to_string(sim) + "/alpha_" + alpha_string + "/N_fine"; 
+            solutions_path = R_path + "/simulations/all/sim_" + std::to_string(sim) + "/alpha_" + alpha_string + "/M_" + M_string; 
           else
             solutions_path = R_path + "/simulations/miss_strategy_" + data_type + "/p_" + p_string + "/sim_" + std::to_string(sim) + "/alpha_" + alpha_string;
 
@@ -430,8 +430,8 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
           }
           // Save GCV scores
           std::ofstream fileGCV_scores(solutions_path + "/gcv_scores.csv");
-          for(std::size_t i = 0; i < GCV.values().size(); ++i) 
-            fileGCV_scores << std::setprecision(16) << std::sqrt(GCV.values()[i]) << "\n" ; 
+          for(std::size_t i = 0; i < GCV.gcvs().size(); ++i) 
+            fileGCV_scores << std::setprecision(16) << std::sqrt(GCV.gcvs()[i]) << "\n" ; 
 
           fileGCV_scores.close();
 

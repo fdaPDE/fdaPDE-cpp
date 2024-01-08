@@ -14,30 +14,32 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#include <cstddef>
+#include <fdaPDE/core.h>
 #include <gtest/gtest.h>   // testing framework
 
-#include <fdaPDE/core.h>
+#include <cstddef>
 using fdapde::core::advection;
 using fdapde::core::diffusion;
 using fdapde::core::dt;
 using fdapde::core::FEM;
 using fdapde::core::fem_order;
+using fdapde::core::bilaplacian;
 using fdapde::core::laplacian;
 using fdapde::core::MatrixDataWrapper;
 using fdapde::core::PDE;
 using fdapde::core::VectorDataWrapper;
+using fdapde::core::Mesh;
+using fdapde::core::SPLINE;
+using fdapde::core::spline_order;
 
-#include "../../fdaPDE/models/regression/sqrpde.h"
 #include "../../fdaPDE/models/sampling_design.h"
-using fdapde::models::SQRPDE;
+#include "../../fdaPDE/models/regression/qsrpde.h"
+
+using fdapde::models::QSRPDE;
 using fdapde::models::SpaceTimeSeparable;
 using fdapde::models::SpaceTimeParabolic;
-using fdapde::models::GeoStatMeshNodes;
-using fdapde::models::GeoStatLocations;
-using fdapde::models::Areal;
-using fdapde::models::MonolithicSolver;
-using fdapde::models::IterativeSolver;
+using fdapde::models::SpaceOnly;
+using fdapde::models::Sampling;
 
 #include "utils/constants.h"
 #include "utils/mesh_loader.h"
@@ -270,11 +272,14 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
     std::string lambda_selection_type = "gcv_smooth";   // gcv gcv_smooth manual 
 
     // define temporal domain
+    unsigned int M = 3; 
+    std::string M_string = std::to_string(M);
     double tf = fdapde::testing::pi;   // final time 
-    DVector<double> time_mesh;
-    unsigned int M = 7; 
-    time_mesh.resize(M);
-    for (std::size_t i = 0; i < M; ++i) time_mesh[i] = (tf / (M-1)) * i;
+    // DVector<double> time_mesh; 
+    // time_mesh.resize(M);
+    // for (std::size_t i = 0; i < M; ++i) time_mesh[i] = (tf / (M-1)) * i;
+    Mesh<1, 1> time_mesh(0, tf, M-1);     // t0, tf, #subintervals 
+
     // define spatial domain and regularizing PDE
     MeshLoader<Mesh2D> domain("c_shaped_adj");
 
@@ -282,11 +287,14 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
     DMatrix<double> space_locs = read_csv<double>(R_path + "/space_locs.csv");
     DMatrix<double> time_locs = read_csv<double>(R_path + "/time_locs.csv");
 
-    // define regularizing PDE
-    auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.rows(), 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
+    // define regularizing PDE in space 
+    auto Ld = -laplacian<FEM>();
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.n_nodes(), 1);
+    PDE<Mesh<2, 2>, decltype(Ld), DMatrix<double>, FEM, fem_order<1>> space_penalty(domain.mesh, Ld, u);
 
+    // define regularizing PDE in time
+    auto Lt = -bilaplacian<SPLINE>();
+    PDE<Mesh<1, 1>, decltype(Lt), DMatrix<double>, SPLINE, spline_order<3>> time_penalty(time_mesh, Lt);
 
     unsigned int n_sim = 5; 
 
@@ -325,7 +333,7 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
 
               std::string solutions_path; 
               if(data_type == "all")
-                solutions_path = R_path + "/simulations/all/sim_" + std::to_string(sim) + "/alpha_" + alpha_string; 
+                solutions_path = R_path + "/simulations/all/sim_" + std::to_string(sim) + "/alpha_" + alpha_string + "/M_" + M_string; 
               else
                 solutions_path = R_path + "/simulations/miss_strategy_" + data_type + "/p_" + p_string + "/sim_" + std::to_string(sim) + "/alpha_" + alpha_string;
               
@@ -335,35 +343,30 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
               if(lambda_selection_type == "gcv"){
                 std::ifstream fileLambdaS_gcv(solutions_path + "/lambda_s_opt.csv");
                 if(fileLambdaS_gcv.is_open()){
-                 fileLambdaS_gcv >> lambda_D; 
-                 fileLambdaS_gcv.close();
+                  fileLambdaS_gcv >> lambda_D; 
+                  fileLambdaS_gcv.close();
                 }
                 std::ifstream fileLambdaT(solutions_path + "/lambda_t_opt.csv");
                 if(fileLambdaT.is_open()){
-                 fileLambdaT >> lambda_T; 
-                 fileLambdaT.close();
+                  fileLambdaT >> lambda_T; 
+                  fileLambdaT.close();
                 }
               } 
 
               if(lambda_selection_type == "gcv_smooth"){
-                std::ifstream fileLambdaS_gcv_smooth(solutions_path + "/gcv_smooth/lambda_s_opt.csv");
+                std::ifstream fileLambdaS_gcv_smooth(solutions_path + "/lambda_s_opt.csv");
                 if(fileLambdaS_gcv_smooth.is_open()){
                   fileLambdaS_gcv_smooth >> lambda_D; 
                   fileLambdaS_gcv_smooth.close();
                 }
-                std::ifstream fileLambdaT_gcv_smooth(solutions_path + "/gcv_smooth/lambda_t_opt.csv");
+                std::ifstream fileLambdaT_gcv_smooth(solutions_path + "/lambda_t_opt.csv");
                 if(fileLambdaT_gcv_smooth.is_open()){
-                 fileLambdaT_gcv_smooth >> lambda_T; 
-                 fileLambdaT_gcv_smooth.close();
+                  fileLambdaT_gcv_smooth >> lambda_T; 
+                  fileLambdaT_gcv_smooth.close();
                 }
               } 
 
-
-              // lambda_D = l[0];
-              // lambda_T = l[1];
-
-
-              SQRPDE<decltype(problem), SpaceTimeSeparable, GeoStatLocations, MonolithicSolver> model(problem, time_mesh, alpha);
+              QSRPDE<SpaceTimeSeparable> model(space_penalty, time_penalty, Sampling::pointwise, alpha);
               model.set_lambda_D(lambda_D);
               model.set_lambda_T(lambda_T);
               model.set_spatial_locations(space_locs);
