@@ -130,29 +130,6 @@ template <typename Model> class SamplingBase {
     Sampling sampling() const { return sampling_; }
 };
 
-// sets to zero rows of matrix M corresponding to ones in the bit_mask
-SpMatrix<double> mask_matrix(const SpMatrix<double>& M, const BinaryVector<fdapde::Dynamic>& bit_mask) {
-    fdapde_assert(bit_mask.size() == M.rows());
-    // reserve space
-    std::size_t n = M.rows();
-    std::size_t N = M.cols();
-    SpMatrix<double> B;
-    B.resize(n, N);
-    // triplet list to fill sparse matrix
-    std::vector<fdapde::Triplet<double>> triplet_list;
-    triplet_list.reserve(n * N);
-    for (int k = 0; k < M.outerSize(); ++k)
-        for (SpMatrix<double>::InnerIterator it(M, k); it; ++it) {
-            if (!bit_mask[it.row()]) {   // not masked observation
-                triplet_list.emplace_back(it.row(), it.col(), it.value());
-            }
-        }
-    // finalize construction
-    B.setFromTriplets(triplet_list.begin(), triplet_list.end());
-    B.makeCompressed();
-    return std::move(B);
-}
-
 }   // namespace models
 }   // namespace fdapde
 

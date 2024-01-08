@@ -19,8 +19,10 @@
 
 #include <fdaPDE/optimization.h>
 #include <fdaPDE/utils.h>
+#include <fdaPDE/linear_algebra.h>
 #include <Eigen/SVD>
 
+#include "../../calibration/kfold_cv.h"
 #include "functional_base.h"
 #include "power_iteration.h"
 #include "rsvd.h"
@@ -64,7 +66,7 @@ class FPCA<RegularizationType_, sequential> :
         // first guess of PCs set to a multivariate PCA (SVD)
         // Eigen::JacobiSVD<DMatrix<double>> svd(X_, Eigen::ComputeThinU | Eigen::ComputeThinV);
         PowerIteration<This> solver(this, tolerance_, max_iter_);   // power iteration solver
-	solver.set_seed(seed_);
+        solver.set_seed(seed_);
         solver.init();
 
         // sequential extraction of principal components
@@ -77,7 +79,7 @@ class FPCA<RegularizationType_, sequential> :
             case Calibration::off: {
                 // find vectors s,f minimizing \norm_F{Y - s^T*f}^2 + (s^T*s)*P(f) fixed \lambda
                 solver.compute(X_, lambda(), svd.matrixV().col(0));
-		// solver.compute(X_, lambda(), svd.matrixV().col(i));		
+                // solver.compute(X_, lambda(), svd.matrixV().col(i));
             } break;
             case Calibration::gcv: {
                 // select \lambda minimizing the GCV index
@@ -87,7 +89,22 @@ class FPCA<RegularizationType_, sequential> :
                     solver.compute(X_, lambda, f0);
                     return solver.gcv();   // return GCV index at convergence
                 });
-                solver.compute(X_, core::Grid<Dynamic>{}.optimize(gcv, lambda_grid_), f0);
+                solver.compute(X_, core::Grid<Dynamic> {}.optimize(gcv, lambda_grid_), f0);
+            } break;
+            case Calibration::kcv: {
+                DVector<double> f0 = svd.matrixV().col(0);
+                auto cv_score = [&solver, &X_, &f0, this](
+                                  const DVector<double>& lambda, const core::BinaryVector<Dynamic>& train_set,
+                                  const core::BinaryVector<Dynamic>& test_set) -> double {
+                    solver.compute(train_set.blk_repeat(1, X_.cols()).select(X_), lambda, f0);   // fit on train set
+                    // reconstruction error on test set: \norm{X_test * (I - fn*fn^\top/J)}_F/n_test
+                    return (test_set.blk_repeat(1, X_.cols()).select(X_) *
+                            (DMatrix<double>::Identity(X_.cols(), X_.cols()) -
+                             solver.fn() * solver.fn().transpose() / (solver.fn().squaredNorm() + solver.ftPf(lambda))))
+                             .squaredNorm() /
+                           test_set.count() * X_.cols();
+                };
+                solver.compute(X_, calibration::KCV {n_folds_, seed_}.fit(*this, lambda_grid_, cv_score), f0);
             } break;
             }
             // store results
@@ -110,10 +127,15 @@ class FPCA<RegularizationType_, sequential> :
         fdapde_assert(calibration_ != Calibration::off);
         lambda_grid_ = lambda_grid;
     }
+    void set_nfolds(std::size_t n_folds) {
+        fdapde_assert(calibration_ == Calibration::kcv);
+        n_folds_ = n_folds;
+    }
    private:
     std::size_t n_pc_ = 3;      // number of principal components
     Calibration calibration_;   // PC function's smoothing parameter selection strategy
     std::vector<DVector<double>> lambda_grid_;
+    std::size_t n_folds_ = 10;   // for a kcv calibration strategy, the number of folds
     // power iteration parameters
     double tolerance_ = 1e-6;     // relative tolerance between Jnew and Jold, used as stopping criterion
     std::size_t max_iter_ = 20;   // maximum number of allowed iterations

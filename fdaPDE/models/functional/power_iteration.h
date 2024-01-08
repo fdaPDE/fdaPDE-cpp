@@ -99,18 +99,10 @@ template <typename Model_> class PowerIteration {
             solver_.solve();
             // prepare for next iteration
             k_++;
+            fn_ = solver_.fitted();   // \Psi*f
+            // update value of discretized functional \norm{X - s*f_n^\top}_F + f^\top*P(\lambda)*f
             Jold = Jnew;
-            // update value of discretized functional
-            fn_ = solver_.fitted();                            // \Psi*f
-            Jnew = (X - s_ * fn_.transpose()).squaredNorm();   // frobenius norm of reconstruction error
-            if constexpr (is_space_only<Model>::value) {
-                // \int_D (Lf-u)^2 = g^\top*R_0*g = f^\top*P*f, being P = R_1^\top*(R_0)^{-1}*R_1
-                Jnew += lambda[0] * solver_.g().dot(solver_.R0() * solver_.g());
-	    } else {
-	        // f^\top*P*f = g^\top*R0*g + f^\top*P_T*f
-                Jnew += lambda[0] * solver_.g().dot(solver_.R0() * solver_.g()) +   // g^\top*R0*g
-                        lambda[1] * solver_.f().dot(solver_.PT() * solver_.f());    // f^\top*P_T*f
-	    }
+            Jnew = (X - s_ * fn_.transpose()).squaredNorm() + solver_.ftPf(lambda);
         }
         // store results
         f_ = solver_.f();                                 // estimated field at convergence
@@ -132,6 +124,7 @@ template <typename Model_> class PowerIteration {
     const DVector<double>& g() const { return g_; }
     const DVector<double>& s() const { return s_; }     // scores vector
     const DVector<double>& fn() const { return fn_; }   // loadings vector
+    double ftPf(const DVector<double>& lambda) const { return solver_.ftPf(lambda); }
     std::size_t n_iter() const { return k_; }
     double f_norm() const { return f_norm_; }
     double fn_norm() const { return fn_norm_; }

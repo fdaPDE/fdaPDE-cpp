@@ -40,8 +40,8 @@ class RegressionBase :
     public SamplingBase<Model> {
    protected:
     DiagMatrix<double> W_ {};   // diagonal matrix of weights (implements possible heteroscedasticity)
-    DMatrix<double> XtWX_ {};   // q x q dense matrix X^T*W*X
-    DMatrix<double> T_ {};      // T = \Psi^T*Q*\Psi + P (required by GCV)
+    DMatrix<double> XtWX_ {};   // q x q dense matrix X^\top*W*X
+    DMatrix<double> T_ {};      // T = \Psi^\top*Q*\Psi + P (required by GCV)
     Eigen::PartialPivLU<DMatrix<double>> invXtWX_ {};   // factorization of the dense q x q matrix XtWX_.
     // missing data and masking logic
     BinaryVector<fdapde::Dynamic> nan_mask_;   // indicator function over missing observations
@@ -50,8 +50,8 @@ class RegressionBase :
     SpMatrix<double> B_;                       // matrix \Psi corrected for NaN and masked observations
 
     // matrices required for Woodbury decomposition
-    DMatrix<double> U_;   // [\Psi^T*D*W*X, 0]
-    DMatrix<double> V_;   // [X^T*W*\Psi,   0]
+    DMatrix<double> U_;   // [\Psi^\top*D*W*X, 0]
+    DMatrix<double> V_;   // [X^\top*W*\Psi,   0]
 
     // room for problem solution
     DVector<double> f_ {};      // estimate of the spatial field (1 x N vector)
@@ -63,9 +63,10 @@ class RegressionBase :
     using Base::idx;                    // indices of observations
     using Base::n_basis;                // number of basis function over domain D
     using Base::P;                      // discretized penalty matrix
+    using Base::R0;                     // mass matrix
     using SamplingBase<Model>::D;       // for areal sampling, matrix of subdomains measures, identity matrix otherwise
     using SamplingBase<Model>::Psi;     // matrix of spatial basis evaluation at locations p_1 ... p_n
-    using SamplingBase<Model>::PsiTD;   // block \Psi^T*D (not nan-corrected)
+    using SamplingBase<Model>::PsiTD;   // block \Psi^\top*D (not nan-corrected)
     using Base::model;
 
     RegressionBase() = default;
@@ -97,7 +98,7 @@ class RegressionBase :
     // getters to Woodbury decomposition matrices
     const DMatrix<double>& U() const { return U_; }
     const DMatrix<double>& V() const { return V_; }
-    // access to NaN corrected \Psi and \Psi^T*D matrices
+    // access to NaN corrected \Psi and \Psi^\top*D matrices
     const SpMatrix<double>& Psi() const { return !is_empty(B_) ? B_ : Psi(not_nan()); }
     auto PsiTD() const { return !is_empty(B_) ? B_.transpose() * D() : Psi(not_nan()).transpose() * D(); }
 
@@ -106,35 +107,43 @@ class RegressionBase :
     bool has_weights() const { return df_.has_block(WEIGHTS_BLK); }  // true if heteroscedastic observation are provided
     bool has_nan() const { return n_nan_ != 0; }                     // true if there are missing data
 
-    // an efficient way to perform a left multiplication by Q implementing the following
-    //  given the design matrix X, the weight matrix W and x
-    //    compute v = X^T*W*x
-    //    solve Yz = v
-    //    return Wx - WXz = W(I-H)x = Qx
-    // it is required to having assigned a design matrix X to the model before calling this method
+    // efficient left multiplication by matrix Q = W(I - X*(X^\top*W*X)^{-1}*X^\top*W)
     DMatrix<double> lmbQ(const DMatrix<double>& x) const {
         if (!has_covariates()) return W_ * x;
-        DMatrix<double> v = X().transpose() * W_ * x;   // X^T*W*x
-        DMatrix<double> z = invXtWX_.solve(v);          // (X^T*W*X)^{-1}*X^T*W*x
-        // compute W*x - W*X*z = W*x - (W*X*(X^T*W*X)^{-1}*X^T*W)*x = W(I - H)*x = Q*x
+        DMatrix<double> v = X().transpose() * W_ * x;   // X^\top*W*x
+        DMatrix<double> z = invXtWX_.solve(v);          // (X^\top*W*X)^{-1}*X^\top*W*x
+        // compute W*x - W*X*z = W*x - (W*X*(X^\top*W*X)^{-1}*X^\top*W)*x = W(I - H)*x = Q*x
         return W_ * x - W_ * X() * z;
     }
     DMatrix<double> fitted() const {   // computes fitted values \hat y = \Psi*f_ + X*beta_
+        fdapde_assert(!is_empty(f_));
         DMatrix<double> hat_y = Psi(not_nan()) * f_;
         if (has_covariates()) hat_y += X() * beta_;
         return hat_y;
     }
+    // efficient evaluation of the term \lambda*f^\top*P*f (requires PDE misfit g_ to be computed)
+    double ftPf(const SVector<Base::n_lambda>& lambda) const {
+        if (is_empty(g_)) return f().dot(Base::P(lambda) * f());   // fallback to standard computation
+        if constexpr (!is_space_time_separable<Model>::value) {
+            // \int_D (Lf-u)^2 = g^\top*R_0*g = f^\top*P*f, being P = R_1^\top*(R_0)^{-1}*R_1
+            return lambda[0] * g().dot(R0() * g());
+        } else {
+            // \int_D(\int_T (L_D(f) - u)^2) + \int_T(\int_D (L_T(f) - u)^2) = f^\top*P*f = g^\top*R0*g + f^\top*P_T*f
+	    return lambda[0] * g().dot(R0() * g()) + lambda[1] * f().dot(Base::PT() * f());
+        }
+    }
+    double ftPf() const { return ftPf(Base::lambda()); }
     // GCV support
     template <typename EDFStrategy_, typename... Args> GCV gcv(Args&&... args) {
         return GCV(Base::model(), EDFStrategy_(std::forward<Args>(args)...));
     }
-    const DMatrix<double>& T() {   // T = \Psi^T*Q*\Psi + P
+    const DMatrix<double>& T() {   // T = \Psi^\top*Q*\Psi + P
         T_ = PsiTD() * lmbQ(Psi()) + P();
         return T_;
     }
     // data dependent regression models' initialization logic
     void analyze_data() {
-        // compute q x q dense matrix X^T*W*X and its factorization
+        // compute q x q dense matrix X^\top*W*X and its factorization
         if (has_weights() && df_.is_dirty(WEIGHTS_BLK)) {
             W_ = df_.template get<double>(WEIGHTS_BLK).col(0).asDiagonal();
             model().runtime().set(runtime_status::require_W_update);
@@ -142,7 +151,7 @@ class RegressionBase :
             // default to homoskedastic observations
             W_ = DVector<double>::Ones(Base::n_locs()).asDiagonal();
         }
-        // compute q x q dense matrix X^T*W*X and its factorization if covariates are supplied
+        // compute q x q dense matrix X^\top*W*X and its factorization if covariates are supplied
         if (has_covariates() && (df_.is_dirty(DESIGN_MATRIX_BLK) || df_.is_dirty(WEIGHTS_BLK))) {
             XtWX_ = X().transpose() * W_ * X();
             invXtWX_ = XtWX_.partialPivLu();
@@ -163,13 +172,12 @@ class RegressionBase :
         return;
     }
 
-    // assembles matrix B (sets to zero \Psi rows corresponding to missing or masked observations)
+    // correct \Psi setting to zero \Psi rows corresponding to missing or masked observations
     void correct_psi() {
         BinaryVector<fdapde::Dynamic> mask(y().rows());
         if (has_nan()) mask = mask | nan_mask_;
         if (y_mask_.size() != 0) mask = mask | y_mask_;
-        // assemble matrix B_ according to given mask
-        if (mask.any()) { B_ = mask_matrix(Psi(not_nan()), mask); }
+        if (mask.any()) { B_ = (~mask.blk_repeat(1, n_basis())).select(Psi(not_nan())); }
         return;
     }
     // if mask[i] is true, removes the contribution of the i-th observation from the model's fitting

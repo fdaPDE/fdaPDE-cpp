@@ -73,8 +73,9 @@ template <typename Model> class SpaceOnlyBase : public ModelBase<Model> {
         if (is_empty(P_)) { P_ = R1().transpose() * invR0().solve(R1()); }
         return P_;
     }
-    // discretized penalty P = \lambda_D*(R1^T*R0^{-1}*R1)
-    auto P() { return lambda_D() * PD(); }
+    // evaluation of penalty term \lambda*(R1^\top*R0^{-1}*R1) at \lambda
+    auto P(const SVector<n_lambda>& lambda) const { return lambda[0] * PD(); }
+    auto P() const { return P(lambda()); }
 
     // destructor
     virtual ~SpaceOnlyBase() = default;
