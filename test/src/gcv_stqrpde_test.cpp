@@ -277,7 +277,7 @@ using namespace std::chrono;
 
 
   
-/* test 5 
+/* test 3 
    domain:       c-shaped
    space sampling: locations != nodes
    time sampling:  locations != nodes
@@ -293,19 +293,22 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
 
     // Marco 
     std::string R_path = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/models/space_time/Test_3"; 
-    //   // Ilenia 
-    //   std::string path = "/mnt/c/Users/ileni/OneDrive - Politecnico di Milano/Thesis_shared/models/space_time/Test_3"; 
+    // Ilenia 
+    // std::string R_path = "/mnt/c/Users/ileni/OneDrive - Politecnico di Milano/Thesis_shared/models/space_time/Test_3"; 
 
     std::vector<double> alphas = {0.1, 0.5, 0.9}; 
     //std::string data_type = "all";   // all d
     std::vector<std::string> data_types = {"all"}; 
-    std::string p_string = "50";   
+    std::string p_string = "50";  
+    std::string lambda_selection_type = "gcv_smooth_eps1e-1.5";   
 
     // define temporal domain
-    unsigned int M = 3; 
-    std::string M_string = std::to_string(M);
     double tf = fdapde::testing::pi;   // final time 
-    Mesh<1, 1> time_mesh(0, tf, M-1);
+    std::string path_mesh = "/M_7";
+  
+    unsigned int M = 7;  // -> da cambiare a seconda del caso
+    Mesh<1, 1> time_mesh(0, tf, M-1);     // t0, tf, #subintervals   
+
     // define spatial domain and regularizing PDE
     MeshLoader<Mesh2D> domain("c_shaped_adj");
     // MeshLoader<Mesh2D> domain("c_shaped_504");   // mesh fine 
@@ -335,22 +338,24 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
       else 
         std::cout << "---------------------------------------MISSING DATA----------------------------" << std::endl;
 
+
       std::vector<DVector<double>> lambdas10_d_t;
       std::vector<DVector<double>> lambdas50_d_t;
       std::vector<DVector<double>> lambdas90_d_t;
       if(data_type == "all"){
         // 10% 
-        for(double xs = -3.6; xs <= -1.8; xs +=0.05)
-          for(double xt = -7.0; xt <= -6.0; xt +=1.0) 
+        for(double xs = -4.0; xs <= -2.8; xs +=0.05)
+          for(double xt = -6.5; xt <= -4.5; xt +=0.5) 
             lambdas10_d_t.push_back(SVector<2>(std::pow(10,xs), std::pow(10,xt)));
         // 50% 
-        for(double xs = -3.2; xs <= -1.8; xs +=0.05)
-          for(double xt = -7.0; xt <= -6.0; xt +=1.0) 
+        for(double xs = -4.2; xs <= -2.0; xs +=0.05)
+          for(double xt = -6.5; xt <= -4.5; xt +=0.5) 
             lambdas50_d_t.push_back(SVector<2>(std::pow(10,xs), std::pow(10,xt)));
         // 90%
-        for(double xs = -3.8; xs <= -1.8; xs +=0.05)
-          for(double xt = -7.0; xt <= -6.0; xt +=1.0) 
+        for(double xs = -5.2; xs <= -2.4; xs +=0.05)
+          for(double xt = -6.5; xt <= -4.5; xt +=0.5) 
             lambdas90_d_t.push_back(SVector<2>(std::pow(10,xs), std::pow(10,xt)));
+
       }
       if(data_type == "d"){
         // 10% 
@@ -370,12 +375,11 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
       // simulations 
       for(unsigned int sim = 1; sim <= n_sim; ++sim){
         std::cout << "---------------Simulation #" << sim << "--------------" << std::endl; 
-        for(double alpha : alphas){
 
+        for(double alpha : alphas){
           unsigned int alpha_int = alpha*100; 
           std::string alpha_string = std::to_string(alpha_int);
-          std::cout << "--------alpha=" << alpha_string << "%" << std::endl;  
-
+          std::cout << "--------alpha=" << alpha_string << "%" << std::endl;
           QSRPDE<SpaceTimeSeparable> model(space_penalty, time_penalty, Sampling::pointwise, alpha);
 
           // load data from .csv files
@@ -398,13 +402,22 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
           // set model's data
           model.set_spatial_locations(space_locs);
           model.set_temporal_locations(time_locs);
+
+          model.set_exact_gcv(lambda_selection_type == "gcv");
+          if(lambda_selection_type == "gcv_smooth_eps1e-3")
+            model.set_eps_power(-3.0);
+          if(lambda_selection_type == "gcv_smooth_eps1e-2")
+            model.set_eps_power(-2.0);
+          if(lambda_selection_type == "gcv_smooth_eps1e-1.5")
+            model.set_eps_power(-1.5);
+          if(lambda_selection_type == "gcv_smooth_eps1e-1")
+            model.set_eps_power(-1.0);
           
           BlockFrame<double, int> df;
           df.stack(OBSERVATIONS_BLK, y);
           model.set_data(df);
           model.init();
 
-          // define GCV function and grid of \lambda_D values
           auto GCV = model.gcv<ExactEDF>();
           // optimize GCV
           Grid<fdapde::Dynamic> opt;
@@ -413,7 +426,7 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
 
           std::string solutions_path; 
           if(data_type == "all")
-            solutions_path = R_path + "/simulations/all/sim_" + std::to_string(sim) + "/alpha_" + alpha_string + "/M_" + M_string; 
+            solutions_path = R_path + "/simulations/all/sim_" + std::to_string(sim) + "/alpha_" + alpha_string + path_mesh + "/" + lambda_selection_type + "_changelambdaT"; 
           else
             solutions_path = R_path + "/simulations/miss_strategy_" + data_type + "/p_" + p_string + "/sim_" + std::to_string(sim) + "/alpha_" + alpha_string;
 
@@ -434,8 +447,8 @@ TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations
             fileGCV_scores << std::setprecision(16) << std::sqrt(GCV.gcvs()[i]) << "\n" ; 
 
           fileGCV_scores.close();
-
         }
+  
       }
       }
 
