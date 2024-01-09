@@ -28,7 +28,7 @@ using fdapde::Dynamic;
 
 namespace fdapde {
 namespace calibration {
-
+  
 // general implementation of KFold Cross Validation
 class KCV {
    private:
@@ -69,13 +69,12 @@ class KCV {
 
     // selects best smoothing parameter of model according to a K-fold cross validation strategy
     template <typename ModelType, typename ScoreType>
-    void fit(ModelType& model, const std::vector<DVector<double>>& lambdas, ScoreType cv_score) {
+    DVector<double> fit(ModelType& model, const std::vector<DVector<double>>& lambdas, ScoreType cv_score) {
         // reserve space for CV scores
         scores_.resize(K_, lambdas.size());
         if (shuffle_) {   // perform a first shuffling of the data if required
             model.set_data(model.data().shuffle(seed_));
 	}
-	cv_score.set_model(model);
         // cycle over all tuning parameters
         for (std::size_t j = 0; j < lambdas.size(); ++j) {
             for (std::size_t fold = 0; fold < K_; ++fold) {   // fixed a tuning parameter, cycle over all data splits
@@ -104,7 +103,7 @@ class KCV {
         Eigen::Index opt_score;
         avg_scores_.minCoeff(&opt_score);
         optimum_ = lambdas[opt_score];
-	return;
+	return optimum_;
     }
 
     // getters

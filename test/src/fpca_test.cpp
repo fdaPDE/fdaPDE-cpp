@@ -105,7 +105,7 @@ TEST(fpca_test, laplacian_samplingatnodes_monolithic) {
     EXPECT_TRUE(almost_equal(model.scores(),   "../data/models/fpca/2D_test1/scores_mon.mtx"));
 }
 
-// test 2
+// test 3
 //    domain:       unit square [1,1] x [1,1]
 //    sampling:     locations != nodes
 //    penalization: simple laplacian
@@ -143,16 +143,15 @@ TEST(fpca_test, laplacian_samplingatlocations_sequential_gcv) {
     EXPECT_TRUE(almost_equal(model.scores(),   "../data/models/fpca/2D_test2/scores.mtx"  ));
 }
 
-/*
-// test 3
+// test 4
 //    domain:       unit square [1,1] x [1,1]
 //    sampling:     locations != nodes
 //    penalization: simple laplacian
 //    BC:           no
 //    order FE:     1
 //    missing data: no
-//    KCV smoothing parameter selection, 10 folds
-TEST(fpca_test, laplacian_samplingatlocations_kcvcalibration) {
+//    solver: sequential (power iteration) + KCV \lambda selection
+TEST(fpca_test, laplacian_samplingatlocations_sequential_kcv) {
     // define domain
     MeshLoader<Mesh2D> domain("unit_square");
     // import data from files
@@ -163,10 +162,10 @@ TEST(fpca_test, laplacian_samplingatlocations_kcvcalibration) {
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
-    FPCA<decltype(problem), SpaceOnly, GeoStatLocations, KCVCalibration> model(problem);
+    FPCA<SpaceOnly, fdapde::sequential> model(problem, Sampling::pointwise, Calibration::kcv);
     model.set_spatial_locations(locs);
     // grid of smoothing parameters
-    std::vector<SVector<1>> lambdas;
+    std::vector<DVector<double>> lambdas;
     for (double x = -4; x <= -2; x += 0.1) lambdas.push_back(SVector<1>(std::pow(10, x)));
     model.set_lambda(lambdas);
     model.set_seed(12654);   // for reproducibility purposes in testing
@@ -183,6 +182,7 @@ TEST(fpca_test, laplacian_samplingatlocations_kcvcalibration) {
     EXPECT_TRUE(almost_equal(model.scores(),   "../data/models/fpca/2D_test3/scores.mtx"  ));
 }
 
+/*
 // test 4
 //    domain:       unit square [1,1] x [1,1]
 //    sampling:     locations = nodes
