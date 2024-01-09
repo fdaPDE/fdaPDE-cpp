@@ -33,7 +33,7 @@ struct IRegression {
     template <typename M>
     using fn_ptrs = fdapde::mem_fn_ptrs<
       &M::f, &M::beta, &M::g, &M::fitted, &M::W, &M::XtWX, &M::U, &M::V, &M::invXtWX, &M::invA, &M::q, &M::n_obs,
-      &M::norm, &M::y, &M::T, &M::lmbQ, &M::has_covariates, &M::P1, &M::R0>;
+      &M::norm, &M::y, &M::T, &M::lmbQ, &M::has_covariates, &M::P1, &M::R0, &M::nan_idxs>;
     // interface implementation
     decltype(auto) f()       const { return fdapde::invoke<const DVector<double>&   , 0>(*this); }
     decltype(auto) beta()    const { return fdapde::invoke<const DVector<double>&   , 1>(*this); }
@@ -56,8 +56,8 @@ struct IRegression {
     decltype(auto) has_covariates() const { return fdapde::invoke<bool, 16>(*this); }
     // M
     decltype(auto) P1() const {return fdapde::invoke<const SpMatrix<double>&, 17>(*this);  }
-
     decltype(auto) R0() const {return fdapde::invoke<const SpMatrix<double>&, 18>(*this);  }
+    decltype(auto) nan_idxs() const {return fdapde::invoke<const SpMatrix<double>&, 19>(*this);  }
 }; 
 
 template <typename RegularizationType>

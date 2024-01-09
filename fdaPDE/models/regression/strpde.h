@@ -74,6 +74,7 @@ class STRPDE<SpaceTimeSeparable, monolithic> :
 
     void init_model() {
         // a change in the smoothing parameter must reset the whole linear system
+        std::cout << "strpde.h init_model n nan = " << nan_idxs().size() << std::endl;
         if (runtime().query(runtime_status::is_lambda_changed)) {
             // assemble system matrix for the nonparameteric part
             if (is_empty(K_)) K_ = Kronecker(P1(), pde().mass());
@@ -94,14 +95,19 @@ class STRPDE<SpaceTimeSeparable, monolithic> :
         }
     }
     void solve() {   // finds a solution to the smoothing problem
+        std::cout << "strpde.h solve pt1" << std::endl;
         BLOCK_FRAME_SANITY_CHECKS;
+        std::cout << "strpde.h solve pt2" << std::endl;
         DVector<double> sol;             // room for problem' solution
         if (!Base::has_covariates()) {   // nonparametric case
             // update rhs of STR-PDE linear system
             b_.block(0, 0, A_.rows() / 2, 1) = -PsiTD() * W() * y();
+            std::cout << "strpde.h solve pt3" << std::endl;
             // solve linear system A_*x = b_
             sol = invA_.solve(b_);
+            std::cout << "strpde.h solve pt4" << std::endl;
             f_ = sol.head(A_.rows() / 2);
+            std::cout << "strpde.h solve pt5" << std::endl;
         } else {   // parametric case
             // update rhs of STR-PDE linear system
             b_.block(0, 0, A_.rows() / 2, 1) = -PsiTD() * lmbQ(y());   // -\Psi^T*D*Q*z
@@ -122,6 +128,18 @@ class STRPDE<SpaceTimeSeparable, monolithic> :
         return;
     }
     double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {   // euclidian norm of op1 - op2
+        // double result = 0;
+
+        // std::set<std::size_t> observation_indexes;
+        // for(std::size_t i = 0; i < op2.rows(); ++i) {
+        //     observation_indexes.insert(i);
+        // }
+        // for(auto ind : nan_idxs())
+        //     observation_indexes.erase(ind); 
+
+        // for(std::size_t i : observation_indexes) { result += (op2.coeff(i, 0) - op1.coeff(i, 0))*(op2.coeff(i, 0) - op1.coeff(i, 0)); }
+        // return result;  
+
         return (op1 - op2).squaredNorm();
     }
 

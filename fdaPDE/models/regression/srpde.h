@@ -102,6 +102,18 @@ class SRPDE : public RegressionBase<SRPDE, SpaceOnly> {
         return;
     }
     inline double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {
+        // double result = 0;
+
+        // std::set<std::size_t> observation_indexes;
+        // for(std::size_t i = 0; i < op2.rows(); ++i) {
+        //     observation_indexes.insert(i);
+        // }
+        // for(auto ind : nan_idxs())
+        //     observation_indexes.erase(ind); 
+
+        // for(std::size_t i : observation_indexes) { result += (op2.coeff(i, 0) - op1.coeff(i, 0))*(op2.coeff(i, 0) - op1.coeff(i, 0)); }
+        // return result;  
+
         return (op1 - op2).squaredNorm();
     }
 

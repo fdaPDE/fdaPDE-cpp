@@ -129,8 +129,16 @@ class QSRPDE : public RegressionBase<QSRPDE<RegularizationType_>, Regularization
     // GCV support
     double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {
         double result = 0;
-        for (std::size_t i = 0; i < op2.rows(); ++i) { result += pinball_loss(op2.coeff(i, 0) - op1.coeff(i, 0), std::pow(10, eps_power)); }
-        return result * result / n_obs();
+
+        std::set<std::size_t> observation_indexes;
+        for(std::size_t i = 0; i < op2.rows(); ++i) {
+            observation_indexes.insert(i);
+        }
+        for(auto ind : Base::nan_idxs())
+            observation_indexes.erase(ind); 
+
+        for(std::size_t i : observation_indexes) { result += pinball_loss(op2.coeff(i, 0) - op1.coeff(i, 0), std::pow(10, eps_power)); }
+        return result * result / n_obs();  // n_obs() returns number of not-nan observations
     }
 
     // Compute  log(1 + exp(x))  without overflow 
