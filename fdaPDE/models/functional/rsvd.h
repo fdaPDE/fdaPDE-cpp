@@ -36,11 +36,9 @@ template <typename Model_> class RSVD {
 
     // let E*\Sigma*F^\top the reduced (rank r) SVD of X*\Psi*(D^{1})^\top, with D^{-1} the inverse of the cholesky
     // factor of \Psi^\top * \Psi + P(\lambda), then
-    DMatrix<double> H_;   // matrix E in the reduced SVD of X*\Psi*(D^{-1})^\top (scores)
-    DMatrix<double> W_;   // \Sigma*F^\top*D^{-1} (field expansion coefficients)
-
-    DVector<double> f_norm_;        // L^2 norm of estimated fields
-    DVector<double> fn_norm_;       // euclidean norm of field evaluation at data locations
+    DMatrix<double> H_;        // matrix E in the reduced SVD of X*\Psi*(D^{-1})^\top (scores)
+    DMatrix<double> W_;        // \Sigma*F^\top*D^{-1} (field expansion coefficients)
+    DVector<double> w_norm_;   // L^2 norm of estimated fields
    public:
     // constructors
     RSVD() = default;
@@ -49,29 +47,25 @@ template <typename Model_> class RSVD {
     // executes the Regularized Singular Value Decomposition on data X for a given rank r and smoothing level \lambda
     void compute(const DMatrix<double>& X, const SVector<n_lambda>& lambda, std::size_t r) {
         // compute matrix C = \Psi^\top*\Psi + P(\lambda)
-        DMatrix<double> C;
-        if constexpr (is_space_only<Model>::value) {
-            C = m_->Psi().transpose() * m_->Psi() + lambda[0] * m_->PD();
-        } else {
-            C = m_->Psi().transpose() * m_->Psi() + lambda[0] * m_->PD() + lambda[1] * m_->PT();
-        }
+        DMatrix<double> C = m_->Psi().transpose() * m_->Psi() + m_->P(lambda);
         // compute the inverse of the cholesky factor of C, D^{-1}
         DMatrix<double> D = C.llt().matrixL();
-	DMatrix<double> invD = D.inverse();
+        DMatrix<double> invD = D.inverse();
 
         // compute SVD of X*\Psi*(D^{-1})^\top
         Eigen::JacobiSVD<DMatrix<double>> svd(
           X * m_->Psi() * invD.transpose(), Eigen::ComputeThinU | Eigen::ComputeThinV);
-	// store results
+        // store results
         H_ = svd.matrixU().leftCols(r);
         W_ = (svd.singularValues().head(r).asDiagonal() * svd.matrixV().leftCols(r).transpose() * invD).transpose();
-	// TODO: store normalizations
+        w_norm_ = (W_.transpose() * m_->R0() * W_).array().sqrt();   // L2 norm of estimated fields
         return;
     }
 
     // getters
-    DMatrix<double> H() const { return H_; }
-    DMatrix<double> W() const { return W_; }
+    const DMatrix<double>& H() const { return H_; }
+    const DMatrix<double>& W() const { return W_; }
+    const DVector<double>& w_norm() const { return w_norm_; }
 };
 
 }   // namespace models

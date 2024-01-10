@@ -41,7 +41,8 @@ class SpaceTimeSeparableBase : public SpaceTimeBase<Model, SpaceTimeSeparable> {
     mutable SpMatrix<double> PD_;   // discretization of space regularization: (R1^T*R0^{-1}*R1) \kron P0
     mutable SpMatrix<double> PT_;   // discretization of time regularization:  (R0 \kron P1)
    public:
-    typedef SpaceTimeBase<Model, SpaceTimeSeparable> Base;
+    using Base = SpaceTimeBase<Model, SpaceTimeSeparable>;
+    static constexpr int n_lambda = n_smoothing_parameters<SpaceTimeSeparable>::value;
     using Base::lambda_D;   // smoothing parameter in space
     using Base::lambda_T;   // smoothing parameter in time
     using Base::model;      // underlying model object
@@ -86,7 +87,6 @@ class SpaceTimeSeparableBase : public SpaceTimeBase<Model, SpaceTimeSeparable> {
     const DVector<double>& time_locs() const { return is_empty(time_locs_) ? time_ : time_locs_; }
     const pde_ptr& time_pde() const { return time_pde_; }
     const pde_ptr& pde() const { return space_pde_; }
-  
     // return stacked version of discretized forcing field
     const DVector<double>& u() {
         if (is_empty(u_)) {   // compute once and cache
@@ -97,7 +97,6 @@ class SpaceTimeSeparableBase : public SpaceTimeBase<Model, SpaceTimeSeparable> {
         }
         return u_;
     }
-
     const SpMatrix<double>& PT() const {   // time-penalty component (R0 \kron P1)
         if (is_empty(PT_)) { PT_ = Kronecker(space_pde_.mass(), P1()); }
         return PT_;
@@ -111,7 +110,8 @@ class SpaceTimeSeparableBase : public SpaceTimeBase<Model, SpaceTimeSeparable> {
         return PD_;
     }
     // discretized penalty P = \lambda_D*((R1^T*R0^{-1}*R1) \kron Rt) + \lambda_T*(R0 \kron Pt)
-    auto P() const { return lambda_D() * PD() + lambda_T() * PT(); }
+    auto P(const SVector<n_lambda>& lambda) const { return lambda[0] * PD() + lambda[1] * PT(); }
+    auto P() const { return P(Base::lambda()); }
 
     // destructor
     virtual ~SpaceTimeSeparableBase() = default;

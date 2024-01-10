@@ -25,7 +25,7 @@ using fdapde::core::SparseBlockMatrix;
 #include "../model_macros.h"
 #include "../model_traits.h"
 #include "distributions.h"
-#include "regression_wrappers.h"
+#include "regression_type_erasure.h"
 #include "srpde.h"
 #include "strpde.h"
 

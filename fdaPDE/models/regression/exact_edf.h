@@ -18,8 +18,7 @@
 #define __EXACT_EDF_H__
 
 #include <fdaPDE/utils.h>
-#include "../model_wrappers.h"
-#include "regression_wrappers.h"
+#include "regression_type_erasure.h"
 
 namespace fdapde {
 namespace models {

@@ -14,22 +14,23 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __REGRESSION_WRAPPERS_H__
-#define __REGRESSION_WRAPPERS_H__
+#ifndef __REGRESSION_TYPE_ERASURE_H__
+#define __REGRESSION_TYPE_ERASURE_H__
 
 #include <fdaPDE/utils.h>
 #include <fdaPDE/linear_algebra.h>
 #include "../model_traits.h"
-#include "../model_wrappers.h"
+#include "../model_type_erasure.h"
 #include "../sampling_design.h"
 using fdapde::models::is_space_only;
 using fdapde::models::Sampling;
+using fdapde::models::SpaceOnly;
 using fdapde::core::BinaryVector;
 using fdapde::Dynamic;
 
 namespace fdapde {
 namespace models {
-  
+
 // type erased wrapper for regression models
 struct IRegression {
     template <typename M>
@@ -81,4 +82,4 @@ make_model(PDE&& args, Sampling s, const DVector<double>& time) {
 
 }   // namespace fdapde
 
-#endif   // __REGRESSION_WRAPPERS_H__
+#endif   // __REGRESSION_TYPE_ERASURE_H__

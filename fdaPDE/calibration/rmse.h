@@ -20,7 +20,7 @@
 #include <fdaPDE/utils.h>
 #include <fdaPDE/linear_algebra.h>
 
-#include "../models/model_wrappers.h"
+#include "../models/regression/regression_type_erasure.h"
 using fdapde::core::BlockFrame;
 using fdapde::core::BinaryVector;
 using fdapde::models::RegressionView;

@@ -22,7 +22,6 @@
 #include <fdaPDE/utils.h>
 #include <fdaPDE/pde.h>
 using fdapde::core::Kronecker;
-using fdapde::core::BinaryVector;
 
 #include "model_base.h"
 #include "model_macros.h"

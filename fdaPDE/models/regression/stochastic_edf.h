@@ -19,8 +19,7 @@
 
 #include <fdaPDE/linear_algebra.h>
 #include <fdaPDE/utils.h>
-#include "../model_wrappers.h"
-#include "regression_wrappers.h"
+#include "regression_type_erasure.h"
 
 #include <random>
 using fdapde::core::SMW;

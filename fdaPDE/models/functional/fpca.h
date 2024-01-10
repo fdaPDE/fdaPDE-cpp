@@ -23,6 +23,8 @@
 #include <Eigen/SVD>
 
 #include "../../calibration/kfold_cv.h"
+#include "../../calibration/symbols.h"
+using fdapde::calibration::Calibration;
 #include "functional_base.h"
 #include "power_iteration.h"
 #include "rsvd.h"
@@ -32,8 +34,6 @@ namespace models {
 
 // FPCA (Functional Principal Components Analysis) model signature
 template <typename RegularizationType, typename SolutionPolicy> class FPCA;
-
-enum Calibration { off, gcv, kcv };
 
 // implementation of FPCA for sequential approach, see e.g.
 // Lila, E., Aston, J.A.D., Sangalli, L.M. (2016), Smooth Principal Component Analysis over two-dimensional manifolds
@@ -73,7 +73,7 @@ class FPCA<RegularizationType_, sequential> :
         for (std::size_t i = 0; i < n_pc_; i++) {
             // TODO: place the SVD outside the loop, for a non-fixed \lambda calibration, makes the algorithm converge
             // to a different solution (selects a different \lambda). must check if the difference is significant
-            Eigen::JacobiSVD<DMatrix<double>> svd(X_, Eigen::ComputeThinU | Eigen::ComputeThinV);
+	  Eigen::JacobiSVD<DMatrix<double>> svd(X_, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
             switch (calibration_) {
             case Calibration::off: {
@@ -110,7 +110,7 @@ class FPCA<RegularizationType_, sequential> :
             // store results
             loadings_.col(i) = solver.fn() / solver.fn_norm();
             scores_.col(i) = solver.s() * solver.fn_norm();
-            X_ -= solver.s() * solver.fn().transpose();   // deflation
+            X_ -= solver.s() * solver.fn().transpose();   // deflation step
         }
         return;
     }
@@ -132,10 +132,10 @@ class FPCA<RegularizationType_, sequential> :
         n_folds_ = n_folds;
     }
    private:
-    std::size_t n_pc_ = 3;      // number of principal components
-    Calibration calibration_;   // PC function's smoothing parameter selection strategy
-    std::vector<DVector<double>> lambda_grid_;
+    std::size_t n_pc_ = 3;       // number of principal components
+    Calibration calibration_;    // PC function's smoothing parameter selection strategy
     std::size_t n_folds_ = 10;   // for a kcv calibration strategy, the number of folds
+    std::vector<DVector<double>> lambda_grid_;
     // power iteration parameters
     double tolerance_ = 1e-6;     // relative tolerance between Jnew and Jold, used as stopping criterion
     std::size_t max_iter_ = 20;   // maximum number of allowed iterations
@@ -166,18 +166,13 @@ class FPCA<RegularizationType_, monolithic> :
         Base(space_penalty, time_penalty, s) {};
 
     void init_model() { return; };
-    void solve() {
-        // monolithic approach via Regularized SVD
-	RSVD<This> solver(this);
-	solver.compute(X(), lambda(), n_pc_);
-	loadings_ = Psi() * solver.W();
-	scores_ = solver.H();
-	// normalization
-	for(std::size_t i = 0; i < n_pc_; ++i) {
-	  double fn_norm_ = std::sqrt(solver.W().col(i).dot(R0() * solver.W().col(i)));
-	  loadings_.col(i) /= fn_norm_;
-	  scores_.col(i) *= fn_norm_;
-	}
+    void solve() {   // monolithic approach via Regularized SVD
+        RSVD<This> solver(this);
+        solver.compute(X(), lambda(), n_pc_);
+        // evaluation of L2 normalized fields at data locations
+        loadings_ = Psi() * (solver.W().array().colwise() / solver.w_norm().array()).matrix();
+        scores_ = solver.H();
+        scores_.array().colwise() *= solver.w_norm().array();
         return;
     }
 
