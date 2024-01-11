@@ -97,10 +97,13 @@ class FPCA<RegularizationType_, sequential> :
                                   const DVector<double>& lambda, const core::BinaryVector<Dynamic>& train_set,
                                   const core::BinaryVector<Dynamic>& test_set) -> double {
                     solver.compute(train_set.blk_repeat(1, X_.cols()).select(X_), lambda, f0);   // fit on train set
-                    // reconstruction error on test set: \norm{X_test * (I - fn*fn^\top/J)}_F/n_test
+                    // reconstruction error on test set: \norm{X_test * (I - fn*fn^\top/J)}_F/n_test, with
+                    // J = \norm{f_n}_2^2 + f^\top*P(\lambda)*f (PS: the division of f^\top*P(\lambda)*f by
+                    // \norm{f}_{L^2} is necessary to obtain J as expected)
                     return (test_set.blk_repeat(1, X_.cols()).select(X_) *
                             (DMatrix<double>::Identity(X_.cols(), X_.cols()) -
-                             solver.fn() * solver.fn().transpose() / (solver.fn().squaredNorm() + solver.ftPf(lambda))))
+                             solver.fn() * solver.fn().transpose() /
+                               (solver.fn().squaredNorm() + solver.ftPf(lambda) / solver.f_squaredNorm())))
                              .squaredNorm() /
                            test_set.count() * X_.cols();
                 };
@@ -108,9 +111,9 @@ class FPCA<RegularizationType_, sequential> :
             } break;
             }
             // store results
-            loadings_.col(i) = solver.fn() / solver.fn_norm();
-            scores_.col(i) = solver.s() * solver.fn_norm();
-            X_ -= solver.s() * solver.fn().transpose();   // deflation step
+            loadings_.col(i) = Psi() * solver.f(); // \frac{\Psi * f}{\norm{f}_{L^2}}
+            scores_.col(i) = solver.s() * solver.f_norm();
+            X_ -= scores_.col(i) * loadings_.col(i).transpose();   // deflation step
         }
         return;
     }
@@ -169,10 +172,9 @@ class FPCA<RegularizationType_, monolithic> :
     void solve() {   // monolithic approach via Regularized SVD
         RSVD<This> solver(this);
         solver.compute(X(), lambda(), n_pc_);
-        // evaluation of L2 normalized fields at data locations
-        loadings_ = Psi() * (solver.W().array().colwise() / solver.w_norm().array()).matrix();
-        scores_ = solver.H();
-        scores_.array().colwise() *= solver.w_norm().array();
+        // store results
+        loadings_ = Psi(not_nan()) * solver.W();   // evaluation of L^2 normalized PC functions at data locations
+        scores_ = solver.H().array().rowwise() * solver.w_norm().transpose().array();
         return;
     }
 

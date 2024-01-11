@@ -37,7 +37,7 @@ template <typename Model_> class RSVD {
     // let E*\Sigma*F^\top the reduced (rank r) SVD of X*\Psi*(D^{1})^\top, with D^{-1} the inverse of the cholesky
     // factor of \Psi^\top * \Psi + P(\lambda), then
     DMatrix<double> H_;        // matrix E in the reduced SVD of X*\Psi*(D^{-1})^\top (scores)
-    DMatrix<double> W_;        // \Sigma*F^\top*D^{-1} (field expansion coefficients)
+    DMatrix<double> W_;        // \Sigma*F^\top*D^{-1} (field expansion coefficients, L^2 normalized)
     DVector<double> w_norm_;   // L^2 norm of estimated fields
    public:
     // constructors
@@ -58,7 +58,11 @@ template <typename Model_> class RSVD {
         // store results
         H_ = svd.matrixU().leftCols(r);
         W_ = (svd.singularValues().head(r).asDiagonal() * svd.matrixV().leftCols(r).transpose() * invD).transpose();
-        w_norm_ = (W_.transpose() * m_->R0() * W_).array().sqrt();   // L2 norm of estimated fields
+        w_norm_.resize(r);
+        for (std::size_t i = 0; i < r; ++i) {
+            w_norm_[i] = std::sqrt(W_.col(i).dot(m_->R0() * W_.col(i)));   // L2 norm of estimated field
+            W_.col(i) = W_.col(i) / w_norm_[i];
+        }
         return;
     }
 

@@ -46,11 +46,10 @@ template <typename Model_> class PowerIteration {
     int seed_;
 
     DVector<double> s_;    // estimated score vector
-    DVector<double> fn_;   // field evaluation at data location (\Psi*f)
+    DVector<double> fn_;   // field evaluation at data location \frac{\Psi*f}{\norm{f}_{L^2}}
     DVector<double> f_;    // field basis expansion at convergence
     DVector<double> g_;    // PDE misfit at convergence
     double f_norm_;        // L^2 norm of estimated field at converegence
-    double fn_norm_;       // euclidean norm of field evaluation at data locations
    public:
     // constructors
     PowerIteration() = default;
@@ -105,29 +104,22 @@ template <typename Model_> class PowerIteration {
             Jnew = (X - s_ * fn_.transpose()).squaredNorm() + solver_.ftPf(lambda);
         }
         // store results
-        f_ = solver_.f();                                 // estimated field at convergence
-        g_ = solver_.g();                                 // PDE misfit at convergence
-        f_norm_ = std::sqrt(f_.dot(solver_.R0() * f_));   // L^2 norm of estimated field
-        //fn_norm_ = fn_.norm();                            // euclidean norm of estimated field at data locations
-
-	// TOOD: check this, should we always return the euclidean norm of the field evalutation?
-	if (m_->sampling() == Sampling::mesh_nodes)
-            fn_norm_ = f_norm_;
-        else
-            fn_norm_ = fn_.norm();
-	
-	return;
+        f_norm_ = std::sqrt(solver_.f().dot(solver_.R0() * solver_.f()));   // L^2 norm of estimated field
+        f_ = solver_.f() / f_norm_;                                         // estimated field (L^2 normalized)
+        g_ = solver_.g();                                                   // PDE misfit at convergence
+        fn_ = solver_.Psi(not_nan()) * f_;   // evaluation of (L^2 unitary norm) estimated field at data locations
+        return;
     }
 
     // getters
-    const DVector<double>& f() const { return f_; }
+    const DVector<double>& f() const { return f_; }   // loadings vector
+    const DVector<double>& s() const { return s_; }   // scores vector
     const DVector<double>& g() const { return g_; }
-    const DVector<double>& s() const { return s_; }     // scores vector
-    const DVector<double>& fn() const { return fn_; }   // loadings vector
-    double ftPf(const DVector<double>& lambda) const { return solver_.ftPf(lambda); }
+    const DVector<double>& fn() const { return fn_; }   
+    double ftPf(const DVector<double>& lambda) const { return solver_.ftPf(lambda); }   // block f^\top*P(\lambda)*f
     std::size_t n_iter() const { return k_; }
     double f_norm() const { return f_norm_; }
-    double fn_norm() const { return fn_norm_; }
+    inline double f_squaredNorm() const { return std::pow(f_norm_, 2); }
     double gcv() { return gcv_.eval(); }   // GCV index at convergence
     // setters
     void set_tolerance(double tolerance) { tolerance_ = tolerance; }
