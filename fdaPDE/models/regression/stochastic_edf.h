@@ -47,14 +47,13 @@ class StochasticEDF {
   
     // evaluate trace of S exploiting a monte carlo approximation
     double compute() {
-        std::size_t n = model_.Psi().cols();   // number of basis functions
         if (!init_) {
             // compute sample from Rademacher distribution
             std::mt19937 rng(seed_);
             std::bernoulli_distribution Be(0.5);   // bernulli distribution with parameter p = 0.5
-            Us_.resize(model_.n_obs(), r_);        // preallocate memory for matrix Us
+            Us_.resize(model_.n_locs(), r_);        // preallocate memory for matrix Us
             // fill matrix
-            for (std::size_t i = 0; i < model_.n_obs(); ++i) {
+            for (std::size_t i = 0; i < model_.n_locs(); ++i) {
                 for (std::size_t j = 0; j < r_; ++j) {
                     if (Be(rng))
                         Us_(i, j) = 1.0;
@@ -67,6 +66,7 @@ class StochasticEDF {
             init_ = true;   // never reinitialize again
         }
         // prepare matrix Bs_
+        std::size_t n = model_.n_basis();
         Bs_ = DMatrix<double>::Zero(2 * n, r_);
         if (!model_.has_covariates())   // non-parametric model
             Bs_.topRows(n) = -model_.PsiTD() * model_.W() * Us_;
