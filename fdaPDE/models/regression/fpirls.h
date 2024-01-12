@@ -81,6 +81,7 @@ template <typename Model_> class FPIRLS {
         double J_old = tolerance_ + 1, J_new = 0;
 	k_ = 0;
         while (k_ < max_iter_ && std::abs(J_new - J_old) > tolerance_) {
+            std::cout << "k fpirls = " << k_ << std::endl; 
             m_->fpirls_compute_step();   // model specific computation of py_ and pW_
             // solve weighted least square problem
             // \argmin_{\beta, f} [ \norm(W^{1/2}(y - X\beta - f_n))^2 + \lambda \int_D (Lf - u)^2 ]
