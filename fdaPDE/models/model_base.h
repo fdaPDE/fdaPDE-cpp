@@ -33,20 +33,13 @@ template <typename Model> class ModelBase {
     ModelBase() = default;
     // full model stack initialization
     void init() {
-        std::cout << "model_base.h init pt1" << std::endl;
-        if (model().runtime().query(runtime_status::require_penalty_init)) { model().init_regularization(); }    
-        std::cout << "model_base.h init pt2" << std::endl;    
+        if (model().runtime().query(runtime_status::require_penalty_init)) { model().init_regularization(); }      
         if (model().runtime().query(runtime_status::require_functional_basis_evaluation)) {
             model().init_sampling(true);   // init \Psi matrix, always force recomputation
-            std::cout << "model_base.h init pt3" << std::endl;
             model().init_nan();            // analyze and set missingness pattern
-            std::cout << "model_base.h init model().nan_idxs().size = " << model().nan_idxs().size() << std::endl;
         }        
-        std::cout << "model_base.h init pt4" << std::endl;
         model().init_data();    // specific data-dependent initialization requested by the model
-        std::cout << "model_base.h init pt5" << std::endl;
         model().init_model();   // model initialization
-        std::cout << "model_base.h init pt6" << std::endl;
     }
   
     // setters

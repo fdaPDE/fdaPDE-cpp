@@ -95,19 +95,14 @@ class STRPDE<SpaceTimeSeparable, monolithic> :
         }
     }
     void solve() {   // finds a solution to the smoothing problem
-        std::cout << "strpde.h solve pt1" << std::endl;
         BLOCK_FRAME_SANITY_CHECKS;
-        std::cout << "strpde.h solve pt2" << std::endl;
         DVector<double> sol;             // room for problem' solution
         if (!Base::has_covariates()) {   // nonparametric case
             // update rhs of STR-PDE linear system
             b_.block(0, 0, A_.rows() / 2, 1) = -PsiTD() * W() * y();
-            std::cout << "strpde.h solve pt3" << std::endl;
             // solve linear system A_*x = b_
             sol = invA_.solve(b_);
-            std::cout << "strpde.h solve pt4" << std::endl;
             f_ = sol.head(A_.rows() / 2);
-            std::cout << "strpde.h solve pt5" << std::endl;
         } else {   // parametric case
             // update rhs of STR-PDE linear system
             b_.block(0, 0, A_.rows() / 2, 1) = -PsiTD() * lmbQ(y());   // -\Psi^T*D*Q*z
