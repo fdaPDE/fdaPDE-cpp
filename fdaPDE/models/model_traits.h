@@ -41,24 +41,29 @@ template <typename T> struct is_stat_model {
     static constexpr bool value = fdapde::is_base_of_template<ModelBase, T>::value;
 };
 
+// space-only regularization trait
 template <typename Model> struct is_space_only {
-    using ModelType = typename std::decay<Model>::type;
-    static constexpr bool value =
-      std::is_same<typename ModelType::RegularizationType, SpaceOnly>::value;
+    static constexpr bool value = std::is_same<typename std::decay<Model>::type::RegularizationType, SpaceOnly>::value;
 };
+// traits for space-time regularizations
 template <typename Model> struct is_space_time {
     static constexpr bool value = !is_space_only<Model>::value;
 };
-// specific traits for space-time regularizations
-template <typename Model> struct is_space_time_separable {   // separable regularization
-    using ModelType = typename std::decay<Model>::type;
+template <typename Model> struct is_space_time_separable {
     static constexpr bool value =
-      std::is_same<typename ModelType::RegularizationType, SpaceTimeSeparable>::value;
+      std::is_same<typename std::decay<Model>::type::RegularizationType, SpaceTimeSeparable>::value;
 };
-template <typename Model> struct is_space_time_parabolic {   // parabolic regularization
-    using ModelType = typename std::decay<Model>::type;
+template <typename Model> struct is_space_time_parabolic {
     static constexpr bool value =
-      std::is_same<typename ModelType::RegularizationType, SpaceTimeParabolic>::value;
+      std::is_same<typename std::decay<Model>::type::RegularizationType, SpaceTimeParabolic>::value;
+};
+  
+template <typename Model_> struct has_single_penalty {
+    using Model = typename std::decay<Model_>::type;
+    static constexpr bool value = (is_space_only<Model>::value || is_space_time_parabolic<Model>::value);
+};
+template <typename Model_> struct has_double_penalty {
+    static constexpr bool value = is_space_time_separable<typename std::decay<Model_>::type>::value;
 };
 
 // selects the regularization base depending on the Model regularization type

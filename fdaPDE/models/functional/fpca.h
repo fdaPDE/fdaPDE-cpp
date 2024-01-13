@@ -46,8 +46,10 @@ class FPCA<RegularizationType_, sequential> :
     using This = FPCA<RegularizationType, sequential>;
     using Base = FunctionalBase<This, RegularizationType>;
     IMPORT_MODEL_SYMBOLS;
-    using Base::lambda;
-    using Base::X;
+    using Base::lambda;         // vector of smoothing parameters
+    using Base::n_basis;        // number of basis functions
+    using Base::n_stat_units;   // number of statistical units
+    using Base::X;              // n_stat_units \times n_locs data matrix
 
     // constructors
     FPCA() = default;
@@ -59,8 +61,10 @@ class FPCA<RegularizationType_, sequential> :
 
     void init_model() { return; };
     void solve() {
-        loadings_.resize(X().cols(), n_pc_);
-        scores_.resize(X().rows(), n_pc_);
+        // preallocate space
+        loadings_.resize(n_basis(), n_pc_);
+        fitted_loadings_.resize(n_locs(), n_pc_);
+        scores_.resize(n_stat_units(), n_pc_);
         DMatrix<double> X_ = X();   // copy original data to avoid side effects
 
         // first guess of PCs set to a multivariate PCA (SVD)
@@ -111,14 +115,16 @@ class FPCA<RegularizationType_, sequential> :
             } break;
             }
             // store results
-            loadings_.col(i) = Psi() * solver.f(); // \frac{\Psi * f}{\norm{f}_{L^2}}
+            loadings_.col(i) = solver.f();
+            fitted_loadings_.col(i) = solver.fn();   // \frac{\Psi * f}{\norm{f}_{L^2}}
             scores_.col(i) = solver.s() * solver.f_norm();
-            X_ -= scores_.col(i) * loadings_.col(i).transpose();   // deflation step
+            X_ -= scores_.col(i) * fitted_loadings_.col(i).transpose();   // X <- X - s*f_n^\top (deflation step)
         }
         return;
     }
 
     // getters
+    const DMatrix<double>& fitted_loadings() const { return fitted_loadings_; }
     const DMatrix<double>& loadings() const { return loadings_; }
     const DMatrix<double>& scores() const { return scores_; }
     // setters
@@ -145,7 +151,8 @@ class FPCA<RegularizationType_, sequential> :
     int seed_ = fdapde::random_seed;
 
     // problem solution
-    DMatrix<double> loadings_;   // evaluation of the PC functions at data locations
+    DMatrix<double> loadings_;          // PC functions' expansion coefficients
+    DMatrix<double> fitted_loadings_;   // evaluation of the PC functions at data locations
     DMatrix<double> scores_;
 };
 
@@ -173,19 +180,22 @@ class FPCA<RegularizationType_, monolithic> :
         RSVD<This> solver(this);
         solver.compute(X(), lambda(), n_pc_);
         // store results
-        loadings_ = Psi(not_nan()) * solver.W();   // evaluation of L^2 normalized PC functions at data locations
+	loadings_ = solver.W();
+        fitted_loadings_ = Psi(not_nan()) * solver.W();   // evaluation of L^2 normalized PC functions at data locations
         scores_ = solver.H().array().rowwise() * solver.w_norm().transpose().array();
         return;
     }
 
     // getters
+    const DMatrix<double>& fitted_loadings() const { return fitted_loadings_; }
     const DMatrix<double>& loadings() const { return loadings_; }
     const DMatrix<double>& scores() const { return scores_; }
     void set_npc(std::size_t n_pc) { n_pc_ = n_pc; }
    private:
     std::size_t n_pc_ = 3;   // number of principal components
     // problem solution
-    DMatrix<double> loadings_;   // evaluation of the PC functions at data locations
+    DMatrix<double> loadings_;          // PC functions' expansion coefficients
+    DMatrix<double> fitted_loadings_;   // evaluation of the PC functions at data locations
     DMatrix<double> scores_;
 };
 

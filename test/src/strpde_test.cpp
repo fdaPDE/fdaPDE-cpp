@@ -25,9 +25,7 @@ using fdapde::core::FEM;
 using fdapde::core::SPLINE;
 using fdapde::core::bilaplacian;
 using fdapde::core::laplacian;
-using fdapde::core::MatrixDataWrapper;
 using fdapde::core::PDE;
-using fdapde::core::VectorDataWrapper;
 using fdapde::core::Mesh;
 using fdapde::core::spline_order;
 
@@ -137,8 +135,8 @@ TEST(strpde_test, laplacian_semiparametric_samplingatlocations_separable_monolit
 TEST(strpde_test, noncostantcoefficientspde_nonparametric_samplingareal_parabolic_monolithic) {
     // define temporal domain
     DVector<double> time_mesh;
-    time_mesh.resize(11);
-    for (std::size_t i = 0; i < 10; ++i) time_mesh[i] = 0.4 * i;
+    time_mesh.resize(10);
+    for (std::size_t i = 0; i < time_mesh.size(); ++i) time_mesh[i] = 0.4 * i;
     // define spatial domain
     MeshLoader<Mesh2D> domain("quasi_circle");
     // import data from files
@@ -146,17 +144,18 @@ TEST(strpde_test, noncostantcoefficientspde_nonparametric_samplingareal_paraboli
     DMatrix<double, Eigen::RowMajor> b_data  = read_csv<double>("../data/models/strpde/2D_test3/b.csv");
     DMatrix<double> subdomains = read_csv<double>("../data/models/strpde/2D_test3/incidence_matrix.csv");
     DMatrix<double> y  = read_csv<double>("../data/models/strpde/2D_test3/y.csv" );
-    DMatrix<double> IC = read_csv<double>("../data/models/strpde/2D_test3/IC.csv");
+    DMatrix<double> IC = read_csv<double>("../data/models/strpde/2D_test3/IC.csv");   // initial condition
     // define regularizing PDE
-    MatrixDataWrapper<2, 2, 2> K(K_data);
-    VectorDataWrapper<2, 2> b(b_data);
+    DiscretizedMatrixField<2, 2, 2> K(K_data);
+    DiscretizedVectorField<2, 2> b(b_data);
     auto L = dt<FEM>() - diffusion<FEM>(K) + advection<FEM>(b);
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, time_mesh.rows());
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> pde(domain.mesh, time_mesh, L, u);
+    pde.set_initial_condition(IC);
     // define model
     double lambda_D = std::pow(0.1, 6);
     double lambda_T = std::pow(0.1, 6);
-    STRPDE<SpaceTimeParabolic, fdapde::monolithic> model(problem, Sampling::areal, time_mesh);
+    STRPDE<SpaceTimeParabolic, fdapde::monolithic> model(pde, Sampling::areal);
     model.set_lambda_D(lambda_D);
     model.set_lambda_T(lambda_T);
     model.set_spatial_locations(subdomains);
@@ -164,7 +163,6 @@ TEST(strpde_test, noncostantcoefficientspde_nonparametric_samplingareal_paraboli
     BlockFrame<double, int> df;
     df.stack(OBSERVATIONS_BLK, y);
     model.set_data(df);
-    model.set_initial_condition(IC);
     // solve smoothing problem
     model.init();
     model.solve();
@@ -183,29 +181,29 @@ TEST(strpde_test, noncostantcoefficientspde_nonparametric_samplingareal_paraboli
 TEST(strpde_test, laplacian_nonparametric_samplingatnodes_parabolic_iterative) {
     // define temporal domain
     DVector<double> time_mesh;
-    time_mesh.resize(11);
-    std::size_t i = 0;
-    for (double x = 0; x <= 2; x += 0.2, ++i) time_mesh[i] = x;
+    time_mesh.resize(10);
+    double x = 0;
+    for (std::size_t i = 0; i < time_mesh.size(); x += 0.2, ++i) time_mesh[i] = x;
     // define spatial domain
     MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files
-    DMatrix<double> y  = read_csv<double>("../data/models/strpde/2D_test4/y.csv" );    
+    DMatrix<double> y  = read_mtx<double>("../data/models/strpde/2D_test4/y.mtx" );    
     DMatrix<double> IC = read_mtx<double>("../data/models/strpde/2D_test4/IC.mtx");
     // define regularizing PDE
     auto L = dt<FEM>() - laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, time_mesh.rows());
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> pde(domain.mesh, time_mesh, L, u);
+    pde.set_initial_condition(IC);
     // define model
     double lambda_D = 1;
     double lambda_T = 1;
-    STRPDE<SpaceTimeParabolic, fdapde::iterative> model(problem, Sampling::mesh_nodes, time_mesh);
+    STRPDE<SpaceTimeParabolic, fdapde::iterative> model(pde, Sampling::mesh_nodes);
     model.set_lambda_D(lambda_D);
     model.set_lambda_T(lambda_T);
     // set model's data
     BlockFrame<double, int> df;
     df.stack(OBSERVATIONS_BLK, y);
     model.set_data(df);
-    model.set_initial_condition(IC);
     // set parameters for iterative method
     model.set_tolerance(1e-4);
     model.set_max_iter(50);

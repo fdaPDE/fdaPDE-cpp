@@ -24,9 +24,7 @@ using fdapde::core::fem_order;
 using fdapde::core::FEM;
 using fdapde::core::Grid;
 using fdapde::core::laplacian;
-using fdapde::core::MatrixDataWrapper;
 using fdapde::core::PDE;
-using fdapde::core::VectorDataWrapper;
 
 #include "../../fdaPDE/models/regression/qsrpde.h"
 #include "../../fdaPDE/models/regression/gcv.h"

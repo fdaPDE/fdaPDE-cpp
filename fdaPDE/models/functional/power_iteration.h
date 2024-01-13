@@ -61,18 +61,11 @@ template <typename Model_> class PowerIteration {
 
     // initializes internal smoothing solver
     void init() {
-        // define internal problem solver
-        if constexpr (!is_space_time<Model>::value)   // space-only
+        if constexpr (is_space_only<Model>::value) {   // space-only solver
             solver_ = SolverType(m_->pde(), m_->sampling());
-        else {   // space-time
-            if constexpr (is_space_time_parabolic<Model>::value) {
-                solver_ = SolverType(m_->pde(), m_->sampling(), m_->time_domain());
-                solver_.set_initial_condition(m_->s(), false);
-            }
-            if constexpr (is_space_time_separable<Model>::value) {
-                solver_ = SolverType(m_->pde(), m_->time_pde(), m_->sampling());
-                solver_.set_temporal_locations(m_->time_locs());
-            }
+        } else {   // space-time separable solver
+            solver_ = SolverType(m_->pde(), m_->time_pde(), m_->sampling());
+            solver_.set_temporal_locations(m_->time_locs());
         }
         solver_.set_spatial_locations(m_->locs());
         // initialize GCV functor

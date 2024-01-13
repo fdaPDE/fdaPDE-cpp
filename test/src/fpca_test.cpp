@@ -69,8 +69,8 @@ TEST(fpca_test, laplacian_samplingatnodes_sequential) {
     model.init();
     model.solve();
     // test correctness
-    EXPECT_TRUE(almost_equal(model.loadings(), "../data/models/fpca/2D_test1/loadings_seq.mtx"));
-    EXPECT_TRUE(almost_equal(model.scores(),   "../data/models/fpca/2D_test1/scores_seq.mtx"));
+    EXPECT_TRUE(almost_equal(model.fitted_loadings(), "../data/models/fpca/2D_test1/loadings_seq.mtx"));
+    EXPECT_TRUE(almost_equal(model.scores(),          "../data/models/fpca/2D_test1/scores_seq.mtx"  ));
 }
 
 // test 2
@@ -102,8 +102,8 @@ TEST(fpca_test, laplacian_samplingatnodes_monolithic) {
     model.init();
     model.solve();
     // test correctness
-    EXPECT_TRUE(almost_equal(model.loadings(), "../data/models/fpca/2D_test1/loadings_mon.mtx"));
-    EXPECT_TRUE(almost_equal(model.scores(),   "../data/models/fpca/2D_test1/scores_mon.mtx"));
+    EXPECT_TRUE(almost_equal(model.fitted_loadings(), "../data/models/fpca/2D_test1/loadings_mon.mtx"));
+    EXPECT_TRUE(almost_equal(model.scores(),          "../data/models/fpca/2D_test1/scores_mon.mtx"  ));
 }
 
 // test 3
@@ -140,8 +140,8 @@ TEST(fpca_test, laplacian_samplingatlocations_sequential_gcv) {
     model.init();
     model.solve();
     // test correctness
-    EXPECT_TRUE(almost_equal(model.loadings(), "../data/models/fpca/2D_test2/loadings.mtx"));
-    EXPECT_TRUE(almost_equal(model.scores(),   "../data/models/fpca/2D_test2/scores.mtx"  ));
+    EXPECT_TRUE(almost_equal(model.fitted_loadings(), "../data/models/fpca/2D_test2/loadings.mtx"));
+    EXPECT_TRUE(almost_equal(model.scores(),          "../data/models/fpca/2D_test2/scores.mtx"  ));
 }
 
 // test 4
@@ -179,8 +179,8 @@ TEST(fpca_test, laplacian_samplingatlocations_sequential_kcv) {
     model.init();
     model.solve();    
     // test correctness
-    EXPECT_TRUE(almost_equal(model.loadings(), "../data/models/fpca/2D_test3/loadings.mtx"));
-    EXPECT_TRUE(almost_equal(model.scores(),   "../data/models/fpca/2D_test3/scores.mtx"  ));
+    EXPECT_TRUE(almost_equal(model.fitted_loadings(), "../data/models/fpca/2D_test3/loadings.mtx"));
+    EXPECT_TRUE(almost_equal(model.scores(),          "../data/models/fpca/2D_test3/scores.mtx"  ));
 }
 
 /*
@@ -212,7 +212,7 @@ TEST(fpca_test, laplacian_samplingatnodes_nocalibration_missingdata) {
     model.init();
     model.solve();
     // test correctness
-    EXPECT_TRUE(almost_equal(model.loadings(), "../data/models/fpca/2D_test4/loadings.mtx"));
+    EXPECT_TRUE(almost_equal(model.fitted_loadings(), "../data/models/fpca/2D_test4/loadings.mtx"));
     EXPECT_TRUE(almost_equal(model.scores(),   "../data/models/fpca/2D_test4/scores.mtx"  ));
 }
 */

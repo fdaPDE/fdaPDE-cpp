@@ -51,7 +51,7 @@ class StochasticEDF {
             // compute sample from Rademacher distribution
             std::mt19937 rng(seed_);
             std::bernoulli_distribution Be(0.5);   // bernulli distribution with parameter p = 0.5
-            Us_.resize(model_.n_locs(), r_);        // preallocate memory for matrix Us
+            Us_.resize(model_.n_locs(), r_);       // preallocate memory for matrix Us
             // fill matrix
             for (std::size_t i = 0; i < model_.n_locs(); ++i) {
                 for (std::size_t j = 0; j < r_; ++j) {

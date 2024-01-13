@@ -41,18 +41,15 @@ class FunctionalBase : public select_regularization_base<Model, RegularizationTy
     using SamplingBase<Model>::PsiTD;   // block \Psi^T*D
 
     FunctionalBase() = default;
-    // space-only constructor
-    fdapde_enable_constructor_if(is_space_only, Model) FunctionalBase(const pde_ptr& pde, Sampling s) :
+      // space-only and space-time parabolic constructor (they require only one PDE)
+    fdapde_enable_constructor_if(has_single_penalty, Model) FunctionalBase(const pde_ptr& pde, Sampling s) :
         Base(pde), SamplingBase<Model>(s) {};
-    // space-time constructors
-    fdapde_enable_constructor_if(is_space_time_separable, Model)
+    // space-time separable constructor
+    fdapde_enable_constructor_if(has_double_penalty, Model)
       FunctionalBase(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s) :
         Base(space_penalty, time_penalty), SamplingBase<Model>(s) {};
-    fdapde_enable_constructor_if(is_space_time_parabolic, Model)
-      FunctionalBase(const pde_ptr& pde, Sampling s, const DVector<double>& time) :
-        Base(pde, time), SamplingBase<Model>(s) {};
 
-    // getters
+  // getters
     const DMatrix<double>& X() const { return df_.template get<double>(OBSERVATIONS_BLK); }   // observation matrix X
     std::size_t n_stat_units() const { return X().rows(); }
     std::size_t n_obs() const { return X().size(); };

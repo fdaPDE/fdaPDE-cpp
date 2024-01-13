@@ -70,16 +70,13 @@ class RegressionBase :
     using Base::model;
 
     RegressionBase() = default;
-    // space-only constructor
-    fdapde_enable_constructor_if(is_space_only, Model) RegressionBase(const pde_ptr& pde, Sampling s) :
+    // space-only and space-time parabolic constructor (they require only one PDE)
+    fdapde_enable_constructor_if(has_single_penalty, Model) RegressionBase(const pde_ptr& pde, Sampling s) :
         Base(pde), SamplingBase<Model>(s) {};
-    // space-time constructors
-    fdapde_enable_constructor_if(is_space_time_separable, Model)
+    // space-time separable constructor
+    fdapde_enable_constructor_if(has_double_penalty, Model)
       RegressionBase(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s) :
         Base(space_penalty, time_penalty), SamplingBase<Model>(s) {};
-    fdapde_enable_constructor_if(is_space_time_parabolic, Model)
-      RegressionBase(const pde_ptr& pde, Sampling s, const DVector<double>& time) :
-        Base(pde, time), SamplingBase<Model>(s) {};
 
     // getters
     const DMatrix<double>& y() const { return df_.template get<double>(OBSERVATIONS_BLK); }   // observation vector y
