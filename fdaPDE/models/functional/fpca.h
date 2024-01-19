@@ -68,27 +68,21 @@ class FPCA<RegularizationType_, sequential> :
         DMatrix<double> X_ = X();   // copy original data to avoid side effects
 
         // first guess of PCs set to a multivariate PCA (SVD)
-        // Eigen::JacobiSVD<DMatrix<double>> svd(X_, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        Eigen::JacobiSVD<DMatrix<double>> svd(X_, Eigen::ComputeThinU | Eigen::ComputeThinV);
         PowerIteration<This> solver(this, tolerance_, max_iter_);   // power iteration solver
         solver.set_seed(seed_);
         solver.init();
 
         // sequential extraction of principal components
         for (std::size_t i = 0; i < n_pc_; i++) {
-            // TODO: place the SVD outside the loop, for a non-fixed \lambda calibration, makes the algorithm converge
-            // to a different solution (selects a different \lambda). must check if the difference is significant
-	  Eigen::JacobiSVD<DMatrix<double>> svd(X_, Eigen::ComputeThinU | Eigen::ComputeThinV);
-
+            DVector<double> f0 = svd.matrixV().col(i);
             switch (calibration_) {
             case Calibration::off: {
                 // find vectors s,f minimizing \norm_F{Y - s^T*f}^2 + (s^T*s)*P(f) fixed \lambda
-                solver.compute(X_, lambda(), svd.matrixV().col(0));
-                // solver.compute(X_, lambda(), svd.matrixV().col(i));
+                solver.compute(X_, lambda(), f0);
             } break;
             case Calibration::gcv: {
                 // select \lambda minimizing the GCV index
-                // DVector<double> f0 = svd.matrixV().col(i);
-                DVector<double> f0 = svd.matrixV().col(0);
                 ScalarField<Dynamic> gcv([&solver, &X_, &f0](const DVector<double>& lambda) -> double {
                     solver.compute(X_, lambda, f0);
                     return solver.gcv();   // return GCV index at convergence
@@ -96,7 +90,6 @@ class FPCA<RegularizationType_, sequential> :
                 solver.compute(X_, core::Grid<Dynamic> {}.optimize(gcv, lambda_grid_), f0);
             } break;
             case Calibration::kcv: {
-                DVector<double> f0 = svd.matrixV().col(0);
                 auto cv_score = [&solver, &X_, &f0, this](
                                   const DVector<double>& lambda, const core::BinaryVector<Dynamic>& train_set,
                                   const core::BinaryVector<Dynamic>& test_set) -> double {
