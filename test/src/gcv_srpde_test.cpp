@@ -117,6 +117,10 @@ TEST(gcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridstoch
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test2/edfs.mtx"));
     EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test2/gcvs.mtx"));
+    // check consistency with GCV calibrator
+    DVector<double> opt_lambda =
+      fdapde::calibration::GCV {Grid<fdapde::Dynamic> {}, StochasticEDF(100, seed)}.fit(model, lambdas);
+    EXPECT_TRUE(opt_lambda == opt.optimum());
 }
 
 // test 3

@@ -36,7 +36,7 @@ class StochasticEDF {
     DMatrix<double> Us_;    // sample from Rademacher distribution
     DMatrix<double> Bs_;    // \Psi^T*Q*Us_
     DMatrix<double> Y_;     // Us_^T*\Psi
-    int seed_;
+    int seed_ = fdapde::random_seed;
     bool init_ = false;
    public:
     // constructor
@@ -83,7 +83,6 @@ class StochasticEDF {
         // compute approximated Tr[S] using monte carlo mean
         double MCmean = 0;
         for (std::size_t i = 0; i < r_; ++i) MCmean += Y_.row(i).dot(sol.col(i).head(n));
-
         return MCmean / r_;
     }
     // setter

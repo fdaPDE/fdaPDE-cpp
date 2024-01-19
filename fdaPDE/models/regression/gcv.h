@@ -34,7 +34,7 @@ namespace fdapde {
 namespace models {
 
 // type-erased wrapper for Tr[S] computation strategies
-struct I_EDFStrategy {
+struct EDFStrategy__ {
     template <typename M> using fn_ptrs = fdapde::mem_fn_ptrs<&M::compute, &M::set_model>;
     // forwardings
     decltype(auto) compute() { return fdapde::invoke<double, 0>(*this); }
@@ -42,7 +42,7 @@ struct I_EDFStrategy {
         fdapde::invoke<void, 1>(*this, model);
     }
 };
-using EDFStrategy = fdapde::erase<fdapde::heap_storage, I_EDFStrategy>;
+using EDFStrategy = fdapde::erase<fdapde::heap_storage, EDFStrategy__>;
   
 // base functor implementing the expression of the GCV index for model M (type-erased).
 class GCV {
@@ -50,6 +50,7 @@ class GCV {
     using This = GCV;
     using VectorType = DVector<double>;
     using MatrixType = DMatrix<double>;
+    static constexpr int DomainDimension = fdapde::Dynamic;
     RegressionView<void> model_;    // model to calibrate
     EDFStrategy trS_;               // strategy used to evaluate the trace of smoothing matrix S
     std::vector<double> edfs_;      // equivalent degrees of freedom q + Tr[S]
@@ -90,7 +91,7 @@ class GCV {
     };
     template <typename ModelType_> GCV(const ModelType_& model) : GCV(model, StochasticEDF()) { }
     GCV(const GCV& other) : model_(other.model_), trS_(other.trS_), gcv_(this, &This::gcv_impl) {};
-    GCV() = default;
+    GCV() : gcv_(this, &This::gcv_impl) { }
 
     // call operator and numerical derivative approximations
     double operator()(const VectorType& lambda) { return gcv_(lambda); }
@@ -109,9 +110,13 @@ class GCV {
     // set edf_evaluation strategy
     template <typename EDFStrategy_> void set_edf_strategy(EDFStrategy_&& trS) {
         trS_ = trS;
-        trS_.set_model(model_);
-	// clear previous status
+	if(model_) trS_.set_model(model_);
 	edfs_.clear(); gcvs_.clear(); cache_.clear();
+    }
+    template <typename ModelType_> void set_model(ModelType_&& model) {
+        model_ = model;
+	if(trS_) trS_.set_model(model_);
+        edfs_.clear(); gcvs_.clear(); cache_.clear();
     }
     void set_step(double step) { gcv_.set_step(step); }
 
@@ -250,6 +255,30 @@ template <typename M> class ExactGCV<M, SpaceOnly> : public GCV<ExactEDF> {
 */
 
 }   // namespace models
+namespace calibration {
+
+// GCV calibrator (fulfills the calibration strategy concept)
+class GCV {
+   private:
+    models::GCV gcv_ {};
+    core::Optimizer<models::GCV> opt_ {};
+   public:
+    // constructor
+    template <typename Optimizer_, typename EDFStrategy_> GCV(Optimizer_&& opt, EDFStrategy_&& edf) : opt_(opt) {
+        gcv_.set_edf_strategy(edf);
+    }
+    // selects best smoothing parameter of regression model by minimization of GCV index
+    template <typename ModelType_, typename LambdaType_>
+    DVector<double> fit(ModelType_& model, const LambdaType_& lambda) {
+        gcv_.set_model(model);
+        return opt_.optimize(gcv_, lambda);
+    }
+    const std::vector<double>& edfs() const { return gcv_.edfs(); }   // equivalent degrees of freedom q + Tr[S]
+    const std::vector<double>& gcvs() const { return gcv_.gcvs(); }   // computed values of GCV index
+    void set_step(double step) { gcv_.set_step(step); }
+};
+
+}   // namespace calibration
 }   // namespace fdapde
 
 #endif   // __GCV_H__
