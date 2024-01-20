@@ -47,19 +47,14 @@ class StochasticEDF {
     // evaluate trace of S exploiting a monte carlo approximation
     double compute() {
         std::size_t n = model_.Psi().cols();   // number of basis functions
-        std::cout << "stochasticEDF.h solve pt1" << std::endl;
         if (!init_) {
             // compute sample from Rademacher distribution
             std::mt19937 rng(seed_);
             std::bernoulli_distribution Be(0.5);   // bernulli distribution with parameter p = 0.5
-            std::cout << "stochasticEDF.h solve pt2" << std::endl;
-            std::cout << "n = " << model_.n_obs() << std::endl;
-            std::cout << "n nan = " << model_.nan_idxs().size() << std::endl;
 
              Us_.resize(model_.Psi().rows(), r_);        // preallocate memory for matrix Us    
             // Us_.resize(model_.n_obs(), r_);        // preallocate memory for matrix Us         
             // + model_.nan_idxs().size()
-            std::cout << "stochasticEDF.h solve pt3" << std::endl;
             // fill matrix
             // for (std::size_t i = 0; i < model_.n_obs(); ++i) {
             for (std::size_t i = 0; i < model_.Psi().rows(); ++i) {    // M 
@@ -70,21 +65,16 @@ class StochasticEDF {
                         Us_(i, j) = -1.0;
                 }
             }
-            std::cout << "stochasticEDF.h solve pt4" << std::endl;
             // prepare matrix Y
             Y_ = Us_.transpose() * model_.Psi();
-            std::cout << "stochasticEDF.h solve pt5" << std::endl;
             init_ = true;   // never reinitialize again
         }
         // prepare matrix Bs_
         Bs_ = DMatrix<double>::Zero(2 * n, r_);
-        std::cout << "stochasticEDF.h solve pt6" << std::endl;
         if (!model_.has_covariates())   // non-parametric model
             Bs_.topRows(n) = -model_.PsiTD() * model_.W() * Us_;
         else   // semi-parametric model
-            Bs_.topRows(n) = -model_.PsiTD() * model_.lmbQ(Us_);
-
-        std::cout << "stochasticEDF.h solve pt7" << std::endl;    
+            Bs_.topRows(n) = -model_.PsiTD() * model_.lmbQ(Us_);  
 
         DMatrix<double> sol;              // room for problem solution
         if (!model_.has_covariates()) {   // nonparametric case
@@ -93,11 +83,9 @@ class StochasticEDF {
             // solve system (A+UCV)*x = Bs via woodbury decomposition using matrices U and V cached by model_
             sol = SMW<>().solve(model_.invA(), model_.U(), model_.XtWX(), model_.V(), Bs_);
         }
-        std::cout << "stochasticEDF.h solve pt8" << std::endl;
         // compute approximated Tr[S] using monte carlo mean
         double MCmean = 0;
         for (std::size_t i = 0; i < r_; ++i) MCmean += Y_.row(i).dot(sol.col(i).head(n));
-        std::cout << "stochasticEDF.h solve pt9" << std::endl;
 
         return MCmean / r_;
     }

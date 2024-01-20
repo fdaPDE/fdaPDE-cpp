@@ -67,15 +67,10 @@ class GCV {
         // fit the model given current lambda
         model_.set_lambda(lambda);
         model_.init();
-        std::cout << "gcv.h gcv_impl() nan size = " << model_.nan_idxs().size() << std::endl;
-        std::cout << "gcv.h gcv_impl() n = " << model_.n_obs() << std::endl;
         model_.solve();
         // compute equivalent degrees of freedom given current lambda (if not already cached)
-        std::cout << "gcv.h gcv_impl() pt1" << std::endl;
         if (cache_.find(lambda) == cache_.end()) { cache_[lambda] = trS_.compute(); }
-        std::cout << "gcv.h gcv_impl() pt2" << std::endl;
         double trS = cache_[lambda];
-        std::cout << "gcv.h gcv_impl() pt3" << std::endl;
         double q = model_.q();            // number of covariates
         std::size_t n = model_.n_obs();   // number of observations
         double dor = n - (q + trS);       // residual degrees of freedom
@@ -88,19 +83,14 @@ class GCV {
    public:
     template <typename ModelType_, typename EDFStrategy_>
     GCV(const ModelType_& model, EDFStrategy_&& trS) : model_(model), trS_(trS), gcv_(this, &This::gcv_impl) {
-        std::cout << "gcv.h constructor 1" << std::endl; 
         // resize gcv input space dimension
         if constexpr (is_space_only<typename std::decay<ModelType_>::type>::value) gcv_.resize(1);
         else gcv_.resize(2);
         // set model pointer in edf computation strategy
-        std::cout << "gcv.h constructor 1 model_ nan size = " << model_.nan_idxs().size() << std::endl;
         trS_.set_model(model_);
-        std::cout << "gcv.h constructor 1 model_ nan size = " << model_.nan_idxs().size() << std::endl;
-        std::cout << "gcv.h constructor 1 model nan size = " << model.nan_idxs().size() << std::endl;
-        std::cout << "gcv.h constructor 1 n = " << model_.n_obs() << std::endl;
     };
-    template <typename ModelType_> GCV(const ModelType_& model) : GCV(model, StochasticEDF()) { std::cout << "gcv.h constructor 2" << std::endl;  }
-    GCV(const GCV& other) : model_(other.model_), trS_(other.trS_), gcv_(this, &This::gcv_impl) { std::cout << "gcv.h constructor 3" << std::endl; };
+    template <typename ModelType_> GCV(const ModelType_& model) : GCV(model, StochasticEDF()) {}; 
+    GCV(const GCV& other) : model_(other.model_), trS_(other.trS_), gcv_(this, &This::gcv_impl) {};
     GCV() = default;
 
     // call operator and numerical derivative approximations

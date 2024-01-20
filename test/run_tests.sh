@@ -55,14 +55,14 @@ while :; do
     esac
 done
 
-## set CMake compiler
-if [ "$COMPILER" = "gcc" ]; then
-    export CC=/usr/bin/gcc
-    export CXX=/usr/bin/g++
-elif [ "$COMPILER" = "clang" ]; then
-    export CC=/usr/bin/clang
-    export CXX=/usr/bin/clang++
-fi
+# ## set CMake compiler
+# if [ "$COMPILER" = "gcc" ]; then
+#     export CC=/usr/bin/gcc
+#     export CXX=/usr/bin/g++
+# elif [ "$COMPILER" = "clang" ]; then
+#     export CC=/usr/bin/clang
+#     export CXX=/usr/bin/clang++
+# fi
 
 # cd into build directory
 if [ -d "$BUILD_DIR" ];

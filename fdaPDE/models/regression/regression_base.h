@@ -121,7 +121,6 @@ class RegressionBase :
     }
     // GCV support
     template <typename EDFStrategy_, typename... Args> GCV gcv(Args&&... args) {
-        std::cout << "regression_base.h constructor gcv nan size = " << Base::model().nan_idxs().size() << std::endl;
         return GCV(Base::model(), EDFStrategy_(std::forward<Args>(args)...));
     }
     const DMatrix<double>& T() {   // T = \Psi^T*Q*\Psi + P
@@ -149,7 +148,6 @@ class RegressionBase :
     }
     void init_nan() {   // regression models' missing data logic (called by SamplingBase::init_sampling())
         // derive missingness pattern
-        std::cout << "regression_base.h init_nan pt-2" << std::endl;
         nan_idxs_.clear();   // empty nan indexes set
         for (std::size_t i = 0; i < df_.template get<double>(OBSERVATIONS_BLK).size(); ++i) {
             if (std::isnan(y()(i, 0))) {   // requires -ffast-math compiler flag to be disabled
@@ -157,8 +155,6 @@ class RegressionBase :
                 df_.template get<double>(OBSERVATIONS_BLK)(i, 0) = 0.0;   // zero out NaN
             }
         }
-        std::cout << "regression_base.h init_nan pt-1" << std::endl;
-        std::cout << "regression_base.h dim nan_idxs_ = " << nan_idxs_.size() << std::endl;
         // matrix B assembly logic (set to zero rows corresponding to missing observations)
         if (has_nan()) {
             // reserve space
@@ -167,14 +163,9 @@ class RegressionBase :
             B_.resize(n, N);
             // triplet list to fill sparse matrix
             std::vector<fdapde::Triplet<double>> triplet_list;
-            std::cout << "regression_base.h init_nan pt1" << std::endl; 
             // triplet_list.reserve(n * N); 
-            triplet_list.reserve(5*n);
+            triplet_list.reserve(5*n);  // modifica temporanea per la memoria
 
-            // pietro: triplet_list.reserve(n * model_traits<Model>::PDE::SolverType::n_dof_per_element);
-                                             // --> model().n_dofs()
-            // std::cout << "ndof = " << space_penalty->n_dofs() << std::endl; 
-            std::cout << "regression_base.h init_nan pt2" << std::endl;
             for (int k = 0; k < Psi(not_nan()).outerSize(); ++k)
                 for (SpMatrix<double>::InnerIterator it(Psi(not_nan()), k); it; ++it) {
                     if (nan_idxs_.find(it.row()) == nan_idxs_.end()) {
@@ -184,7 +175,6 @@ class RegressionBase :
                 }
             // finalize construction
             B_.setFromTriplets(triplet_list.begin(), triplet_list.end());
-            std::cout << "regression_base.h init_nan pt3" << std::endl;
             B_.makeCompressed();
         }
         return;

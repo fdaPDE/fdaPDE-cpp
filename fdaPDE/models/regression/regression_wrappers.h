@@ -28,7 +28,11 @@ using fdapde::models::Sampling;
 namespace fdapde {
 namespace models {
   
-// type erased wrapper for regression models
+// type erased wrapper for regression models  
+// Per salvare A: 
+// - &M::A
+// - decltype(auto) A() const {return fdapde::invoke<const fdapde::core::SparseBlockMatrix<double, 2, 2>&, 20>(*this);  }
+
 struct IRegression {
     template <typename M>
     using fn_ptrs = fdapde::mem_fn_ptrs<

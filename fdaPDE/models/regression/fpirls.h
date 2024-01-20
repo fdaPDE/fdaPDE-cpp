@@ -81,16 +81,20 @@ template <typename Model_> class FPIRLS {
         double J_old = tolerance_ + 1, J_new = 0;
 	k_ = 0;
         while (k_ < max_iter_ && std::abs(J_new - J_old) > tolerance_) {
-            std::cout << "k fpirls = " << k_ << std::endl; 
             m_->fpirls_compute_step();   // model specific computation of py_ and pW_
             // solve weighted least square problem
             // \argmin_{\beta, f} [ \norm(W^{1/2}(y - X\beta - f_n))^2 + \lambda \int_D (Lf - u)^2 ]
             solver_.data().template insert<double>(OBSERVATIONS_BLK, m_->py());
+            // solve weighted least square problem
             solver_.data().template insert<double>(WEIGHTS_BLK, m_->pW());
-	    // update solver and solve
-	    solver_.init();
+            // solve weighted least square problem
+	        // update solver and solve
+	        solver_.init();
+            // solve weighted least square problem
             solver_.solve();
+            // solve weighted least square problem
             m_->fpirls_update_step(solver_.fitted(), solver_.beta());   // model specific update step
+            // solve weighted least square problem
             // update value of the objective functional J = data_loss + \int_D (Lf-u)^2
             double J = m_->data_loss() + m_->lambda_D()*solver_.g().dot(m_->R0() * solver_.g());
 
@@ -103,7 +107,6 @@ template <typename Model_> class FPIRLS {
             // prepare for next iteration
             k_++; J_old = J_new; J_new = J;
         }
-        std::cout << "niter fpirls = " << k_ << std::endl; 
         return;
     }
     // sets an externally defined solver
