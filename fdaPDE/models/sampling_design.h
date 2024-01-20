@@ -20,6 +20,7 @@
 #include <fdaPDE/linear_algebra.h>
 #include <fdaPDE/mesh.h>
 #include <fdaPDE/utils.h>
+#include <fdaPDE/pde.h>
 using fdapde::core::Kronecker;
 
 #include "model_base.h"
@@ -94,7 +95,7 @@ template <typename Model> class SamplingBase {
             Psi_ = basis_evaluation->Psi;
             model().tensorize_psi();   // tensorize \Psi for space-time problems
 
-            // here we must be carefull of the type of model (space-only or space-time) we are handling
+            // here we must distinguish between space-only and space-time models
             if constexpr (is_space_time<Model>::value) {
                 // store I_m \kron D
                 std::size_t m = model().n_temporal_locs();
@@ -111,7 +112,7 @@ template <typename Model> class SamplingBase {
 	  } break;
         }
     }
-  
+
     // getters
     const SpMatrix<double>& Psi(not_nan) const { return Psi_; }
     const SpMatrix<double>& PsiTD(not_nan) const { return PsiTD_; }

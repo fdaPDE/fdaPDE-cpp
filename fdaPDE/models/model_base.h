@@ -25,6 +25,12 @@ using fdapde::core::BlockFrame;
 #include "model_runtime.h"
 
 namespace fdapde {
+
+// supported resolution strategies
+struct monolithic {};
+struct iterative {};
+struct sequential {};
+  
 namespace models {
 
 // abstract base interface for any fdaPDE statistical model.
@@ -33,13 +39,15 @@ template <typename Model> class ModelBase {
     ModelBase() = default;
     // full model stack initialization
     void init() {
-        if (model().runtime().query(runtime_status::require_penalty_init)) { model().init_regularization(); }        
+        if (model().runtime().query(runtime_status::require_penalty_init)) { model().init_regularization(); }
         if (model().runtime().query(runtime_status::require_functional_basis_evaluation)) {
             model().init_sampling(true);   // init \Psi matrix, always force recomputation
-            model().init_nan();            // analyze and set missingness pattern
-        }        
-        model().init_data();    // specific data-dependent initialization requested by the model
-        model().init_model();   // model initialization
+        }
+	model().analyze_data();    // specific data-dependent initialization requested by the model
+	if (model().runtime().query(runtime_status::require_psi_correction)) { model().correct_psi(); }
+        model().init_model();
+	// clear all dirty bits in blockframe
+	for(const auto& BLK : df_.dirty_cols()) df_.clear_dirty_bit(BLK);
     }
   
     // setters
@@ -52,6 +60,7 @@ template <typename Model> class ModelBase {
             for (std::size_t i = 0; i < n; ++i) idx(i, 0) = i;
             df_.insert(INDEXES_BLK, idx);
         }
+	model().runtime().set(runtime_status::require_data_stack_update);
     }
     void set_lambda(const DVector<double>& lambda) {   // dynamic sized version of set_lambda provided by upper layers
 	model().set_lambda_D(lambda[0]);

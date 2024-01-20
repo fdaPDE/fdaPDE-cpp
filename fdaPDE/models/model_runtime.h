@@ -25,12 +25,14 @@ enum runtime_status {
     is_lambda_changed,                     // asserted true whenever a new value of \lambda is set
     require_pde_init,                      // if asserted true, pde is not in a valid state and should be reinitialized
     require_penalty_init,                  // if asserted true, the penalty stack must incur a re-initialization
-    require_functional_basis_evaluation,   // if asserted true, \Psi matrix (and releated) must be recomputed
+    require_functional_basis_evaluation,   // if asserted true, \Psi matrix must be recomputed
+    require_psi_correction,                // if asserted true, matrix \Psi must be updated
+    require_data_stack_update,             // asserted true whenever new data are set
     // regression flags
     require_W_update   // asserted true whenever the weights matrix W is modified
 
 };
-  
+
 namespace models {
 
 class model_runtime_handler {
@@ -41,7 +43,7 @@ class model_runtime_handler {
 	  // we do not force a pde initialization by default since it is already initialized in ModelBase constructor
           {runtime_status::require_penalty_init,                true},
           {runtime_status::require_functional_basis_evaluation, true}
-    } {};
+	} {};
 
     void set(int flag) { runtime_[flag] = true; }
     bool query(int flag) const {

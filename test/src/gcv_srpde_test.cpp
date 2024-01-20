@@ -24,9 +24,9 @@ using fdapde::core::fem_order;
 using fdapde::core::FEM;
 using fdapde::core::Grid;
 using fdapde::core::laplacian;
-using fdapde::core::MatrixDataWrapper;
+using fdapde::core::DiscretizedMatrixField;
 using fdapde::core::PDE;
-using fdapde::core::VectorDataWrapper;
+using fdapde::core::DiscretizedVectorField;
 
 #include "../../fdaPDE/models/regression/srpde.h"
 #include "../../fdaPDE/models/regression/gcv.h"
@@ -295,8 +295,8 @@ TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_gride
     DMatrix<double> u = read_csv<double>("../data/models/gcv/2D_test7/force.csv");
     DMatrix<double> y = read_csv<double>("../data/models/gcv/2D_test7/y.csv"    );
     // define regularizing PDE
-    MatrixDataWrapper<2, 2, 2> K(K_data);
-    VectorDataWrapper<2, 2> b(b_data);
+    DiscretizedMatrixField<2, 2, 2> K(K_data);
+    DiscretizedVectorField<2, 2> b(b_data);
     auto L = -diffusion<FEM>(K) + advection<FEM>(b);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
@@ -338,8 +338,8 @@ TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_grids
     DMatrix<double> u = read_csv<double>("../data/models/gcv/2D_test8/force.csv");
     DMatrix<double> y = read_csv<double>("../data/models/gcv/2D_test8/y.csv"    );
     // define regularizing PDE
-    MatrixDataWrapper<2, 2, 2> K(K_data);
-    VectorDataWrapper<2, 2> b(b_data);
+    DiscretizedMatrixField<2, 2, 2> K(K_data);
+    DiscretizedVectorField<2, 2> b(b_data);
     auto L = -diffusion<FEM>(K) + advection<FEM>(b);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model

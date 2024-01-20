@@ -18,12 +18,11 @@
 #define __EXACT_EDF_H__
 
 #include <fdaPDE/utils.h>
-#include "../model_wrappers.h"
-#include "regression_wrappers.h"
+#include "regression_type_erasure.h"
 
 namespace fdapde {
 namespace models {
-
+  
 // Evaluates exactly the trace of matrix S = \Psi*T^{-1}*\Psi^T*Q. Uses the cyclic property of the trace
 // operator: Tr[S] = Tr[\Psi*T^{-1}*\Psi^T*Q] = Tr[Q*\Psi*T^{-1}*\Psi^T]
 class ExactEDF {

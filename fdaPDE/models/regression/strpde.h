@@ -33,15 +33,10 @@ using fdapde::core::BlockVector;
 using fdapde::core::Kronecker;
 using fdapde::core::SMW;
 using fdapde::core::SparseBlockMatrix;
-using fdapde::core::SparseKroneckerTensorProduct;
+using fdapde::core::KroneckerTensorProduct;
 using fdapde::core::SplineBasis;
 
 namespace fdapde {
-
-// supported resolution strategies
-struct monolithic { };
-struct iterative { };
-
 namespace models {
 
 // STRPDE model signature
@@ -153,7 +148,7 @@ class STRPDE<SpaceTimeParabolic, monolithic> :
     using Base::s;                 // initial condition
     // constructor
     STRPDE() = default;
-    STRPDE(const pde_ptr& pde, Sampling s, const DMatrix<double>& time) : Base(pde, s, time) {};
+    STRPDE(const pde_ptr& pde, Sampling s) : Base(pde, s) {};
 
     void init_model() {   // update model object in case of **structural** changes in its definition
         // assemble system matrix for the nonparameteric part of the model
@@ -259,12 +254,13 @@ class STRPDE<SpaceTimeParabolic, iterative> :
     using Base::pde_;              // parabolic differential operator df/dt + Lf - u
     // constructor
     STRPDE() = default;
-    STRPDE(const pde_ptr& pde, Sampling s, const DMatrix<double>& time) : Base(pde, s, time) { pde_.init(); };
+    STRPDE(const pde_ptr& pde, Sampling s) : Base(pde, s) { pde_.init(); };
 
     // redefine SpaceTimeParabolicBase properties affected by iterative approach
     void tensorize_psi() { return; } // avoid tensorization of \Psi matrix
     void init_regularization() {
         pde_.init();
+	s_ = pde_.initial_condition();
         // compute time step (assuming equidistant points)
         DeltaT_ = time_[1] - time_[0];
         u_ = pde_.force();   // compute forcing term

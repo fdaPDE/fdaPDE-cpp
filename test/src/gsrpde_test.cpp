@@ -237,23 +237,24 @@ TEST(gsrpde_test, laplacian_semiparametric_samplingatlocations_separable_monolit
 TEST(gsrpde_test, laplacian_semiparametric_samplingatlocations_parabolic_monolithic_gamma) {
     // define temporal domain
     DVector<double> time_mesh;
-    time_mesh.resize(4);
-    for (std::size_t i = 0; i < 4; ++i) time_mesh[i] = (1. / 3) * i;
+    time_mesh.resize(3);
+    for (std::size_t i = 0; i < 3; ++i) time_mesh[i] = (1. / 3) * i;
     // define spatial domain
     MeshLoader<Mesh2D> domain("c_shaped");
     // import data from files
     DMatrix<double> locs = read_csv<double>("../data/models/gsrpde/2D_test6/locs.csv");
-    DMatrix<double> y    = read_csv<double>("../data/models/gsrpde/2D_test6/y.csv"   );
-    DMatrix<double> X    = read_csv<double>("../data/models/gsrpde/2D_test6/X.csv"   );
+    DMatrix<double> y    = read_mtx<double>("../data/models/gsrpde/2D_test6/y.mtx"   );
+    DMatrix<double> X    = read_mtx<double>("../data/models/gsrpde/2D_test6/X.mtx"   );
     DMatrix<double> IC   = read_mtx<double>("../data/models/gsrpde/2D_test6/IC.mtx"  );
     // define regularizing PDE    
     auto L = dt<FEM>() - laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, time_mesh.rows());
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> pde(domain.mesh, time_mesh, L, u);
+    pde.set_initial_condition(IC);
     // define model
     double lambda_D = std::pow(0.1, 2.5);
     double lambda_T = std::pow(0.1, 2.5);
-    GSRPDE<SpaceTimeParabolic> model(problem, time_mesh, Sampling::pointwise, Gamma());
+    GSRPDE<SpaceTimeParabolic> model(pde, Sampling::pointwise, Gamma());
     model.set_lambda_D(lambda_D);
     model.set_lambda_T(lambda_T);
     model.set_spatial_locations(locs);
@@ -262,7 +263,6 @@ TEST(gsrpde_test, laplacian_semiparametric_samplingatlocations_parabolic_monolit
     df.stack(OBSERVATIONS_BLK, y);
     df.insert(DESIGN_MATRIX_BLK, X);
     model.set_data(df);
-    model.set_initial_condition(IC);
     // solve smoothing problem
     model.init();
     model.solve();

@@ -19,211 +19,186 @@
 
 #include <fdaPDE/optimization.h>
 #include <fdaPDE/utils.h>
-
+#include <fdaPDE/linear_algebra.h>
 #include <Eigen/SVD>
-using fdapde::core::Grid;
 
 #include "../../calibration/kfold_cv.h"
 #include "../../calibration/symbols.h"
+using fdapde::calibration::Calibration;
 #include "functional_base.h"
-#include "profiling_estimation.h"
-using fdapde::calibration::KFoldCV;
-using fdapde::calibration::NoCalibration;
-using fdapde::calibration::KCVCalibration;
-using fdapde::calibration::GCVCalibration;
+#include "power_iteration.h"
+#include "rsvd.h"
 
 namespace fdapde {
 namespace models {
 
-// Functional Principal Components Analysis
-template <typename PDE, typename RegularizationType, typename SamplingDesign, typename CalibrationStrategy>
-class FPCA : public FunctionalBase<FPCA<PDE, RegularizationType, SamplingDesign, CalibrationStrategy>> {
-    static_assert(std::is_base_of<PDEBase, PDE>::value);
-   private:
-    typedef FPCA<PDE, RegularizationType, SamplingDesign, CalibrationStrategy> Model;
-    typedef FunctionalBase<Model> Base;
-    std::size_t n_pc_ = 3;   // number of principal components
-    // profiling_estimation parameters
-    double tol_ = 1e-6;               // relative tolerance between Jnew and Jold, used as stopping criterion
-    std::size_t max_iter_ = 20;       // maximum number of allowed iterations
-    int seed_ = fdapde::random_seed;
-    std::size_t n_folds_;   // for KCVCalibration, the number of folds to use
+// FPCA (Functional Principal Components Analysis) model signature
+template <typename RegularizationType, typename SolutionPolicy> class FPCA;
 
-    // problem solution
-    DMatrix<double> loadings_;
-    DMatrix<double> scores_;
-
-    // tag dispatched resolution approaches
-    void solve_(NoCalibration);    // fix \lambda for all the components
-    void solve_(GCVCalibration);   // select \lambda for each component minimizing the GCV index
-    void solve_(KCVCalibration);   // select \lambda for each component using a K-fold cross validation approach
+// implementation of FPCA for sequential approach, see e.g.
+// Lila, E., Aston, J.A.D., Sangalli, L.M. (2016), Smooth Principal Component Analysis over two-dimensional manifolds
+// with an application to Neuroimaging, Annals of Applied Statistics, 10 (4), 1854-1879.
+template <typename RegularizationType_>
+class FPCA<RegularizationType_, sequential> :
+    public FunctionalBase<FPCA<RegularizationType_, sequential>, RegularizationType_> {
    public:
+    using RegularizationType = std::decay_t<RegularizationType_>;
+    using This = FPCA<RegularizationType, sequential>;
+    using Base = FunctionalBase<This, RegularizationType>;
     IMPORT_MODEL_SYMBOLS;
-    using Base::lambda;
-    using Base::lambdas;
-    using Base::nan_idxs;
-    using Base::X;
-    // constructor
+    using Base::lambda;         // vector of smoothing parameters
+    using Base::n_basis;        // number of basis functions
+    using Base::n_stat_units;   // number of statistical units
+    using Base::X;              // n_stat_units \times n_locs data matrix
+
+    // constructors
     FPCA() = default;
-    // space-only constructor
-    template <
-      typename U = RegularizationType, typename std::enable_if<std::is_same<U, SpaceOnly>::value, int>::type = 0>
-    FPCA(const PDE& pde) : Base(pde) {};
-    // space-time constructor
-    template <
-      typename U = RegularizationType, typename std::enable_if<!std::is_same<U, SpaceOnly>::value, int>::type = 0>
-    FPCA(const PDE& pde, const DVector<double>& time) : Base(pde, time) {};
+    fdapde_enable_constructor_if(is_space_only, This) FPCA(const pde_ptr& pde, Sampling s, Calibration c) :
+        Base(pde, s), calibration_(c) {};
+    fdapde_enable_constructor_if(is_space_time_separable, This)
+      FPCA(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s, Calibration c) :
+        Base(space_penalty, time_penalty, s), calibration_(c) {};
 
     void init_model() { return; };
-    virtual void solve();   // compute principal components
+    void solve() {
+        // preallocate space
+        loadings_.resize(n_basis(), n_pc_);
+        fitted_loadings_.resize(n_locs(), n_pc_);
+        scores_.resize(n_stat_units(), n_pc_);
+        DMatrix<double> X_ = X();   // copy original data to avoid side effects
+
+        // first guess of PCs set to a multivariate PCA (SVD)
+        // Eigen::JacobiSVD<DMatrix<double>> svd(X_, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        PowerIteration<This> solver(this, tolerance_, max_iter_);   // power iteration solver
+        solver.set_seed(seed_);
+        solver.init();
+
+        // sequential extraction of principal components
+        for (std::size_t i = 0; i < n_pc_; i++) {
+            // TODO: place the SVD outside the loop, for a non-fixed \lambda calibration, makes the algorithm converge
+            // to a different solution (selects a different \lambda). must check if the difference is significant
+	  Eigen::JacobiSVD<DMatrix<double>> svd(X_, Eigen::ComputeThinU | Eigen::ComputeThinV);
+
+            switch (calibration_) {
+            case Calibration::off: {
+                // find vectors s,f minimizing \norm_F{Y - s^T*f}^2 + (s^T*s)*P(f) fixed \lambda
+                solver.compute(X_, lambda(), svd.matrixV().col(0));
+                // solver.compute(X_, lambda(), svd.matrixV().col(i));
+            } break;
+            case Calibration::gcv: {
+                // select \lambda minimizing the GCV index
+                // DVector<double> f0 = svd.matrixV().col(i);
+                DVector<double> f0 = svd.matrixV().col(0);
+                ScalarField<Dynamic> gcv([&solver, &X_, &f0](const DVector<double>& lambda) -> double {
+                    solver.compute(X_, lambda, f0);
+                    return solver.gcv();   // return GCV index at convergence
+                });
+                solver.compute(X_, core::Grid<Dynamic> {}.optimize(gcv, lambda_grid_), f0);
+            } break;
+            case Calibration::kcv: {
+                DVector<double> f0 = svd.matrixV().col(0);
+                auto cv_score = [&solver, &X_, &f0, this](
+                                  const DVector<double>& lambda, const core::BinaryVector<Dynamic>& train_set,
+                                  const core::BinaryVector<Dynamic>& test_set) -> double {
+                    solver.compute(train_set.blk_repeat(1, X_.cols()).select(X_), lambda, f0);   // fit on train set
+                    // reconstruction error on test set: \norm{X_test * (I - fn*fn^\top/J)}_F/n_test, with
+                    // J = \norm{f_n}_2^2 + f^\top*P(\lambda)*f (PS: the division of f^\top*P(\lambda)*f by
+                    // \norm{f}_{L^2} is necessary to obtain J as expected)
+                    return (test_set.blk_repeat(1, X_.cols()).select(X_) *
+                            (DMatrix<double>::Identity(X_.cols(), X_.cols()) -
+                             solver.fn() * solver.fn().transpose() /
+                               (solver.fn().squaredNorm() + solver.ftPf(lambda) / solver.f_squaredNorm())))
+                             .squaredNorm() /
+                           test_set.count() * X_.cols();
+                };
+                solver.compute(X_, calibration::KCV {n_folds_, seed_}.fit(*this, lambda_grid_, cv_score), f0);
+            } break;
+            }
+            // store results
+            loadings_.col(i) = solver.f();
+            fitted_loadings_.col(i) = solver.fn();   // \frac{\Psi * f}{\norm{f}_{L^2}}
+            scores_.col(i) = solver.s() * solver.f_norm();
+            X_ -= scores_.col(i) * fitted_loadings_.col(i).transpose();   // X <- X - s*f_n^\top (deflation step)
+        }
+        return;
+    }
+
     // getters
+    const DMatrix<double>& fitted_loadings() const { return fitted_loadings_; }
     const DMatrix<double>& loadings() const { return loadings_; }
     const DMatrix<double>& scores() const { return scores_; }
     // setters
-    void set_tolerance(double tol) { tol_ = tol; }
-    void set_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
     void set_npc(std::size_t n_pc) { n_pc_ = n_pc; }
+    void set_tolerance(double tolerance) { tolerance_ = tolerance; }
+    void set_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
     void set_seed(std::size_t seed) { seed_ = seed; }
-    template <
-      typename U = CalibrationStrategy,
-      typename std::enable_if<std::is_same<U, KCVCalibration>::value, int>::type = 0>
+    void set_lambda(const std::vector<DVector<double>>& lambda_grid) {
+        fdapde_assert(calibration_ != Calibration::off);
+        lambda_grid_ = lambda_grid;
+    }
     void set_nfolds(std::size_t n_folds) {
+        fdapde_assert(calibration_ == Calibration::kcv);
         n_folds_ = n_folds;
     }
+   private:
+    std::size_t n_pc_ = 3;       // number of principal components
+    Calibration calibration_;    // PC function's smoothing parameter selection strategy
+    std::size_t n_folds_ = 10;   // for a kcv calibration strategy, the number of folds
+    std::vector<DVector<double>> lambda_grid_;
+    // power iteration parameters
+    double tolerance_ = 1e-6;     // relative tolerance between Jnew and Jold, used as stopping criterion
+    std::size_t max_iter_ = 20;   // maximum number of allowed iterations
+    int seed_ = fdapde::random_seed;
+
+    // problem solution
+    DMatrix<double> loadings_;          // PC functions' expansion coefficients
+    DMatrix<double> fitted_loadings_;   // evaluation of the PC functions at data locations
+    DMatrix<double> scores_;
 };
 
-// implementative details
+// implementation of FPCA for monolithic approach, see e.g.
+template <typename RegularizationType_>
+class FPCA<RegularizationType_, monolithic> :
+    public FunctionalBase<FPCA<RegularizationType_, monolithic>, RegularizationType_> {
+   public:
+    using RegularizationType = std::decay_t<RegularizationType_>;
+    using This = FPCA<RegularizationType, monolithic>;
+    using Base = FunctionalBase<This, RegularizationType>;
+    IMPORT_MODEL_SYMBOLS;
+    using Base::lambda;
+    using Base::X;
 
-// finds solution to FPCA problem, dispatch to solver depending on CalibrationStrategy
-template <typename PDE, typename RegularizationType, typename SamplingDesign, typename CalibrationStrategy>
-void FPCA<PDE, RegularizationType, SamplingDesign, CalibrationStrategy>::solve() {
-    loadings_.resize(X().cols(), n_pc_); scores_.resize(X().rows(), n_pc_);
-    // dispatch to desired solution strategy
-    solve_(CalibrationStrategy());
-    return;
-}
-  
-// solution in case of fixed \lambda
-template <typename PDE, typename RegularizationType, typename SamplingDesign, typename CalibrationStrategy>
-void FPCA<PDE, RegularizationType, SamplingDesign, CalibrationStrategy>::solve_(NoCalibration) {
-    ProfilingEstimation<decltype(*this)> pe(*this, tol_, max_iter_, seed_);
-    BlockFrame<double, int> data_ = data();
-    // Principal Components computation
-    for (std::size_t i = 0; i < n_pc_; i++) {
-        // find vectors s,f minimizing \norm_F{Y - s^T*f}^2 + (s^T*s)*P(f) fixed \lambda
-        pe.compute(data_, lambda());
-        loadings_.col(i) = pe.f_n() / pe.f_n_norm();
-        scores_.col(i) = pe.s() * pe.f_n_norm();
-        // subtract computed PC from data
-        data_.get<double>(OBSERVATIONS_BLK) -= scores_.col(i) * loadings_.col(i).transpose();
+    // constructors
+    FPCA() = default;
+    fdapde_enable_constructor_if(is_space_only, This) FPCA(const pde_ptr& pde, Sampling s) : Base(pde, s) {};
+    fdapde_enable_constructor_if(is_space_time_separable, This)
+      FPCA(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s) :
+        Base(space_penalty, time_penalty, s) {};
+
+    void init_model() { return; };
+    void solve() {   // monolithic approach via Regularized SVD
+        RSVD<This> solver(this);
+        solver.compute(X(), lambda(), n_pc_);
+        // store results
+	loadings_ = solver.W();
+        fitted_loadings_ = Psi(not_nan()) * solver.W();   // evaluation of L^2 normalized PC functions at data locations
+        scores_ = solver.H().array().rowwise() * solver.w_norm().transpose().array();
+        return;
     }
-    return;
-}
 
-// best \lambda for PC choosen according to GCV index
-template <typename PDE, typename RegularizationType, typename SamplingDesign, typename CalibrationStrategy>
-void FPCA<PDE, RegularizationType, SamplingDesign, CalibrationStrategy>::solve_(GCVCalibration) {
-    ProfilingEstimation<decltype(*this)> pe(*this, tol_, max_iter_, seed_);
-    BlockFrame<double, int> data_ = data();
-    // wrap objective into a ScalarField accepted by OPT module
-    const std::size_t n_lambda = n_smoothing_parameters<RegularizationType>::value;
-    ScalarField<n_lambda> f;
-    f = [&pe, &data_](const SVector<n_lambda>& p) -> double {
-      // find vectors s,f minimizing \norm_F{Y - s^T*f}^2 + (s^T*s)*P(f) fixed \lambda = p
-      pe.compute(data_, p);
-      return pe.gcv(); // return GCV at convergence
-    };
-
-    Grid<n_lambda> opt;   // optimization algorithm
-    // Principal Components computation
-    for (std::size_t i = 0; i < n_pc_; i++) {
-        opt.optimize(f, lambdas());   // select optimal \lambda for i-th PC
-        // compute and store results given estimated optimal \lambda
-        pe.compute(data_, opt.optimum());
-        loadings_.col(i) = pe.f_n() / pe.f_n_norm();
-        scores_.col(i) = pe.s() * pe.f_n_norm();
-        // subtract computed PC from data
-        data_.get<double>(OBSERVATIONS_BLK) -= scores_.col(i) * loadings_.col(i).transpose();
-    }
-    return;
-}
-
-// best \lambda for PC choosen according to K-fold CV strategy, uses the reconstruction error on test set as CV score
-template <typename PDE, typename RegularizationType, typename SamplingDesign, typename CalibrationStrategy>
-void FPCA<PDE, RegularizationType, SamplingDesign, CalibrationStrategy>::solve_(KCVCalibration) {
-    ProfilingEstimation<decltype(*this)> pe(*this, tol_, max_iter_, seed_);
-    const std::size_t n_lambda = n_smoothing_parameters<RegularizationType>::value;
-    
-    // routine executed by the CV-engine to produce the model score
-    std::function<double(DVector<double>, BlockFrame<double, int>, BlockFrame<double, int>)> cv_score =
-      [this](const DVector<double>& lambda,
-	     const BlockFrame<double, int>& train_df,
-	     const BlockFrame<double, int>& test_df) -> double {
-        ProfilingEstimation<decltype(*this)> pe_(*this, tol_, max_iter_, seed_);
-        // get references to train and test sets
-        const DMatrix<double>& X_test = test_df.get<double>(OBSERVATIONS_BLK);
-        SVector<n_lambda> p(lambda.data());
-        // find vectors s,f minimizing \norm_F{Y - s^T*f}^2 + (s^T*s)*P(f)
-        pe_.compute(train_df, p);
-        // compute reconstruction error and scores (X_test * f_n)/(\norm{f_n} + \lambda*P(f)) on test set
-        if (this->has_nan()) {
-            auto nan_pattern = X_test.array().isNaN();   // missingness pattern
-            std::size_t n = nan_pattern.count();         // number of not-NaN points in test set
-            // scores vector
-            DVector<double> s = (nan_pattern.select(0, X_test)) * pe_.f_n();
-            double pen = p[0] * (pe_.g().dot(R0() * pe_.g()));   // \lambda*P(f)
-            for (std::size_t i = 0; i < s.rows(); ++i) {
-                // compute \norm{f_n} for i-th subject
-                double sum_f = (X_test.row(i)).array().isNaN().select(0, pe_.f_n().transpose()).squaredNorm();
-                s[i] /= (sum_f + pen);   // normalize i-th score
-            }
-            // evaluate reconstruction error on test set
-            double err = nan_pattern.select(0, X_test - s * pe_.f_n().transpose()).squaredNorm();
-            return err / n;
-        } else {
-            // scores vector
-            DVector<double> s = (X_test * pe_.f_n()) / (pe_.f_n().squaredNorm() + p[0] * (pe_.g().dot(R0() * pe_.g())));
-            // evaluate reconstruction error on test set
-            return (X_test - s * pe_.f_n().transpose()).squaredNorm() / X_test.size();
-        }
-    };
-
-    // define K-fold algorithm
-    KFoldCV cv(n_folds_, seed_);
-    std::vector<DVector<double>> lambdas_;
-    lambdas_.reserve(lambdas().size());
-    for (const auto& l : lambdas()) { lambdas_.emplace_back(Eigen::Map<const DVector<double>>(l.data(), n_lambda, 1)); }
-    // Principal Components computation
-    BlockFrame<double, int> data_ = data();
-    for (std::size_t i = 0; i < n_pc_; i++) {
-        cv.compute(lambdas_, data_, cv_score);   // select optimal smoothing level
-        pe.compute(data_, cv.optimum());         // execute profiling estimation given estimated optimal \lambda
-        loadings_.col(i) = pe.f_n() / pe.f_n_norm();
-        scores_.col(i) = pe.s() * pe.f_n_norm();
-        // subtract computed PC from data
-        data_.get<double>(OBSERVATIONS_BLK) -= pe.s() * pe.f_n().transpose();
-    }
-    return;
-}
-
-template <typename PDE_, typename SamplingDesign_, typename CalibrationStrategy>
-struct model_traits<FPCA<PDE_, SpaceOnly, SamplingDesign_, CalibrationStrategy>> {
-    typedef PDE_ PDE;
-    typedef SpaceOnly regularization;
-    typedef SamplingDesign_ sampling;
-    typedef MonolithicSolver solver;
-    enum { N = PDE::N, M = PDE::M, n_lambda = 1 };
+    // getters
+    const DMatrix<double>& fitted_loadings() const { return fitted_loadings_; }
+    const DMatrix<double>& loadings() const { return loadings_; }
+    const DMatrix<double>& scores() const { return scores_; }
+    void set_npc(std::size_t n_pc) { n_pc_ = n_pc; }
+   private:
+    std::size_t n_pc_ = 3;   // number of principal components
+    // problem solution
+    DMatrix<double> loadings_;          // PC functions' expansion coefficients
+    DMatrix<double> fitted_loadings_;   // evaluation of the PC functions at data locations
+    DMatrix<double> scores_;
 };
-// specialization for separable regularization
-template <typename PDE_, typename SamplingDesign_, typename CalibrationStrategy>
-struct model_traits<FPCA<PDE_, SpaceTimeSeparable, SamplingDesign_, CalibrationStrategy>> {
-    typedef PDE_ PDE;
-    typedef SpaceTimeSeparable regularization;
-    typedef SplineBasis<3> TimeBasis;   // use cubic B-splines
-    typedef SamplingDesign_ sampling;
-    typedef MonolithicSolver solver;
-    enum { N = PDE::N, M = PDE::M, n_lambda = 2 };
-};
+
 
 }   // namespace models
 }   // namespace fdapde

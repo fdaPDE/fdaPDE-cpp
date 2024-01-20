@@ -55,11 +55,12 @@ class SpaceTimeParabolicBase : public SpaceTimeBase<Model, SpaceTimeParabolic> {
     using Base::df_;        // model's data
     // constructor
     SpaceTimeParabolicBase() = default;
-    SpaceTimeParabolicBase(const pde_ptr& parabolic_penalty, const DVector<double>& time) :
-      pde_(parabolic_penalty), Base(time) { }
+    SpaceTimeParabolicBase(const pde_ptr& parabolic_penalty) :
+      pde_(parabolic_penalty), Base(parabolic_penalty.time_domain()) { }
     // init data structure related to parabolic regularization
     void init_regularization() {
-        pde_.init(); 
+        pde_.init();
+        s_ = pde_.initial_condition();   // derive initial condition from parabolic problem
         std::size_t m_ = time_.rows();   // number of time points
         DeltaT_ = time_[1] - time_[0];   // time step (assuming equidistant points)
 
@@ -91,18 +92,6 @@ class SpaceTimeParabolicBase : public SpaceTimeBase<Model, SpaceTimeParabolic> {
     void set_penalty(const pde_ptr& pde) {
         pde_ = pde;
         model().runtime().set(runtime_status::require_penalty_init);
-    }
-    // shift = true, cause the removal of the first time instant of data, in case it has been used to estimate the IC
-    void set_initial_condition(const DMatrix<double>& s, bool shift = true) {
-        s_ = s;
-        if (shift) { // left shrink time domain by one step
-            std::size_t m = time_.rows();       // number of time instants
-            time_ = time_.tail(m - 1).eval();   // correct time interval [0,T] (eval() to avoid aliasing)
-            pde_.set_forcing(pde_.forcing_data().rightCols(m - 1));
-            model().runtime().set(runtime_status::require_penalty_init);   // force pde (re-)initialization
-            // remove from data the first time instant, reindex points
-            model().set_data(df_.tail(model().n_spatial_locs()).extract(), true);
-        }
     }
     // getters
     const pde_ptr& pde() const { return pde_; }   // regularizing term df/dt + Lf - u

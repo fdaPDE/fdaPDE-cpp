@@ -43,19 +43,15 @@ class QSRPDE : public RegressionBase<QSRPDE<RegularizationType_>, Regularization
     using Base::XtWX_;      // q x q matrix X^T*W*X
     // constructor
     QSRPDE() = default;
-    // space-only constructor
-    template <
-      typename U = RegularizationType,
-      typename std::enable_if<std::is_same<U, SpaceOnly>::value, int>::type = 0>
+    // space-only and space-time parabolic constructor
+    fdapde_enable_constructor_if(has_single_penalty, This)
     QSRPDE(const pde_ptr& pde, Sampling s, double alpha = 0.5) : Base(pde, s), alpha_(alpha) {
         fpirls_ = FPIRLS<This>(this, tol_, max_iter_);
     };
-    // space-time constructor
-    template <
-      typename U = RegularizationType,
-      typename std::enable_if<!std::is_same<U, SpaceOnly>::value, int>::type = 0>
-    QSRPDE(const pde_ptr& pde, const DVector<double>& time, Sampling s, double alpha = 0.5) :
-        Base(pde, s, time), alpha_(alpha) {
+    // space-time separable constructor
+    fdapde_enable_constructor_if(has_double_penalty, This)
+    QSRPDE(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s, double alpha = 0.5) :
+        Base(space_penalty, time_penalty, s), alpha_(alpha) {
         fpirls_ = FPIRLS<This>(this, tol_, max_iter_);
     };
 
