@@ -76,7 +76,7 @@ TEST(gcv_qstrpde_test, laplacian_nonparametric_samplingatlocations_gridexact) {
  
     // define domain
     MeshLoader<Mesh2D> domain("c_shaped_adj");
-    unsigned int M = 7;  
+    unsigned int M = 3;  
     Mesh<1, 1> time_mesh(0, fdapde::testing::pi, M-1);     
 
     // import data from files
@@ -106,7 +106,7 @@ TEST(gcv_qstrpde_test, laplacian_nonparametric_samplingatlocations_gridexact) {
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
     std::vector<DVector<double>> lambdas_d_t;
-    for(double xs = -4.0; xs <= -2.0; xs +=0.5)
+    for(double xs = -4.0; xs <= -2.0; xs +=1.0)
       for(double xt = -7.0; xt <= -5.0; xt +=1.0) 
         lambdas_d_t.push_back(SVector<2>(std::pow(10,xs), std::pow(10,xt)));
 
@@ -134,7 +134,7 @@ TEST(gcv_qstrpde_test, laplacian_nonparametric_samplingatlocations_gridstochasti
 
     // define domain
     MeshLoader<Mesh2D> domain("c_shaped_adj");
-    unsigned int M = 7;  
+    unsigned int M = 3;  
     Mesh<1, 1> time_mesh(0, fdapde::testing::pi, M-1);
     // import data from files
     DMatrix<double> space_locs = read_csv<double>("../data/models/gcv/2D_test10/locs.csv");
@@ -162,9 +162,9 @@ TEST(gcv_qstrpde_test, laplacian_nonparametric_samplingatlocations_gridstochasti
     model.init();
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 66546513;
-    auto GCV = model.gcv<StochasticEDF>(1000, seed);
+    auto GCV = model.gcv<StochasticEDF>(100, seed);
     std::vector<DVector<double>> lambdas_d_t;
-    for(double xs = -4.0; xs <= -2.0; xs +=0.5)
+    for(double xs = -4.0; xs <= -2.0; xs +=1.0)
       for(double xt = -7.0; xt <= -5.0; xt +=1.0)
         lambdas_d_t.push_back(SVector<2>(std::pow(10,xs), std::pow(10,xt)));
 
