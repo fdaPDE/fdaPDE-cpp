@@ -43,27 +43,25 @@ class GSRPDE : public RegressionBase<GSRPDE<RegularizationType_>, Regularization
     using Base::XtWX_;      // q x q matrix X^T*W*X
     // constructor
     GSRPDE() = default;
-    // space-only constructor
-    fdapde_enable_constructor_if(is_space_only, This)
+    // space-only and space-time parabolic constructor
+    fdapde_enable_constructor_if(has_single_penalty, This)
       GSRPDE(const pde_ptr& pde, Sampling s, const Distribution& distr) :
         Base(pde, s), distr_(distr) {
         fpirls_ = FPIRLS<This>(this, tol_, max_iter_);
     };
-    // space-time constructors
-    fdapde_enable_constructor_if(is_space_time_separable, This)
-    GSRPDE(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s, const Distribution& distr) :
-      Base(space_penalty, time_penalty, s), distr_(distr) {
-        fpirls_ = FPIRLS<This>(this, tol_, max_iter_);
-    };
-    fdapde_enable_constructor_if(is_space_time_parabolic, This)
-    GSRPDE(const pde_ptr& space_penalty, const DVector<double>& time, Sampling s, const Distribution& distr) :
-      Base(space_penalty, s, time), distr_(distr) {
+    // space-time separable constructor
+    fdapde_enable_constructor_if(has_double_penalty, This)
+      GSRPDE(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s, const Distribution& distr) :
+        Base(space_penalty, time_penalty, s), distr_(distr) {
         fpirls_ = FPIRLS<This>(this, tol_, max_iter_);
     };
 
     // setters
     void set_fpirls_tolerance(double tol) { tol_ = tol; }
     void set_fpirls_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
+
+    // getters
+    const SpMatrix<double>& P1() const { return P1_; }   // ficticious (to compile fpirls space-time case)
 
     void init_data()  { return; };
     void init_model() { fpirls_.init(); };
@@ -125,6 +123,7 @@ class GSRPDE : public RegressionBase<GSRPDE<RegularizationType_>, Regularization
     DVector<double> mu_;   // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : mean vector at step k
     DMatrix<double> T_;    // T = \Psi^T*Q*\Psi + P
     fdapde::SparseLU<SpMatrix<double>> invA_;   // factorization of non-parametric system matrix A
+    SpMatrix<double> P1_{}; // ficticious (to compile fpirls space-time case)
 
     // FPIRLS parameters (set to default)
     FPIRLS<This> fpirls_;

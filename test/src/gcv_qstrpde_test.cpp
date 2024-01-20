@@ -29,9 +29,7 @@ using fdapde::core::laplacian;
 using fdapde::core::bilaplacian;
 using fdapde::core::SPLINE;
 using fdapde::core::spline_order;
-using fdapde::core::MatrixDataWrapper;
 using fdapde::core::PDE;
-using fdapde::core::VectorDataWrapper;
 
 #include "../../fdaPDE/models/sampling_design.h"
 #include "../../fdaPDE/models/regression/qsrpde.h"
@@ -463,10 +461,6 @@ using namespace std::chrono;
 
 
 
-
-
-
-
 // ------------ TEST PER PALU 
 
 // test 1
@@ -482,7 +476,7 @@ using namespace std::chrono;
 //  time penalization: separable (mass penalization)
 TEST(gcv_qstrpde_test, laplacian_nonparametric_samplingatlocations_gridexact) {
   
-    std::string R_path = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/models/space_time/Test_3/per_pull_request"; 
+    // std::string R_path = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/models/space_time/Test_3/per_pull_request"; 
   
     // define domain
     MeshLoader<Mesh2D> domain("c_shaped_adj");
@@ -490,12 +484,9 @@ TEST(gcv_qstrpde_test, laplacian_nonparametric_samplingatlocations_gridexact) {
     Mesh<1, 1> time_mesh(0, fdapde::testing::pi, M-1);     
 
     // import data from files
-    // DMatrix<double> space_locs = read_csv<double>("../data/gcv/qstrpde/2D_test1/locs.csv");
-    // DMatrix<double> time_locs = read_csv<double>("../data/gcv/qstrpde/2D_test1/time_locations.csv"); 
-    // DMatrix<double> y = read_csv<double>("../data/gcv/qstrpde/2D_test1/y.csv");
-    DMatrix<double> space_locs = read_csv<double>(R_path + "/locs.csv");
-    DMatrix<double> time_locs = read_csv<double>(R_path + "/time_locations.csv"); 
-    DMatrix<double> y = read_csv<double>(R_path + "/y.csv");
+    DMatrix<double> space_locs = read_csv<double>("../data/models/gcv/2D_test9/locs.csv");
+    DMatrix<double> time_locs = read_csv<double>("../data/models/gcv/2D_test9/time_locations.csv"); 
+    DMatrix<double> y = read_csv<double>("../data/models/gcv/2D_test9/y.csv");
 
     // define regularizing PDE in space 
     auto Ld = -laplacian<FEM>();
@@ -527,8 +518,8 @@ TEST(gcv_qstrpde_test, laplacian_nonparametric_samplingatlocations_gridexact) {
     Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas_d_t);
     // test correctness
-    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/qstrpde/2D_test1/edfs.mtx"));
-    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/qstrpde/2D_test1/gcvs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test9/edfs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test9/gcvs.mtx"));
 
     // std::ofstream fileEDF_scores(R_path + "/edfs.mtx");
     // for(std::size_t i = 0; i < GCV.gcvs().size(); ++i) 
@@ -562,12 +553,9 @@ TEST(gcv_qstrpde_test, laplacian_nonparametric_samplingatlocations_gridstochasti
     unsigned int M = 7;  
     Mesh<1, 1> time_mesh(0, fdapde::testing::pi, M-1);
     // import data from files
-    // DMatrix<double> space_locs = read_csv<double>("../data/gcv/qstrpde/2D_test1/locs.csv");
-    // DMatrix<double> time_locs = read_csv<double>("../data/gcv/qstrpde/2D_test1/time_locations.csv"); 
-    // DMatrix<double> y = read_csv<double>("../data/gcv/qstrpde/2D_test1/y.csv");
-    DMatrix<double> space_locs = read_csv<double>(R_path + "/locs.csv");
-    DMatrix<double> time_locs = read_csv<double>(R_path + "/time_locations.csv"); 
-    DMatrix<double> y = read_csv<double>(R_path + "/y.csv");
+    DMatrix<double> space_locs = read_csv<double>("../data/models/gcv/2D_test10/locs.csv");
+    DMatrix<double> time_locs = read_csv<double>("../data/models/gcv/2D_test10/time_locations.csv"); 
+    DMatrix<double> y = read_csv<double>("../data/models/gcv/2D_test10/y.csv");
 
     // define regularizing PDE in space 
     auto Ld = -laplacian<FEM>();
@@ -601,8 +589,8 @@ TEST(gcv_qstrpde_test, laplacian_nonparametric_samplingatlocations_gridstochasti
     opt.optimize(GCV, lambdas_d_t);
 
     // test correctness
-    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/qstrpde/2D_test2/edfs.mtx"));
-    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/qstrpde/2D_test2/gcvs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test10/edfs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test10/gcvs.mtx"));
 
     // std::ofstream fileEDF_scores(R_path + "/edfs.mtx");
     // for(std::size_t i = 0; i < GCV.gcvs().size(); ++i) 

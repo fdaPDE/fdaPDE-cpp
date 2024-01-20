@@ -24,14 +24,12 @@ using fdapde::core::FEM;
 using fdapde::core::fem_order;
 
 using fdapde::core::laplacian;
-using fdapde::core::MatrixDataWrapper;
 using fdapde::core::PDE;
-using fdapde::core::VectorDataWrapper;
 
-#include "../../fdaPDE/models/regression/msqrpde.h"
+#include "../../fdaPDE/models/regression/mqsrpde.h"
 #include "../../fdaPDE/models/sampling_design.h"
 using fdapde::models::SpaceOnly;
-using fdapde::models::MSQRPDE;
+using fdapde::models::MQSRPDE;
 
 #include "utils/constants.h"
 #include "utils/mesh_loader.h"
@@ -567,7 +565,7 @@ using fdapde::testing::read_csv;
 //    covariates:   no
 //    BC:           no
 //    order FE:     1
-TEST(msqrpde_test6, laplacian_nonparametric_samplingatlocations) {
+TEST(mqsrpde_test6, laplacian_nonparametric_samplingatlocations) {
 
     // path test   
     std::string R_path = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/models/multiple_quantiles/Tests/Test_6"; 
@@ -686,7 +684,7 @@ TEST(msqrpde_test6, laplacian_nonparametric_samplingatlocations) {
 
                 std::cout << "--------------------Simulation #" << std::to_string(sim) << "-------------" << std::endl; 
 
-                MSQRPDE<SpaceOnly> model(problem, Sampling::pointwise, alphas);
+                MQSRPDE<SpaceOnly> model(problem, Sampling::pointwise, alphas);
                 model.set_spatial_locations(loc);
                 model.set_preprocess_option(processing); 
                 model.set_forcing_option(force);

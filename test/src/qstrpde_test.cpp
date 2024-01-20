@@ -25,9 +25,7 @@ using fdapde::core::FEM;
 using fdapde::core::fem_order;
 using fdapde::core::bilaplacian;
 using fdapde::core::laplacian;
-using fdapde::core::MatrixDataWrapper;
 using fdapde::core::PDE;
-using fdapde::core::VectorDataWrapper;
 using fdapde::core::Mesh;
 using fdapde::core::SPLINE;
 using fdapde::core::spline_order;
@@ -248,7 +246,7 @@ using fdapde::testing::read_csv;
 
 
 
-// // test 3   ---> DA LANCIARE 
+// // test 3   
 // //    domain:         c-shaped
 // //    space sampling: locations != nodes
 // //    time sampling:  locations != nodes
@@ -261,9 +259,9 @@ using fdapde::testing::read_csv;
 // TEST(sqrpde_time_test, laplacian_nonparametric_samplingatlocations_timelocations_separable_monolithic_missingdata) {
 
 //     // Marco 
-//     // std::string R_path = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/models/space_time/Test_3"; 
+//     std::string R_path = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/models/space_time/Test_3"; 
 //     // Ilenia 
-//     std::string R_path = "/mnt/c/Users/ileni/OneDrive - Politecnico di Milano/Thesis_shared/models/space_time/Test_3"; 
+//     // std::string R_path = "/mnt/c/Users/ileni/OneDrive - Politecnico di Milano/Thesis_shared/models/space_time/Test_3"; 
 
 //     std::vector<double> alphas = {0.1, 0.9};   
 //     //std::string data_type = "all";   // all  d
@@ -403,7 +401,7 @@ using fdapde::testing::read_csv;
 
 
 
-// ------------ PER PALU 
+// ------------ PER PALUMMO
 
 // test 1 
 //    domain:         c-shaped

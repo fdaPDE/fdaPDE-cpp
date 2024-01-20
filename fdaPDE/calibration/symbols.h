@@ -20,10 +20,8 @@
 namespace fdapde {
 namespace calibration {
 
-// supported calibration strategies
-struct NoCalibration  { };
-struct GCVCalibration { };
-struct KCVCalibration { };
+// possible calibration strateges
+enum Calibration { off, gcv, kcv };
 
 }   // namespace calibration
 }   // namespace fdapde

@@ -25,7 +25,7 @@ using fdapde::core::SparseBlockMatrix;
 #include "../model_macros.h"
 #include "../model_traits.h"
 #include "distributions.h"
-#include "regression_wrappers.h"
+#include "regression_type_erasure.h"
 #include "srpde.h"
 #include "strpde.h"
 
@@ -54,18 +54,11 @@ template <typename Model_> class FPIRLS {
             using SolverType = typename std::conditional<
               is_space_only<Model>::value, SRPDE,
               STRPDE<typename Model::RegularizationType, fdapde::monolithic> >::type;
-            // define internal problem solver
-            if constexpr (!is_space_time<Model_>::value)   // space-only
+            if constexpr (is_space_only<Model_>::value || is_space_time_parabolic<Model_>::value) {
                 solver_ = SolverType(m_->pde(), m_->sampling());
-            else {   // space-time
-                if constexpr (is_space_time_parabolic<Model_>::value) {
-                    solver_ = SolverType(m_->pde(), m_->sampling(), m_->time_domain());
-                    solver_.set_initial_condition(m_->s(), false);
-                }
-                if constexpr (is_space_time_separable<Model_>::value) {
-                    solver_ = SolverType(m_->pde(), m_->time_pde(), m_->sampling());
-                    solver_.set_temporal_locations(m_->time_locs());
-                }
+            } else {   // space-time separable
+                solver_ = SolverType(m_->pde(), m_->time_pde(), m_->sampling());
+                solver_.set_temporal_locations(m_->time_locs());
             }
             // solver initialization
             solver_.set_spatial_locations(m_->locs());

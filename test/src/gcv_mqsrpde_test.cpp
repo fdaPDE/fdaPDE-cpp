@@ -24,13 +24,11 @@ using fdapde::core::fem_order;
 using fdapde::core::FEM;
 using fdapde::core::Grid;
 using fdapde::core::laplacian;
-using fdapde::core::MatrixDataWrapper;
 using fdapde::core::PDE;
-using fdapde::core::VectorDataWrapper;
 
-#include "../../fdaPDE/models/regression/msqrpde.h"
+#include "../../fdaPDE/models/regression/mqsrpde.h"
 #include "../../fdaPDE/models/sampling_design.h"
-using fdapde::models::MSQRPDE;
+using fdapde::models::MQSRPDE;
 using fdapde::models::SpaceOnly;
 
 #include "../../fdaPDE/models/regression/gcv.h"
@@ -47,7 +45,7 @@ using fdapde::testing::MeshLoader;
 using fdapde::testing::read_mtx;
 using fdapde::testing::read_csv;
 
-double RMSE(DVector<double> v1, DVector<double> v2){
+double RMSE_metric(DVector<double> v1, DVector<double> v2){
     double res = 0.; 
     if(v1.size() != v2.size())
         std::cout << std::endl << "----------ERROR IN RMSE COMPUTATION---------" << std::endl; 
@@ -625,7 +623,7 @@ TEST(gcv_msqrpde_test6, pde_nonparametric_samplingatlocations_spaceonly_gridexac
                     model.init();
                     model.solve();
 
-                    rmse_score[count_l] = RMSE(model.f(), f_true); 
+                    rmse_score[count_l] = RMSE_metric(model.f(), f_true); 
 
                     count_l = count_l+1; 
                 }

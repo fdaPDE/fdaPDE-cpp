@@ -14,8 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __MSQRPDE_H__
-#define __MSQRPDE_H__
+#ifndef __MQSRPDE_H__
+#define __MQSRPDE_H__
 
 #include <fdaPDE/linear_algebra.h>
 #include <fdaPDE/pde.h>
@@ -41,15 +41,15 @@ namespace models{
 	    
   
 template <typename RegularizationType_>
-    class MSQRPDE : public RegressionBase<MSQRPDE<RegularizationType_>, RegularizationType_> {  
+    class MQSRPDE : public RegressionBase<MQSRPDE<RegularizationType_>, RegularizationType_> {  
     
     public:
         using RegularizationType = std::decay_t<RegularizationType_>;
-        using This = MSQRPDE<RegularizationType>;
-        using Base = RegressionBase<MSQRPDE<RegularizationType>, RegularizationType>;
+        using This = MQSRPDE<RegularizationType>;
+        using Base = RegressionBase<MQSRPDE<RegularizationType>, RegularizationType>;
 
     private:
-        // typedef RegressionBase<MSQRPDE<PDE_, RegularizationType, SamplingDesign_, Solver_>> Base;
+        // typedef RegressionBase<MQSRPDE<PDE_, RegularizationType, SamplingDesign_, Solver_>> Base;
 
         unsigned int h_;                      // number of quantile orders 
         const std::vector<double> alphas_;    // quantile order 
@@ -118,9 +118,9 @@ template <typename RegularizationType_>
         DVector<double> lambdas_D;       // smoothing parameters in space  
 
         // constructor
-        MSQRPDE() = default;
+        MQSRPDE() = default;
 
-        // MSQRPDE(const PDE_& pde, std::vector<double>& alphas = {0.1, 0.5, 0.9}) : Base(pde), alphas_(alphas) {
+        // MQSRPDE(const PDE_& pde, std::vector<double>& alphas = {0.1, 0.5, 0.9}) : Base(pde), alphas_(alphas) {
         //     // // Check if the provided quantile orders are an increasing sequence 
         //     // auto i = std::adjacent_find(alphas.begin(), alphas.end(), std::greater_equal<int>());
         //     // assert(i == alphas.end(), "Quantile orders must be an increasing sequence"); 
@@ -131,11 +131,11 @@ template <typename RegularizationType_>
         template <
             typename U = RegularizationType,
             typename std::enable_if<std::is_same<U, SpaceOnly>::value, int>::type = 0>
-        MSQRPDE(const pde_ptr& pde, Sampling s, std::vector<double>& alphas = {0.1, 0.5, 0.9}) : Base(pde, s), alphas_(alphas) {
-            auto i = std::adjacent_find(alphas.begin(), alphas.end(), std::greater_equal<int>());
-            if(i != alphas.end()){
-                throw std::logic_error("Quantile orders are not in strictly ascending order");
-            }
+        MQSRPDE(const pde_ptr& pde, Sampling s, std::vector<double>& alphas = {0.1, 0.5, 0.9}) : Base(pde, s), alphas_(alphas) {
+            // auto i = std::adjacent_find(alphas.begin(), alphas.end(), std::greater_equal<int>());
+            // if(i != alphas.end()){
+            //     throw std::logic_error("Quantile orders are not in strictly ascending order");
+            // }
             h_ = alphas_.size();
         };
 
@@ -248,11 +248,11 @@ template <typename RegularizationType_>
         const DMatrix<double>& H_multiple(); 
         const DMatrix<double>& Q_multiple(); 
 
-        virtual ~MSQRPDE() = default;
+        virtual ~MQSRPDE() = default;
     };
 
     // template <typename PDE_, typename RegularizationType_, typename SamplingDesign_, typename Solver_>
-    //     struct model_traits<MSQRPDE<PDE_, RegularizationType_, SamplingDesign_, Solver_>> {
+    //     struct model_traits<MQSRPDE<PDE_, RegularizationType_, SamplingDesign_, Solver_>> {
     //     typedef PDE_ PDE;
     //     typedef SpaceOnly regularization;
     //     typedef SamplingDesign_ sampling;
@@ -260,9 +260,9 @@ template <typename RegularizationType_>
     //     enum { N = PDE::N, M = PDE::M, n_lambda = 1 };
     // };
 
-    // // msqrpde trait
+    // // mqsrpde trait
     // template <typename Model>
-    // struct is_msqrpde { static constexpr bool value = is_instance_of<Model, MSQRPDE>::value; };
+    // struct is_mqsrpde { static constexpr bool value = is_instance_of<Model, MQSRPDE>::value; };
 
 
     // perform proper initialization and update of model. Computes quantites which can be reused
@@ -270,7 +270,7 @@ template <typename RegularizationType_>
     // It is implicitly called by ModelBase::init() as part of the initialization process.
     // NB: a change in the smoothing parameter must trigger a re-initialization of the model
     template <typename RegularizationType>
-    void MSQRPDE<RegularizationType>::init_model() {
+    void MQSRPDE<RegularizationType>::init_model() {
 
         // Assemble matrices
         assemble_matrices();  
@@ -311,7 +311,7 @@ template <typename RegularizationType_>
 
         // Processing 
         // rmk: media posta a distanza 2*eps e non eps per evitare instabilità numeriche nel caso in cui 
-        // la soluzione postporcessata venga data in input all'algoritmo di MSQRPDE
+        // la soluzione postporcessata venga data in input all'algoritmo di MQSRPDE
 
         std::size_t ind_median = (find(alphas_.begin(), alphas_.end(), 0.5)) - alphas_.begin();
         //std::cout << "idx median : " << ind_median << std::endl;
@@ -479,7 +479,7 @@ template <typename RegularizationType_>
 
     // finds a solution 
     template <typename RegularizationType>
-        void MSQRPDE<RegularizationType>::solve() {
+        void MQSRPDE<RegularizationType>::solve() {
 
         w_.resize(h_*n_obs()); 
         W_bar_.resize(h_*n_obs());    
@@ -499,7 +499,7 @@ template <typename RegularizationType_>
         while(force_entrance || (crossing_constraints() && iter_ < max_iter_global_)){ 
 
             if(force_entrance)
-                std::cout << "In the MSQRPDE algorithm with forced entrance" << std::endl;
+                std::cout << "In the MQSRPDE algorithm with forced entrance" << std::endl;
 
             force_entrance = false; 
 
@@ -629,7 +629,7 @@ template <typename RegularizationType_>
 
     // Utilities 
     template <typename RegularizationType>
-        DVector<double> MSQRPDE<RegularizationType>::fitted() const{
+        DVector<double> MQSRPDE<RegularizationType>::fitted() const{
 
         DVector<double> fit = fn_curr_; 
         if(has_covariates())
@@ -638,19 +638,19 @@ template <typename RegularizationType_>
     }
 
     template <typename RegularizationType>
-        DVector<double> MSQRPDE<RegularizationType>::fitted(unsigned int j) const{
+        DVector<double> MQSRPDE<RegularizationType>::fitted(unsigned int j) const{
         // index j \in {0, ..., h-1}
         return fitted().block(j*n_obs(), 0, n_obs(), 1); 
     }
 
     template <typename RegularizationType>
-        const bool MSQRPDE<RegularizationType>::crossing_constraints() const {
+        const bool MQSRPDE<RegularizationType>::crossing_constraints() const {
         // Return true if the current estimate of quantiles is crossing, false otherwise 
         return crossing_penalty() > eps_; 
     }
 
     template <typename RegularizationType>
-        double MSQRPDE<RegularizationType>::model_loss() const{
+        double MQSRPDE<RegularizationType>::model_loss() const{
 
         double loss = 0.; 
         for(auto j = 0; j < h_; ++j)
@@ -660,7 +660,7 @@ template <typename RegularizationType_>
     }
 
     template <typename RegularizationType>
-        double MSQRPDE<RegularizationType>::crossing_penalty() const{
+        double MQSRPDE<RegularizationType>::crossing_penalty() const{
   
         // compute value of the unpenalized unconstrained functional J: 
         double pen = 0.; 
@@ -672,7 +672,7 @@ template <typename RegularizationType_>
     }
 
     template <typename RegularizationType>
-        double MSQRPDE<RegularizationType>::crossing_penalty_f() const{
+        double MQSRPDE<RegularizationType>::crossing_penalty_f() const{
   
         // compute value of the unpenalized unconstrained functional J: 
         double pen = 0.; 
@@ -684,7 +684,7 @@ template <typename RegularizationType_>
     }
 
     template <typename RegularizationType>
-        double MSQRPDE<RegularizationType>::crossing_penalty_param() const{
+        double MQSRPDE<RegularizationType>::crossing_penalty_param() const{
   
         // compute value of the unpenalized unconstrained functional J: 
         double pen = 0.; 
@@ -697,7 +697,7 @@ template <typename RegularizationType_>
     }
 
     template <typename RegularizationType>
-        const DMatrix<double>& MSQRPDE<RegularizationType>::H_multiple() {
+        const DMatrix<double>& MQSRPDE<RegularizationType>::H_multiple() {
         // compute H = X*(X^T*W*X)^{-1}*X^T*W
         H_multiple_ = X_multiple_*(invXtWX_multiple_.solve(X_multiple_.transpose()*W_multiple_));
 
@@ -705,7 +705,7 @@ template <typename RegularizationType_>
     }
 
     template <typename RegularizationType>
-        const DMatrix<double>& MSQRPDE<RegularizationType>::Q_multiple() {
+        const DMatrix<double>& MQSRPDE<RegularizationType>::Q_multiple() {
         // compute Q = W(I - H) = W ( I - X*(X^T*W*X)^{-1}*X^T*W ) 
         Q_multiple_ = W_multiple_*(DMatrix<double>::Identity(n_obs()*h_, n_obs()*h_) - H_multiple());
 
@@ -714,12 +714,12 @@ template <typename RegularizationType_>
 
     // returns the pinball loss at a specific x 
     template <typename RegularizationType>
-    DVector<double> MSQRPDE<RegularizationType>::rho_alpha(const double& alpha, const DVector<double>& x) const{ 
+    DVector<double> MQSRPDE<RegularizationType>::rho_alpha(const double& alpha, const DVector<double>& x) const{ 
         return 0.5*x.cwiseAbs() + (alpha - 0.5)*x; 
     }
 
     template <typename RegularizationType>
-        void MSQRPDE<RegularizationType>::abs_res_adj(DVector<double>& res) {
+        void MQSRPDE<RegularizationType>::abs_res_adj(DVector<double>& res) {
             unsigned int count_debug = 1; 
             for(int i = 0; i < res.size(); ++i) {
                 if(res(i) < tol_weights_) {
@@ -733,4 +733,4 @@ template <typename RegularizationType_>
 } // namespace models
 } // namespace fdapde
     
-#endif // __MSQRPDE_H__
+#endif // __MQSRPDE_H__

@@ -44,10 +44,8 @@ class QSRPDE : public RegressionBase<QSRPDE<RegularizationType_>, Regularization
 
     // constructor
     QSRPDE() = default;
-    // space-only constructor
-    template <
-      typename U = RegularizationType,
-      typename std::enable_if<std::is_same<U, SpaceOnly>::value, int>::type = 0>
+    // space-only and space-time parabolic constructor
+    fdapde_enable_constructor_if(has_single_penalty, This)
     QSRPDE(const pde_ptr& pde, Sampling s, double alpha = 0.5) : Base(pde, s), alpha_(alpha) {
         fpirls_ = FPIRLS<This>(this, tol_, max_iter_);
     };
@@ -124,20 +122,16 @@ class QSRPDE : public RegressionBase<QSRPDE<RegularizationType_>, Regularization
     const DVector<double>& py() const { return py_; }
     const DVector<double>& pW() const { return pW_; }
     const fdapde::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
-    const SpMatrix<double>& P1() const { return P1_; }   // ficticious (otherwise compile error in regression_wrappers)
+    const SpMatrix<double>& P1() const { return P1_; }   // ficticious (to compile fpirls space-time case)
 
     // GCV support
     double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {
+
         double result = 0;
-
-        std::set<std::size_t> observation_indexes;
-        for(std::size_t i = 0; i < op2.rows(); ++i) {
-            observation_indexes.insert(i);
+        for(std::size_t i = 0; i < n_locs(); ++i){
+            if(!Base::nan_mask()[i])
+                result += pinball_loss(op2.coeff(i, 0) - op1.coeff(i, 0), std::pow(10, eps_power)); 
         }
-        for(auto ind : Base::nan_idxs())
-            observation_indexes.erase(ind); 
-
-        for(std::size_t i : observation_indexes) { result += pinball_loss(op2.coeff(i, 0) - op1.coeff(i, 0), std::pow(10, eps_power)); }
         return result * result / n_obs();  // n_obs() returns number of not-nan observations
     }
 
@@ -159,7 +153,7 @@ class QSRPDE : public RegressionBase<QSRPDE<RegularizationType_>, Regularization
     DVector<double> mu_;      // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : quantile vector at step k
     DMatrix<double> T_;       // T = \Psi^T*Q*\Psi + P
     fdapde::SparseLU<SpMatrix<double>> invA_;   // factorization of non-parametric system matrix A
-    SpMatrix<double> P1_{}; // ficticious 
+    SpMatrix<double> P1_{}; // ficticious (to compile fpirls space-time case)
 
     // FPIRLS algorithm
     FPIRLS<This> fpirls_;

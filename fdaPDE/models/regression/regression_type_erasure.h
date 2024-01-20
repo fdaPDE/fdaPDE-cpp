@@ -14,30 +14,29 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __REGRESSION_WRAPPERS_H__
-#define __REGRESSION_WRAPPERS_H__
+#ifndef __REGRESSION_TYPE_ERASURE_H__
+#define __REGRESSION_TYPE_ERASURE_H__
 
 #include <fdaPDE/utils.h>
+#include <fdaPDE/linear_algebra.h>
 #include "../model_traits.h"
-#include "../model_wrappers.h"
+#include "../model_type_erasure.h"
 #include "../sampling_design.h"
-using fdapde::models::SpaceOnly;
 using fdapde::models::is_space_only;
 using fdapde::models::Sampling;
+using fdapde::models::SpaceOnly;
+using fdapde::core::BinaryVector;
+using fdapde::Dynamic;
 
 namespace fdapde {
 namespace models {
-  
-// type erased wrapper for regression models  
-// Per salvare A: 
-// - &M::A
-// - decltype(auto) A() const {return fdapde::invoke<const fdapde::core::SparseBlockMatrix<double, 2, 2>&, 20>(*this);  }
 
+// type erased wrapper for regression models
 struct IRegression {
     template <typename M>
     using fn_ptrs = fdapde::mem_fn_ptrs<
       &M::f, &M::beta, &M::g, &M::fitted, &M::W, &M::XtWX, &M::U, &M::V, &M::invXtWX, &M::invA, &M::q, &M::n_obs,
-      &M::norm, &M::y, &M::T, &M::lmbQ, &M::has_covariates, &M::P1, &M::R0, &M::nan_idxs>;
+      &M::norm, &M::y, &M::T, &M::lmbQ, &M::has_covariates, &M::nan_mask, &M::mask_obs, &M::X>;
     // interface implementation
     decltype(auto) f()       const { return fdapde::invoke<const DVector<double>&   , 0>(*this); }
     decltype(auto) beta()    const { return fdapde::invoke<const DVector<double>&   , 1>(*this); }
@@ -58,10 +57,9 @@ struct IRegression {
     decltype(auto) T() { return fdapde::invoke<const DMatrix<double>&, 14>(*this); }
     decltype(auto) lmbQ(const DMatrix<double>& x) const { return fdapde::invoke<DMatrix<double>, 15>(*this, x); }
     decltype(auto) has_covariates() const { return fdapde::invoke<bool, 16>(*this); }
-    // M
-    decltype(auto) P1() const {return fdapde::invoke<const SpMatrix<double>&, 17>(*this);  }
-    decltype(auto) R0() const {return fdapde::invoke<const SpMatrix<double>&, 18>(*this);  }
-    decltype(auto) nan_idxs() const {return fdapde::invoke<const SpMatrix<double>&, 19>(*this);  }
+    decltype(auto) nan_mask() const { return fdapde::invoke<const BinaryVector<Dynamic>&, 17>(*this); }
+    decltype(auto) mask_obs(const BinaryVector<Dynamic>& mask) { return fdapde::invoke<void, 18>(*this, mask); }
+    decltype(auto) X() const { return fdapde::invoke<const DMatrix<double>&, 19>(*this); }
 }; 
 
 template <typename RegularizationType>
@@ -84,4 +82,4 @@ make_model(PDE&& args, Sampling s, const DVector<double>& time) {
 
 }   // namespace fdapde
 
-#endif   // __REGRESSION_WRAPPERS_H__
+#endif   // __REGRESSION_TYPE_ERASURE_H__

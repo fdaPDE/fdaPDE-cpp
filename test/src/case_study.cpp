@@ -12,9 +12,7 @@ using fdapde::core::Grid;
 using fdapde::core::Mesh; 
 using fdapde::core::SPLINE;
 using fdapde::core::spline_order;
-using fdapde::core::MatrixDataWrapper;
 using fdapde::core::PDE;
-using fdapde::core::VectorDataWrapper;
 
 #include "../../fdaPDE/models/sampling_design.h"
 #include "../../fdaPDE/models/regression/strpde.h"
@@ -1551,17 +1549,25 @@ TEST(case_study_run, laplacian_nonparametric_samplingatlocations_timelocations_s
     std::vector<double> alphas = {0.9}; 
 
     // Marco 
-    // std::string path_data = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/case_study/ARPA/Lombardia/dati_Cpp/" + pollutant; 
-   
-    // Ilenia 
-    std::string path_data = "/mnt/c/Users/ileni/OneDrive - Politecnico di Milano/Thesis_shared/case_study/ARPA/Lombardia/dati_Cpp/" + pollutant ; 
+    std::string path_data = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/case_study/ARPA/Lombardia/dati_Cpp/" + pollutant; 
+    std::string path = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/Magistrale/Anno_II_Semestre_II/Thesis_shared/case_study/ARPA/Lombardia"; 
     std::string solutions_path; 
     if(est_type == "mean")
-        solutions_path = "/mnt/c/Users/ileni/OneDrive - Politecnico di Milano/Thesis_shared/case_study/ARPA/Lombardia/STRPDE/" + pollutant + "/" + periodicity + "/gcv_Cpp_" + gcv_type; 
+        solutions_path = path + "/STRPDE/" + pollutant + "/" + periodicity + "/gcv_Cpp_" + gcv_type; 
     if(est_type == "quantile")
-        solutions_path = "/mnt/c/Users/ileni/OneDrive - Politecnico di Milano/Thesis_shared/case_study/ARPA/Lombardia/QSTRPDE/" + pollutant +"/" + periodicity + "/gcv_Cpp_" + gcv_type + "/eps_" + eps_string; 
+        solutions_path = path + "/QSTRPDE/" + pollutant +"/" + periodicity + "/gcv_Cpp_" + gcv_type + "/eps_" + eps_string; 
 
-    std::cout << "Solution path : " << solutions_path << std::endl ; 
+
+
+   
+    // Ilenia 
+    //std::string path_data = "/mnt/c/Users/ileni/OneDrive - Politecnico di Milano/Thesis_shared/case_study/ARPA/Lombardia/dati_Cpp/" + pollutant ; 
+    // std::string solutions_path; 
+    // if(est_type == "mean")
+    //     solutions_path = "/mnt/c/Users/ileni/OneDrive - Politecnico di Milano/Thesis_shared/case_study/ARPA/Lombardia/STRPDE/" + pollutant + "/" + periodicity + "/gcv_Cpp_" + gcv_type; 
+    // if(est_type == "quantile")
+    //     solutions_path = "/mnt/c/Users/ileni/OneDrive - Politecnico di Milano/Thesis_shared/case_study/ARPA/Lombardia/QSTRPDE/" + pollutant +"/" + periodicity + "/gcv_Cpp_" + gcv_type + "/eps_" + eps_string; 
+
 
     // define temporal domain
     unsigned int M = 22; 

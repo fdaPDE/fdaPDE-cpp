@@ -23,9 +23,9 @@ using fdapde::core::diffusion;
 using fdapde::core::FEM;
 using fdapde::core::fem_order;
 using fdapde::core::laplacian;
-using fdapde::core::MatrixDataWrapper;
+using fdapde::core::DiscretizedMatrixField;
 using fdapde::core::PDE;
-using fdapde::core::VectorDataWrapper;
+using fdapde::core::DiscretizedVectorField;
 
 #include "../../fdaPDE/models/regression/srpde.h"
 #include "../../fdaPDE/models/sampling_design.h"
@@ -156,8 +156,8 @@ TEST(srpde_test, noncostantcoefficientspde_nonparametric_samplingareal) {
     DMatrix<double> u = read_csv<double>("../data/models/srpde/2D_test4/force.csv");
     DMatrix<double> y = read_csv<double>("../data/models/srpde/2D_test4/y.csv"    );
     // define regularizing PDE
-    MatrixDataWrapper<2, 2, 2> K(K_data);
-    VectorDataWrapper<2, 2> b(b_data);
+    DiscretizedMatrixField<2, 2, 2> K(K_data);
+    DiscretizedVectorField<2, 2> b(b_data);
     auto L = -diffusion<FEM>(K) + advection<FEM>(b);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
