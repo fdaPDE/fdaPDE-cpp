@@ -18,8 +18,6 @@
 !fdaPDE/models/functional/*
 !fdaPDE/calibration/
 !fdaPDE/calibration/*
-!fdaPDE/preprocess/
-!fdaPDE/preprocess/*
 !test/
 !test/*
 !test/src/
@@ -56,6 +54,8 @@
 !test/data/gcv/qsrpde/*
 !test/data/models/fpca/
 !test/data/models/fpca/*
+!test/data/models/centering/
+!test/data/models/centering/*
 !.github/
 !.github/*
 !.github/workflows/
@@ -168,6 +168,8 @@
 !test/data/models/fpca/2D_test3/*
 !test/data/models/fpca/2D_test4/
 !test/data/models/fpca/2D_test4/*
+!test/data/models/centering/2D_test1/
+!test/data/models/centering/2D_test1/*
 *.txt
 *.json
 *.cmake
