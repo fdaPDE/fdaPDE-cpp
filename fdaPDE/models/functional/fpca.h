@@ -90,7 +90,7 @@ class FPCA<RegularizationType_, sequential> :
                 solver.compute(X_, core::Grid<Dynamic> {}.optimize(gcv, lambda_grid_), f0);
             } break;
             case Calibration::kcv: {
-                auto cv_score = [&solver, &X_, &f0, this](
+                auto cv_score = [&solver, &X_, &f0](
                                   const DVector<double>& lambda, const core::BinaryVector<Dynamic>& train_set,
                                   const core::BinaryVector<Dynamic>& test_set) -> double {
                     solver.compute(train_set.blk_repeat(1, X_.cols()).select(X_), lambda, f0);   // fit on train set

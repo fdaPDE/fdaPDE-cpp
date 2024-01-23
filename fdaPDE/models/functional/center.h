@@ -17,37 +17,35 @@
 #ifndef __CENTER_H__
 #define __CENTER_H__
 
-#include <fdaPDE/optimization.h>
 #include <fdaPDE/utils.h>
-#include <fdaPDE/linear_algebra.h>
-#include <Eigen/SVD>
-
-#include "../../calibration/kfold_cv.h"
-#include "../../calibration/symbols.h"
-using fdapde::calibration::Calibration;
-#include "functional_base.h"
-#include "power_iteration.h"
-#include "rsvd.h"
 
 namespace fdapde {
 namespace models {
 
-template <typename CalibrationType_, typename SmootherType_>
-std::pair<DMatrix<double>, DMatrix<double>> center(
-  const DMatrix<double>& data, SmootherType_&& smoother, CalibrationType_&& calibration,
-  const std::vector<DVector<double>>& lambdas) { // lambdas must be removed and put inside calibration strategy (use expression-templates and lazy eval)
-    BlockFrame<double, int> df;
-    df.insert<double>(OBSERVATIONS_BLK, data.colwise().sum().transpose() / data.rows());
-    smoother.set_data(df);
-    // set optimal lambda according to choosen calibration strategy (currently only GCV based supported)
-    smoother.set_lambda(calibration.fit(smoother, lambdas));
-    smoother.init();
-    smoother.solve();   // should we include init() in solve() ?? cleaner interface
+struct CenterReturnType {
+    DMatrix<double> fitted;   // the centred data, X - \mu
+    DMatrix<double> mean;     // the mean field \mu
+};
 
-    std::cout << smoother.f() << std::endl;
-    
-    DMatrix<double> mean = smoother.fitted().replicate(1, data.rows()).transpose();
-    return std::make_pair(data - mean, mean);
+// functional centering of the data matrix X
+template <typename SmootherType_, typename CalibrationType_>
+CenterReturnType center(const DMatrix<double>& X, SmootherType_&& smoother, CalibrationType_&& calibration) {
+    BlockFrame<double, int> df;
+    df.insert<double>(OBSERVATIONS_BLK, X.colwise().sum().transpose() / X.rows());
+    smoother.set_data(df);
+    // set optimal lambda according to choosen calibration strategy
+    smoother.set_lambda(calibration.fit(smoother));
+    smoother.init();
+    smoother.solve();
+    // compute mean matrix and return
+    DMatrix<double> mean = smoother.fitted().replicate(1, X.rows()).transpose();
+    return {X - mean, mean};
+}
+
+// pointwise centering of the data matrix X
+CenterReturnType center(const DMatrix<double>& X) {
+    DMatrix<double> mean = (X.colwise().sum().transpose() / X.rows()).replicate(1, X.rows()).transpose();
+    return {X - mean, mean};
 }
 
 }   // namespace models

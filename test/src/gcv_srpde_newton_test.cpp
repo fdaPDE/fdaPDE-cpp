@@ -138,10 +138,6 @@ TEST(gcv_srpde_newton_test, laplacian_nonparametric_samplingatnodes_newton_fd_ex
 
   // check optimal lambda
   EXPECT_TRUE( almost_equal(best_lambda[0], expected_lambda[0]) );
-  // check consistency with GCV calibrator
-  DVector<double> opt_lambda =
-    fdapde::calibration::GCV {Newton<fdapde::Dynamic>(10, 0.05, 1), ExactEDF()}.fit(model, pt);
-  EXPECT_TRUE(opt_lambda == opt.optimum());
 }
 
 // test 3

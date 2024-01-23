@@ -26,11 +26,13 @@ using fdapde::core::BlockFrame;
 using fdapde::core::BinaryVector;
 using fdapde::Dynamic;
 
+#include "calibration_base.h"
+
 namespace fdapde {
 namespace calibration {
   
 // general implementation of KFold Cross Validation
-class KCV {
+class KCV : public CalibratorBase<KCV> {
    private:
     // algorithm's parameters
     std::size_t K_;      // number of folds

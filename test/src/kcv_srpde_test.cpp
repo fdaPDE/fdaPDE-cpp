@@ -71,6 +71,9 @@ TEST(kcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_rmse) {
     std::vector<DVector<double>> lambdas;
     for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     kcv.fit(model, lambdas, RMSE(model));
+
+    auto KCV_ = fdapde::calibration::KCV {n_folds}(lambdas, RMSE());
+    KCV_.fit(model);
     
     // test correctness
     // TODO

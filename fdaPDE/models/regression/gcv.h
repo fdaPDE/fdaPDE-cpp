@@ -84,7 +84,7 @@ class GCV {
     template <typename ModelType_, typename EDFStrategy_>
     GCV(const ModelType_& model, EDFStrategy_&& trS) : model_(model), trS_(trS), gcv_(this, &This::gcv_impl) {
         // resize gcv input space dimension
-        if constexpr (is_space_only<typename std::decay<ModelType_>::type>::value) gcv_.resize(1);
+        if constexpr (is_space_only<std::decay_t<ModelType_>>::value) gcv_.resize(1);
         else gcv_.resize(2);
         // set model pointer in edf computation strategy
         trS_.set_model(model_);
@@ -114,6 +114,9 @@ class GCV {
 	edfs_.clear(); gcvs_.clear(); cache_.clear();
     }
     template <typename ModelType_> void set_model(ModelType_&& model) {
+      	// resize gcv input space dimension
+        if constexpr (is_space_only<std::decay_t<ModelType_>>::value) gcv_.resize(1);
+        else gcv_.resize(2);
         model_ = model;
 	if(trS_) trS_.set_model(model_);
         edfs_.clear(); gcvs_.clear(); cache_.clear();
@@ -255,30 +258,6 @@ template <typename M> class ExactGCV<M, SpaceOnly> : public GCV<ExactEDF> {
 */
 
 }   // namespace models
-namespace calibration {
-
-// GCV calibrator (fulfills the calibration strategy concept)
-class GCV {
-   private:
-    models::GCV gcv_ {};
-    core::Optimizer<models::GCV> opt_ {};
-   public:
-    // constructor
-    template <typename Optimizer_, typename EDFStrategy_> GCV(Optimizer_&& opt, EDFStrategy_&& edf) : opt_(opt) {
-        gcv_.set_edf_strategy(edf);
-    }
-    // selects best smoothing parameter of regression model by minimization of GCV index
-    template <typename ModelType_, typename LambdaType_>
-    DVector<double> fit(ModelType_& model, const LambdaType_& lambda) {
-        gcv_.set_model(model);
-        return opt_.optimize(gcv_, lambda);
-    }
-    const std::vector<double>& edfs() const { return gcv_.edfs(); }   // equivalent degrees of freedom q + Tr[S]
-    const std::vector<double>& gcvs() const { return gcv_.gcvs(); }   // computed values of GCV index
-    void set_step(double step) { gcv_.set_step(step); }
-};
-
-}   // namespace calibration
 }   // namespace fdapde
 
 #endif   // __GCV_H__
