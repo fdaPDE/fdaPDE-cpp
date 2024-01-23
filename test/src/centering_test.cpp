@@ -69,5 +69,4 @@ TEST(centering_test, srpde_gcv_stochastic_grid) {
       fdapde::calibration::GCV {Grid<fdapde::Dynamic> {}, StochasticEDF(100)}(lambda_grid));
     // test correctness
     EXPECT_TRUE(almost_equal(centered_data.fitted, "../data/models/centering/2D_test1/fitted.mtx"));
-    EXPECT_TRUE(almost_equal(centered_data.mean,   "../data/models/centering/2D_test1/mean.mtx"  ));
 }

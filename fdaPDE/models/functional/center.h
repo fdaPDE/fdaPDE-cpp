@@ -38,14 +38,7 @@ CenterReturnType center(const DMatrix<double>& X, SmootherType_&& smoother, Cali
     smoother.init();
     smoother.solve();
     // compute mean matrix and return
-    DMatrix<double> mean = smoother.fitted().replicate(1, X.rows()).transpose();
-    return {X - mean, mean};
-}
-
-// pointwise centering of the data matrix X
-CenterReturnType center(const DMatrix<double>& X) {
-    DMatrix<double> mean = (X.colwise().sum().transpose() / X.rows()).replicate(1, X.rows()).transpose();
-    return {X - mean, mean};
+    return {X - smoother.fitted().replicate(1, X.rows()).transpose(), smoother.f()};
 }
 
 }   // namespace models
