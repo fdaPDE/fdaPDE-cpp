@@ -25,89 +25,103 @@ namespace fdapde {
 namespace models {
 
 // minimal type erased wrappers for models  
-template <typename RegularizationType> struct IStatModel { };
+template <typename RegularizationType> struct StatisticalModel__ { };
 
-// base statistical models interface (do not permute fn_ptrs members!)
-#define DEFINE_BASE_STAT_MODEL_INTERFACE                                                                               \
-    void init() { fdapde::invoke<void, 0>(*this); }                                                                    \
-    void solve() { fdapde::invoke<void, 1>(*this); }                                                                   \
-    void set_lambda_D(double lambda) { fdapde::invoke<void, 2>(*this, lambda); }                                       \
+// base statistical models interface (do not permute BASE_MODEL_FN_PTRS members!)
+#define BASE_MODEL_INTERFACE                                                                                           \
+    void init() { invoke<void, 0>(*this); }                                                                            \
+    void solve() { invoke<void, 1>(*this); }                                                                           \
     void set_data(const BlockFrame<double, int>& data, bool reindex = false) {                                         \
-        fdapde::invoke<void, 3>(*this, data, reindex);                                                                 \
+        invoke<void, 2>(*this, data, reindex);                                                                         \
     }                                                                                                                  \
-    void set_spatial_locations(const DMatrix<double>& locs) { fdapde::invoke<void, 4>(*this, locs); }                  \
-    BlockFrame<double, int>& data() { return fdapde::invoke<BlockFrame<double, int>&, 5>(*this); }                     \
-    decltype(auto) R0() const { return fdapde::invoke<const SpMatrix<double>&, 6>(*this); }                            \
-    std::size_t n_locs() const { return fdapde::invoke<std::size_t, 7>(*this); }                                       \
-    std::size_t n_basis() const { return fdapde::invoke<std::size_t, 8>(*this); }
+    decltype(auto) n_locs()  const { return invoke<std::size_t, 3>(*this); }                                           \
+    decltype(auto) n_basis() const { return invoke<std::size_t, 4>(*this); }                                           \
+    decltype(auto) data()          { return invoke<BlockFrame<double, int>&, 5>(*this); }                              \
+    decltype(auto) data()    const { return invoke<const BlockFrame<double, int>&, 6>(*this); }                        \
+    decltype(auto) R0()      const { return invoke<const SpMatrix<double>&, 7>(*this); }                               \
+    decltype(auto) R1()      const { return invoke<const SpMatrix<double>&, 8>(*this); }                               \
+    decltype(auto) u()       const { return invoke<const DMatrix<double>&, 9>(*this); }                                \
+    decltype(auto) Psi()     const { return invoke<const SpMatrix<double>&, 10>(*this, not_nan()); }                   \
+    decltype(auto) PsiTD()   const { return invoke<const SpMatrix<double>&, 11>(*this, not_nan()); }
+
+#define BASE_MODEL_FN_PTRS                                                                                             \
+    &M::init, &M::solve, &M::set_data, &M::n_locs, &M::n_basis,                                                        \
+      static_cast<BlockFrame<double, int>& (ModelBase<M>::*)()>(&M::data),                                             \
+      static_cast<const BlockFrame<double, int>& (ModelBase<M>::*)() const>(&M::data), &M::R0, &M::R1, &M::u,          \
+      static_cast<const SpMatrix<double>& (SamplingBase<M>::*)(not_nan) const>(&M::Psi),                               \
+      static_cast<const SpMatrix<double>& (SamplingBase<M>::*)(not_nan) const>(&M::PsiTD)
+
+// basic model interface
+template <> struct StatisticalModel__<void> {
+    template <typename M>
+    using fn_ptrs = fdapde::mem_fn_ptrs<
+      BASE_MODEL_FN_PTRS, static_cast<void (ModelBase<M>::*)(const DVector<double>&)>(&M::set_lambda),
+      static_cast<DVector<double> (ModelBase<M>::*)(int) const>(&M::lambda)>;
+    // interface implementation
+    BASE_MODEL_INTERFACE
+    void set_lambda(const DVector<double>& lambda) { invoke<void, 12>(*this, lambda); }
+    decltype(auto) lambda() const { return invoke<DVector<double>, 13>(*this, fdapde::Dynamic); }
+};
 
 // space-only statistical model interface
-template <> struct IStatModel<SpaceOnly> {
+template <> struct StatisticalModel__<SpaceOnly> {
+    // compile time constants
     using RegularizationType = SpaceOnly;
+    static constexpr int n_lambda = 1;
+
+    // interface implementation
     template <typename M>
     using fn_ptrs = fdapde::mem_fn_ptrs<
-      &M::init, &M::solve,   // initializtion and solution of the regression problem
-      &M::set_lambda_D, &M::set_data, &M::set_spatial_locations,
-      static_cast<BlockFrame<double, int>& (ModelBase<M>::*)()>(&M::data), &M::R0, &M::n_locs, &M::n_basis,
-      static_cast<void (SpaceOnlyBase<M>::*)(const SVector<1>&)>(&M::set_lambda)>;
-    // interface implementation
-    DEFINE_BASE_STAT_MODEL_INTERFACE;
-    void set_lambda(const SVector<1>& lambda) { fdapde::invoke<void, 9>(*this, lambda); }
+      BASE_MODEL_FN_PTRS, &M::set_lambda_D, static_cast<SVector<1> (SpaceOnlyBase<M>::*)() const>(&M::lambda),
+      static_cast<void (SpaceOnlyBase<M>::*)(const SVector<1>&)>(&M::set_lambda), &M::set_spatial_locations>;
+    BASE_MODEL_INTERFACE
+    void set_lambda_D(double lambda_D) { invoke<void, 12>(*this, lambda_D); }
+    SVector<1> lambda() const { return invoke<SVector<1>, 13>(*this); }
+    void set_lambda(const SVector<1>& lambda) { invoke<void, 14>(*this, lambda); }
+    void set_spatial_locations(const DMatrix<double>& locs) { invoke<void, 15>(*this, locs); }
 };
 
-// space-time separable statistical model interface
-template <> struct IStatModel<SpaceTimeSeparable> {
+// space-time separable interface
+template <> struct StatisticalModel__<SpaceTimeSeparable> {
+    // compile time constants
     using RegularizationType = SpaceTimeSeparable;
+    static constexpr int n_lambda = 2;
+
+    // interface implementation
     template <typename M>
     using fn_ptrs = fdapde::mem_fn_ptrs<
-      &M::init, &M::solve,   // initializtion and solution of the regression problem
-      &M::set_lambda_D, &M::set_data, &M::set_spatial_locations,
-      static_cast<BlockFrame<double, int>& (ModelBase<M>::*)()>(&M::data), &M::R0, &M::n_locs, &M::n_basis,
-      static_cast<void (SpaceTimeBase<M, SpaceTimeSeparable>::*)(const SVector<2>&)>(&M::set_lambda), &M::set_lambda_T,
-      &M::set_temporal_locations>;
-    // interface implementation
-    DEFINE_BASE_STAT_MODEL_INTERFACE;
-    void set_lambda(const SVector<2>& lambda) { fdapde::invoke<void, 9>(*this, lambda); }
-    void set_lambda_T(double lambda_T) { fdapde::invoke<void, 10>(*this, lambda_T); }
-    void set_temporal_locations(const DMatrix<double>& locs) { fdapde::invoke<void, 11>(*this, locs); }
+      BASE_MODEL_FN_PTRS, &M::set_lambda_D, &M::set_lambda_T,
+      static_cast<SVector<2> (SpaceTimeBase<M, SpaceTimeSeparable>::*)() const>(&M::lambda),
+      static_cast<void (SpaceTimeBase<M, SpaceTimeSeparable>::*)(const SVector<2>&)>(&M::set_lambda),
+      &M::set_spatial_locations, &M::set_temporal_locations>;
+    BASE_MODEL_INTERFACE
+    void set_lambda_D(double lambda_D) { invoke<void, 12>(*this, lambda_D); }
+    void set_lambda_T(double lambda_T) { invoke<void, 13>(*this, lambda_T); }
+    SVector<2> lambda() const { return invoke<SVector<2>, 14>(*this); }
+    void set_lambda(const SVector<2>& lambda) { invoke<void, 15>(*this, lambda); }
+    void set_spatial_locations(const DMatrix<double>& locs) { invoke<void, 16>(*this, locs); }
+    void set_temporal_locations(const DMatrix<double>& locs) { invoke<void, 17>(*this, locs); }
 };
 
-// space-time parabolic statistical model interface
-template <> struct IStatModel<SpaceTimeParabolic> {
+// space-time parabolic interface
+template <> struct StatisticalModel__<SpaceTimeParabolic> {
+    // compile time constants
     using RegularizationType = SpaceTimeParabolic;
-    template <typename M>
-    using fn_ptrs = fdapde::mem_fn_ptrs<
-      &M::init, &M::solve,   // initializtion and solution of the regression problem
-      &M::set_lambda_D, &M::set_data, &M::set_spatial_locations,
-      static_cast<BlockFrame<double, int>& (ModelBase<M>::*)()>(&M::data), &M::R0, &M::n_locs, &M::n_basis,
-      static_cast<void (SpaceTimeBase<M, SpaceTimeParabolic>::*)(const SVector<2>&)>(&M::set_lambda), &M::set_lambda_T>;
-    // interface implementation
-    DEFINE_BASE_STAT_MODEL_INTERFACE;
-    void set_lambda(const SVector<2>& lambda) { fdapde::invoke<void, 9>(*this, lambda); }
-    void set_lambda_T(double lambda_T) { fdapde::invoke<void, 10>(*this, lambda_T); }
-};
+    static constexpr int n_lambda = 2;
 
-// regularization-independent model interface
-template <> struct IStatModel<void> {
+    // interface implementation
     template <typename M>
     using fn_ptrs = fdapde::mem_fn_ptrs<
-      &M::init, &M::solve, static_cast<void (ModelBase<M>::*)(const DVector<double>&)>(&M::set_lambda),
-      static_cast<DVector<double> (ModelBase<M>::*)(int) const>(&M::lambda),
-      static_cast<const SpMatrix<double>& (SamplingBase<M>::*)(not_nan) const>(&M::Psi),
-      static_cast<const SpMatrix<double>& (SamplingBase<M>::*)(not_nan) const>(&M::PsiTD), &M::set_data,
-      &M::n_locs, &M::n_basis>;
-    // interface implementation
-    void init()  { fdapde::invoke<void, 0>(*this); }
-    void solve() { fdapde::invoke<void, 1>(*this); }
-    void set_lambda(const DVector<double>& lambda) { fdapde::invoke<void, 2>(*this, lambda); }
-    decltype(auto) lambda() const { return fdapde::invoke<DVector<double>, 3>(*this, fdapde::Dynamic); }
-    decltype(auto) Psi()    const { return fdapde::invoke<const SpMatrix<double>&, 4>(*this, not_nan()); }
-    decltype(auto) PsiTD()  const { return fdapde::invoke<const SpMatrix<double>&, 5>(*this, not_nan()); }
-    void set_data(const BlockFrame<double, int>& data, bool reindex = false) {
-        fdapde::invoke<void, 6>(*this, data, reindex);
-    }
-    std::size_t n_locs() const { return fdapde::invoke<std::size_t, 7>(*this); }
-    std::size_t n_basis() const { return fdapde::invoke<std::size_t, 8>(*this); }
+      BASE_MODEL_FN_PTRS, &M::set_lambda_D, &M::set_lambda_T,
+      static_cast<SVector<2> (SpaceTimeBase<M, SpaceTimeParabolic>::*)() const>(&M::lambda),
+      static_cast<void (SpaceTimeBase<M, SpaceTimeParabolic>::*)(const SVector<2>&)>(&M::set_lambda),
+      &M::set_spatial_locations>;
+    BASE_MODEL_INTERFACE
+    void set_lambda_D(double lambda_D) { invoke<void, 12>(*this, lambda_D); }
+    void set_lambda_T(double lambda_T) { invoke<void, 13>(*this, lambda_T); }
+    SVector<2> lambda() const { return invoke<SVector<2>, 14>(*this); }
+    void set_lambda(const SVector<2>& lambda) { invoke<void, 15>(*this, lambda); }
+    void set_spatial_locations(const DMatrix<double>& locs) { invoke<void, 16>(*this, locs); }
 };
 
 }   // namespace models

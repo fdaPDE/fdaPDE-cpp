@@ -36,42 +36,40 @@ template <typename Model_> class PowerIteration {
     using SolverType = typename std::conditional<
       is_space_only<Model>::value, SRPDE, STRPDE<typename Model::RegularizationType, fdapde::monolithic>>::type;
     static constexpr int n_lambda = Model::n_lambda;
-    Model* m_;
     GCV gcv_;   // GCV functor
     // algorithm's parameters
     double tolerance_ = 1e-6;     // treshold on |Jnew - Jold| used as stopping criterion
     std::size_t max_iter_ = 20;   // maximum number of iterations before forced stop
     std::size_t k_ = 0;           // iteration index
     SolverType solver_;           // internal solver
-    int seed_;
+    int seed_ = fdapde::random_seed;
+    int n_mc_samples_ = 100;
 
     DVector<double> s_;    // estimated score vector
     DVector<double> fn_;   // field evaluation at data location \frac{\Psi*f}{\norm{f}_{L^2}}
     DVector<double> f_;    // field basis expansion at convergence
     DVector<double> g_;    // PDE misfit at convergence
     double f_norm_;        // L^2 norm of estimated field at converegence
+
    public:
     // constructors
     PowerIteration() = default;
-    PowerIteration(Model* m, double tolerance, std::size_t max_iter, int seed) :
-        m_(m), tolerance_(tolerance), max_iter_(max_iter),
-        seed_((seed == fdapde::random_seed) ? std::random_device()() : seed) {};
-    PowerIteration(Model* m, double tolerance, std::size_t max_iter) :
+    PowerIteration(const Model& m, double tolerance, std::size_t max_iter, int seed) :
+        tolerance_(tolerance), max_iter_(max_iter),
+        seed_((seed == fdapde::random_seed) ? std::random_device()() : seed) {
+        // initialize internal smoothing solver
+        if constexpr (is_space_only<SolverType>::value) { solver_ = SolverType(m.pde(), m.sampling()); }
+        else {
+            solver_ = SolverType(m.pde(), m.time_pde(), m.sampling());
+            solver_.set_temporal_locations(m.time_locs());
+        }
+        solver_.set_spatial_locations(m.locs());
+        return;
+    };
+    template <typename ModelType> PowerIteration(const ModelType& m, double tolerance, std::size_t max_iter) :
         PowerIteration(m, tolerance, max_iter, fdapde::random_seed) {};
 
-    // initializes internal smoothing solver
-    void init() {
-        if constexpr (is_space_only<Model>::value) {   // space-only solver
-            solver_ = SolverType(m_->pde(), m_->sampling());
-        } else {   // space-time separable solver
-            solver_ = SolverType(m_->pde(), m_->time_pde(), m_->sampling());
-            solver_.set_temporal_locations(m_->time_locs());
-        }
-        solver_.set_spatial_locations(m_->locs());
-        // initialize GCV functor
-        gcv_ = solver_.template gcv<StochasticEDF>(100, seed_);
-    }
-
+    void init() { gcv_ = solver_.template gcv<StochasticEDF>(n_mc_samples_, seed_); }
     // executes the power itration algorithm on data X and smoothing parameter \lambda, starting from f0
     void compute(const DMatrix<double>& X, const SVector<n_lambda>& lambda, const DVector<double>& f0) {
         // initialization
@@ -83,16 +81,16 @@ template <typename Model_> class PowerIteration {
         double Jnew = 1;
         fn_ = f0;   // set starting point
         while (!almost_equal(Jnew, Jold, tolerance_) && k_ < max_iter_) {
-            // compute score vector s as \frac{X*fn}{\norm(X*fn)}
+            // s = \frac{X*fn}{\norm(X*fn)}
             s_ = X * fn_;
             s_ = s_ / s_.norm();
-            // compute loadings by solving a proper smoothing problem
+            // compute loadings (solve smoothing problem)
             solver_.data().template insert<double>(OBSERVATIONS_BLK, X.transpose() * s_);   // X^\top*s
             solver_.solve();
             // prepare for next iteration
             k_++;
             fn_ = solver_.fitted();   // \Psi*f
-            // update value of discretized functional \norm{X - s*f_n^\top}_F + f^\top*P(\lambda)*f
+            // update value of discretized functional: \norm{X - s*f_n^\top}_F + f^\top*P(\lambda)*f
             Jold = Jnew;
             Jnew = (X - s_ * fn_.transpose()).squaredNorm() + solver_.ftPf(lambda);
         }

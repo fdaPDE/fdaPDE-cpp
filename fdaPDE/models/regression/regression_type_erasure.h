@@ -32,54 +32,43 @@ namespace fdapde {
 namespace models {
 
 // type erased wrapper for regression models
-struct IRegression {
+struct RegressionModel__ {
     template <typename M>
     using fn_ptrs = fdapde::mem_fn_ptrs<
       &M::f, &M::beta, &M::g, &M::fitted, &M::W, &M::XtWX, &M::U, &M::V, &M::invXtWX, &M::invA, &M::q, &M::n_obs,
       &M::norm, &M::y, &M::T, &M::lmbQ, &M::has_covariates, &M::nan_mask, &M::mask_obs, &M::X>;
     // interface implementation
-    decltype(auto) f()       const { return fdapde::invoke<const DVector<double>&   , 0>(*this); }
-    decltype(auto) beta()    const { return fdapde::invoke<const DVector<double>&   , 1>(*this); }
-    decltype(auto) g()       const { return fdapde::invoke<const DVector<double>&   , 2>(*this); }
-    decltype(auto) fitted()  const { return fdapde::invoke<DMatrix<double>          , 3>(*this); }
-    decltype(auto) W()       const { return fdapde::invoke<const DiagMatrix<double>&, 4>(*this); }
-    decltype(auto) XtWX()    const { return fdapde::invoke<const DMatrix<double>&   , 5>(*this); }
-    decltype(auto) U()       const { return fdapde::invoke<const DMatrix<double>&   , 6>(*this); }
-    decltype(auto) V()       const { return fdapde::invoke<const DMatrix<double>&   , 7>(*this); }
-    decltype(auto) invXtWX() const { return fdapde::invoke<const Eigen::PartialPivLU<DMatrix<double>>&, 8>(*this); }
-    decltype(auto) invA()    const { return fdapde::invoke<const fdapde::SparseLU<SpMatrix<double>>&  , 9>(*this); }
-    decltype(auto) q()       const { return fdapde::invoke<std::size_t, 10>(*this); }
-    decltype(auto) n_obs()   const { return fdapde::invoke<std::size_t, 11>(*this); }
+    decltype(auto) f()       const { return invoke<const DVector<double>&   , 0>(*this); }
+    decltype(auto) beta()    const { return invoke<const DVector<double>&   , 1>(*this); }
+    decltype(auto) g()       const { return invoke<const DVector<double>&   , 2>(*this); }
+    decltype(auto) fitted()  const { return invoke<DMatrix<double>          , 3>(*this); }
+    decltype(auto) W()       const { return invoke<const DiagMatrix<double>&, 4>(*this); }
+    decltype(auto) XtWX()    const { return invoke<const DMatrix<double>&   , 5>(*this); }
+    decltype(auto) U()       const { return invoke<const DMatrix<double>&   , 6>(*this); }
+    decltype(auto) V()       const { return invoke<const DMatrix<double>&   , 7>(*this); }
+    decltype(auto) invXtWX() const { return invoke<const Eigen::PartialPivLU<DMatrix<double>>&, 8>(*this); }
+    decltype(auto) invA()    const { return invoke<const fdapde::SparseLU<SpMatrix<double>>&  , 9>(*this); }
+    decltype(auto) q()       const { return invoke<std::size_t, 10>(*this); }
+    decltype(auto) n_obs()   const { return invoke<std::size_t, 11>(*this); }
     decltype(auto) norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {
-        return fdapde::invoke<double, 12> (*this, op1, op2);
+        return invoke<double, 12> (*this, op1, op2);
     }
-    decltype(auto) y() const { return fdapde::invoke<const DMatrix<double>&, 13>(*this); }
-    decltype(auto) T() { return fdapde::invoke<const DMatrix<double>&, 14>(*this); }
-    decltype(auto) lmbQ(const DMatrix<double>& x) const { return fdapde::invoke<DMatrix<double>, 15>(*this, x); }
-    decltype(auto) has_covariates() const { return fdapde::invoke<bool, 16>(*this); }
-    decltype(auto) nan_mask() const { return fdapde::invoke<const BinaryVector<Dynamic>&, 17>(*this); }
-    decltype(auto) mask_obs(const BinaryVector<Dynamic>& mask) { return fdapde::invoke<void, 18>(*this, mask); }
-    decltype(auto) X() const { return fdapde::invoke<const DMatrix<double>&, 19>(*this); }
-}; 
+    decltype(auto) y() const { return invoke<const DMatrix<double>&, 13>(*this); }
+    decltype(auto) T() { return invoke<const DMatrix<double>&, 14>(*this); }
+    decltype(auto) lmbQ(const DMatrix<double>& x) const { return invoke<DMatrix<double>, 15>(*this, x); }
+    decltype(auto) has_covariates() const { return invoke<bool, 16>(*this); }
+    decltype(auto) nan_mask() const { return invoke<const BinaryVector<Dynamic>&, 17>(*this); }
+    decltype(auto) mask_obs(const BinaryVector<Dynamic>& mask) { return invoke<void, 18>(*this, mask); }
+    decltype(auto) X() const { return invoke<const DMatrix<double>&, 19>(*this); }
+};
 
 template <typename RegularizationType>
-using RegressionModel = fdapde::erase<fdapde::heap_storage, IStatModel<RegularizationType>, IRegression>;
+using RegressionModel = fdapde::erase<fdapde::heap_storage, StatisticalModel__<RegularizationType>, RegressionModel__>;
 template <typename RegularizationType>
-using RegressionView  = fdapde::erase<fdapde::non_owning_storage, IStatModel<RegularizationType>, IRegression>;
+using RegressionView =
+  fdapde::erase<fdapde::non_owning_storage, StatisticalModel__<RegularizationType>, RegressionModel__>;
 
 }   // namespace models
-
-template <typename Model, typename PDE>
-typename std::enable_if< is_space_only<Model>::value, models::RegressionModel<SpaceOnly>>::type
-make_model(PDE&& args, Sampling s) {
-    return models::RegressionModel<SpaceOnly>(Model(std::forward<PDE>(args), s));
-}
-template <typename Model, typename PDE>
-typename std::enable_if<!is_space_only<Model>::value, models::RegressionModel<typename Model::RegularizationType>>::type
-make_model(PDE&& args, Sampling s, const DVector<double>& time) {
-    return models::RegressionModel<typename Model::RegularizationType>(Model(std::forward<PDE>(args), s, time));
-}
-
 }   // namespace fdapde
 
 #endif   // __REGRESSION_TYPE_ERASURE_H__

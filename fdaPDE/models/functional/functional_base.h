@@ -49,7 +49,7 @@ class FunctionalBase : public select_regularization_base<Model, RegularizationTy
       FunctionalBase(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s) :
         Base(space_penalty, time_penalty), SamplingBase<Model>(s) {};
 
-  // getters
+    // getters
     const DMatrix<double>& X() const { return df_.template get<double>(OBSERVATIONS_BLK); }   // observation matrix X
     std::size_t n_stat_units() const { return X().rows(); }
     std::size_t n_obs() const { return X().size(); };

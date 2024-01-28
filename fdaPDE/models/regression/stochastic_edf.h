@@ -30,8 +30,7 @@ namespace models {
 // computes an approximation of the trace of S = \Psi*T^{-1}*\Psi^T*Q using a monte carlo approximation.
 class StochasticEDF {
    private:
-    using ModelType = fdapde::erase<fdapde::non_owning_storage, IStatModel<void>, IRegression>;
-    ModelType model_;
+    RegressionView<void> model_;
     std::size_t r_ = 100;   // number of monte carlo realizations
     DMatrix<double> Us_;    // sample from Rademacher distribution
     DMatrix<double> Bs_;    // \Psi^T*Q*Us_
@@ -86,7 +85,7 @@ class StochasticEDF {
         return MCmean / r_;
     }
     // setter
-    void set_model(ModelType& model) { model_ = model; }
+    void set_model(RegressionView<void> model) { model_ = model; }
     void set_seed(int seed) { seed_ = seed; }
     void set_n_mc_samples(int r) { r_ = r; }
 };

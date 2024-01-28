@@ -27,8 +27,7 @@ namespace models {
 // operator: Tr[S] = Tr[\Psi*T^{-1}*\Psi^T*Q] = Tr[Q*\Psi*T^{-1}*\Psi^T]
 class ExactEDF {
    private:
-    using ModelType = fdapde::erase<fdapde::non_owning_storage, IStatModel<void>, IRegression>;
-    ModelType model_;
+    RegressionView<void> model_;
     // computes smoothing matrix S = Q*\Psi*T^{-1}*\Psi^T
     const DMatrix<double>& S() {
         // factorize matrix T
@@ -43,7 +42,7 @@ class ExactEDF {
 
     ExactEDF() = default;
     double compute() { return S().trace(); }   // computes Tr[S]
-    void set_model(const ModelType& model) { model_ = model; }
+    void set_model(RegressionView<void> model) { model_ = model; }
 };
 
 }   // namespace models

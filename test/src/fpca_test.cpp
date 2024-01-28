@@ -28,6 +28,7 @@ using fdapde::core::PDE;
 #include "../../fdaPDE/models/functional/fpca.h"
 #include "../../fdaPDE/models/sampling_design.h"
 using fdapde::models::FPCA;
+using fdapde::models::RegularizedSVD;
 using fdapde::models::Sampling;
 #include "../../fdaPDE/calibration/symbols.h"
 using fdapde::calibration::Calibration;
@@ -56,10 +57,10 @@ TEST(fpca_test, laplacian_samplingatnodes_sequential) {
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> pde(domain.mesh, L, u);
     // define model
     double lambda_D = 1e-2;
-    FPCA<SpaceOnly, fdapde::sequential> model(problem, Sampling::mesh_nodes, Calibration::off);
+    FPCA<SpaceOnly> model(pde, Sampling::mesh_nodes, RegularizedSVD<fdapde::sequential>{Calibration::off});
     model.set_lambda_D(lambda_D);
     // set model's data
     BlockFrame<double, int> df;
@@ -69,8 +70,8 @@ TEST(fpca_test, laplacian_samplingatnodes_sequential) {
     model.init();
     model.solve();
     // test correctness
-    EXPECT_TRUE(almost_equal(model.fitted_loadings(), "../data/models/fpca/2D_test1/loadings_seq.mtx"));
-    EXPECT_TRUE(almost_equal(model.scores(),          "../data/models/fpca/2D_test1/scores_seq.mtx"  ));
+    EXPECT_TRUE(almost_equal(model.Psi() * model.loadings(), "../data/models/fpca/2D_test1/loadings_seq.mtx"));
+    EXPECT_TRUE(almost_equal(model.scores(),                 "../data/models/fpca/2D_test1/scores_seq.mtx"  ));
 }
 
 // test 2
@@ -92,7 +93,7 @@ TEST(fpca_test, laplacian_samplingatnodes_monolithic) {
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda_D = 1e-2;
-    FPCA<SpaceOnly, fdapde::monolithic> model(problem, Sampling::mesh_nodes);
+    FPCA<SpaceOnly> model(problem, Sampling::mesh_nodes, RegularizedSVD<fdapde::monolithic>());
     model.set_lambda_D(lambda_D);
     // set model's data
     BlockFrame<double, int> df;
@@ -102,8 +103,8 @@ TEST(fpca_test, laplacian_samplingatnodes_monolithic) {
     model.init();
     model.solve();
     // test correctness
-    EXPECT_TRUE(almost_equal(model.fitted_loadings(), "../data/models/fpca/2D_test1/loadings_mon.mtx"));
-    EXPECT_TRUE(almost_equal(model.scores(),          "../data/models/fpca/2D_test1/scores_mon.mtx"  ));
+    EXPECT_TRUE(almost_equal(model.Psi() * model.loadings(), "../data/models/fpca/2D_test1/loadings_mon.mtx"));
+    EXPECT_TRUE(almost_equal(model.scores(),                 "../data/models/fpca/2D_test1/scores_mon.mtx"  ));
 }
 
 // test 3
@@ -123,15 +124,16 @@ TEST(fpca_test, laplacian_samplingatlocations_sequential_gcv) {
     // define regularizing PDE
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
-    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
-    // define model
-    FPCA<SpaceOnly, fdapde::sequential> model(problem, Sampling::pointwise, Calibration::gcv);
-    model.set_spatial_locations(locs);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> pde(domain.mesh, L, u);
     // grid of smoothing parameters
     std::vector<DVector<double>> lambda_grid;
     for (double x = -4; x <= -2; x += 0.1) { lambda_grid.push_back(SVector<1>(std::pow(10, x))); }
-    model.set_lambda(lambda_grid);
-    model.set_seed(78965);   // for reproducibility purposes in testing
+    // define model
+    RegularizedSVD<fdapde::sequential> rsvd(Calibration::gcv);
+    rsvd.set_lambda(lambda_grid);
+    rsvd.set_seed(78965);   // for reproducibility purposes in testing
+    FPCA<SpaceOnly> model(pde, Sampling::pointwise, rsvd);
+    model.set_spatial_locations(locs);
     // set model's data
     BlockFrame<double, int> df;
     df.insert(OBSERVATIONS_BLK, y);
@@ -140,8 +142,8 @@ TEST(fpca_test, laplacian_samplingatlocations_sequential_gcv) {
     model.init();
     model.solve();
     // test correctness
-    EXPECT_TRUE(almost_equal(model.fitted_loadings(), "../data/models/fpca/2D_test2/loadings.mtx"));
-    EXPECT_TRUE(almost_equal(model.scores(),          "../data/models/fpca/2D_test2/scores.mtx"  ));
+    EXPECT_TRUE(almost_equal(model.Psi() * model.loadings(), "../data/models/fpca/2D_test2/loadings.mtx"));
+    EXPECT_TRUE(almost_equal(model.scores(),                 "../data/models/fpca/2D_test2/scores.mtx"  ));
 }
 
 // test 4
@@ -162,15 +164,15 @@ TEST(fpca_test, laplacian_samplingatlocations_sequential_kcv) {
     auto L = -laplacian<FEM>();
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
-    // define model
-    FPCA<SpaceOnly, fdapde::sequential> model(problem, Sampling::pointwise, Calibration::kcv);
-    model.set_spatial_locations(locs);
     // grid of smoothing parameters
-    std::vector<DVector<double>> lambdas;
-    for (double x = -4; x <= -2; x += 0.1) lambdas.push_back(SVector<1>(std::pow(10, x)));
-    model.set_lambda(lambdas);
-    model.set_seed(12654);   // for reproducibility purposes in testing
-    model.set_nfolds(10);    // perform a 10 folds cross-validation
+    std::vector<DVector<double>> lambda_grid;
+    for (double x = -4; x <= -2; x += 0.1) lambda_grid.push_back(SVector<1>(std::pow(10, x)));
+    // define model
+    RegularizedSVD<fdapde::sequential> rsvd(Calibration::kcv);
+    rsvd.set_lambda(lambda_grid);
+    rsvd.set_seed(12654);   // for reproducibility purposes in testing    
+    FPCA<SpaceOnly> model(problem, Sampling::pointwise, rsvd);
+    model.set_spatial_locations(locs);
     // set model's data
     BlockFrame<double, int> df;
     df.insert(OBSERVATIONS_BLK, y);
@@ -179,8 +181,8 @@ TEST(fpca_test, laplacian_samplingatlocations_sequential_kcv) {
     model.init();
     model.solve();    
     // test correctness
-    EXPECT_TRUE(almost_equal(model.fitted_loadings(), "../data/models/fpca/2D_test3/loadings.mtx"));
-    EXPECT_TRUE(almost_equal(model.scores(),          "../data/models/fpca/2D_test3/scores.mtx"  ));
+    EXPECT_TRUE(almost_equal(model.Psi() * model.loadings(), "../data/models/fpca/2D_test3/loadings.mtx"));
+    EXPECT_TRUE(almost_equal(model.scores(),                 "../data/models/fpca/2D_test3/scores.mtx"  ));
 }
 
 /*

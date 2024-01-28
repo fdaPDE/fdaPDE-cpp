@@ -27,6 +27,10 @@ struct CenterReturnType {
     DMatrix<double> mean;     // the mean field \mu
 };
 
+  // need to handle case with missing data
+  // introudce a mean function which just produces the (smooth) mean field (no centering)
+  // then we can speak about weighted average field
+  
 // functional centering of the data matrix X
 template <typename SmootherType_, typename CalibrationType_>
 CenterReturnType center(const DMatrix<double>& X, SmootherType_&& smoother, CalibrationType_&& calibration) {
@@ -34,7 +38,12 @@ CenterReturnType center(const DMatrix<double>& X, SmootherType_&& smoother, Cali
     df.insert<double>(OBSERVATIONS_BLK, X.colwise().sum().transpose() / X.rows());
     smoother.set_data(df);
     // set optimal lambda according to choosen calibration strategy
-    smoother.set_lambda(calibration.fit(smoother));
+    if constexpr (std::is_base_of<Eigen::MatrixBase<CalibrationType_>, CalibrationType_>::value) {   // fixed \lambda
+        fdapde_assert(calibration.cols() == 1 && calibration.rows() == SmootherType_::n_lambda);
+        smoother.set_lambda(calibration);   // center with fixed \lambda
+    } else {
+        smoother.set_lambda(calibration.fit(smoother));
+    }
     smoother.init();
     smoother.solve();
     // compute mean matrix and return

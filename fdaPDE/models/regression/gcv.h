@@ -38,9 +38,7 @@ struct EDFStrategy__ {
     template <typename M> using fn_ptrs = fdapde::mem_fn_ptrs<&M::compute, &M::set_model>;
     // forwardings
     decltype(auto) compute() { return fdapde::invoke<double, 0>(*this); }
-    decltype(auto) set_model(const fdapde::erase<fdapde::non_owning_storage, IStatModel<void>, IRegression>& model) {
-        fdapde::invoke<void, 1>(*this, model);
-    }
+    void set_model(const RegressionView<void>& model) { fdapde::invoke<void, 1>(*this, model); }
 };
 using EDFStrategy = fdapde::erase<fdapde::heap_storage, EDFStrategy__>;
   
