@@ -58,6 +58,13 @@ template <typename T> struct CalibratorBase {
     }
 };
 
+// a type-erasure wrapper for a (configured) calibration algorithm for models of type ModelType
+template <typename ModelType_> struct Calibrator__ {
+    template <typename T> using fn_ptrs = fdapde::mem_fn_ptrs<&T::template fit<ModelType_>>;
+    DVector<double> fit(ModelType_& model) { return fdapde::invoke<DVector<double>, 0>(*this, model); }
+};
+template <typename ModelType_> using Calibrator = fdapde::erase<fdapde::heap_storage, Calibrator__<ModelType_>>;
+
 }   // namespace calibration
 }   // namespace fdapde
 

@@ -50,7 +50,6 @@ template <typename Model_> class PowerIteration {
     DVector<double> f_;    // field basis expansion at convergence
     DVector<double> g_;    // PDE misfit at convergence
     double f_norm_;        // L^2 norm of estimated field at converegence
-
    public:
     // constructors
     PowerIteration() = default;

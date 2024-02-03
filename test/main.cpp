@@ -14,6 +14,7 @@
 #include "src/kcv_srpde_test.cpp"
 // functional test suite
 #include "src/fpca_test.cpp"
+#include "src/fpls_test.cpp"
 #include "src/centering_test.cpp"
 
 

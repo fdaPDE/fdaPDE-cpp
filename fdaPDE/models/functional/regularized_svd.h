@@ -20,7 +20,12 @@
 #include <fdaPDE/utils.h>
 #include <Eigen/SVD>
 
+#include "../../calibration/kfold_cv.h"
+#include "../../calibration/symbols.h"
+using fdapde::calibration::Calibration;
 #include "../model_traits.h"
+#include "power_iteration.h"
+
 
 namespace fdapde {
 namespace models {
@@ -32,9 +37,106 @@ template <typename SolutionPolicy_> class RegularizedSVD;
 // Finds a low-rank approximation of X while penalizing for the eigenfunctions of \mathcal{X} by sequentially solving
 // \argmin_{s,f} \norm_F{X - s^\top*f}^2 + (s^\top*s)*P_{\lambda}(f), up to a desired rank
 template <> class RegularizedSVD<sequential> {
+   private:
+    Calibration calibration_;    // PC function's smoothing parameter selection strategy
+    std::size_t n_folds_ = 10;   // for a kcv calibration strategy, the number of folds
+    std::vector<DVector<double>> lambda_grid_;
+    // power iteration parameters
+    double tolerance_ = 1e-6;     // relative tolerance between Jnew and Jold, used as stopping criterion
+    std::size_t max_iter_ = 20;   // maximum number of allowed iterations
+    int seed_ = fdapde::random_seed;
+
+    // problem solution
+    DMatrix<double> scores_;
+    DMatrix<double> loadings_;        // PC functions' expansion coefficients
+    DVector<double> loadings_norm_;   // L^2 norm of estimated fields
+
+    // basic rsvd iterator (should be used only for the end() iterator)
+    struct rsvd_iterator_base {
+        friend RegularizedSVD;
+        RegularizedSVD* rsvd_;
+        int index_;   // current rank
+        rsvd_iterator_base(RegularizedSVD* rsvd, int index) : rsvd_(rsvd), index_(index) {};
+        friend bool operator!=(const rsvd_iterator_base& lhs, const rsvd_iterator_base& rhs) {
+            return lhs.index_ != rhs.index_;
+        }
+    };
+
+    // this iterator allows to range over each component of X, while triggering the computation only when required
+    template <typename ModelType> struct rsvd_iterator : public rsvd_iterator_base {
+       private:
+        PowerIteration<ModelType> solver_;        // rank-one step solver
+        DMatrix<double> X_;                       // deflated data
+        Eigen::JacobiSVD<DMatrix<double>> svd_;   // thin monolithic Singular Value Decomposition (not regularized)
+        ModelType& model_;
+
+        // rank-one step: \argmin_{s,f} \norm_F{X - s^\top*f}^2 + (s^\top*s)*P_{\lambda}(f). calibration of \lambda
+        // dispatched to desired strategy
+        void rank_one_step() {
+            DVector<double> f0 = svd_.matrixV().col(index_);
+            switch (rsvd_->calibration_) {
+            case Calibration::off: {
+                // find vectors s,f minimizing \norm_F{Y - s^T*f}^2 + (s^T*s)*P(f) fixed \lambda
+                solver_.compute(X_, model_.lambda(), f0);
+            } break;
+            case Calibration::gcv: {
+                // select \lambda minimizing the GCV index
+                ScalarField<Dynamic> gcv([&](const DVector<double>& lambda) -> double {
+                    solver_.compute(X_, lambda, f0);
+                    return solver_.gcv();   // return GCV index at convergence
+                });
+                solver_.compute(X_, core::Grid<Dynamic> {}.optimize(gcv, rsvd_->lambda_grid_), f0);
+            } break;
+            case Calibration::kcv: {
+                // select \lambda minimizing the reconstruction error in cross-validation
+                auto cv_score = [&](
+                                  const DVector<double>& lambda, const core::BinaryVector<Dynamic>& train_set,
+                                  const core::BinaryVector<Dynamic>& test_set) -> double {
+                    solver_.compute(train_set.blk_repeat(1, X_.cols()).select(X_), lambda, f0);   // fit on train set
+                    // reconstruction error on test set: \norm{X_test * (I - fn*fn^\top/J)}_F/n_test, with
+                    // J = \norm{f_n}_2^2 + f^\top*P(\lambda)*f (PS: the division of f^\top*P(\lambda)*f by
+                    // \norm{f}_{L^2} is necessary to obtain J as expected)
+                    return (test_set.blk_repeat(1, X_.cols()).select(X_) *
+                            (DMatrix<double>::Identity(X_.cols(), X_.cols()) -
+                             solver_.fn() * solver_.fn().transpose() /
+                               (solver_.fn().squaredNorm() + solver_.ftPf(lambda) / solver_.f_squaredNorm())))
+                             .squaredNorm() /
+                           test_set.count() * X_.cols();
+                };
+                solver_.compute(
+                  X_, calibration::KCV {rsvd_->n_folds_, rsvd_->seed_}.fit(model_, rsvd_->lambda_grid_, cv_score), f0);
+            } break;
+            }
+            X_ -= solver_.s() * solver_.fn().transpose() * solver_.f_norm();   // X <- X - s*f_n^\top (deflation step)
+            return;
+        }
+       public:
+        // constructor
+        rsvd_iterator(RegularizedSVD* rsvd, int index, const DMatrix<double>& X, ModelType& model) :
+            rsvd_iterator_base(rsvd, index),
+            X_(X),
+            solver_(model, rsvd->tolerance_, rsvd->max_iter_, rsvd->seed_),
+            model_(model) {
+            // first guess of PCs set to a multivariate PCA (SVD)
+            svd_ = Eigen::JacobiSVD<DMatrix<double>>(X_, Eigen::ComputeThinU | Eigen::ComputeThinV);
+            solver_.init();   // initialize power iteration solver
+        };
+        rsvd_iterator& operator++() {
+            ++index_;
+            return *this;
+        }
+        bool operator!=(const rsvd_iterator_base& rhs) {
+            if (index_ != rhs.index_) { rank_one_step(); }   // trigger computation of next component only if not ended
+            return index_ != rhs.index_;
+        }
+        // getters
+        const DVector<double>& scores() const { return solver_.s(); }
+        const DVector<double>& loading() const { return solver_.f(); }
+        double norm() const { return solver_.f_norm(); }
+    };
    public:
     // constructors
-    RegularizedSVD(Calibration c) : calibration_(c) {}
+    RegularizedSVD(Calibration c) : calibration_(c) { }
     RegularizedSVD() : RegularizedSVD(Calibration::off) {};
 
     // sequentially solves \argmin_{s,f} \norm_F{X - s^\top*f}^2 + (s^\top*s)*P_{\lambda}(f), up to the specified rank,
@@ -44,56 +146,18 @@ template <> class RegularizedSVD<sequential> {
         loadings_.resize(model.n_basis(), rank);
         scores_.resize(X.rows(), rank);
         loadings_norm_.resize(rank);
-        DMatrix<double> X_ = X;   // copy data
-
-        // first guess of PCs set to a multivariate PCA (SVD)
-        Eigen::JacobiSVD<DMatrix<double>> svd(X_, Eigen::ComputeThinU | Eigen::ComputeThinV);
-	// initialize power iteration solver
-	PowerIteration<ModelType> solver(model, tolerance_, max_iter_, seed_);
-        solver.init();
-        // sequential extraction of principal components
-        for (std::size_t i = 0; i < rank; i++) {
-            DVector<double> f0 = svd.matrixV().col(i);
-            switch (calibration_) {
-            case Calibration::off: {
-                // find vectors s,f minimizing \norm_F{Y - s^T*f}^2 + (s^T*s)*P(f) fixed \lambda
-                solver.compute(X_, model.lambda(), f0);
-            } break;
-            case Calibration::gcv: {
-                // select \lambda minimizing the GCV index
-                ScalarField<Dynamic> gcv([&solver, &X_, &f0](const DVector<double>& lambda) -> double {
-                    solver.compute(X_, lambda, f0);
-                    return solver.gcv();   // return GCV index at convergence
-                });
-                solver.compute(X_, core::Grid<Dynamic> {}.optimize(gcv, lambda_grid_), f0);
-            } break;
-            case Calibration::kcv: {
-                // select \lambda minimizing the reconstruction error in cross-validation
-                auto cv_score = [&solver, &X_, &f0](
-                                  const DVector<double>& lambda, const core::BinaryVector<Dynamic>& train_set,
-                                  const core::BinaryVector<Dynamic>& test_set) -> double {
-                    solver.compute(train_set.blk_repeat(1, X_.cols()).select(X_), lambda, f0);   // fit on train set
-                    // reconstruction error on test set: \norm{X_test * (I - fn*fn^\top/J)}_F/n_test, with
-                    // J = \norm{f_n}_2^2 + f^\top*P(\lambda)*f (PS: the division of f^\top*P(\lambda)*f by
-                    // \norm{f}_{L^2} is necessary to obtain J as expected)
-                    return (test_set.blk_repeat(1, X_.cols()).select(X_) *
-                            (DMatrix<double>::Identity(X_.cols(), X_.cols()) -
-                             solver.fn() * solver.fn().transpose() /
-                               (solver.fn().squaredNorm() + solver.ftPf(lambda) / solver.f_squaredNorm())))
-                             .squaredNorm() /
-                           test_set.count() * X_.cols();
-                };
-                solver.compute(X_, calibration::KCV {n_folds_, seed_}.fit(model, lambda_grid_, cv_score), f0);
-            } break;
-            }
-            // store results
-            loadings_.col(i) = solver.f();
-            scores_.col(i) = solver.s() * solver.f_norm();
-	    loadings_norm_[i] = solver.f_norm();
-            X_ -= scores_.col(i) * solver.fn().transpose();   // X <- X - s*f_n^\top (deflation step)
+        int i = 0;
+        for (auto it = begin(X, model); it != end(rank); ++it, ++i) {
+            loadings_.col(i) = it.loading();
+            scores_.col(i) = it.scores() * it.norm();
+            loadings_norm_[i] = it.norm();
         }
-        return;
     }
+    // iterator support
+    template <typename ModelType> rsvd_iterator<ModelType> begin(const DMatrix<double>& X, ModelType&& model) {
+        return rsvd_iterator<ModelType>(this, 0, X, model);
+    }
+    rsvd_iterator_base end(int rank) { return rsvd_iterator_base(this, rank); }
     // getters
     const DMatrix<double>& scores() const { return scores_; }
     const DMatrix<double>& loadings() const { return loadings_; }
@@ -105,26 +169,13 @@ template <> class RegularizedSVD<sequential> {
     RegularizedSVD& set_lambda(const std::vector<DVector<double>>& lambda_grid) {
         fdapde_assert(calibration_ != Calibration::off);
         lambda_grid_ = lambda_grid;
-	return *this;
+        return *this;
     }
     RegularizedSVD& set_nfolds(std::size_t n_folds) {
         fdapde_assert(calibration_ == Calibration::kcv);
         n_folds_ = n_folds;
-	return *this;
+        return *this;
     }
-   private:
-    Calibration calibration_;    // PC function's smoothing parameter selection strategy
-    std::size_t n_folds_ = 10;   // for a kcv calibration strategy, the number of folds
-    std::vector<DVector<double>> lambda_grid_;
-    // power iteration parameters
-    double tolerance_ = 1e-6;     // relative tolerance between Jnew and Jold, used as stopping criterion
-    std::size_t max_iter_ = 20;   // maximum number of allowed iterations
-    int seed_ = fdapde::random_seed; 
-
-    // problem solution
-    DMatrix<double> scores_;
-    DMatrix<double> loadings_;        // PC functions' expansion coefficients
-    DVector<double> loadings_norm_;   // L^2 norm of estimated fields
 };
 
 // finds a rank r matrix U minimizing \norm{X - U*\Psi^\top}_F^2 + Tr[U*P_{\lambda}(f)*U^\top]
@@ -150,7 +201,7 @@ template <> class RegularizedSVD<monolithic> {
             loadings_norm_[i] = std::sqrt(loadings_.col(i).dot(model.R0() * loadings_.col(i)));   // L^2 norm
             loadings_.col(i) = loadings_.col(i) / loadings_norm_[i];
         }
-	scores_ = scores_.array().rowwise() * loadings_norm_.transpose().array();
+        scores_ = scores_.array().rowwise() * loadings_norm_.transpose().array();
         return;
     }
     // getters
@@ -160,9 +211,9 @@ template <> class RegularizedSVD<monolithic> {
    private:
     // let E*\Sigma*F^\top the reduced (rank r) SVD of X*\Psi*(D^{1})^\top, with D^{-1} the inverse of the cholesky
     // factor of \Psi^\top * \Psi + P(\lambda), then
-    DMatrix<double> scores_;            // matrix E in the reduced SVD of X*\Psi*(D^{-1})^\top
-    DMatrix<double> loadings_;          // \Sigma*F^\top*D^{-1} (PC functions expansion coefficients, L^2 normalized)
-    DVector<double> loadings_norm_;     // L^2 norm of estimated fields
+    DMatrix<double> scores_;          // matrix E in the reduced SVD of X*\Psi*(D^{-1})^\top
+    DMatrix<double> loadings_;        // \Sigma*F^\top*D^{-1} (PC functions expansion coefficients, L^2 normalized)
+    DVector<double> loadings_norm_;   // L^2 norm of estimated fields
 };
 
 }   // namespace models

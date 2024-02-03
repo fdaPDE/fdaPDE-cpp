@@ -56,6 +56,8 @@
 !test/data/models/fpca/*
 !test/data/models/centering/
 !test/data/models/centering/*
+!test/data/models/fpls/
+!test/data/models/fpls/*
 !.github/
 !.github/*
 !.github/workflows/
@@ -170,6 +172,10 @@
 !test/data/models/fpca/2D_test4/*
 !test/data/models/centering/2D_test1/
 !test/data/models/centering/2D_test1/*
+!test/data/models/fpls/2D_test1/
+!test/data/models/fpls/2D_test1/*
+!test/data/models/fpls/2D_test2/
+!test/data/models/fpls/2D_test2/*
 *.txt
 *.json
 *.cmake
