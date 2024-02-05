@@ -112,7 +112,6 @@ TEST(fpls_test, laplacian_samplingatnodes_sequential_gcv) {
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> pde(domain.mesh, L, u);
     // define model
-    double lambda_D = 10.0;
     std::size_t seed = 476813;
     // grid for smoothing parameter selection
     std::vector<DVector<double>> lambda_grid;

@@ -47,24 +47,18 @@ template <> class RegularizedSVD<sequential> {
     int seed_ = fdapde::random_seed;
 
     // problem solution
-    DMatrix<double> scores_;
     DMatrix<double> loadings_;        // PC functions' expansion coefficients
     DVector<double> loadings_norm_;   // L^2 norm of estimated fields
+    DMatrix<double> scores_;
+    std::vector<DVector<double>> selected_lambdas_;   // vector of smoothing parameters selected for each component
 
-    // basic rsvd iterator (should be used only for the end() iterator)
-    struct rsvd_iterator_base {
+    // rank-one-stepper API: this iterator allows to range over each component of X, while triggering the computation
+    // only when required
+    template <typename ModelType> struct rsvd_iterator {
+       private:
         friend RegularizedSVD;
         RegularizedSVD* rsvd_;
         int index_;   // current rank
-        rsvd_iterator_base(RegularizedSVD* rsvd, int index) : rsvd_(rsvd), index_(index) {};
-        friend bool operator!=(const rsvd_iterator_base& lhs, const rsvd_iterator_base& rhs) {
-            return lhs.index_ != rhs.index_;
-        }
-    };
-
-    // this iterator allows to range over each component of X, while triggering the computation only when required
-    template <typename ModelType> struct rsvd_iterator : public rsvd_iterator_base {
-       private:
         PowerIteration<ModelType> solver_;        // rank-one step solver
         DMatrix<double> X_;                       // deflated data
         Eigen::JacobiSVD<DMatrix<double>> svd_;   // thin monolithic Singular Value Decomposition (not regularized)
@@ -74,10 +68,12 @@ template <> class RegularizedSVD<sequential> {
         // dispatched to desired strategy
         void rank_one_step() {
             DVector<double> f0 = svd_.matrixV().col(index_);
+	    // select optimal smoothing level according to requested calibration strategy
+	    DVector<double> optimal_lambda;
             switch (rsvd_->calibration_) {
             case Calibration::off: {
                 // find vectors s,f minimizing \norm_F{Y - s^T*f}^2 + (s^T*s)*P(f) fixed \lambda
-                solver_.compute(X_, model_.lambda(), f0);
+                optimal_lambda = model_.lambda();
             } break;
             case Calibration::gcv: {
                 // select \lambda minimizing the GCV index
@@ -85,7 +81,7 @@ template <> class RegularizedSVD<sequential> {
                     solver_.compute(X_, lambda, f0);
                     return solver_.gcv();   // return GCV index at convergence
                 });
-                solver_.compute(X_, core::Grid<Dynamic> {}.optimize(gcv, rsvd_->lambda_grid_), f0);
+		optimal_lambda = core::Grid<Dynamic> {}.optimize(gcv, rsvd_->lambda_grid_);
             } break;
             case Calibration::kcv: {
                 // select \lambda minimizing the reconstruction error in cross-validation
@@ -103,19 +99,19 @@ template <> class RegularizedSVD<sequential> {
                              .squaredNorm() /
                            test_set.count() * X_.cols();
                 };
-                solver_.compute(
-                  X_, calibration::KCV {rsvd_->n_folds_, rsvd_->seed_}.fit(model_, rsvd_->lambda_grid_, cv_score), f0);
+                optimal_lambda =
+                  calibration::KCV {rsvd_->n_folds_, rsvd_->seed_}.fit(model_, rsvd_->lambda_grid_, cv_score);
             } break;
             }
+            solver_.compute(X_, optimal_lambda, f0);
             X_ -= solver_.s() * solver_.fn().transpose() * solver_.f_norm();   // X <- X - s*f_n^\top (deflation step)
+            rsvd_->selected_lambdas_.push_back(optimal_lambda);                // store optimal smoothing level
             return;
         }
        public:
         // constructor
         rsvd_iterator(RegularizedSVD* rsvd, int index, const DMatrix<double>& X, ModelType& model) :
-            rsvd_iterator_base(rsvd, index),
-            X_(X),
-            solver_(model, rsvd->tolerance_, rsvd->max_iter_, rsvd->seed_),
+            rsvd_(rsvd), index_(index), X_(X), solver_(model, rsvd->tolerance_, rsvd->max_iter_, rsvd->seed_),
             model_(model) {
             // first guess of PCs set to a multivariate PCA (SVD)
             svd_ = Eigen::JacobiSVD<DMatrix<double>>(X_, Eigen::ComputeThinU | Eigen::ComputeThinV);
@@ -125,14 +121,17 @@ template <> class RegularizedSVD<sequential> {
             ++index_;
             return *this;
         }
-        bool operator!=(const rsvd_iterator_base& rhs) {
-            if (index_ != rhs.index_) { rank_one_step(); }   // trigger computation of next component only if not ended
-            return index_ != rhs.index_;
+        // iterate until desired rank not reached
+        bool operator!=(std::size_t rank) {
+            fdapde_assert(rank > 0);
+            if (index_ != rank) { rank_one_step(); }   // trigger computation of next component only if not ended
+            return index_ != rank;
         }
         // getters
         const DVector<double>& scores() const { return solver_.s(); }
         const DVector<double>& loading() const { return solver_.f(); }
         double norm() const { return solver_.f_norm(); }
+        const DVector<double>& lambda() const { return rsvd_->selected_lambdas_.back(); }
     };
    public:
     // constructors
@@ -141,27 +140,31 @@ template <> class RegularizedSVD<sequential> {
 
     // sequentially solves \argmin_{s,f} \norm_F{X - s^\top*f}^2 + (s^\top*s)*P_{\lambda}(f), up to the specified rank,
     // selecting the level of smoothing of the component according to the desired strategy
-    template <typename ModelType> void compute(const DMatrix<double>& X, std::size_t rank, ModelType& model) {
+    template <typename ModelType> void compute(const DMatrix<double>& X, ModelType& model, std::size_t rank) {
         // preallocate space
         loadings_.resize(model.n_basis(), rank);
         scores_.resize(X.rows(), rank);
         loadings_norm_.resize(rank);
         int i = 0;
-        for (auto it = begin(X, model); it != end(rank); ++it, ++i) {
+        for (auto it = rank_one_stepper(X, model); it != rank; ++it, ++i) {
             loadings_.col(i) = it.loading();
             scores_.col(i) = it.scores() * it.norm();
             loadings_norm_[i] = it.norm();
         }
     }
     // iterator support
-    template <typename ModelType> rsvd_iterator<ModelType> begin(const DMatrix<double>& X, ModelType&& model) {
+    template <typename ModelType>
+    rsvd_iterator<ModelType> rank_one_stepper(const DMatrix<double>& X, ModelType&& model) {
         return rsvd_iterator<ModelType>(this, 0, X, model);
     }
-    rsvd_iterator_base end(int rank) { return rsvd_iterator_base(this, rank); }
     // getters
     const DMatrix<double>& scores() const { return scores_; }
     const DMatrix<double>& loadings() const { return loadings_; }
     const DVector<double>& loadings_norm() const { return loadings_norm_; }
+    const std::vector<DVector<double>>& selected_lambdas() const { return selected_lambdas_; }
+    const std::vector<DVector<double>>& lambda_grid() const { return lambda_grid_; }
+    Calibration calibration() const { return calibration_; }
+
     // setters
     void set_tolerance(double tolerance) { tolerance_ = tolerance; }
     void set_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
@@ -182,7 +185,7 @@ template <> class RegularizedSVD<sequential> {
 template <> class RegularizedSVD<monolithic> {
    public:
     // solves \norm{X - U*\Psi^\top}_F^2 + Tr[U*P_{\lambda}(f)*U^\top] retaining the first rank components
-    template <typename ModelType> void compute(const DMatrix<double>& X, std::size_t rank, ModelType& model) {
+    template <typename ModelType> void compute(const DMatrix<double>& X, ModelType& model, std::size_t rank) {
         // compute matrix C = \Psi^\top*\Psi + P(\lambda)
         DMatrix<double> C = model.Psi().transpose() * model.Psi() + model.P();
         // compute the inverse of the cholesky factor of C, D^{-1}

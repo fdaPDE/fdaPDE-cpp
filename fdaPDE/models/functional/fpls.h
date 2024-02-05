@@ -21,6 +21,8 @@
 #include <Eigen/SVD>
 
 #include "../../calibration/calibration_base.h"
+#include "../../calibration/off.h"
+#include "../../calibration/gcv.h"
 using fdapde::calibration::Calibrator;
 #include "functional_base.h"
 #include "regularized_svd.h"
@@ -49,8 +51,8 @@ class FPLS : public FunctionalBase<FPLS<RegularizationType_>, RegularizationType
     fdapde_enable_constructor_if(is_space_only, This)
       FPLS(const pde_ptr& pde, Sampling s, RegularizedSVD<sequential> rsvd) :
         Base(pde, s), rsvd_(rsvd) {};
-    fdapde_enable_constructor_if(is_space_time_separable, This) FPLS(
-      const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s, RegularizedSVD<sequential> rsvd) :
+    fdapde_enable_constructor_if(is_space_time_separable, This)
+      FPLS(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s, RegularizedSVD<sequential> rsvd) :
         Base(space_penalty, time_penalty, s), rsvd_(rsvd) {};
 
     void init_model() {
@@ -61,6 +63,13 @@ class FPLS : public FunctionalBase<FPLS<RegularizationType_>, RegularizationType
             smoother_.set_temporal_locations(Base::time_locs());
         }
         smoother_.set_spatial_locations(Base::locs());
+        if (!calibrator_) {   // smoothing solver's calibration strategy fallback
+            if (rsvd_.calibration() == Calibration::off) {
+                calibrator_ = calibration::Off {Base::lambda()};
+            } else {
+                calibrator_ = calibration::GCV {core::Grid<Dynamic> {}, StochasticEDF(100)}(rsvd_.lambda_grid());
+	    }
+        }
         return;
     }
     void solve() {
@@ -77,7 +86,7 @@ class FPLS : public FunctionalBase<FPLS<RegularizationType_>, RegularizationType
         for (std::size_t h = 0; h < n_comp_; ++h) {
             // correlation maximization
             // solves \argmin_{v,w} \norm_F{Y_h^\top*X_h - v^\top*w}^2 + (v^\top*v)*P_{\lambda}(w)
-            rsvd_.compute(Y_h.transpose() * X_h, 1, *this);
+	  rsvd_.compute(Y_h.transpose() * X_h, *this, 1);
             W_.col(h) = rsvd_.loadings();
             V_.col(h) = rsvd_.scores() / rsvd_.loadings_norm()[0];
             T_.col(h) = X_h * Psi() * W_.col(h);   // X latent component
@@ -113,17 +122,17 @@ class FPLS : public FunctionalBase<FPLS<RegularizationType_>, RegularizationType
         calibrator_ = calibrator;
     }
    private:
-    SmootherType smoother_;
-    Calibrator<SmootherType> calibrator_;
-    RegularizedSVD<sequential> rsvd_;
-    std::size_t n_comp_ = 3;   // number of latent components
+    SmootherType smoother_;                 // smoothing algorithm used in regression step
+    Calibrator<SmootherType> calibrator_;   // calibration strategy used in regression step
+    RegularizedSVD<sequential> rsvd_;       // RSVD solver employed in correlation maximization step
+    std::size_t n_comp_ = 3;                // number of latent components
 
     // problem solution
-    DMatrix<double> W_;   // directions in X-spce
-    DMatrix<double> V_;   // directions in Y-space
+    DMatrix<double> W_;   // optimal directions in X space
+    DMatrix<double> V_;   // optimal directions in Y space
     DMatrix<double> T_;   // latent components
-    DMatrix<double> C_;   // X components
-    DMatrix<double> D_;   // Y components
+    DMatrix<double> C_;   // optimal X loadings
+    DMatrix<double> D_;   // optimal Y loadings
     DMatrix<double> B_;
 };
 

@@ -41,8 +41,8 @@ class FPCA : public FunctionalBase<FPCA<RegularizationType_>, RegularizationType
     struct SolverType__ {   // type erased solver strategy
         using This_ = FPCA<RegularizationType_>;
         template <typename T> using fn_ptrs = mem_fn_ptrs<&T::template compute<This_>, &T::loadings, &T::scores>;
-        void compute(const DMatrix<double>& X, std::size_t rank, This_& model) {
-            invoke<void, 0>(*this, X, rank, model);
+        void compute(const DMatrix<double>& X, This_& model, std::size_t rank) {
+            invoke<void, 0>(*this, X, model, rank);
         }
         decltype(auto) loadings() const { return invoke<const DMatrix<double>&, 1>(*this); }
         decltype(auto) scores()   const { return invoke<const DMatrix<double>&, 2>(*this); }
@@ -65,7 +65,7 @@ class FPCA : public FunctionalBase<FPCA<RegularizationType_>, RegularizationType
         Base(space_penalty, time_penalty, s), solver_(solver) {};
 
     void init_model() { fdapde_assert(bool(solver_) == true); };   // check solver is assigned
-    void solve() { solver_.compute(X(), n_pc_, *this); }
+    void solve() { solver_.compute(X(), *this, n_pc_); }
     // getters
     const DMatrix<double>& loadings() const { return solver_.loadings(); }
     const DMatrix<double>& scores() const { return solver_.scores(); }
