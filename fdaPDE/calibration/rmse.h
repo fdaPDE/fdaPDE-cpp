@@ -42,7 +42,7 @@ class RMSE {
       const BinaryVector<fdapde::Dynamic>& test_mask) {
         model_.set_lambda(lambda);
         // fit model on train set
-        model_.mask_obs(test_mask);   // discard test set from training phase
+        model_.set_mask(test_mask);   // discard test set from training phase
         model_.init();
         model_.solve();
 

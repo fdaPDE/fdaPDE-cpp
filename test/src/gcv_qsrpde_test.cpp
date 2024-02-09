@@ -18,13 +18,16 @@
 #include <gtest/gtest.h>   // testing framework
 
 #include <cstddef>
-using fdapde::core::advection;
-using fdapde::core::diffusion;
-using fdapde::core::fem_order;
 using fdapde::core::FEM;
-using fdapde::core::Grid;
+using fdapde::core::fem_order;
 using fdapde::core::laplacian;
+using fdapde::core::diffusion;
 using fdapde::core::PDE;
+using fdapde::core::Mesh;
+using fdapde::core::bilaplacian;
+using fdapde::core::SPLINE;
+using fdapde::core::spline_order;
+using fdapde::core::Grid;
 
 #include "../../fdaPDE/models/regression/qsrpde.h"
 #include "../../fdaPDE/models/regression/gcv.h"
@@ -32,9 +35,9 @@ using fdapde::core::PDE;
 using fdapde::models::QSRPDE;
 using fdapde::models::SpaceOnly;
 using fdapde::models::ExactEDF;
-using fdapde::models::GCV;
 using fdapde::models::StochasticEDF;
 using fdapde::models::Sampling;
+#include "../../fdaPDE/calibration/gcv.h"
 
 #include "utils/constants.h"
 #include "utils/mesh_loader.h"
@@ -290,7 +293,7 @@ TEST(gcv_qsrpde_test, costantcoefficientspde_nonparametric_samplingatnodes_grids
 //    order FE:     1
 //    GCV optimization: grid exact
 TEST(gcv_qsrpde_test, laplacian_semiparametric_samplingareal_gridexact) {
-    // define domain and regularizing PDE
+    // define domain
     MeshLoader<Mesh2D> domain("c_shaped_areal");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/gcv/qsrpde/2D_test7/y.csv");
@@ -331,8 +334,7 @@ TEST(gcv_qsrpde_test, laplacian_semiparametric_samplingareal_gridexact) {
 //    order FE:     1
 //    GCV optimization: grid stochastic
 TEST(gcv_qsrpde_test, laplacian_semiparametric_samplingareal_gridstochastic) {
-    // define domain and regularizing PDE
-    // define domain and regularizing PDE
+    // define domain
     MeshLoader<Mesh2D> domain("c_shaped_areal");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/gcv/qsrpde/2D_test8/y.csv");
@@ -359,8 +361,114 @@ TEST(gcv_qsrpde_test, laplacian_semiparametric_samplingareal_gridstochastic) {
     for (double x = -4.0; x <= -1.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
     // optimize GCV
     Grid<fdapde::Dynamic> opt;
-    opt.optimize(GCV, lambdas);
+    opt.optimize(GCV, lambdas);   // optimize gcv field
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/qsrpde/2D_test8/edfs.mtx"));
     EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/qsrpde/2D_test8/gcvs.mtx"));
+}
+
+// test 9
+//    domain:       c-shaped
+//    space sampling: locations != nodes
+//    time sampling:  locations != nodes
+//    penalization: simple laplacian
+//    missing_data: yes
+//    covariates:   no
+//    BC:           no
+//    order FE:     1
+//    GCV optimization: grid exact
+//    time penalization: separable (mass penalization)
+TEST(gcv_qsrpde_test, laplacian_nonparametric_samplingatlocations_timelocations_separable_gridexact) {
+    // define temporal and spatial domain
+    Mesh<1, 1> time_mesh(0, fdapde::testing::pi, 2);   // interval [0, \pi] with 3 knots
+    MeshLoader<Mesh2D> domain("c_shaped_adj");
+    // import data from files
+    DMatrix<double> space_locs = read_csv<double>("../data/gcv/qsrpde/2D_test9/locs.csv");
+    DMatrix<double> time_locs  = read_csv<double>("../data/gcv/qsrpde/2D_test9/time_locations.csv");
+    DMatrix<double> y          = read_csv<double>("../data/gcv/qsrpde/2D_test9/y.csv");
+    // define regularizing PDE in space
+    auto Ld = -laplacian<FEM>();
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.n_nodes(), 1);
+    PDE<Mesh<2, 2>, decltype(Ld), DMatrix<double>, FEM, fem_order<1>> space_penalty(domain.mesh, Ld, u);
+    // define regularizing PDE in time
+    auto Lt = -bilaplacian<SPLINE>();
+    PDE<Mesh<1, 1>, decltype(Lt), DMatrix<double>, SPLINE, spline_order<3>> time_penalty(time_mesh, Lt);
+    // define model
+    double alpha = 0.5;
+    QSRPDE<SpaceTimeSeparable> model(space_penalty, time_penalty, Sampling::pointwise, alpha);
+    model.set_spatial_locations(space_locs);
+    model.set_temporal_locations(time_locs);
+    // set model's data
+    BlockFrame<double, int> df;
+    df.stack(OBSERVATIONS_BLK, y);
+    model.set_data(df);
+    model.init();
+    // define GCV function and grid of \lambda_D values
+    auto GCV = model.gcv<ExactEDF>();
+    std::vector<DVector<double>> lambda_grid;
+    for (double lambda_s = -4.0; lambda_s <= -2.0; lambda_s += 1.0) {
+        for (double lambda_t = -7.0; lambda_t <= -5.0; lambda_t += 1.0)
+            lambda_grid.push_back(SVector<2>(std::pow(10, lambda_s), std::pow(10, lambda_t)));
+    }
+    // optimize GCV
+    Grid<fdapde::Dynamic> opt;
+    opt.optimize(GCV, lambda_grid);
+    // test correctness
+    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/qsrpde/2D_test9/edfs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/qsrpde/2D_test9/gcvs.mtx"));
+}
+
+// test 10
+//    domain:       c-shaped
+//    space sampling: locations != nodes
+//    time sampling:  locations != nodes
+//    penalization: simple laplacian
+//    missing_data: yes
+//    covariates:   no
+//    BC:           no
+//    order FE:     1
+//    GCV optimization: grid stochastic
+//    time penalization: separable (mass penalization)
+TEST(gcv_qsrpde_test, laplacian_nonparametric_samplingatlocations_timelocations_separable_gridstochastic) {
+    // define temporal and spatial domain
+    Mesh<1, 1> time_mesh(0, fdapde::testing::pi, 2);   // interval [0, \pi] with 3 knots
+    MeshLoader<Mesh2D> domain("c_shaped_adj");
+    // import data from files
+    DMatrix<double> space_locs = read_csv<double>("../data/gcv/qsrpde/2D_test10/locs.csv");
+    DMatrix<double> time_locs  = read_csv<double>("../data/gcv/qsrpde/2D_test10/time_locations.csv");
+    DMatrix<double> y          = read_csv<double>("../data/gcv/qsrpde/2D_test10/y.csv");
+    // define regularizing PDE in space 
+    auto Ld = -laplacian<FEM>();
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.n_nodes(), 1);
+    PDE<Mesh<2, 2>, decltype(Ld), DMatrix<double>, FEM, fem_order<1>> space_penalty(domain.mesh, Ld, u);
+    // define regularizing PDE in time
+    auto Lt = -bilaplacian<SPLINE>();
+    PDE<Mesh<1, 1>, decltype(Lt), DMatrix<double>, SPLINE, spline_order<3>> time_penalty(time_mesh, Lt);
+    // define model
+    double alpha = 0.5;
+    QSRPDE<SpaceTimeSeparable> model(space_penalty, time_penalty, Sampling::pointwise, alpha);
+    model.set_spatial_locations(space_locs);
+    model.set_temporal_locations(time_locs);
+    // set model's data
+    BlockFrame<double, int> df;
+    df.stack(OBSERVATIONS_BLK, y);
+    model.set_data(df);
+    model.init();
+    // define GCV function and grid of \lambda_D values
+    std::size_t seed = 66546513;
+    auto GCV = model.gcv<StochasticEDF>(100, seed);
+    std::vector<DVector<double>> lambda_grid;
+    for (double lambda_s = -4.0; lambda_s <= -2.0; lambda_s += 1.0) {
+        for (double lambda_t = -7.0; lambda_t <= -5.0; lambda_t += 1.0)
+            lambda_grid.push_back(SVector<2>(std::pow(10, lambda_s), std::pow(10, lambda_t)));
+    }
+    // optimize GCV
+    Grid<fdapde::Dynamic> opt;
+    opt.optimize(GCV, lambda_grid);
+    // test correctness
+    EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/qsrpde/2D_test10/edfs.mtx"));
+    EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/qsrpde/2D_test10/gcvs.mtx"));
+    // check consistency with GCV calibrator
+    auto GCV_ = fdapde::calibration::GCV {Grid<fdapde::Dynamic> {}, StochasticEDF(100, seed)}(lambda_grid);
+    EXPECT_TRUE(GCV_.fit(model) == opt.optimum());
 }

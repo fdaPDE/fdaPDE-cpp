@@ -68,7 +68,6 @@ class STRPDE<SpaceTimeSeparable, monolithic> :
         Base(space_penalty, time_penalty, s) {};
 
     void init_model() {
-        // a change in the smoothing parameter must reset the whole linear system
         if (runtime().query(runtime_status::is_lambda_changed)) {
             // assemble system matrix for the nonparameteric part
             if (is_empty(K_)) K_ = Kronecker(P1(), pde().mass());
@@ -88,8 +87,8 @@ class STRPDE<SpaceTimeSeparable, monolithic> :
             return;
         }
     }
-    void solve() {   // finds a solution to the smoothing problem
-        BLOCK_FRAME_SANITY_CHECKS;
+    void solve() {
+        fdapde_assert(y().rows() != 0);
         DVector<double> sol;             // room for problem' solution
         if (!Base::has_covariates()) {   // nonparametric case
             // update rhs of STR-PDE linear system
@@ -100,8 +99,7 @@ class STRPDE<SpaceTimeSeparable, monolithic> :
         } else {   // parametric case
             // update rhs of STR-PDE linear system
             b_.block(0, 0, A_.rows() / 2, 1) = -PsiTD() * lmbQ(y());   // -\Psi^T*D*Q*z
-
-            // definition of matrices U and V  for application of woodbury formula
+            // matrices U and V for application of woodbury formula
             U_ = DMatrix<double>::Zero(A_.rows(), q());
             U_.block(0, 0, A_.rows() / 2, q()) = PsiTD() * W() * X();
             V_ = DMatrix<double>::Zero(q(), A_.rows());
@@ -116,15 +114,11 @@ class STRPDE<SpaceTimeSeparable, monolithic> :
         g_ = sol.tail(A_.rows() / 2);
         return;
     }
-    double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {   // euclidian norm of op1 - op2
-        return (op1 - op2).squaredNorm();
-    }
-
+    // GCV support
+    double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const { return (op1 - op2).squaredNorm(); }
     // getters
     const SparseBlockMatrix<double, 2, 2>& A() const { return A_; }
     const fdapde::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
-
-    virtual ~STRPDE() = default;
 };
 
 // implementation of STRPDE for parabolic space-time regularization, monolithic approach
@@ -169,10 +163,9 @@ class STRPDE<SpaceTimeParabolic, monolithic> :
         invA_.compute(A_);
         return;
     }
-    void solve() {   // finds a solution to the smoothing problem
-        BLOCK_FRAME_SANITY_CHECKS;
-        DVector<double> sol;   // room for problem' solution
-
+    void solve() {
+        fdapde_assert(y().rows() != 0);
+        DVector<double> sol;             // room for problem' solution
         if (!Base::has_covariates()) {   // nonparametric case
             // update rhs of STR-PDE linear system
             b_.block(0, 0, A_.rows() / 2, 1) = -PsiTD() * W() * y();
@@ -182,8 +175,7 @@ class STRPDE<SpaceTimeParabolic, monolithic> :
         } else {   // parametric case
             // rhs of STR-PDE linear system
             b_.block(0, 0, A_.rows() / 2, 1) = -PsiTD() * lmbQ(y());   // -\Psi^T*D*Q*z
-
-            // definition of matrices U and V  for application of woodbury formula
+            // matrices U and V for application of woodbury formula
             U_ = DMatrix<double>::Zero(A_.rows(), q());
             U_.block(0, 0, A_.rows() / 2, q()) = PsiTD() * W() * X();
             V_ = DMatrix<double>::Zero(q(), A_.rows());
@@ -198,15 +190,12 @@ class STRPDE<SpaceTimeParabolic, monolithic> :
         g_ = sol.tail(A_.rows() / 2);
         return;
     }
-
     // getters
     const SparseBlockMatrix<double, 2, 2>& A() const { return A_; }
     const fdapde::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
     double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {   // euclidian norm of op1 - op2
         return (op1 - op2).squaredNorm(); // NB: to check, defined just for compiler
     }
-  
-    virtual ~STRPDE() = default;
 };
 
 // implementation of STRPDE for parabolic space-time regularization, iterative approach
@@ -274,6 +263,7 @@ class STRPDE<SpaceTimeParabolic, iterative> :
 
     void init_model() { return; };
     void solve() {
+        fdapde_assert(y().rows() != 0);
         // compute starting point (f^(k,0), g^(k,0)) k = 1 ... m for iterative minimization of functional J(f,g)
         A_ = SparseBlockMatrix<double, 2, 2>(
           PsiTD() * Psi(),   lambda_D() * R1().transpose(),
@@ -318,7 +308,6 @@ class STRPDE<SpaceTimeParabolic, iterative> :
         double Jold = std::numeric_limits<double>::max();
         double Jnew = J(f_old.get(), g_old.get());
         std::size_t i = 1;   // iteration number
-
         // build system matrix for the iterative scheme
         A_.block(0, 1) += lambda_D() * lambda_T() / DeltaT() * R0();
         A_.block(1, 0) += lambda_D() * lambda_T() / DeltaT() * R0();
@@ -333,7 +322,6 @@ class STRPDE<SpaceTimeParabolic, iterative> :
             b_ << PsiTD() * y(0) + (lambda_D() * lambda_T() / DeltaT()) * R0() * g_old(1), lambda_D() * u(0);
             // solve linear system
             solve(0, f_new, g_new);
-
             // general step
             for (std::size_t t = 1; t < n_temporal_locs() - 1; ++t) {
                 // \Psi^T*y^k   + (\lambda_D*\lambda_T/DeltaT)*R_0*g^(k+1,i-1),
@@ -343,13 +331,11 @@ class STRPDE<SpaceTimeParabolic, iterative> :
                 // solve linear system
                 solve(t, f_new, g_new);
             }
-
             // at last step g^(k+1,i-1) is zero
             b_ << PsiTD() * y(n_temporal_locs() - 1),
               lambda_D() * (lambda_T() / DeltaT() * R0() * f_old(n_temporal_locs() - 2) + u(n_temporal_locs() - 1));
             // solve linear system
             solve(n_temporal_locs() - 1, f_new, g_new);
-
             // prepare for next iteration
             Jold = Jnew;
             f_old = f_new;
@@ -357,18 +343,14 @@ class STRPDE<SpaceTimeParabolic, iterative> :
             Jnew = J(f_old.get(), g_old.get());
             i++;
         }
-
         // store solution
         f_ = f_old.get();
         g_ = g_old.get();
         return;
     }
-
     // setters
     void set_tolerance(double tol) { tol_ = tol; }
     void set_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
-
-    virtual ~STRPDE() = default;
 };
 
 }   // namespace models

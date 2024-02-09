@@ -21,7 +21,12 @@
 using fdapde::core::FEM;
 using fdapde::core::fem_order;
 using fdapde::core::laplacian;
+using fdapde::core::diffusion;
 using fdapde::core::PDE;
+using fdapde::core::Mesh;
+using fdapde::core::bilaplacian;
+using fdapde::core::SPLINE;
+using fdapde::core::spline_order;
 
 #include "../../fdaPDE/models/regression/qsrpde.h"
 #include "../../fdaPDE/models/sampling_design.h"
@@ -176,4 +181,49 @@ TEST(qsrpde_test, laplacian_semiparametric_samplingareal) {
     // test correctness
     EXPECT_TRUE(almost_equal(model.f()   , "../data/models/qsrpde/2D_test4/sol.mtx" ));
     EXPECT_TRUE(almost_equal(model.beta(), "../data/models/qsrpde/2D_test4/beta.mtx"));
+}
+
+// test 5
+//    domain:         c-shaped
+//    space sampling: locations != nodes
+//    time sampling:  locations != nodes
+//    missing data:   no
+//    penalization:   simple laplacian
+//    covariates:     no
+//    BC:             no
+//    order FE:       1
+//    time penalization: separable (mass penalization)
+TEST(qsrpde_test, laplacian_nonparametric_samplingatlocations_separable_monolithic) {
+    // define temporal and spatial domain
+    Mesh<1, 1> time_mesh(0, fdapde::testing::pi, 6);   // interval [0, \pi] with 7 knots
+    MeshLoader<Mesh2D> domain("c_shaped_adj");
+    // import data from files
+    DMatrix<double> space_locs = read_csv<double>("../data/models/qsrpde/2D_test5/locs.csv");
+    DMatrix<double> time_locs  = read_csv<double>("../data/models/qsrpde/2D_test5/time_locations.csv");
+    DMatrix<double> y          = read_csv<double>("../data/models/qsrpde/2D_test5/y.csv");
+    // define regularizing PDE in space
+    auto Ld = -laplacian<FEM>();
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.n_nodes(), 1);
+    PDE<Mesh<2, 2>, decltype(Ld), DMatrix<double>, FEM, fem_order<1>> space_penalty(domain.mesh, Ld, u);
+    // define regularizing PDE in time
+    auto Lt = -bilaplacian<SPLINE>();
+    PDE<Mesh<1, 1>, decltype(Lt), DMatrix<double>, SPLINE, spline_order<3>> time_penalty(time_mesh, Lt);
+    // define model
+    double alpha = 0.5;
+    double lambda_D = 1e-3;
+    double lambda_T = 1e-6;
+    QSRPDE<SpaceTimeSeparable> model(space_penalty, time_penalty, Sampling::pointwise, alpha);
+    model.set_lambda_D(lambda_D);
+    model.set_lambda_T(lambda_T);
+    model.set_spatial_locations(space_locs);
+    model.set_temporal_locations(time_locs);
+    // set model's data
+    BlockFrame<double, int> df;
+    df.stack(OBSERVATIONS_BLK, y);
+    model.set_data(df);
+    // solve smoothing problem
+    model.init();
+    model.solve();
+    // test correctness
+    EXPECT_TRUE(almost_equal(model.f(), "../data/models/qsrpde/2D_test5/sol.mtx"));
 }

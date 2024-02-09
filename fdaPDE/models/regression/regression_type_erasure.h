@@ -36,7 +36,7 @@ struct RegressionModel__ {
     template <typename M>
     using fn_ptrs = fdapde::mem_fn_ptrs<
       &M::f, &M::beta, &M::g, &M::fitted, &M::W, &M::XtWX, &M::U, &M::V, &M::invXtWX, &M::invA, &M::q, &M::n_obs,
-      &M::norm, &M::y, &M::T, &M::lmbQ, &M::has_covariates, &M::nan_mask, &M::mask_obs, &M::X>;
+      &M::norm, &M::y, &M::T, &M::lmbQ, &M::has_covariates, &M::nan_mask, &M::set_mask, &M::X>;
     // interface implementation
     decltype(auto) f()       const { return invoke<const DVector<double>&   , 0>(*this); }
     decltype(auto) beta()    const { return invoke<const DVector<double>&   , 1>(*this); }
@@ -58,7 +58,7 @@ struct RegressionModel__ {
     decltype(auto) lmbQ(const DMatrix<double>& x) const { return invoke<DMatrix<double>, 15>(*this, x); }
     decltype(auto) has_covariates() const { return invoke<bool, 16>(*this); }
     decltype(auto) nan_mask() const { return invoke<const BinaryVector<Dynamic>&, 17>(*this); }
-    decltype(auto) mask_obs(const BinaryVector<Dynamic>& mask) { return invoke<void, 18>(*this, mask); }
+    decltype(auto) set_mask(const BinaryVector<Dynamic>& mask) { return invoke<void, 18>(*this, mask); }
     decltype(auto) X() const { return invoke<const DMatrix<double>&, 19>(*this); }
 };
 

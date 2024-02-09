@@ -36,7 +36,8 @@ namespace models {
 template <typename Model_> class FPIRLS {
    private:
     using Model = typename std::decay<Model_>::type;
-    using SolverWrapper = RegressionModel<typename std::decay_t<Model_>::RegularizationType>;
+    using RegularizationType = typename std::decay_t<Model_>::RegularizationType;
+    using SolverWrapper = RegressionModel<RegularizationType>;
     Model* m_;
     // algorithm's parameters
     double tolerance_;       // treshold on objective functional J to convergence
@@ -47,7 +48,7 @@ template <typename Model_> class FPIRLS {
     // constructor
     FPIRLS() = default;
     FPIRLS(Model* m, double tolerance, std::size_t max_iter) : m_(m), tolerance_(tolerance), max_iter_(max_iter) {};
-
+  
     // initialize internal smoothing solver
     void init() {
         if (!solver_) {   // default solver initialization
@@ -62,9 +63,10 @@ template <typename Model_> class FPIRLS {
             }
             // solver initialization
             solver_.set_spatial_locations(m_->locs());
-            solver_.set_data(m_->data());   // possible covariates are passed from here
+            solver_.set_data(m_->data());
         }
-	solver_.set_lambda(m_->lambda());
+        solver_.set_lambda(m_->lambda());     // derive smoothing level
+        solver_.set_mask(m_->masked_obs());   // derive missing and masking data pattern
     }
     // executes the FPIRLS algorithm
     void compute() {
@@ -83,10 +85,9 @@ template <typename Model_> class FPIRLS {
 	    solver_.init();
             solver_.solve();
             m_->fpirls_update_step(solver_.fitted(), solver_.beta());   // model specific update step
-            // update value of the objective functional J = data_loss + \int_D (Lf-u)^2
-            double J = m_->data_loss() + m_->lambda_D()*solver_.g().dot(m_->R0() * solver_.g());
-            // prepare for next iteration
-            k_++; J_old = J_new; J_new = J;
+            // update objective functional J = data_loss + f^\top * P_{\lambda}(f) * f 
+            k_++; J_old = J_new;
+	    J_new = m_->data_loss() + m_->ftPf(m_->lambda(), solver_.f(), solver_.g());;
         }
         return;
     }

@@ -20,6 +20,7 @@
 #include <fdaPDE/utils.h>
 using fdapde::core::BlockFrame;
 #include "model_traits.h"
+#include "sampling_design.h"
 
 namespace fdapde {
 namespace models {
@@ -68,7 +69,6 @@ template <> struct StatisticalModel__<SpaceOnly> {
     // compile time constants
     using RegularizationType = SpaceOnly;
     static constexpr int n_lambda = 1;
-
     // interface implementation
     template <typename M>
     using fn_ptrs = fdapde::mem_fn_ptrs<
@@ -86,7 +86,6 @@ template <> struct StatisticalModel__<SpaceTimeSeparable> {
     // compile time constants
     using RegularizationType = SpaceTimeSeparable;
     static constexpr int n_lambda = 2;
-
     // interface implementation
     template <typename M>
     using fn_ptrs = fdapde::mem_fn_ptrs<
@@ -108,7 +107,6 @@ template <> struct StatisticalModel__<SpaceTimeParabolic> {
     // compile time constants
     using RegularizationType = SpaceTimeParabolic;
     static constexpr int n_lambda = 2;
-
     // interface implementation
     template <typename M>
     using fn_ptrs = fdapde::mem_fn_ptrs<

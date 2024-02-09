@@ -59,10 +59,9 @@ class GSRPDE : public RegressionBase<GSRPDE<RegularizationType_>, Regularization
     // setters
     void set_fpirls_tolerance(double tol) { tol_ = tol; }
     void set_fpirls_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
-
-    void init_data()  { return; };
     void init_model() { fpirls_.init(); };
-    void solve() {   // finds a solution to the smoothing problem
+    void solve() {
+        fdapde_assert(y().rows() != 0);
         // execute FPIRLS for minimization of functional \norm{V^{-1/2}(y - \mu)}^2 + \lambda \int_D (Lf - u)^2
         fpirls_.compute();
         // fpirls_ converged: extract matrix W and solution estimates
@@ -103,23 +102,21 @@ class GSRPDE : public RegressionBase<GSRPDE<RegularizationType_>, Regularization
     const DVector<double>& py() const { return py_; }
     const DVector<double>& pW() const { return pW_; }
     const fdapde::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
-
     // GCV support
     double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {   // total deviance \sum dev(\hat y - y)
         DMatrix<double> mu = distr_.inv_link(op1);
         double result = 0;
-        for (std::size_t i = 0; i < op2.rows(); ++i) { result += distr_.deviance(mu.coeff(i, 0), op2.coeff(i, 0)); }
+        for (std::size_t i = 0; i < n_locs(); ++i) {
+            if (!Base::masked_obs()[i]) result += distr_.deviance(mu.coeff(i, 0), op2.coeff(i, 0));
+        }
         return result;
     }
-
-    virtual ~GSRPDE() = default;
    private:
     Distribution distr_ {};
     DVector<double> py_;   // \tilde y^k = G^k(y-u^k) + \theta^k
     DVector<double> pW_;   // diagonal of W^k = ((G^k)^{-2})*((V^k)^{-1})
     DVector<double> mu_;   // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : mean vector at step k
-    DMatrix<double> T_;    // T = \Psi^T*Q*\Psi + P
-    fdapde::SparseLU<SpMatrix<double>> invA_;   // factorization of non-parametric system matrix A
+    fdapde::SparseLU<SpMatrix<double>> invA_;
 
     // FPIRLS parameters (set to default)
     FPIRLS<This> fpirls_;

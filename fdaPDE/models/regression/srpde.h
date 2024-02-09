@@ -52,7 +52,6 @@ class SRPDE : public RegressionBase<SRPDE, SpaceOnly> {
     SRPDE(const pde_ptr& pde, Sampling s) : Base(pde, s) {};
 
     void init_model() {
-        // a change in the smoothing parameter must reset the whole linear system
         if (runtime().query(runtime_status::is_lambda_changed)) {
             // assemble system matrix for nonparameteric part
             A_ = SparseBlockMatrix<double, 2, 2>(
@@ -71,10 +70,9 @@ class SRPDE : public RegressionBase<SRPDE, SpaceOnly> {
             return;
         }
     }
-    // finds a solution to the smoothing problem
     void solve() {
-        BLOCK_FRAME_SANITY_CHECKS;
-        DVector<double> sol;       // room for problem' solution
+        fdapde_assert(y().rows() != 0);
+        DVector<double> sol;
         if (!has_covariates()) {   // nonparametric case
             // update rhs of SR-PDE linear system
             b_.block(0, 0, n_basis(), 1) = -PsiTD() * W() * y();
@@ -84,8 +82,7 @@ class SRPDE : public RegressionBase<SRPDE, SpaceOnly> {
         } else {   // parametric case
             // update rhs of SR-PDE linear system
             b_.block(0, 0, n_basis(), 1) = -PsiTD() * lmbQ(y());   // -\Psi^T*D*Q*z
-
-            // definition of matrices U and V  for application of woodbury formula
+            // matrices U and V for application of woodbury formula
             U_ = DMatrix<double>::Zero(2 * n_basis(), q());
             U_.block(0, 0, n_basis(), q()) = PsiTD() * W() * X();
             V_ = DMatrix<double>::Zero(q(), 2 * n_basis());
@@ -100,10 +97,8 @@ class SRPDE : public RegressionBase<SRPDE, SpaceOnly> {
         g_ = sol.tail(n_basis());
         return;
     }
-    inline double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {
-        return (op1 - op2).squaredNorm();
-    }
-
+    // GCV support
+    double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const { return (op1 - op2).squaredNorm(); }
     // getters
     const SparseBlockMatrix<double, 2, 2>& A() const { return A_; }
     const fdapde::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
