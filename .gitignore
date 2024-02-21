@@ -10,3 +10,6 @@
 test/fdapde_test
 test/.cache
 test/build/
+test/CMakeFiles/
+test/_deps/
+test/libs/

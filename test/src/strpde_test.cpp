@@ -296,3 +296,41 @@ TEST(strpde_test, laplacian_nonparametric_samplingatlocations_timelocations_sepa
     // test correctness
     EXPECT_TRUE(almost_equal(model.f(), "../data/models/strpde/2D_test6/sol.mtx"));
 }
+
+// test 7
+//    domain:         surface_hub
+//    space sampling: locations == nodes
+//    time sampling:  locations == nodes
+//    missing data:   yes
+//    penalization:   simple laplacian
+//    covariates:     no
+//    BC:             no
+//    order FE:       1
+//    time penalization: separable (mass penalization)
+TEST(strpde_test, laplacian_nonparametric_samplingatnodes_separable_monolithic_surface) {
+    // define temporal and spatial domain
+    Mesh<1, 1> time_mesh(0, 4, 4);   // points {0, 1, \ldots, 4}
+    MeshLoader<SurfaceMesh> domain("surface");
+    // import data from files
+    DMatrix<double> y = read_csv<double>("../data/models/strpde/2D_test7/y.csv");
+    // define regularizing PDE in space
+    auto Ld = -laplacian<FEM>();
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.n_nodes(), 1);
+    PDE<Mesh<2, 3>, decltype(Ld), DMatrix<double>, FEM, fem_order<1>> space_penalty(domain.mesh, Ld, u);
+    // define regularizing PDE in time
+    auto Lt = -bilaplacian<SPLINE>();
+    PDE<Mesh<1, 1>, decltype(Lt), DMatrix<double>, SPLINE, spline_order<3>> time_penalty(time_mesh, Lt);
+    // define model
+    STRPDE<SpaceTimeSeparable, fdapde::monolithic> model(space_penalty, time_penalty, Sampling::mesh_nodes);
+    model.set_lambda_D(1e-9);
+    model.set_lambda_T(1e-6);
+    // set model's data
+    BlockFrame<double, int> df;
+    df.stack(OBSERVATIONS_BLK, y);
+    model.set_data(df);
+    // solve smoothing problem
+    model.init();
+    model.solve();
+    // test correctness
+    EXPECT_TRUE(almost_equal(model.f(), "../data/models/strpde/2D_test7/sol.mtx"));
+}

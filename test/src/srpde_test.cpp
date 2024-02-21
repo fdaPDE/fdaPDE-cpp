@@ -175,3 +175,34 @@ TEST(srpde_test, noncostantcoefficientspde_nonparametric_samplingareal) {
     // test correctness
     EXPECT_TRUE(almost_equal(model.f() , "../data/models/srpde/2D_test4/sol.mtx"));
 }
+
+// test 5
+//    domain:       c-shaped surface
+//    sampling:     locations = nodes
+//    penalization: simple laplacian
+//    covariates:   no
+//    BC:           no
+//    order FE:     1
+TEST(srpde_test, laplacian_nonparametric_samplingatnodes_surface) {
+    // define domain 
+    MeshLoader<SurfaceMesh> domain("c_shaped_surface");
+    // import data from files
+    DMatrix<double> y = read_csv<double>("../data/models/srpde/2D_test5/y.csv");
+    // define regularizing PDE
+    auto L = -laplacian<FEM>();
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
+    // define model
+    double lambda = 1e-2;
+    SRPDE model(problem, Sampling::mesh_nodes);
+    model.set_lambda_D(lambda);
+    // set model's data
+    BlockFrame<double, int> df;
+    df.insert(OBSERVATIONS_BLK, y);
+    model.set_data(df);
+    // solve smoothing problem
+    model.init();
+    model.solve();
+    // test correctness
+    EXPECT_TRUE(almost_equal(model.f()  , "../data/models/srpde/2D_test5/sol.mtx"));
+}

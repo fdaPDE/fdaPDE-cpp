@@ -185,6 +185,46 @@ TEST(fpca_test, laplacian_samplingatlocations_sequential_kcv) {
     EXPECT_TRUE(almost_equal(model.scores(),                 "../data/models/fpca/2D_test3/scores.mtx"  ));
 }
 
+// test 5
+//    domain:       unit square [1,1] x [1,1]
+//    sampling:     locations == nodes
+//    penalization: space-time separable
+//    BC:           no
+//    order FE:     1
+//    missing data: no
+//    solver: sequential (power iteration)
+// TEST(fpca_test, laplacian_samplingatnodes_separable_sequential) {
+//   // define time domain
+//   Mesh<1, 1> time_mesh(0, 1, 14);
+//   // define domain and regularizing PDE
+//   MeshLoader<Mesh2D> domain("unit_square15");
+//   // import data from files
+//   DMatrix<double> y = read_csv<double>("../data/models/fpca/2D_test5/y.csv");
+//   // define regularizing PDE in space
+//   auto Ld = -laplacian<FEM>();
+//   DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.n_nodes(), 1);
+//   PDE<Mesh<2, 2>, decltype(Ld), DMatrix<double>, FEM, fem_order<1>> space_penalty(domain.mesh, Ld, u);
+//   // define regularizing PDE in time
+//   auto Lt = -bilaplacian<SPLINE>();
+//   PDE<Mesh<1, 1>, decltype(Lt), DMatrix<double>, SPLINE, spline_order<3>> time_penalty(time_mesh, Lt);
+//     // define model
+//   double lambda_D = std::pow(10, -3.6); // 1e-3.6
+//   double lambda_T = std::pow(10, -2.2); // 1e-2.2
+//   FPCA<SpaceTimeSeparable> model(
+//     space_penalty, time_penalty, Sampling::mesh_nodes, RegularizedSVD<fdapde::sequential> {Calibration::off});
+//   model.set_lambda_D(lambda_D);
+//   model.set_lambda_T(lambda_T);
+//   // set model's data
+//   BlockFrame<double, int> df;
+//   df.insert(OBSERVATIONS_BLK, y);
+//   model.set_data(df);
+//   // solve smoothing problem
+//   model.init();
+//   model.solve();
+// }
+
+
+
 /*
 // test 4
 //    domain:       unit square [1,1] x [1,1]

@@ -25,18 +25,17 @@ namespace calibration {
 
 // a class representing a fixed lambda calibration strategy (no calibration)
 class Off {
-  protected:
+   private:
     DVector<double> lambda_;
-  public:
+   public:
     Off() = default;
-    template <typename LambdaType> void operator()(const LambdaType& lambda) {
-      static_assert(std::is_base_of<Eigen::MatrixBase<LambdaType>, LambdaType>::value);
-      fdapde_assert(lambda.cols() == 1 && (lambda.rows() == 1 || lambda.rows() == 2));
-      lambda_ = lambda;
+    // sets internal smoothing level \lambda to provided one
+    Off& operator()(const DVector<double>& lambda) {
+        fdapde_assert(lambda.rows() == 1 || lambda.rows() == 2);
+        lambda_ = lambda;
+	return *this;
     }
-    template <typename ModelType_> DVector<double> fit(ModelType_& model) {
-      return lambda_;
-    }
+    template <typename ModelType_> DVector<double> fit(ModelType_& model) { return lambda_; }
 };
 
 }   // namespace calibration

@@ -65,7 +65,7 @@ class FPLS : public FunctionalBase<FPLS<RegularizationType_>, RegularizationType
         smoother_.set_spatial_locations(Base::locs());
         if (!calibrator_) {   // smoothing solver's calibration strategy fallback
             if (rsvd_.calibration() == Calibration::off) {
-                calibrator_ = calibration::Off {Base::lambda()};
+                calibrator_ = calibration::Off {}(Base::lambda());
             } else {
                 calibrator_ = calibration::GCV {core::Grid<Dynamic> {}, StochasticEDF(100)}(rsvd_.lambda_grid());
 	    }
