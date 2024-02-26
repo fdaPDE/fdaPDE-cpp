@@ -25,6 +25,7 @@
 using fdapde::calibration::Calibration;
 #include "../model_traits.h"
 #include "power_iteration.h"
+#include "../../core/fdaPDE/optimization/grid.h"
 
 
 namespace fdapde {
@@ -211,6 +212,7 @@ template <> class RegularizedSVD<monolithic> {
     const DMatrix<double>& scores() const { return scores_; }
     const DMatrix<double>& loadings() const { return loadings_; }
     const DVector<double>& loadings_norm() const { return loadings_norm_; }
+    Calibration calibration() const { return Calibration::off; }
    private:
     // let E*\Sigma*F^\top the reduced (rank r) SVD of X*\Psi*(D^{1})^\top, with D^{-1} the inverse of the cholesky
     // factor of \Psi^\top * \Psi + P(\lambda), then
@@ -218,6 +220,19 @@ template <> class RegularizedSVD<monolithic> {
     DMatrix<double> loadings_;        // \Sigma*F^\top*D^{-1} (PC functions expansion coefficients, L^2 normalized)
     DVector<double> loadings_norm_;   // L^2 norm of estimated fields
 };
+
+// a type-erasure wrapper for a (configured) RSVD algorithm for models of type ModelType
+template<typename ModelType_> struct RSVDType__ {   // type erased solver strategy
+    template <typename T> using fn_ptrs = mem_fn_ptrs<&T::template compute<ModelType_>,
+      &T::loadings, &T::scores, &T::calibration>;
+    void compute(const DMatrix<double>& X, ModelType_& model, std::size_t rank) {
+        invoke<void, 0>(*this, X, model, rank);
+    }
+    decltype(auto) loadings()      const { return invoke<const DMatrix<double>&, 1>(*this); }
+    decltype(auto) scores()        const { return invoke<const DMatrix<double>&, 2>(*this); }
+    decltype(auto) calibration()   const { return invoke<Calibration, 3>(*this); }
+};
+template<typename ModelType_> using RSVDType = fdapde::erase<heap_storage, RSVDType__<ModelType_>>;
 
 }   // namespace models
 }   // namespace fdapde

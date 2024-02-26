@@ -29,13 +29,15 @@ class Off {
     DVector<double> lambda_;
    public:
     Off() = default;
-    // sets internal smoothing level \lambda to provided one
-    Off& operator()(const DVector<double>& lambda) {
-        fdapde_assert(lambda.rows() == 1 || lambda.rows() == 2);
-        lambda_ = lambda;
-	return *this;
+    ConfiguredCalibrator<Off> operator()(const DVector<double>& lambda) {
+      fdapde_assert(lambda.cols() == 1 && (lambda.rows() == 1 || lambda.rows() == 2));
+      lambda_ = lambda;
+      return ConfiguredCalibrator<Off>(static_cast<const Off&>(*this));
     }
-    template <typename ModelType_> DVector<double> fit(ModelType_& model) { return lambda_; }
+    const DVector<double>& optimum() const { return lambda_; }
+    template <typename ModelType_> DVector<double> fit(ModelType_& model) {
+      return lambda_;
+    }
 };
 
 }   // namespace calibration

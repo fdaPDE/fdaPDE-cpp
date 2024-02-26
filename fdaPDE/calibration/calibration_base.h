@@ -50,6 +50,9 @@ template <typename Calibrator, typename... Args_> class ConfiguredCalibrator {
         std::apply([&](auto&&... arg) { (set_model(arg), ...); }, args_);
         return call_(model, std::make_index_sequence<sizeof...(Args_)> {});
     }
+    DVector<double> optimum() {
+      return c_.optimum();
+    }
 };
 
 template <typename T> struct CalibratorBase {
@@ -60,8 +63,9 @@ template <typename T> struct CalibratorBase {
 
 // a type-erasure wrapper for a (configured) calibration algorithm for models of type ModelType
 template <typename ModelType_> struct Calibrator__ {
-    template <typename T> using fn_ptrs = fdapde::mem_fn_ptrs<&T::template fit<ModelType_>>;
+    template <typename T> using fn_ptrs = fdapde::mem_fn_ptrs<&T::template fit<ModelType_>, &T::optimum>;
     DVector<double> fit(ModelType_& model) { return fdapde::invoke<DVector<double>, 0>(*this, model); }
+    DVector<double> optimum(ModelType_& model) { return fdapde::invoke<DVector<double>, 1>(*this, model); }
 };
 template <typename ModelType_> using Calibrator = fdapde::erase<fdapde::heap_storage, Calibrator__<ModelType_>>;
 

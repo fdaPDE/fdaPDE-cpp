@@ -74,7 +74,7 @@ TEST(fpls_test, laplacian_samplingatnodes_sequential_off) {
     rsvd.set_max_iter(20);
     FPLS<SpaceOnly> model(pde, Sampling::mesh_nodes, rsvd);   // functional partial least squares model
     model.set_lambda_D(lambda_D);
-    model.set_smoothing_step_calibrator(fdapde::calibration::Off {}(SVector<1>(lambda_D)));
+    model.set_regression_step_calibrator(fdapde::calibration::Off {}(SVector<1>(lambda_D)));
     // set model's data
     BlockFrame<double, int> df;
     df.insert(OBSERVATIONS_BLK, DMatrix<double>(Y.rowwise() - Y.colwise().mean()));   // pointwise centred responses
@@ -123,7 +123,7 @@ TEST(fpls_test, laplacian_samplingatnodes_sequential_gcv) {
     rsvd.set_lambda(lambda_grid);
     rsvd.set_seed(seed);   // for reproducibility purposes in testing
     FPLS<SpaceOnly> model(pde, Sampling::mesh_nodes, rsvd);   // functional partial least square models
-    model.set_smoothing_step_calibrator(
+    model.set_regression_step_calibrator(
       fdapde::calibration::GCV {Grid<fdapde::Dynamic> {}, StochasticEDF(1000, seed)}(lambda_grid));
     // set model's data
     BlockFrame<double, int> df;

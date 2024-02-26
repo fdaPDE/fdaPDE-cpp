@@ -37,17 +37,8 @@ template <typename RegularizationType_>
 class FPCA : public FunctionalBase<FPCA<RegularizationType_>, RegularizationType_> {
    private:
     std::size_t n_pc_ = 3;   // number of principal components
-
-    struct SolverType__ {   // type erased solver strategy
-        using This_ = FPCA<RegularizationType_>;
-        template <typename T> using fn_ptrs = mem_fn_ptrs<&T::template compute<This_>, &T::loadings, &T::scores>;
-        void compute(const DMatrix<double>& X, This_& model, std::size_t rank) {
-            invoke<void, 0>(*this, X, model, rank);
-        }
-        decltype(auto) loadings() const { return invoke<const DMatrix<double>&, 1>(*this); }
-        decltype(auto) scores()   const { return invoke<const DMatrix<double>&, 2>(*this); }
-    };
-    using SolverType = fdapde::erase<heap_storage, SolverType__>;
+    using ModelType = std::decay_t<FPCA<RegularizationType_>>;
+    using SolverType = RSVDType<ModelType>;
     SolverType solver_;
    public:
     using RegularizationType = std::decay_t<RegularizationType_>;
@@ -58,10 +49,10 @@ class FPCA : public FunctionalBase<FPCA<RegularizationType_>, RegularizationType
 
     // constructors
     FPCA() = default;
-    fdapde_enable_constructor_if(is_space_only, This) FPCA(const pde_ptr& pde, Sampling s, SolverType solver) :
+    fdapde_enable_constructor_if(is_space_only, This) FPCA(const pde_ptr& pde, Sampling s, SolverType solver = RegularizedSVD<fdapde::sequential>{}) :
         Base(pde, s), solver_(solver) {};
     fdapde_enable_constructor_if(is_space_time_separable, This)
-      FPCA(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s, SolverType solver) :
+      FPCA(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s, SolverType solver = RegularizedSVD<fdapde::sequential>{}) :
         Base(space_penalty, time_penalty, s), solver_(solver) {};
 
     void init_model() { fdapde_assert(bool(solver_) == true); };   // check solver is assigned

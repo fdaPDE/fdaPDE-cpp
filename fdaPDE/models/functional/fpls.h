@@ -58,7 +58,7 @@ class FPLS : public FunctionalBase<FPLS<RegularizationType_>, RegularizationType
     void init_model() {
         // initialize smoothing solver for regression step
         if constexpr (is_space_only<SmootherType>::value) { smoother_ = SmootherType(Base::pde(), Base::sampling()); }
-	else {
+	      else {
             smoother_ = SmootherType(Base::pde(), Base::time_pde(), Base::sampling());
             smoother_.set_temporal_locations(Base::time_locs());
         }
@@ -68,7 +68,7 @@ class FPLS : public FunctionalBase<FPLS<RegularizationType_>, RegularizationType
                 calibrator_ = calibration::Off {}(Base::lambda());
             } else {
                 calibrator_ = calibration::GCV {core::Grid<Dynamic> {}, StochasticEDF(100)}(rsvd_.lambda_grid());
-	    }
+	          }
         }
         return;
     }
@@ -86,7 +86,7 @@ class FPLS : public FunctionalBase<FPLS<RegularizationType_>, RegularizationType
         for (std::size_t h = 0; h < n_comp_; ++h) {
             // correlation maximization
             // solves \argmin_{v,w} \norm_F{Y_h^\top*X_h - v^\top*w}^2 + (v^\top*v)*P_{\lambda}(w)
-	  rsvd_.compute(Y_h.transpose() * X_h, *this, 1);
+	          rsvd_.compute(Y_h.transpose() * X_h, *this, 1);
             W_.col(h) = rsvd_.loadings();
             V_.col(h) = rsvd_.scores() / rsvd_.loadings_norm()[0];
             T_.col(h) = X_h * Psi() * W_.col(h);   // X latent component
@@ -118,7 +118,7 @@ class FPLS : public FunctionalBase<FPLS<RegularizationType_>, RegularizationType
     // setters
     void set_ncomp(std::size_t n_comp) { n_comp_ = n_comp; }
     void set_rsvd(const RegularizedSVD<sequential>& rsvd) { rsvd_ = rsvd; }
-    template <typename CalibratorType_> void set_smoothing_step_calibrator(CalibratorType_&& calibrator) {
+    template <typename CalibratorType_> void set_regression_step_calibrator(CalibratorType_&& calibrator) {
         calibrator_ = calibrator;
     }
    private:

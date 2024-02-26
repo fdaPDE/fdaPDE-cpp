@@ -17,6 +17,7 @@
 #ifndef __CALIBRATION_GCV_H__
 #define __CALIBRATION_GCV_H__
 
+#include "../core/fdaPDE/optimization/optimizer.h"
 #include "../models/regression/gcv.h"
 #include "calibration_base.h"
 
@@ -28,6 +29,7 @@ class GCV : public CalibratorBase<GCV> {
    private:
     models::GCV gcv_ {};
     core::Optimizer<models::GCV> opt_ {};
+    DVector<double> optimum_; 
    public:
     // constructor
     template <typename Optimizer_, typename EDFStrategy_> GCV(Optimizer_&& opt, EDFStrategy_&& edf) : opt_(opt) {
@@ -37,8 +39,10 @@ class GCV : public CalibratorBase<GCV> {
     template <typename ModelType_, typename... Args>
     DVector<double> fit(ModelType_& model, Args&&... args) {
         gcv_.set_model(model);
-        return opt_.optimize(gcv_, std::forward<Args>(args)...);
+        optimum_ = opt_.optimize(gcv_, std::forward<Args>(args)...);
+        return optimum_;
     }
+    const DVector<double>& optimum() const { return optimum_; }       // optimal tuning parameter
     const std::vector<double>& edfs() const { return gcv_.edfs(); }   // equivalent degrees of freedom q + Tr[S]
     const std::vector<double>& gcvs() const { return gcv_.gcvs(); }   // computed values of GCV index
     void set_step(double step) { gcv_.set_step(step); }
