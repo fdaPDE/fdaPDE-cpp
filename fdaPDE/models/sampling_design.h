@@ -18,7 +18,7 @@
 #define __SAMPLING_DESIGN_H__
 
 #include <fdaPDE/linear_algebra.h>
-#include <fdaPDE/mesh.h>
+#include <fdaPDE/geometry.h>
 #include <fdaPDE/utils.h>
 #include <fdaPDE/pde.h>
 using fdapde::core::Kronecker;

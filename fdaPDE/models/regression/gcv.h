@@ -49,7 +49,7 @@ class GCV {
     using VectorType = DVector<double>;
     using MatrixType = DMatrix<double>;
     static constexpr int DomainDimension = fdapde::Dynamic;
-    RegressionView<void> model_;    // model to calibrate
+    RegressionView<void> model_;
     EDFStrategy trS_;               // strategy used to evaluate the trace of smoothing matrix S
     std::vector<double> edfs_;      // equivalent degrees of freedom q + Tr[S]
     std::vector<double> gcvs_;      // computed values of GCV index
@@ -81,14 +81,15 @@ class GCV {
    public:
     template <typename ModelType_, typename EDFStrategy_>
     GCV(const ModelType_& model, EDFStrategy_&& trS) : model_(model), trS_(trS), gcv_(this, &This::gcv_impl) {
-        // resize gcv input space dimension
-        if constexpr (is_space_only<std::decay_t<ModelType_>>::value) gcv_.resize(1);
-        else gcv_.resize(2);
         // set model pointer in edf computation strategy
         trS_.set_model(model_);
     };
     template <typename ModelType_> GCV(const ModelType_& model) : GCV(model, StochasticEDF()) { }
-    GCV(const GCV& other) : model_(other.model_), trS_(other.trS_), gcv_(this, &This::gcv_impl) {};
+    GCV(const GCV& other) : model_(other.model_), trS_(other.trS_), gcv_(this, &This::gcv_impl) {
+        // copy other GCV functor configuration
+        gcv_.resize(other.gcv_.inner_size());
+	gcv_.set_step(other.gcv_.step());
+    };
     GCV() : gcv_(this, &This::gcv_impl) { }
 
     // call operator and numerical derivative approximations
@@ -112,15 +113,15 @@ class GCV {
 	edfs_.clear(); gcvs_.clear(); cache_.clear();
     }
     template <typename ModelType_> void set_model(ModelType_&& model) {
-      	// resize gcv input space dimension
-        if constexpr (is_space_only<std::decay_t<ModelType_>>::value) gcv_.resize(1);
-        else gcv_.resize(2);
         model_ = model;
 	if(trS_) trS_.set_model(model_);
         edfs_.clear(); gcvs_.clear(); cache_.clear();
     }
     void set_step(double step) { gcv_.set_step(step); }
-
+    void resize(int gcv_dynamic_inner_size) {
+        fdapde_assert(gcv_dynamic_inner_size == 1 || gcv_dynamic_inner_size == 2);
+        gcv_.resize(gcv_dynamic_inner_size);
+    }
     // getters
     const std::vector<double>& edfs() const { return edfs_; }   // equivalent degrees of freedom q + Tr[S]
     const std::vector<double>& gcvs() const { return gcvs_; }   // computed values of GCV index

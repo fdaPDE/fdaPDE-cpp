@@ -54,6 +54,10 @@ template <typename RegularizationType> struct StatisticalModel__ { };
 
 // basic model interface
 template <> struct StatisticalModel__<void> {
+    // compile time constants
+    using RegularizationType = void;
+    static constexpr int n_lambda = fdapde::Dynamic;
+    // interface implementation
     template <typename M>
     using fn_ptrs = fdapde::mem_fn_ptrs<
       BASE_MODEL_FN_PTRS, static_cast<void (ModelBase<M>::*)(const DVector<double>&)>(&M::set_lambda),

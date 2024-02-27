@@ -25,28 +25,34 @@ namespace fdapde {
 namespace calibration {
 
 // GCV calibrator (fulfills the calibration strategy concept)
-class GCV : public CalibratorBase<GCV> {
+template <typename RegularizationType> class GCV : public CalibratorBase<GCV<RegularizationType>> {
    private:
     models::GCV gcv_ {};
     core::Optimizer<models::GCV> opt_ {};
-    DVector<double> optimum_; 
    public:
     // constructor
     template <typename Optimizer_, typename EDFStrategy_> GCV(Optimizer_&& opt, EDFStrategy_&& edf) : opt_(opt) {
+        if constexpr (std::is_same_v<RegularizationType, models::SpaceOnly>) gcv_.resize(1);
+        else gcv_.resize(2);
         gcv_.set_edf_strategy(edf);
     }
     // selects best smoothing parameter of regression model by minimization of GCV index
     template <typename ModelType_, typename... Args>
     DVector<double> fit(ModelType_& model, Args&&... args) {
         gcv_.set_model(model);
-        optimum_ = opt_.optimize(gcv_, std::forward<Args>(args)...);
-        return optimum_;
+        return opt_.optimize(gcv_, std::forward<Args>(args)...);
     }
-    const DVector<double>& optimum() const { return optimum_; }       // optimal tuning parameter
+    const DVector<double>& optimum() const { return opt_.optimum(); }
     const std::vector<double>& edfs() const { return gcv_.edfs(); }   // equivalent degrees of freedom q + Tr[S]
     const std::vector<double>& gcvs() const { return gcv_.gcvs(); }   // computed values of GCV index
     void set_step(double step) { gcv_.set_step(step); }
+    void resize(int gcv_dynamic_inner_size) {   // set GCV's domain dimension
+        static_assert(std::is_same_v<RegularizationType, void>, "THIS_METHOD_IS_FOR_VOID_REGULARIZATION_ONLY");
+        gcv_.resize(gcv_dynamic_inner_size);
+    }
 };
+// template argument deduction rule
+template <typename Optimizer_, typename EDFStrategy_> GCV(Optimizer_&& opt, EDFStrategy_&& edf) -> GCV<void>;
 
 }   // namespace calibration
 }   // namespace fdapde

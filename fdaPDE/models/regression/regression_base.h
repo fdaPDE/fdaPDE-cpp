@@ -141,7 +141,9 @@ class RegressionBase :
     double ftPf() const { return ftPf(Base::lambda()); }
     // GCV support
     template <typename EDFStrategy_, typename... Args> GCV gcv(Args&&... args) {
-        return GCV(Base::model(), EDFStrategy_(std::forward<Args>(args)...));
+        GCV gcv(Base::model(), EDFStrategy_(std::forward<Args>(args)...));
+        gcv.resize(Base::n_lambda);
+        return gcv;
     }
     const DMatrix<double>& T() {   // T = \Psi^\top*Q*\Psi + P
         T_ = PsiTD() * lmbQ(Psi()) + P();

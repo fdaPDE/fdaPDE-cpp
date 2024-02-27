@@ -32,6 +32,7 @@ using fdapde::models::ExactEDF;
 using fdapde::models::GCV;
 using fdapde::models::StochasticEDF;
 using fdapde::models::Sampling;
+#include "../../fdaPDE/calibration/gcv.h"
 
 #include "utils/constants.h"
 #include "utils/mesh_loader.h"
@@ -175,5 +176,11 @@ TEST(gcv_srpde_newton_test, laplacian_nonparametric_samplingatnodes_newton_fd_st
   auto best_lambda = opt.optimum();
   DVector<double> expected_lambda = SVector<1>(0.0000075627208132);
   // check optimal lambda
-  EXPECT_TRUE( almost_equal(best_lambda[0], expected_lambda[0]) );
+  EXPECT_TRUE(almost_equal(best_lambda[0], expected_lambda[0]));
+
+  // check consistency with GCV calibrator
+  auto GCV_ = fdapde::calibration::GCV<SpaceOnly> {Newton<fdapde::Dynamic>(10, 0.05, 1), StochasticEDF(100, seed)};
+  GCV_.set_step(4e-8);
+  fdapde::models::RegressionView<void> model_view = model;   // get view to model
+  EXPECT_TRUE(GCV_(pt).fit(model_view) == opt.optimum());    // check if it works with a view
 }

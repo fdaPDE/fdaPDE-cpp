@@ -17,7 +17,7 @@
 #ifndef __MESH_LOADER_H__
 #define __MESH_LOADER_H__
 
-#include <fdaPDE/mesh.h>
+#include <fdaPDE/geometry.h>
 #include <fdaPDE/utils.h>
 #include <gtest/gtest.h>   // testing framework
 
