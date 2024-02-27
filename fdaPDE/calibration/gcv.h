@@ -29,6 +29,9 @@ template <typename RegularizationType> class GCV : public CalibratorBase<GCV<Reg
    private:
     models::GCV gcv_ {};
     core::Optimizer<models::GCV> opt_ {};
+    template <typename T> struct is_void {
+        static constexpr bool value = std::is_same_v<T, void>;
+    };
    public:
     // constructor
     template <typename Optimizer_, typename EDFStrategy_> GCV(Optimizer_&& opt, EDFStrategy_&& edf) : opt_(opt) {
@@ -42,12 +45,12 @@ template <typename RegularizationType> class GCV : public CalibratorBase<GCV<Reg
         gcv_.set_model(model);
         return opt_.optimize(gcv_, std::forward<Args>(args)...);
     }
-    const DVector<double>& optimum() const { return opt_.optimum(); }
-    const std::vector<double>& edfs() const { return gcv_.edfs(); }   // equivalent degrees of freedom q + Tr[S]
-    const std::vector<double>& gcvs() const { return gcv_.gcvs(); }   // computed values of GCV index
+    DVector<double> optimum() { return opt_.optimum(); }                // optimal \lambda found
+    const std::vector<double>& edfs() const { return gcv_.edfs(); }     // equivalent degrees of freedom q + Tr[S]
+    const std::vector<double>& gcvs() const { return gcv_.gcvs(); }     // computed values of GCV index
     void set_step(double step) { gcv_.set_step(step); }
     void resize(int gcv_dynamic_inner_size) {   // set GCV's domain dimension
-        static_assert(std::is_same_v<RegularizationType, void>, "THIS_METHOD_IS_FOR_VOID_REGULARIZATION_ONLY");
+        fdapde_static_assert(is_void<RegularizationType>::value, THIS_METHOD_IS_FOR_VOID_REGULARIZATION_ONLY);
         gcv_.resize(gcv_dynamic_inner_size);
     }
 };

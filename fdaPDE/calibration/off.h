@@ -30,14 +30,12 @@ class Off {
    public:
     Off() = default;
     ConfiguredCalibrator<Off> operator()(const DVector<double>& lambda) {
-      fdapde_assert(lambda.cols() == 1 && (lambda.rows() == 1 || lambda.rows() == 2));
+      fdapde_assert(lambda.rows() == 1 || lambda.rows() == 2);
       lambda_ = lambda;
-      return ConfiguredCalibrator<Off>(static_cast<const Off&>(*this));
+      return *this;
     }
-    const DVector<double>& optimum() const { return lambda_; }
-    template <typename ModelType_> DVector<double> fit(ModelType_& model) {
-      return lambda_;
-    }
+    template <typename ModelType_> DVector<double> fit(ModelType_& model) { return lambda_; }
+    const DVector<double>& optimum() const { return lambda_; }   // for compatibility with other calibrators only
 };
 
 }   // namespace calibration

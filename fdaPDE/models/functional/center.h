@@ -53,7 +53,8 @@ struct CenterReturnType {
     DMatrix<double> mean;     // mean field expansion coefficients
 };
 template <typename SmootherType_, typename CalibratorType_>
-CenterReturnType center(const DMatrix<double>& X, const DVector<double>& w, SmootherType_&& smoother, CalibratorType_&& calibrator) {
+CenterReturnType
+center(const DMatrix<double>& X, const DVector<double>& w, SmootherType_&& smoother, CalibratorType_&& calibrator) {
     DMatrix<double> mean_field = smooth_mean(X, w, smoother, calibrator);
     // compute mean matrix and return
     return {X - smoother.fitted().replicate(1, X.rows()).transpose(), smoother.f()};
