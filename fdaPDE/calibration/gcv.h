@@ -34,6 +34,7 @@ template <typename RegularizationType> class GCV : public CalibratorBase<GCV<Reg
     };
    public:
     // constructor
+    GCV() = default;
     template <typename Optimizer_, typename EDFStrategy_> GCV(Optimizer_&& opt, EDFStrategy_&& edf) : opt_(opt) {
         if constexpr (std::is_same_v<RegularizationType, models::SpaceOnly>) gcv_.resize(1);
         else gcv_.resize(2);

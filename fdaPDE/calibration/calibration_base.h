@@ -38,6 +38,7 @@ template <typename Calibrator, typename... Args_> class ConfiguredCalibrator {
     struct callback_require_model<
       T, M, std::void_t<decltype(std::declval<T>().template set_model<M>(std::declval<M>()))>> : std::true_type { };
    public:
+    ConfiguredCalibrator() = default;
     ConfiguredCalibrator(const CalibratorType& c, Args_&&... args) :
         c_(c), args_(std::make_tuple(std::forward<Args_>(args)...)) {};
     template <typename ModelType_> DVector<double> fit(ModelType_& model) {
