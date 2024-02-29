@@ -25,8 +25,11 @@
 #include "../../calibration/gcv.h"
 using fdapde::calibration::Calibrator;
 #include "functional_base.h"
-#include "regularized_svd.h"
 #include "center.h"
+
+// regularized_svd
+#include "regularized_svd.h"
+using fdapde::models::RSVDType;
 
 namespace fdapde {
 namespace models {
@@ -49,10 +52,11 @@ class FPLS : public FunctionalBase<FPLS<RegularizationType_>, RegularizationType
     // constructors
     FPLS() = default;
     fdapde_enable_constructor_if(is_space_only, This)
-      FPLS(const pde_ptr& pde, Sampling s, RegularizedSVD<sequential> rsvd) :
+      FPLS(const pde_ptr& pde, Sampling s, RegularizedSVD<sequential> rsvd = RegularizedSVD<fdapde::sequential>{}) :
         Base(pde, s), rsvd_(rsvd) {};
     fdapde_enable_constructor_if(is_space_time_separable, This)
-      FPLS(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s, RegularizedSVD<sequential> rsvd) :
+      FPLS(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s,
+           RegularizedSVD<sequential> rsvd = RegularizedSVD<fdapde::sequential>{}) :
         Base(space_penalty, time_penalty, s), rsvd_(rsvd) {};
 
     void init_model() {
@@ -117,14 +121,14 @@ class FPLS : public FunctionalBase<FPLS<RegularizationType_>, RegularizationType
     const DMatrix<double>& B() const { return B_; }
     // setters
     void set_ncomp(std::size_t n_comp) { n_comp_ = n_comp; }
-    void set_rsvd(const RegularizedSVD<sequential>& rsvd) { rsvd_ = rsvd; }
+    void set_rsvd(const RSVDType<This>& rsvd) { rsvd_ = rsvd; }
     template <typename CalibratorType_> void set_regression_step_calibrator(CalibratorType_&& calibrator) {
         calibrator_ = calibrator;
     }
    private:
     SmootherType smoother_;                 // smoothing algorithm used in regression step
     Calibrator<SmootherType> calibrator_;   // calibration strategy used in regression step
-    RegularizedSVD<sequential> rsvd_;       // RSVD solver employed in correlation maximization step
+    RSVDType<This> rsvd_;       // RSVD solver employed in correlation maximization step
     std::size_t n_comp_ = 3;                // number of latent components
 
     // problem solution
