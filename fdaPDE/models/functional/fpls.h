@@ -113,11 +113,11 @@ class FPLS : public FunctionalBase<FPLS<RegularizationType_>, RegularizationType
     const DMatrix<double>& X() const { return df_.template get<double>(DESIGN_MATRIX_BLK); }
     const DMatrix<double>& X_space_directions() const { return W_; }
     const DMatrix<double>& Y_space_directions() const { return V_; }
-    const DMatrix<double>& X_latent() const { return T_; }
+    const DMatrix<double>& X_latent_scores() const { return T_; }
     const DMatrix<double>& X_loadings() const { return C_; }
     const DMatrix<double>& Y_loadings() const { return D_; }
-    DMatrix<double> fitted() const { return X_latent() * Y_loadings().transpose(); }
-    DMatrix<double> reconstructed() const { return X_latent() * X_loadings().transpose(); }
+    DMatrix<double> fitted() const { return X_latent_scores() * Y_loadings().transpose(); }
+    DMatrix<double> reconstructed() const { return X_latent_scores() * X_loadings().transpose(); }
     const DMatrix<double>& B() const { return B_; }
     // setters
     void set_ncomp(std::size_t n_comp) { n_comp_ = n_comp; }
