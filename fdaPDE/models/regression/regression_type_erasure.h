@@ -63,10 +63,9 @@ struct RegressionModel__ {
 };
 
 template <typename RegularizationType>
-using RegressionModel = fdapde::erase<fdapde::heap_storage, StatisticalModel__<RegularizationType>, RegressionModel__>;
+using RegressionModel = erase<heap_storage,       StatisticalModel__<RegularizationType>, RegressionModel__>;
 template <typename RegularizationType>
-using RegressionView =
-  fdapde::erase<fdapde::non_owning_storage, StatisticalModel__<RegularizationType>, RegressionModel__>;
+using RegressionView  = erase<non_owning_storage, StatisticalModel__<RegularizationType>, RegressionModel__>;
 
 }   // namespace models
 }   // namespace fdapde

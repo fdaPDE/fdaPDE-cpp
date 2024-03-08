@@ -119,7 +119,7 @@ TEST(gcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridstoch
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test2/edfs.mtx"));
     EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test2/gcvs.mtx"));
     // check consistency with GCV calibrator
-    auto GCV_ = fdapde::calibration::GCV {Grid<fdapde::Dynamic> {}, StochasticEDF(100, seed)}(lambdas);
+    auto GCV_ = fdapde::calibration::GCV<SpaceOnly> {Grid<fdapde::Dynamic> {}, StochasticEDF(100, seed)}(lambdas);
     EXPECT_TRUE(GCV_.fit(model) == opt.optimum());
 }
 
@@ -304,7 +304,6 @@ TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_gride
     auto L = -diffusion<FEM>(K) + advection<FEM>(b);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
-    double lambda = std::pow(0.1, 3);
     SRPDE model(problem, Sampling::areal);
     model.set_spatial_locations(subdomains);
     // set model's data
@@ -347,7 +346,6 @@ TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_grids
     auto L = -diffusion<FEM>(K) + advection<FEM>(b);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
-    double lambda = std::pow(0.1, 3);
     SRPDE model(problem, Sampling::areal);
     model.set_spatial_locations(subdomains);
     // set model's data

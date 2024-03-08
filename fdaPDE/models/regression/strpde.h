@@ -56,7 +56,7 @@ class STRPDE<SpaceTimeSeparable, monolithic> :
     using RegularizationType = SpaceTimeSeparable;
     using Base = RegressionBase<STRPDE<RegularizationType, monolithic>, RegularizationType>;
     // import commonly defined symbols from base
-    IMPORT_REGRESSION_SYMBOLS;
+    IMPORT_REGRESSION_SYMBOLS
     using Base::lambda_D;   // smoothing parameter in space
     using Base::lambda_T;   // smoothing parameter in time
     using Base::P;          // discretized penalty: P = \lambda_D*((R1^T*R0^{-1}*R1) \kron Rt) + \lambda_T*(R0 \kron Pt)
@@ -64,7 +64,7 @@ class STRPDE<SpaceTimeSeparable, monolithic> :
     using Base::P1;         // time penalization matrix: [P1_]_{ij} = \int_{[0,T]} (\phi_i)_tt*(\phi_j)_tt
     // constructor
     STRPDE() = default;
-    STRPDE(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s) :
+    STRPDE(const Base::PDE& space_penalty, const Base::PDE& time_penalty, Sampling s) :
         Base(space_penalty, time_penalty, s) {};
 
     void init_model() {
@@ -134,7 +134,7 @@ class STRPDE<SpaceTimeParabolic, monolithic> :
     using RegularizationType = SpaceTimeParabolic;
     using Base = RegressionBase<STRPDE<RegularizationType, monolithic>, RegularizationType>;
     // import commonly defined symbols from base
-    IMPORT_REGRESSION_SYMBOLS;
+    IMPORT_REGRESSION_SYMBOLS
     using Base::L;          // [L]_{ii} = 1/DeltaT for i \in {1 ... m} and [L]_{i,i-1} = -1/DeltaT for i \in {1 ... m-1}
     using Base::lambda_D;   // smoothing parameter in space
     using Base::lambda_T;   // smoothing parameter in time
@@ -142,7 +142,7 @@ class STRPDE<SpaceTimeParabolic, monolithic> :
     using Base::s;                 // initial condition
     // constructor
     STRPDE() = default;
-    STRPDE(const pde_ptr& pde, Sampling s) : Base(pde, s) {};
+    STRPDE(const Base::PDE& pde, Sampling s) : Base(pde, s) {};
 
     void init_model() {   // update model object in case of **structural** changes in its definition
         // assemble system matrix for the nonparameteric part of the model
@@ -212,30 +212,30 @@ class STRPDE<SpaceTimeParabolic, iterative> :
     double J(const DMatrix<double>& f, const DMatrix<double>& g) const {
         double SSE = 0;
         // SSE = \sum_{k=1}^m (z^k - \Psi*f^k)^T*(z^k - \Psi*f^k)
-        for (std::size_t t = 0; t < n_temporal_locs(); ++t) {
+        for (int t = 0; t < n_temporal_locs(); ++t) {
             SSE += (y(t) - Psi() * f.block(n_spatial_basis() * t, 0, n_spatial_basis(), 1)).squaredNorm();
         }
         return SSE + lambda_D() * g.squaredNorm();
     }
     // internal solve routine used by the iterative method
-    void solve(std::size_t t, BlockVector<double>& f_new, BlockVector<double>& g_new) const {
+    void solve(int t, BlockVector<double>& f_new, BlockVector<double>& g_new) const {
         DVector<double> x = invA_.solve(b_);
         f_new(t) = x.topRows(n_spatial_basis());
         g_new(t) = x.bottomRows(n_spatial_basis());
         return;
     }
     // internal utilities
-    DMatrix<double> y(std::size_t k) const { return y().block(n_spatial_locs() * k, 0, n_spatial_locs(), 1); }
-    DMatrix<double> u(std::size_t k) const { return u_.block(n_basis() * k, 0, n_basis(), 1); }
+    DMatrix<double> y(int k) const { return y().block(n_spatial_locs() * k, 0, n_spatial_locs(), 1); }
+    DMatrix<double> u(int k) const { return u_.block(n_basis() * k, 0, n_basis(), 1); }
 
     // quantities related to iterative scheme
     double tol_ = 1e-4;           // tolerance used as stopping criterion
-    std::size_t max_iter_ = 50;   // maximum number of allowed iterations
+    int max_iter_ = 50;   // maximum number of allowed iterations
    public:
     using RegularizationType = SpaceTimeParabolic;
     using Base = RegressionBase<STRPDE<RegularizationType, iterative>, RegularizationType>;
     // import commonly defined symbols from base
-    IMPORT_REGRESSION_SYMBOLS;
+    IMPORT_REGRESSION_SYMBOLS
     using Base::DeltaT;            // distance between two time instants
     using Base::lambda_D;          // smoothing parameter in space
     using Base::lambda_T;          // smoothing parameter in time
@@ -243,7 +243,7 @@ class STRPDE<SpaceTimeParabolic, iterative> :
     using Base::pde_;              // parabolic differential operator df/dt + Lf - u
     // constructor
     STRPDE() = default;
-    STRPDE(const pde_ptr& pde, Sampling s) : Base(pde, s) { pde_.init(); };
+    STRPDE(const Base::PDE& pde, Sampling s) : Base(pde, s) { pde_.init(); };
 
     // redefine SpaceTimeParabolicBase properties affected by iterative approach
     void tensorize_psi() { return; } // avoid tensorization of \Psi matrix
@@ -259,7 +259,7 @@ class STRPDE<SpaceTimeParabolic, iterative> :
     // getters
     const SpMatrix<double>& R0() const { return pde_.mass(); }    // mass matrix in space
     const SpMatrix<double>& R1() const { return pde_.stiff(); }   // discretization of differential operator L
-    std::size_t n_basis() const { return pde_.n_dofs(); }         // number of basis functions
+    int n_basis() const { return pde_.n_dofs(); }         // number of basis functions
 
     void init_model() { return; };
     void solve() {
@@ -275,7 +275,7 @@ class STRPDE<SpaceTimeParabolic, iterative> :
         // compute f^(k,0), k = 1 ... m as solution of Ax = b_(k)
         BlockVector<double> f_old(n_temporal_locs(), n_spatial_basis());
         // solve n_temporal_locs() space only linear systems
-        for (std::size_t t = 0; t < n_temporal_locs(); ++t) {
+        for (int t = 0; t < n_temporal_locs(); ++t) {
             // right hand side at time step t
             b_ << PsiTD() * y(t),   // should put W()
               lambda_D() * lambda_T() * u(t);
@@ -307,7 +307,7 @@ class STRPDE<SpaceTimeParabolic, iterative> :
         // initialize value of functional J to minimize
         double Jold = std::numeric_limits<double>::max();
         double Jnew = J(f_old.get(), g_old.get());
-        std::size_t i = 1;   // iteration number
+        int i = 1;   // iteration number
         // build system matrix for the iterative scheme
         A_.block(0, 1) += lambda_D() * lambda_T() / DeltaT() * R0();
         A_.block(1, 0) += lambda_D() * lambda_T() / DeltaT() * R0();
@@ -323,7 +323,7 @@ class STRPDE<SpaceTimeParabolic, iterative> :
             // solve linear system
             solve(0, f_new, g_new);
             // general step
-            for (std::size_t t = 1; t < n_temporal_locs() - 1; ++t) {
+            for (int t = 1; t < n_temporal_locs() - 1; ++t) {
                 // \Psi^T*y^k   + (\lambda_D*\lambda_T/DeltaT)*R_0*g^(k+1,i-1),
                 // \lambda_D*u^k + (\lambda_D*\lambda_T/DeltaT)*R_0*f^(k-1,i-1)
                 b_ << PsiTD() * y(t) + (lambda_D() * lambda_T() / DeltaT()) * R0() * g_old(t + 1),
@@ -350,7 +350,7 @@ class STRPDE<SpaceTimeParabolic, iterative> :
     }
     // setters
     void set_tolerance(double tol) { tol_ = tol; }
-    void set_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
+    void set_max_iter(int max_iter) { max_iter_ = max_iter; }
 };
 
 }   // namespace models

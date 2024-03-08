@@ -38,10 +38,10 @@ template <typename Model_> class PowerIteration {
     static constexpr int n_lambda = Model::n_lambda;
     GCV gcv_;   // GCV functor
     // algorithm's parameters
-    double tolerance_ = 1e-6;     // treshold on |Jnew - Jold| used as stopping criterion
-    std::size_t max_iter_ = 20;   // maximum number of iterations before forced stop
-    std::size_t k_ = 0;           // iteration index
-    SolverType solver_;           // internal solver
+    double tolerance_ = 1e-6;   // treshold on |Jnew - Jold| used as stopping criterion
+    int max_iter_ = 20;         // maximum number of iterations before forced stop
+    int k_ = 0;                 // iteration index
+    SolverType solver_;         // internal solver
     int seed_ = fdapde::random_seed;
     int n_mc_samples_ = 100;
 
@@ -53,7 +53,7 @@ template <typename Model_> class PowerIteration {
    public:
     // constructors
     PowerIteration() = default;
-    PowerIteration(const Model& m, double tolerance, std::size_t max_iter, int seed) :
+    PowerIteration(const Model& m, double tolerance, int max_iter, int seed) :
         tolerance_(tolerance), max_iter_(max_iter),
         seed_((seed == fdapde::random_seed) ? std::random_device()() : seed) {
         // initialize internal smoothing solver
@@ -65,8 +65,9 @@ template <typename Model_> class PowerIteration {
         solver_.set_spatial_locations(m.locs());
         return;
     };
-    template <typename ModelType> PowerIteration(const ModelType& m, double tolerance, std::size_t max_iter) :
-        PowerIteration(m, tolerance, max_iter, fdapde::random_seed) {};
+    template <typename ModelType>
+    PowerIteration(const ModelType& m, double tolerance, int max_iter) :
+        PowerIteration(m, tolerance, max_iter, fdapde::random_seed) { }
 
     void init() { gcv_ = solver_.template gcv<StochasticEDF>(n_mc_samples_, seed_); }
     // executes the power itration algorithm on data X and smoothing parameter \lambda, starting from f0
@@ -107,14 +108,14 @@ template <typename Model_> class PowerIteration {
     const DVector<double>& g() const { return g_; }
     const DVector<double>& fn() const { return fn_; }   
     double ftPf(const DVector<double>& lambda) const { return solver_.ftPf(lambda); }   // block f^\top*P(\lambda)*f
-    std::size_t n_iter() const { return k_; }
+    int n_iter() const { return k_; }
     double f_norm() const { return f_norm_; }
     inline double f_squaredNorm() const { return std::pow(f_norm_, 2); }
     double gcv() { return gcv_.eval(); }   // GCV index at convergence
     // setters
     void set_tolerance(double tolerance) { tolerance_ = tolerance; }
-    void set_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
-    void set_seed(std::size_t seed) { seed_ = seed; }
+    void set_max_iter(int max_iter) { max_iter_ = max_iter; }
+    void set_seed(int seed) { seed_ = seed; }
 };
 
 }   // namespace models

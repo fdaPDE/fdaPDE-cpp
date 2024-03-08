@@ -36,23 +36,28 @@ template <typename RegularizationType> class GCV : public CalibratorBase<GCV<Reg
     // constructor
     GCV() = default;
     template <typename Optimizer_, typename EDFStrategy_> GCV(Optimizer_&& opt, EDFStrategy_&& edf) : opt_(opt) {
-        if constexpr (std::is_same_v<RegularizationType, models::SpaceOnly>) gcv_.resize(1);
-        else gcv_.resize(2);
+        if constexpr (!is_void<RegularizationType>::value) {
+            if constexpr (std::is_same_v<RegularizationType, models::SpaceOnly>) {
+                gcv_.resize(1);
+            } else {   // space-time models
+                gcv_.resize(2);
+            }
+        }
         gcv_.set_edf_strategy(edf);
     }
     // selects best smoothing parameter of regression model by minimization of GCV index
-    template <typename ModelType_, typename... Args>
-    DVector<double> fit(ModelType_& model, Args&&... args) {
+    template <typename ModelType_, typename... Args> DVector<double> fit(ModelType_& model, Args&&... args) {
+        fdapde_assert(gcv_.inner_size() != 0);
         gcv_.set_model(model);
         return opt_.optimize(gcv_, std::forward<Args>(args)...);
     }
-    DVector<double> optimum() { return opt_.optimum(); }                // optimal \lambda found
-    const std::vector<double>& edfs() const { return gcv_.edfs(); }     // equivalent degrees of freedom q + Tr[S]
-    const std::vector<double>& gcvs() const { return gcv_.gcvs(); }     // computed values of GCV index
+    DVector<double> optimum() { return opt_.optimum(); }              // optimal \lambda found
+    const std::vector<double>& edfs() const { return gcv_.edfs(); }   // equivalent degrees of freedom q + Tr[S]
+    const std::vector<double>& gcvs() const { return gcv_.gcvs(); }   // computed values of GCV index
     void set_step(double step) { gcv_.set_step(step); }
-    void resize(int gcv_dynamic_inner_size) {   // set GCV's domain dimension
+    template <typename RegularizationType_> void set() {   // set GCV's domain dimension
         fdapde_static_assert(is_void<RegularizationType>::value, THIS_METHOD_IS_FOR_VOID_REGULARIZATION_ONLY);
-        gcv_.resize(gcv_dynamic_inner_size);
+        gcv_.resize(models::n_smoothing_parameters<RegularizationType_>::value);
     }
 };
 // template argument deduction rule

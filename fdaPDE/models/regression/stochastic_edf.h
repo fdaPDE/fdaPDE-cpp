@@ -31,7 +31,7 @@ namespace models {
 class StochasticEDF {
    private:
     RegressionView<void> model_;
-    std::size_t r_ = 100;   // number of monte carlo realizations
+    int r_ = 100;   // number of monte carlo realizations
     DMatrix<double> Us_;    // sample from Rademacher distribution
     DMatrix<double> Bs_;    // \Psi^T*Q*Us_
     DMatrix<double> Y_;     // Us_^T*\Psi
@@ -39,9 +39,9 @@ class StochasticEDF {
     bool init_ = false;
    public:
     // constructor
-    StochasticEDF(std::size_t r, int seed) :
+    StochasticEDF(int r, int seed) :
         r_(r), seed_((seed == fdapde::random_seed) ? std::random_device()() : seed) { }
-    StochasticEDF(std::size_t r) : StochasticEDF(r, std::random_device()()) { }
+    StochasticEDF(int r) : StochasticEDF(r, std::random_device()()) { }
     StochasticEDF() : StochasticEDF(100) { }
   
     // evaluate trace of S exploiting a monte carlo approximation
@@ -52,8 +52,8 @@ class StochasticEDF {
             std::bernoulli_distribution Be(0.5);   // bernulli distribution with parameter p = 0.5
             Us_.resize(model_.n_locs(), r_);       // preallocate memory for matrix Us
             // fill matrix
-            for (std::size_t i = 0; i < model_.n_locs(); ++i) {
-                for (std::size_t j = 0; j < r_; ++j) {
+            for (int i = 0; i < model_.n_locs(); ++i) {
+                for (int j = 0; j < r_; ++j) {
                     if (Be(rng))
                         Us_(i, j) = 1.0;
                     else
@@ -65,7 +65,7 @@ class StochasticEDF {
             init_ = true;   // never reinitialize again
         }
         // prepare matrix Bs_
-        std::size_t n = model_.n_basis();
+        int n = model_.n_basis();
         Bs_ = DMatrix<double>::Zero(2 * n, r_);
         if (!model_.has_covariates())   // non-parametric model
             Bs_.topRows(n) = -model_.PsiTD() * model_.W() * Us_;
@@ -81,7 +81,7 @@ class StochasticEDF {
         }
         // compute approximated Tr[S] using monte carlo mean
         double MCmean = 0;
-        for (std::size_t i = 0; i < r_; ++i) MCmean += Y_.row(i).dot(sol.col(i).head(n));
+        for (int i = 0; i < r_; ++i) MCmean += Y_.row(i).dot(sol.col(i).head(n));
         return MCmean / r_;
     }
     // setter

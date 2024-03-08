@@ -32,23 +32,22 @@ using fdapde::models::SpaceOnly;
 
 namespace fdapde {
 namespace models {
-
-// type-erased wrapper for Tr[S] computation strategies
-struct EDFStrategy__ {
-    template <typename M> using fn_ptrs = fdapde::mem_fn_ptrs<&M::compute, &M::set_model>;
-    // forwardings
-    decltype(auto) compute() { return fdapde::invoke<double, 0>(*this); }
-    void set_model(const RegressionView<void>& model) { fdapde::invoke<void, 1>(*this, model); }
-};
-using EDFStrategy = fdapde::erase<fdapde::heap_storage, EDFStrategy__>;
   
 // base functor implementing the expression of the GCV index for model M (type-erased).
 class GCV {
-   public:
+   private:
     using This = GCV;
     using VectorType = DVector<double>;
     using MatrixType = DMatrix<double>;
-    static constexpr int DomainDimension = fdapde::Dynamic;
+    // type-erased wrapper for Tr[S] computation strategies
+    struct EDFStrategy__ {
+        template <typename M> using fn_ptrs = fdapde::mem_fn_ptrs<&M::compute, &M::set_model>;
+        // forwardings
+        decltype(auto) compute() { return fdapde::invoke<double, 0>(*this); }
+        void set_model(const RegressionView<void>& model) { fdapde::invoke<void, 1>(*this, model); }
+    };
+    using EDFStrategy = fdapde::erase<fdapde::heap_storage, EDFStrategy__>;
+
     RegressionView<void> model_;
     EDFStrategy trS_;               // strategy used to evaluate the trace of smoothing matrix S
     std::vector<double> edfs_;      // equivalent degrees of freedom q + Tr[S]
@@ -79,19 +78,27 @@ class GCV {
         return gcv_value;
     }
    public:
+    static constexpr int DomainDimension = fdapde::Dynamic;
+    // constructors
     template <typename ModelType_, typename EDFStrategy_>
     GCV(const ModelType_& model, EDFStrategy_&& trS) : model_(model), trS_(trS), gcv_(this, &This::gcv_impl) {
         // set model pointer in edf computation strategy
         trS_.set_model(model_);
-    };
+    }
     template <typename ModelType_> GCV(const ModelType_& model) : GCV(model, StochasticEDF()) { }
     GCV(const GCV& other) : model_(other.model_), trS_(other.trS_), gcv_(this, &This::gcv_impl) {
         // copy other GCV functor configuration
         gcv_.resize(other.gcv_.inner_size());
 	gcv_.set_step(other.gcv_.step());
-    };
+    }
     GCV() : gcv_(this, &This::gcv_impl) { }
-
+    GCV& operator=(const GCV& other) {
+        model_ = other.model_;
+        trS_ = other.trS_;
+        gcv_ = ScalarField<fdapde::Dynamic, double (This::*)(const VectorType&)>(this, &This::gcv_impl);
+        return *this;
+    }
+  
     // call operator and numerical derivative approximations
     double operator()(const VectorType& lambda) { return gcv_(lambda); }
     std::function<VectorType(const VectorType&)> derive() const { return gcv_.derive(); }
@@ -125,6 +132,7 @@ class GCV {
     // getters
     const std::vector<double>& edfs() const { return edfs_; }   // equivalent degrees of freedom q + Tr[S]
     const std::vector<double>& gcvs() const { return gcvs_; }   // computed values of GCV index
+    int inner_size() const { return gcv_.inner_size(); }
 };
 
 // provides the analytical expresssion of GCV gradient and hessian, for newton-like optimization methods

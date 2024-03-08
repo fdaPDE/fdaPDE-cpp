@@ -56,8 +56,7 @@ template <typename Model> class SamplingBase {
     }
    public:
     SamplingBase() = default;
-    SamplingBase(Sampling sampling) : sampling_(sampling) { };
-    SamplingBase(const SamplingBase& other) : sampling_(other.sampling_) { };
+    SamplingBase(Sampling sampling) : sampling_(sampling) { }
   
     void init_sampling(bool forced = false) {
         // compute once if not forced to recompute
@@ -66,14 +65,14 @@ template <typename Model> class SamplingBase {
         switch (sampling_) {
         case Sampling::mesh_nodes: {  // data sampled at mesh nodes: \Psi is the identity matrix
             // preallocate space for Psi matrix
-            std::size_t n = model().n_spatial_basis();
-            std::size_t N = model().n_spatial_basis();
+            int n = model().n_spatial_basis();
+            int N = model().n_spatial_basis();
             Psi_.resize(n, N);
             std::vector<fdapde::Triplet<double>> triplet_list;
             triplet_list.reserve(n);
             // if data locations are equal to mesh nodes then \Psi is the identity matrix.
             // \psi_i(p_i) = 1 and \psi_i(p_j) = 0 \forall i \neq j
-            for (std::size_t i = 0; i < n; ++i) triplet_list.emplace_back(i, i, 1.0);
+            for (int i = 0; i < n; ++i) triplet_list.emplace_back(i, i, 1.0);
             // finalize construction
             Psi_.setFromTriplets(triplet_list.begin(), triplet_list.end());
             Psi_.makeCompressed();
@@ -98,10 +97,10 @@ template <typename Model> class SamplingBase {
             // here we must distinguish between space-only and space-time models
             if constexpr (is_space_time<Model>::value) {
                 // store I_m \kron D
-                std::size_t m = model().n_temporal_locs();
-                std::size_t n = n_spatial_locs();
+                int m = model().n_temporal_locs();
+                int n = n_spatial_locs();
                 DVector<double> IkronD(n * m);
-                for (std::size_t i = 0; i < m; ++i) IkronD.segment(i * n, n) = basis_evaluation->D;
+                for (int i = 0; i < m; ++i) IkronD.segment(i * n, n) = basis_evaluation->D;
                 // compute and store result
                 D_ = IkronD.asDiagonal();
             } else {
@@ -116,7 +115,7 @@ template <typename Model> class SamplingBase {
     // getters
     const SpMatrix<double>& Psi(not_nan) const { return Psi_; }
     const SpMatrix<double>& PsiTD(not_nan) const { return PsiTD_; }
-    std::size_t n_spatial_locs() const {
+    int n_spatial_locs() const {
         return sampling_ == Sampling::mesh_nodes ? model().pde().n_dofs() : locs_.rows();
     }
     const DiagMatrix<double>& D() const { return D_; }

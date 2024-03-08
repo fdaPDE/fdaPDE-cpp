@@ -17,8 +17,6 @@
 #include "src/fpls_test.cpp"
 #include "src/centering_test.cpp"
 
-
-
 int main(int argc, char **argv){
   // start testing
   testing::InitGoogleTest(&argc, argv);

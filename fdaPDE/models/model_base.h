@@ -43,21 +43,20 @@ template <typename Model> class ModelBase {
         if (model().runtime().query(runtime_status::require_functional_basis_evaluation)) {
             model().init_sampling(true);   // init \Psi matrix, always force recomputation
         }
-	model().analyze_data();    // specific data-dependent initialization requested by the model
+	model().analyze_data();    // specific data-dependent initialization requested by Model
 	if (model().runtime().query(runtime_status::require_psi_correction)) { model().correct_psi(); }
         model().init_model();
 	// clear all dirty bits in blockframe
 	for(const auto& BLK : df_.dirty_cols()) df_.clear_dirty_bit(BLK);
     }
-  
     // setters
     void set_data(const BlockFrame<double, int>& df, bool reindex = false) {
         df_ = df;
         // insert an index row (if not yet present or requested)
         if (!df_.has_block(INDEXES_BLK) || reindex) {
-            std::size_t n = df_.rows();
+            int n = df_.rows();
             DMatrix<int> idx(n, 1);
-            for (std::size_t i = 0; i < n; ++i) idx(i, 0) = i;
+            for (int i = 0; i < n; ++i) idx(i, 0) = i;
             df_.insert(INDEXES_BLK, idx);
         }
 	model().runtime().set(runtime_status::require_data_stack_update);
@@ -70,8 +69,11 @@ template <typename Model> class ModelBase {
     const BlockFrame<double, int>& data() const { return df_; }
     BlockFrame<double, int>& data() { return df_; }   // direct write-access to model's internal data storage
     const DMatrix<int>& idx() const { return df_.get<int>(INDEXES_BLK); }   // data indices
-    std::size_t n_locs() const { return model().n_spatial_locs() * model().n_temporal_locs(); }
-    DVector<double> lambda(int) const { return model().lambda(); }   // int supposed to be fdapde::Dynamic
+    int n_locs() const { return model().n_spatial_locs() * model().n_temporal_locs(); }
+    DVector<double> lambda(int) const {   // int supposed to be fdapde::Dynamic
+        fdapde_assert(!is_empty(model().lambda()));
+        return model().lambda();
+    }
     // access to model runtime status
     model_runtime_handler& runtime() { return runtime_; }
     const model_runtime_handler& runtime() const { return runtime_; }
@@ -80,7 +82,7 @@ template <typename Model> class ModelBase {
    protected:
     BlockFrame<double, int> df_ {};      // blockframe for data storage
     model_runtime_handler runtime_ {};   // model's runtime status
-
+  
     // getter to underlying model object
     inline Model& model() { return static_cast<Model&>(*this); }
     inline const Model& model() const { return static_cast<const Model&>(*this); }
@@ -89,9 +91,9 @@ template <typename Model> class ModelBase {
 // set boundary conditions on problem's linear system
 // BUG: not working - fix needed due to SparseBlockMatrix interface
 // template <typename Model> void ModelBase<Model>::set_dirichlet_bc(SpMatrix<double>& A, DMatrix<double>& b) {
-//     std::size_t n = A.rows() / 2;
+//     int n = A.rows() / 2;
 
-//     for (std::size_t i = 0; i < n; ++i) {
+//     for (int i = 0; i < n; ++i) {
 //         if (pde_->domain().is_on_boundary(i)) {
 //             A.row(i) *= 0;          // zero all entries of this row
 //             A.coeffRef(i, i) = 1;   // set diagonal element to 1 to impose equation u_j = b_j

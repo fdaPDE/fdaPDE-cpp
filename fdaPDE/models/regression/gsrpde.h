@@ -35,7 +35,7 @@ class GSRPDE : public RegressionBase<GSRPDE<RegularizationType_>, Regularization
     using This = GSRPDE<RegularizationType>;
     using Base = RegressionBase<GSRPDE<RegularizationType>, RegularizationType>;
     // import commonly defined symbols from base
-    IMPORT_REGRESSION_SYMBOLS;
+    IMPORT_REGRESSION_SYMBOLS
     using Base::invXtWX_;   // LU factorization of X^T*W*X
     using Base::lambda_D;   // smoothing parameter in space
     using Base::P;          // discretized penalty
@@ -44,22 +44,21 @@ class GSRPDE : public RegressionBase<GSRPDE<RegularizationType_>, Regularization
     // constructor
     GSRPDE() = default;
     // space-only and space-time parabolic constructor
-    fdapde_enable_constructor_if(has_single_penalty, This)
-      GSRPDE(const pde_ptr& pde, Sampling s, const Distribution& distr) :
-        Base(pde, s), distr_(distr) {
+    GSRPDE(const Base::PDE& pde, Sampling s, const Distribution& distr)
+        requires(is_space_only<This>::value || is_space_time_parabolic<This>::value)
+        : Base(pde, s), distr_(distr) {
         fpirls_ = FPIRLS<This>(this, tol_, max_iter_);
-    };
+    }
     // space-time separable constructor
-    fdapde_enable_constructor_if(has_double_penalty, This)
-      GSRPDE(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s, const Distribution& distr) :
-        Base(space_penalty, time_penalty, s), distr_(distr) {
+    GSRPDE(const Base::PDE& space_penalty, const Base::PDE& time_penalty, Sampling s, const Distribution& distr)
+        requires(is_space_time_separable<This>::value)
+        : Base(space_penalty, time_penalty, s), distr_(distr) {
         fpirls_ = FPIRLS<This>(this, tol_, max_iter_);
-    };
-
+    }
     // setters
     void set_fpirls_tolerance(double tol) { tol_ = tol; }
     void set_fpirls_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
-    void init_model() { fpirls_.init(); };
+    void init_model() { fpirls_.init(); }
     void solve() {
         fdapde_assert(y().rows() != 0);
         // execute FPIRLS for minimization of functional \norm{V^{-1/2}(y - \mu)}^2 + \lambda \int_D (Lf - u)^2
@@ -81,7 +80,7 @@ class GSRPDE : public RegressionBase<GSRPDE<RegularizationType_>, Regularization
     }
     // required by FPIRLS (see fpirls.h for details)
     // initalizes mean vector \mu
-    void fpirls_init() { mu_ = distr_.preprocess(y()); };
+    void fpirls_init() { mu_ = distr_.preprocess(y()); }
     // computes W^k = ((G^k)^{-2})*((V^k)^{-1}) and y^k = G^k(y-u^k) + \theta^k
     void fpirls_compute_step() {
         DVector<double> theta_ = distr_.link(mu_);   // \theta^k = (g(\mu^k_1), ..., g(\mu^k_n))
@@ -91,7 +90,7 @@ class GSRPDE : public RegressionBase<GSRPDE<RegularizationType_>, Regularization
         py_ = G_.asDiagonal() * (y() - mu_) + theta_;
     }
     // updates mean vector \mu after WLS solution
-    void fpirls_update_step(const DMatrix<double>& hat_f, const DMatrix<double>& hat_beta) {
+    void fpirls_update_step(const DMatrix<double>& hat_f, [[maybe_unused]] const DMatrix<double>& hat_beta) {
         mu_ = distr_.inv_link(hat_f);
     }
     // returns the data loss \norm{V^{-1/2}(y - \mu)}^2

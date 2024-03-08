@@ -42,7 +42,7 @@ const std::string MESH_PATH = "../data/mesh/";
 //     * 2D:   3600 2D points, 6962  elements, 10561 edges. /test/data/mesh/unit_square/*.csv
 //     * 2.5D: 340  3D points, 616   elements, 956   edges. /test/data/mesh/surface/*.csv
 //     * 3D:   587  3D points, 2775  elements, 5795  faces. /test/data/mesh/unit_sphere/*.csv
-constexpr const auto standard_mesh_selector(unsigned int M, unsigned int N) {
+constexpr auto standard_mesh_selector(unsigned int M, unsigned int N) {
     // first order meshes
     if (M == 1 && N == 2) return "network";       // 1.5D
     if (M == 2 && N == 2) return "unit_square";   // 2D

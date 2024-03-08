@@ -136,7 +136,7 @@ TEST(strpde_test, noncostantcoefficientspde_nonparametric_samplingareal_paraboli
     // define temporal domain
     DVector<double> time_mesh;
     time_mesh.resize(10);
-    for (std::size_t i = 0; i < time_mesh.size(); ++i) time_mesh[i] = 0.4 * i;
+    for (int i = 0; i < time_mesh.size(); ++i) time_mesh[i] = 0.4 * i;
     // define spatial domain
     MeshLoader<Mesh2D> domain("quasi_circle");
     // import data from files
@@ -183,7 +183,7 @@ TEST(strpde_test, laplacian_nonparametric_samplingatnodes_parabolic_iterative) {
     DVector<double> time_mesh;
     time_mesh.resize(10);
     double x = 0;
-    for (std::size_t i = 0; i < time_mesh.size(); x += 0.2, ++i) time_mesh[i] = x;
+    for (int i = 0; i < time_mesh.size(); x += 0.2, ++i) time_mesh[i] = x;
     // define spatial domain
     MeshLoader<Mesh2D> domain("unit_square_coarse");
     // import data from files

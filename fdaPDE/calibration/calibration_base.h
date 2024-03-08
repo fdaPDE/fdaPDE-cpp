@@ -26,9 +26,10 @@ template <typename Calibrator, typename... Args_> class ConfiguredCalibrator {
    private:
     using CalibratorType = std::decay_t<Calibrator>;
     using ArgsPackType = std::tuple<std::decay_t<Args_>...>;
-    ArgsPackType args_;   // parameter pack forwarded to calibration strategy at fit time
     CalibratorType c_;
-    template <typename ModelType_, std::size_t... I> auto call_(ModelType_& model, std::index_sequence<I...> seq) {
+    ArgsPackType args_;   // parameter pack forwarded to calibration strategy at fit time
+    template <typename ModelType_, std::size_t... I>
+    auto call_(ModelType_& model, [[maybe_unused]] std::index_sequence<I...> seq) {
         return c_.fit(model, std::get<I>(args_)...);   // forward stored parameters to calibrator
     }
 
@@ -41,7 +42,7 @@ template <typename Calibrator, typename... Args_> class ConfiguredCalibrator {
     ConfiguredCalibrator() = default;
     ConfiguredCalibrator(const CalibratorType& c, Args_&&... args) :
         c_(c), args_(std::make_tuple(std::forward<Args_>(args)...)) {};
-    template <typename ModelType_> DVector<double> fit(ModelType_& model) {
+    template <typename ModelType_> DVector<double> fit(ModelType_&& model) {
         // forward model instance to callbacks which require it
         auto set_model = [&model](auto&& arg) {
             if constexpr (callback_require_model<std::decay_t<decltype(arg)>, ModelType_>::value) {

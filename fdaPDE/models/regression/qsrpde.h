@@ -34,7 +34,7 @@ class QSRPDE : public RegressionBase<QSRPDE<RegularizationType_>, Regularization
     using This = QSRPDE<RegularizationType>;
     using Base = RegressionBase<QSRPDE<RegularizationType>, RegularizationType>;
     // import commonly defined symbols from base
-    IMPORT_REGRESSION_SYMBOLS;
+    IMPORT_REGRESSION_SYMBOLS
     using Base::invXtWX_;   // LU factorization of X^T*W*X
     using Base::lambda_D;   // smoothing parameter in space
     using Base::n_basis;    // number of spatial basis functions
@@ -45,19 +45,20 @@ class QSRPDE : public RegressionBase<QSRPDE<RegularizationType_>, Regularization
     // constructor
     QSRPDE() = default;
     // space-only and space-time parabolic constructor
-    fdapde_enable_constructor_if(has_single_penalty, This)
-    QSRPDE(const pde_ptr& pde, Sampling s, double alpha = 0.5) : Base(pde, s), alpha_(alpha) {
+    QSRPDE(const Base::PDE& pde, Sampling s, double alpha = 0.5)
+        requires(is_space_only<This>::value || is_space_time_parabolic<This>::value)
+        : Base(pde, s), alpha_(alpha) {
         fpirls_ = FPIRLS<This>(this, tol_, max_iter_);
-    };
+    }
     // space-time separable constructor
-    fdapde_enable_constructor_if(has_double_penalty, This)
-    QSRPDE(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s, double alpha = 0.5) :
-        Base(space_penalty, time_penalty, s), alpha_(alpha) {
+    QSRPDE(const Base::PDE& space_penalty, const Base::PDE& time_penalty, Sampling s, double alpha = 0.5)
+        requires(is_space_time_separable<This>::value)
+        : Base(space_penalty, time_penalty, s), alpha_(alpha) {
         fpirls_ = FPIRLS<This>(this, tol_, max_iter_);
-    };
+    }
     // setter
     void set_fpirls_tolerance(double tol) { tol_ = tol; }
-    void set_fpirls_max_iter(std::size_t max_iter) { max_iter_ = max_iter; }
+    void set_fpirls_max_iter(int max_iter) { max_iter_ = max_iter; }
     void set_alpha(double alpha) { alpha_ = alpha; }
     void set_eps_power(double eps) { eps_ = eps; }
     void set_weights_tolerance(double tol_weights) { tol_weights_ = tol_weights; }
@@ -112,7 +113,9 @@ class QSRPDE : public RegressionBase<QSRPDE<RegularizationType_>, Regularization
         py_ = y() - (1 - 2. * alpha_) * abs_res;
     }
     // updates mean vector \mu after WLS solution
-    void fpirls_update_step(const DMatrix<double>& hat_f, const DMatrix<double>& hat_beta) { mu_ = hat_f; }
+    void fpirls_update_step(const DMatrix<double>& hat_f, [[maybe_unused]] const DMatrix<double>& hat_beta) {
+        mu_ = hat_f;
+    }
     // returns the data loss \norm{diag(W)^{-1/2}(y - \mu)}^2
     double data_loss() const { return (pW_.cwiseSqrt().matrix().asDiagonal() * (py_ - mu_)).squaredNorm(); }
     const DVector<double>& py() const { return py_; }
@@ -121,7 +124,7 @@ class QSRPDE : public RegressionBase<QSRPDE<RegularizationType_>, Regularization
     // GCV support
     double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {
         double result = 0;
-        for (std::size_t i = 0; i < n_locs(); ++i) {
+        for (int i = 0; i < n_locs(); ++i) {
             if (!Base::masked_obs()[i]) result += pinball_loss(op2.coeff(i, 0) - op1.coeff(i, 0), std::pow(10, eps_));
         }
         return std::pow(result, 2) / n_obs();
@@ -133,9 +136,9 @@ class QSRPDE : public RegressionBase<QSRPDE<RegularizationType_>, Regularization
     DVector<double> mu_;      // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : quantile vector at step k
     fdapde::SparseLU<SpMatrix<double>> invA_;
 
-    FPIRLS<This> fpirls_;          // fpirls algorithm
-    std::size_t max_iter_ = 200;   // maximum number of iterations in fpirls before forced stop
-    double tol_ = 1e-6;            // fprils convergence tolerance
+    FPIRLS<This> fpirls_;   // fpirls algorithm
+    int max_iter_ = 200;    // maximum number of iterations in fpirls before forced stop
+    double tol_ = 1e-6;     // fprils convergence tolerance
     double tol_weights_ = 1e-6;
 
     double eps_ = -1e-1;   // pinball loss smoothing factor

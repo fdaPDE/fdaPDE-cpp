@@ -124,14 +124,14 @@ TEST(fpls_test, laplacian_samplingatnodes_sequential_gcv) {
     rsvd.set_seed(seed);   // for reproducibility purposes in testing
     FPLS<SpaceOnly> model(pde, Sampling::mesh_nodes, rsvd);   // functional partial least square models
     model.set_regression_step_calibrator(
-      fdapde::calibration::GCV {Grid<fdapde::Dynamic> {}, StochasticEDF(1000, seed)}(lambda_grid));
+      fdapde::calibration::GCV<SpaceOnly> {Grid<fdapde::Dynamic> {}, StochasticEDF(1000, seed)}(lambda_grid));
     // set model's data
     BlockFrame<double, int> df;
     df.insert(OBSERVATIONS_BLK, DMatrix<double>(Y.rowwise() - Y.colwise().mean()));   // pointwise centred responses
     // smooth centred functional covariates (select optimal smoothing)
     auto centered_covs = center(
       X, SRPDE {pde, Sampling::mesh_nodes},
-      fdapde::calibration::GCV {Grid<fdapde::Dynamic> {}, StochasticEDF(1000, seed)}(lambda_grid));
+      fdapde::calibration::GCV<SpaceOnly> {Grid<fdapde::Dynamic> {}, StochasticEDF(1000, seed)}(lambda_grid));
     df.insert(DESIGN_MATRIX_BLK, centered_covs.fitted);
     model.set_data(df);
     // solve FPLS problem

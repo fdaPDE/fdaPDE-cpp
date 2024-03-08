@@ -41,13 +41,14 @@ class FunctionalBase : public select_regularization_base<Model, RegularizationTy
     using SamplingBase<Model>::PsiTD;   // block \Psi^T*D
 
     FunctionalBase() = default;
-      // space-only and space-time parabolic constructor (they require only one PDE)
-    fdapde_enable_constructor_if(has_single_penalty, Model) FunctionalBase(const pde_ptr& pde, Sampling s) :
-        Base(pde), SamplingBase<Model>(s) {};
+    // space-only and space-time parabolic constructor (they require only one PDE)
+    FunctionalBase(const Base::PDE& pde, Sampling s)
+        requires(is_space_only<Model>::value || is_space_time_parabolic<Model>::value)
+        : Base(pde), SamplingBase<Model>(s) {};
     // space-time separable constructor
-    fdapde_enable_constructor_if(has_double_penalty, Model)
-      FunctionalBase(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s) :
-        Base(space_penalty, time_penalty), SamplingBase<Model>(s) {};
+    FunctionalBase(const Base::PDE& space_penalty, const Base::PDE& time_penalty, Sampling s)
+        requires(is_space_time_separable<Model>::value)
+        : Base(space_penalty, time_penalty), SamplingBase<Model>(s) {};
 
     // getters
     const DMatrix<double>& X() const { return df_.template get<double>(OBSERVATIONS_BLK); }   // observation matrix X

@@ -41,15 +41,16 @@ class SRPDE : public RegressionBase<SRPDE, SpaceOnly> {
     fdapde::SparseLU<SpMatrix<double>> invA_ {};   // factorization of matrix A
     DVector<double> b_ {};                         // right hand side of problem's linear system (1 x 2N vector)
    public:
-    IMPORT_REGRESSION_SYMBOLS;
+    IMPORT_REGRESSION_SYMBOLS
     using Base::lambda_D;   // smoothing parameter in space
     using Base::n_basis;    // number of spatial basis
     using Base::runtime;    // runtime model status
     using RegularizationType = SpaceOnly;
+    using This = SRPDE;
     static constexpr int n_lambda = 1;
     // constructor
     SRPDE() = default;
-    SRPDE(const pde_ptr& pde, Sampling s) : Base(pde, s) {};
+    SRPDE(const Base::PDE& pde, Sampling s) : Base(pde, s) {};
 
     void init_model() {
         if (runtime().query(runtime_status::is_lambda_changed)) {

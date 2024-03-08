@@ -21,7 +21,6 @@
 #include <fdaPDE/pde.h>
 #include <fdaPDE/linear_algebra.h>
 #include "model_base.h"
-using fdapde::core::pde_ptr;
 using fdapde::core::lump;
 
 namespace fdapde {
@@ -30,6 +29,7 @@ namespace models {
 // abstract base interface for any *space-only* fdaPDE statistical model.
 template <typename Model> class SpaceOnlyBase : public ModelBase<Model> {
    public:
+    using PDE = erase<heap_storage, core::PDE__>;
     using Base = ModelBase<Model>;
     static constexpr int n_lambda = n_smoothing_parameters<SpaceOnly>::value;
     using Base::lambda;       // dynamic sized smoothing parameter vector
@@ -37,7 +37,7 @@ template <typename Model> class SpaceOnlyBase : public ModelBase<Model> {
     using Base::set_lambda;   // dynamic sized setter for \lambda
     // constructor
     SpaceOnlyBase() = default;
-    SpaceOnlyBase(const pde_ptr& space_penalty) : pde_(space_penalty) {};
+    SpaceOnlyBase(const PDE& space_penalty) : pde_(space_penalty) {};
     void init_regularization() {
         pde_.init();
         if (mass_lumping) { R0_lumped_ = lump(pde_.mass()); }   // lump mass matrix if requested
@@ -51,7 +51,7 @@ template <typename Model> class SpaceOnlyBase : public ModelBase<Model> {
         lambda_ = lambda;
     }
     void set_lambda_D(double lambda_D) { set_lambda(SVector<n_lambda>(lambda_D)); }
-    void set_penalty(const pde_ptr& pde) {
+    void set_penalty(const PDE& pde) {
         pde_ = pde;
         model().runtime().set(runtime_status::require_penalty_init);
     }
@@ -61,10 +61,10 @@ template <typename Model> class SpaceOnlyBase : public ModelBase<Model> {
     const SpMatrix<double>& R0() const { return mass_lumping ? R0_lumped_ : pde_.mass(); }   // mass matrix
     const SpMatrix<double>& R1() const { return pde_.stiff(); }    // discretization of differential operator L
     const DMatrix<double>& u() const { return pde_.force(); }      // discretization of forcing term u
-    inline std::size_t n_temporal_locs() const { return 1; }       // number of time instants
-    std::size_t n_basis() const { return pde_.n_dofs(); };         // number of basis functions
-    std::size_t n_spatial_basis() const { return n_basis(); }      // number of basis functions in space
-    const pde_ptr& pde() const { return pde_; }                    // regularizing term Lf - u
+    inline int n_temporal_locs() const { return 1; }               // number of time instants
+    int n_basis() const { return pde_.n_dofs(); };                 // number of basis functions
+    int n_spatial_basis() const { return n_basis(); }              // number of basis functions in space
+    const PDE& pde() const { return pde_; }                        // regularizing term Lf - u
     const fdapde::SparseLU<SpMatrix<double>>& invR0() const {      // LU factorization of mass matrix R0
         if (!invR0_) { invR0_.compute(R0()); }
         return invR0_;
@@ -76,11 +76,10 @@ template <typename Model> class SpaceOnlyBase : public ModelBase<Model> {
     // evaluation of penalty term \lambda*(R1^\top*R0^{-1}*R1) at \lambda
     auto P(const SVector<n_lambda>& lambda) const { return lambda[0] * PD(); }
     auto P() const { return P(lambda()); }
-
     // destructor
     virtual ~SpaceOnlyBase() = default;
    protected:
-    pde_ptr pde_ {};               // differential penalty in space Lf - u
+    PDE pde_ {};                   // differential penalty in space Lf - u
     mutable SpMatrix<double> P_;   // discretization of penalty term: R1^T*R0^{-1}*R1
     mutable fdapde::SparseLU<SpMatrix<double>> invR0_;
     SpMatrix<double> R0_lumped_;   // lumped mass matrix, if mass_lumping == true, empty otherwise

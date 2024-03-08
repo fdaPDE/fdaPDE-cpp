@@ -27,15 +27,11 @@ namespace models {
 // models since the type of time regularization is not yet defined at this point
 template <typename Model, typename RegularizationType>
 class SpaceTimeBase : public ModelBase<Model> {
-   protected:
-    typedef ModelBase<Model> Base;
-    using Base::model;     // underlying model object
-    static constexpr int n_lambda = n_smoothing_parameters<RegularizationType>::value;
-
-    DVector<double> time_;   // time domain [0, T]
-    SVector<n_lambda> lambda_ = SVector<n_lambda>::Zero();
    public:
+    using Base = ModelBase<Model>;
+    static constexpr int n_lambda = n_smoothing_parameters<RegularizationType>::value;
     using Base::lambda;       // dynamic sized smoothing parameter vector
+    using Base::model;        // underlying model object
     using Base::set_lambda;   // dynamic sized setter for \lambda
     // constructor
     SpaceTimeBase() = default;
@@ -55,9 +51,12 @@ class SpaceTimeBase : public ModelBase<Model> {
     inline double lambda_T() const { return lambda_[1]; }
     const DVector<double>& time_domain() const { return time_; }           // number of nodes in time
     const DVector<double>& time_locs() const { return time_; }             // time locations where we have observations
-    inline std::size_t n_temporal_locs() const { return time_.rows(); }    // number of time instants  
+    inline int n_temporal_locs() const { return time_.rows(); }            // number of time instants
     // destructor
     virtual ~SpaceTimeBase() = default;
+   protected:
+    DVector<double> time_;   // time domain [0, T]
+    SVector<n_lambda> lambda_ = SVector<n_lambda>::Zero();
 };
 
 }   // namespace models

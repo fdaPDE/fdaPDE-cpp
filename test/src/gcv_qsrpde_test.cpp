@@ -37,6 +37,7 @@ using fdapde::models::SpaceOnly;
 using fdapde::models::ExactEDF;
 using fdapde::models::StochasticEDF;
 using fdapde::models::Sampling;
+using fdapde::models::SpaceTime;
 #include "../../fdaPDE/calibration/gcv.h"
 
 #include "utils/constants.h"
@@ -469,6 +470,6 @@ TEST(gcv_qsrpde_test, laplacian_nonparametric_samplingatlocations_timelocations_
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/qsrpde/2D_test10/edfs.mtx"));
     EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/qsrpde/2D_test10/gcvs.mtx"));
     // check consistency with GCV calibrator
-    auto GCV_ = fdapde::calibration::GCV {Grid<fdapde::Dynamic> {}, StochasticEDF(100, seed)}(lambda_grid);
+    auto GCV_ = fdapde::calibration::GCV<SpaceTime> {Grid<fdapde::Dynamic> {}, StochasticEDF(100, seed)}(lambda_grid);
     EXPECT_TRUE(GCV_.fit(model) == opt.optimum());
 }

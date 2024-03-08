@@ -3,9 +3,10 @@ cmake_minimum_required(VERSION 3.14)
 project(TEST)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_CXX_FLAGS "-g -O2 -march=x86-64 -std=c++20 -I${CMAKE_CURRENT_SOURCE_DIR}/../ -I${CMAKE_CURRENT_SOURCE_DIR}/../fdaPDE/core/")
+set(CMAKE_WARNINGS_FLAGS "-Wall -Wpedantic -Wextra -Werror")
+set(CMAKE_CXX_FLAGS "-g -O2 -march=x86-64 -std=c++20 ${CMAKE_WARNINGS_FLAGS} -I${CMAKE_CURRENT_SOURCE_DIR}/../ -I${CMAKE_CURRENT_SOURCE_DIR}/../fdaPDE/core/")
 
-find_package (Eigen3 3.3 REQUIRED NO_MODULE)
+find_package (Eigen3 3.4 REQUIRED NO_MODULE)
 
 include_directories(../src/)
 include_directories(../../fdaPDE/)
@@ -14,7 +15,8 @@ include_directories(../../fdaPDE/)
 include(FetchContent)
 FetchContent_Declare(
   googletest
-  URL https://github.com/google/googletest/archive/609281088cfefc76f9d0ce82e1ff6c30cc3591e5.zip
+  # version 1.14.0
+  URL https://github.com/google/googletest/archive/f8d7d77c06936315286eb55f8de22cd23c188571.zip
 )
 
 # For Windows: Prevent overriding the parent project's compiler/linker settings
@@ -28,8 +30,7 @@ target_link_libraries (fdapde_test Eigen3::Eigen)
 target_link_libraries (fdapde_test gtest_main)
 
 add_test(NAME fdapde_test
-	 COMMAND $<TARGET_FILE:fdapde_test>
-  )
+	 COMMAND $<TARGET_FILE:fdapde_test>)
 
 include(GoogleTest)
 gtest_discover_tests(fdapde_test)

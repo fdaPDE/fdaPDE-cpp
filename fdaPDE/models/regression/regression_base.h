@@ -46,7 +46,7 @@ class RegressionBase :
     // missing data and masking logic
     BinaryVector<fdapde::Dynamic> nan_mask_;     // indicator function over missing observations
     BinaryVector<fdapde::Dynamic> y_mask_;       // discards i-th observation from the fitting if y_mask_[i] == true
-    std::size_t n_nan_ = 0;                      // number of missing entries in observation vector
+    int n_nan_ = 0;                      // number of missing entries in observation vector
     SpMatrix<double> B_;                         // matrix \Psi corrected for NaN and masked observations
 
     // matrices required for Woodbury decomposition
@@ -61,7 +61,7 @@ class RegressionBase :
     using Base = typename select_regularization_base<Model, RegularizationType>::type;
     using Base::df_;                    // BlockFrame for problem's data storage
     using Base::idx;                    // indices of observations
-    using Base::n_basis;                // number of basis function over domain D
+    using Base::n_basis;                // number of basis function over physical domain
     using Base::P;                      // discretized penalty matrix
     using Base::R0;                     // mass matrix
     using SamplingBase<Model>::D;       // for areal sampling, matrix of subdomains measures, identity matrix otherwise
@@ -71,16 +71,17 @@ class RegressionBase :
 
     RegressionBase() = default;
     // space-only and space-time parabolic constructor (they require only one PDE)
-    fdapde_enable_constructor_if(has_single_penalty, Model) RegressionBase(const pde_ptr& pde, Sampling s) :
-        Base(pde), SamplingBase<Model>(s) {};
+    RegressionBase(const Base::PDE& pde, Sampling s)
+        requires(is_space_only<Model>::value || is_space_time_parabolic<Model>::value)
+        : Base(pde), SamplingBase<Model>(s) {};
     // space-time separable constructor
-    fdapde_enable_constructor_if(has_double_penalty, Model)
-      RegressionBase(const pde_ptr& space_penalty, const pde_ptr& time_penalty, Sampling s) :
-        Base(space_penalty, time_penalty), SamplingBase<Model>(s) {};
+    RegressionBase(const Base::PDE& space_penalty, const Base::PDE& time_penalty, Sampling s)
+        requires(is_space_time_separable<Model>::value)
+        : Base(space_penalty, time_penalty), SamplingBase<Model>(s) {};
 
     // getters
     const DMatrix<double>& y() const { return df_.template get<double>(OBSERVATIONS_BLK); }   // observation vector y
-    std::size_t q() const {
+    int q() const {
         return df_.has_block(DESIGN_MATRIX_BLK) ? df_.template get<double>(DESIGN_MATRIX_BLK).cols() : 0;
     }
     const DMatrix<double>& X() const { return df_.template get<double>(DESIGN_MATRIX_BLK); }   // covariates
@@ -92,7 +93,7 @@ class RegressionBase :
     const DVector<double>& beta() const { return beta_; };   // estimate of regression coefficients
     const BinaryVector<fdapde::Dynamic>& nan_mask() const { return nan_mask_; }
     BinaryVector<fdapde::Dynamic> masked_obs() const { return y_mask_ | nan_mask_; }
-    std::size_t n_obs() const { return y().rows() - masked_obs().count(); }   // number of (active) observations
+    int n_obs() const { return y().rows() - masked_obs().count(); }   // number of (active) observations
     // getters to Woodbury decomposition matrices
     const DMatrix<double>& U() const { return U_; }
     const DMatrix<double>& V() const { return V_; }
@@ -170,7 +171,7 @@ class RegressionBase :
         // derive missingness pattern from observations vector (if changed)
         if (df_.is_dirty(OBSERVATIONS_BLK)) {
             n_nan_ = 0;
-            for (std::size_t i = 0; i < df_.template get<double>(OBSERVATIONS_BLK).size(); ++i) {
+            for (int i = 0; i < df_.template get<double>(OBSERVATIONS_BLK).size(); ++i) {
                 if (std::isnan(y()(i, 0))) {   // requires -ffast-math compiler flag to be disabled
                     nan_mask_.set(i);
                     n_nan_++;

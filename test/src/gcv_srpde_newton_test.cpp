@@ -27,11 +27,13 @@ using fdapde::core::PDE;
 #include "../../fdaPDE/models/regression/srpde.h"
 #include "../../fdaPDE/models/regression/gcv.h"
 #include "../../fdaPDE/models/sampling_design.h"
+#include "../../fdaPDE/models/regression/regression_type_erasure.h"
 using fdapde::models::SRPDE;
 using fdapde::models::ExactEDF;
 using fdapde::models::GCV;
 using fdapde::models::StochasticEDF;
 using fdapde::models::Sampling;
+using fdapde::models::RegressionView;
 #include "../../fdaPDE/calibration/gcv.h"
 
 #include "utils/constants.h"
@@ -181,6 +183,5 @@ TEST(gcv_srpde_newton_test, laplacian_nonparametric_samplingatnodes_newton_fd_st
   // check consistency with GCV calibrator
   auto GCV_ = fdapde::calibration::GCV<SpaceOnly> {Newton<fdapde::Dynamic>(10, 0.05, 1), StochasticEDF(100, seed)};
   GCV_.set_step(4e-8);
-  fdapde::models::RegressionView<void> model_view = model;   // get view to model
-  EXPECT_TRUE(GCV_(pt).fit(model_view) == opt.optimum());    // check if it works with a view
+  EXPECT_TRUE(GCV_(pt).fit(RegressionView<void>(model)) == opt.optimum());
 }

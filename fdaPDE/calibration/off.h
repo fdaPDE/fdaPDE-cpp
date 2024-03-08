@@ -34,7 +34,7 @@ class Off {
       lambda_ = lambda;
       return *this;
     }
-    template <typename ModelType_> DVector<double> fit(ModelType_& model) { return lambda_; }
+    template <typename ModelType_> DVector<double> fit([[maybe_unused]] ModelType_& model) { return lambda_; }
     const DVector<double>& optimum() const { return lambda_; }   // for compatibility with other calibrators only
 };
 

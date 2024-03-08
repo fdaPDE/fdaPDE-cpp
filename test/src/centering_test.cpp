@@ -66,7 +66,7 @@ TEST(centering_test, srpde_gcv_stochastic_grid) {
     for (double x = -6.0; x <= 0.0; x += 0.5) lambda_grid.push_back(SVector<1>(std::pow(10, x)));
     auto centered_data = center(
       X, SRPDE {pde, Sampling::mesh_nodes},
-      fdapde::calibration::GCV {Grid<fdapde::Dynamic> {}, StochasticEDF(100)}(lambda_grid));
+      fdapde::calibration::GCV<SpaceOnly> {Grid<fdapde::Dynamic> {}, StochasticEDF(100)}(lambda_grid));
     // test correctness
     EXPECT_TRUE(almost_equal(centered_data.fitted, "../data/models/centering/2D_test1/fitted.mtx"));
 }

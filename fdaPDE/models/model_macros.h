@@ -34,7 +34,7 @@
 // imports all basic symbols a model can expect from a RegressionBase
 // symbols specific for the regularization type used need to be imported via dedicated using declaration
 #define IMPORT_REGRESSION_SYMBOLS                                                                                      \
-    IMPORT_MODEL_SYMBOLS;                                                                                              \
+    IMPORT_MODEL_SYMBOLS                                                                                               \
     using Base::y;              /* vector of observations y = [y_1 ... y_n] */                                         \
     using Base::n_obs;          /* number of observations n */                                                         \
     using Base::W;              /* matrix of observation weights W_ = diag[W_1 ... W_n] */                             \

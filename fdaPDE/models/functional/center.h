@@ -32,7 +32,7 @@ DMatrix<double> smooth_mean(
     // let O_{p_i} the set of index where x_j is observed at location p_i, compute smoother data {y_i}_i
     // y_i = \sum_{j \in O_{p_i}} x_j(p_i)*w_j / \sum_{j \in O_{p_i}} w_j
     DMatrix<double> X_ = X.array().isNaN().select(0, X).transpose() * w;
-    for (std::size_t i = 0; i < X.cols(); ++i) { X_(i, 0) /= X.col(i).array().isNaN().select(0, w).squaredNorm(); }
+    for (int i = 0; i < X.cols(); ++i) { X_(i, 0) /= X.col(i).array().isNaN().select(0, w).squaredNorm(); }
     df.insert<double>(OBSERVATIONS_BLK, X_);
     smoother.set_data(df);
     smoother.set_lambda(calibrator.fit(smoother));   // find optimal smoothing parameter
