@@ -126,8 +126,8 @@ TEST(fpca_test, laplacian_samplingatlocations_sequential_gcv) {
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> pde(domain.mesh, L, u);
     // grid of smoothing parameters
-    std::vector<DVector<double>> lambda_grid;
-    for (double x = -4; x <= -2; x += 0.1) { lambda_grid.push_back(SVector<1>(std::pow(10, x))); }
+    DMatrix<double> lambda_grid(20, 1);
+    for (int i = 0; i < 20; ++i) lambda_grid(i, 0) = std::pow(10, -4 + 0.1 * i);
     // define model
     RegularizedSVD<fdapde::sequential> rsvd(Calibration::gcv);
     rsvd.set_lambda(lambda_grid);
@@ -165,8 +165,8 @@ TEST(fpca_test, laplacian_samplingatlocations_sequential_kcv) {
     DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // grid of smoothing parameters
-    std::vector<DVector<double>> lambda_grid;
-    for (double x = -4; x <= -2; x += 0.1) lambda_grid.push_back(SVector<1>(std::pow(10, x)));
+    DMatrix<double> lambda_grid(20, 1);
+    for (int i = 0; i < 20; ++i) lambda_grid(i, 0) = std::pow(10, -4 + 0.1 * i);
     // define model
     RegularizedSVD<fdapde::sequential> rsvd(Calibration::kcv);
     rsvd.set_lambda(lambda_grid);

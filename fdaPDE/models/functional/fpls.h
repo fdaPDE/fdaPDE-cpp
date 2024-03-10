@@ -49,11 +49,11 @@ class FPLS : public FunctionalBase<FPLS<RegularizationType_>, RegularizationType
     // constructors
     FPLS() = default;
     // space-only constructor
-    FPLS(const Base::PDE& pde, Sampling s, RegularizedSVD<sequential> rsvd)
-    requires(is_space_only<This>::value) : Base(pde, s), rsvd_(rsvd) { }
+    FPLS(const Base::PDE& pde, Sampling s, RegularizedSVD<sequential> rsvd) requires(is_space_only<This>::value) :
+      Base(pde, s), rsvd_(rsvd) { }
     // space-time separable constructor
     FPLS(const Base::PDE& space_penalty, const Base::PDE& time_penalty, Sampling s, RegularizedSVD<sequential> rsvd)
-    requires(is_space_time_separable<This>::value) : Base(space_penalty, time_penalty, s), rsvd_(rsvd) { }
+      requires(is_space_time_separable<This>::value) : Base(space_penalty, time_penalty, s), rsvd_(rsvd) { }
 
     void init_model() {
         // initialize smoothing solver for regression step

@@ -173,7 +173,7 @@ TEST(gcv_srpde_newton_test, laplacian_nonparametric_samplingatnodes_newton_fd_st
   GCV.set_step(4e-08);
   // optimize GCV
   Newton<fdapde::Dynamic> opt(10, 0.05, 1);
-  DVector<double> pt = SVector<1>(6.25e-06);
+  DMatrix<double> pt = SVector<1>(6.25e-06);
   opt.optimize(GCV, pt);
   auto best_lambda = opt.optimum();
   DVector<double> expected_lambda = SVector<1>(0.0000075627208132);

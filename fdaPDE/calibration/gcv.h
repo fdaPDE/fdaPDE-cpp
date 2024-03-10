@@ -34,31 +34,33 @@ template <typename RegularizationType> class GCV : public CalibratorBase<GCV<Reg
     };
    public:
     // constructor
-    GCV() = default;
-    template <typename Optimizer_, typename EDFStrategy_> GCV(Optimizer_&& opt, EDFStrategy_&& edf) : opt_(opt) {
+    GCV() {
         if constexpr (!is_void<RegularizationType>::value) {
-            if constexpr (std::is_same_v<RegularizationType, models::SpaceOnly>) {
-                gcv_.resize(1);
-            } else {   // space-time models
-                gcv_.resize(2);
-            }
+            constexpr int n_lambda = std::is_same_v<RegularizationType, models::SpaceOnly> ? 1 : 2;
+            gcv_.resize(n_lambda);
         }
+    }
+    template <typename Optimizer_, typename EDFStrategy_> GCV(Optimizer_&& opt, EDFStrategy_&& edf) : GCV() {
+        opt_ = opt;
         gcv_.set_edf_strategy(edf);
     }
     // selects best smoothing parameter of regression model by minimization of GCV index
     template <typename ModelType_, typename... Args> DVector<double> fit(ModelType_& model, Args&&... args) {
-        fdapde_assert(gcv_.inner_size() != 0);
+        fdapde_assert(gcv_.inner_size() != 0 && bool(opt_) == true);
         gcv_.set_model(model);
         return opt_.optimize(gcv_, std::forward<Args>(args)...);
     }
     DVector<double> optimum() { return opt_.optimum(); }              // optimal \lambda found
     const std::vector<double>& edfs() const { return gcv_.edfs(); }   // equivalent degrees of freedom q + Tr[S]
     const std::vector<double>& gcvs() const { return gcv_.gcvs(); }   // computed values of GCV index
+    // setters
     void set_step(double step) { gcv_.set_step(step); }
+    template <typename Optimizer_> void set_optimizer(Optimizer_&& opt) { opt_ = opt; }
     template <typename RegularizationType_> void set() {   // set GCV's domain dimension
         fdapde_static_assert(is_void<RegularizationType>::value, THIS_METHOD_IS_FOR_VOID_REGULARIZATION_ONLY);
         gcv_.resize(models::n_smoothing_parameters<RegularizationType_>::value);
     }
+    template <typename EDFStrategy_> void set_edf_strategy(EDFStrategy_&& edf) { gcv_.set_edf_strategy(edf); }
 };
 // template argument deduction rule
 template <typename Optimizer_, typename EDFStrategy_> GCV(Optimizer_&& opt, EDFStrategy_&& edf) -> GCV<void>;

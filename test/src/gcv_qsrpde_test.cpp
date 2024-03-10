@@ -38,6 +38,7 @@ using fdapde::models::ExactEDF;
 using fdapde::models::StochasticEDF;
 using fdapde::models::Sampling;
 using fdapde::models::SpaceTime;
+using fdapde::models::SpaceTimeSeparable;
 #include "../../fdaPDE/calibration/gcv.h"
 
 #include "utils/constants.h"
@@ -75,8 +76,8 @@ TEST(gcv_qsrpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridexac
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    std::vector<DVector<double>> lambdas;
-    for (double x = -8.0; x <= -5.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
+    DMatrix<double> lambdas(13, 1);
+    for (int i = 0; i < 13; ++i) { lambdas(i, 0) = std::pow(10, -8.0 + 0.25 * i); }
     // optimize GCV
     Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);
@@ -113,8 +114,8 @@ TEST(gcv_qsrpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridstoc
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 438172;
     auto GCV = model.gcv<StochasticEDF>(1000, seed);
-    std::vector<DVector<double>> lambdas;
-    for (double x = -8.0; x <= -5.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
+    DMatrix<double> lambdas(13, 1);
+    for (int i = 0; i < 13; ++i) { lambdas(i, 0) = std::pow(10, -8.0 + 0.25 * i); }
     // optimize GCV
     Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);
@@ -154,8 +155,8 @@ TEST(gcv_qsrpde_test, laplacian_semiparametric_samplingatlocations_gridexact) {
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    std::vector<DVector<double>> lambdas;
-    for (double x = -5.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
+    DMatrix<double> lambdas(9, 1);
+    for (int i = 0; i < 9; ++i) { lambdas(i, 0) = std::pow(10, -5.0 + 0.25 * i); }
     // optimize GCV
     Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);
@@ -196,8 +197,8 @@ TEST(gcv_qsrpde_test, laplacian_semiparametric_samplingatlocations_gridstochasti
     // define GCV function and grid of \lambda_D value
     std::size_t seed = 66546513;
     auto GCV = model.gcv<StochasticEDF>(1000, seed);
-    std::vector<DVector<double>> lambdas;
-    for (double x = -5.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
+    DMatrix<double> lambdas(9, 1);
+    for (int i = 0; i < 9; ++i) { lambdas(i, 0) = std::pow(10, -5.0 + 0.25 * i); }
     // optimize GCV
     Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);
@@ -235,8 +236,8 @@ TEST(gcv_qsrpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gride
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    std::vector<DVector<double>> lambdas;
-    for (double x = -7.0; x <= -5.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
+    DMatrix<double> lambdas(9, 1);
+    for (int i = 0; i < 9; ++i) { lambdas(i, 0) = std::pow(10, -7.0 + 0.25 * i); }
     // optimize GCV
     Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);   // optimize gcv field
@@ -275,8 +276,8 @@ TEST(gcv_qsrpde_test, costantcoefficientspde_nonparametric_samplingatnodes_grids
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 438172;
     auto GCV = model.gcv<StochasticEDF>(1000, seed);
-    std::vector<DVector<double>> lambdas;
-    for (double x = -7.0; x <= -5.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
+    DMatrix<double> lambdas(9, 1);
+    for (int i = 0; i < 9; ++i) { lambdas(i, 0) = std::pow(10, -7.0 + 0.25 * i); }
     // optimize GCV
     Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);   // optimize gcv field
@@ -316,8 +317,8 @@ TEST(gcv_qsrpde_test, laplacian_semiparametric_samplingareal_gridexact) {
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    std::vector<DVector<double>> lambdas;
-    for (double x = -4.0; x <= -1.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
+    DMatrix<double> lambdas(13, 1);
+    for (int i = 0; i < 13; ++i) { lambdas(i, 0) = std::pow(10, -4.0 + 0.25 * i); }
     // optimize GCV
     Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);   // optimize gcv field
@@ -358,8 +359,8 @@ TEST(gcv_qsrpde_test, laplacian_semiparametric_samplingareal_gridstochastic) {
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 438172;
     auto GCV = model.gcv<StochasticEDF>(100, seed);
-    std::vector<DVector<double>> lambdas;
-    for (double x = -4.0; x <= -1.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
+    DMatrix<double> lambdas(13, 1);
+    for (int i = 0; i < 13; ++i) { lambdas(i, 0) = std::pow(10, -4.0 + 0.25 * i); }
     // optimize GCV
     Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);   // optimize gcv field
@@ -406,14 +407,16 @@ TEST(gcv_qsrpde_test, laplacian_nonparametric_samplingatlocations_timelocations_
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    std::vector<DVector<double>> lambda_grid;
-    for (double lambda_s = -4.0; lambda_s <= -2.0; lambda_s += 1.0) {
-        for (double lambda_t = -7.0; lambda_t <= -5.0; lambda_t += 1.0)
-            lambda_grid.push_back(SVector<2>(std::pow(10, lambda_s), std::pow(10, lambda_t)));
+    DMatrix<double> lambdas(9, 2);
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            lambdas(i * 3 + j, 0) = std::pow(10, -4.0 + 1.0 * i);
+            lambdas(i * 3 + j, 1) = std::pow(10, -7.0 + 1.0 * j);
+        }
     }
     // optimize GCV
     Grid<fdapde::Dynamic> opt;
-    opt.optimize(GCV, lambda_grid);
+    opt.optimize(GCV, lambdas);
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/qsrpde/2D_test9/edfs.mtx"));
     EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/qsrpde/2D_test9/gcvs.mtx"));
@@ -458,18 +461,20 @@ TEST(gcv_qsrpde_test, laplacian_nonparametric_samplingatlocations_timelocations_
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 66546513;
     auto GCV = model.gcv<StochasticEDF>(100, seed);
-    std::vector<DVector<double>> lambda_grid;
-    for (double lambda_s = -4.0; lambda_s <= -2.0; lambda_s += 1.0) {
-        for (double lambda_t = -7.0; lambda_t <= -5.0; lambda_t += 1.0)
-            lambda_grid.push_back(SVector<2>(std::pow(10, lambda_s), std::pow(10, lambda_t)));
+    DMatrix<double> lambdas(9, 2);
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            lambdas(i * 3 + j, 0) = std::pow(10, -4.0 + 1.0 * i);
+            lambdas(i * 3 + j, 1) = std::pow(10, -7.0 + 1.0 * j);
+        }
     }
     // optimize GCV
     Grid<fdapde::Dynamic> opt;
-    opt.optimize(GCV, lambda_grid);
+    opt.optimize(GCV, lambdas);
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/gcv/qsrpde/2D_test10/edfs.mtx"));
     EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/gcv/qsrpde/2D_test10/gcvs.mtx"));
     // check consistency with GCV calibrator
-    auto GCV_ = fdapde::calibration::GCV<SpaceTime> {Grid<fdapde::Dynamic> {}, StochasticEDF(100, seed)}(lambda_grid);
+    auto GCV_ = fdapde::calibration::GCV<SpaceTime> {Grid<fdapde::Dynamic> {}, StochasticEDF(100, seed)}(lambdas);
     EXPECT_TRUE(GCV_.fit(model) == opt.optimum());
 }

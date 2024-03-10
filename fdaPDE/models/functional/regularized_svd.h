@@ -41,7 +41,7 @@ template <> class RegularizedSVD<sequential> {
    private:
     Calibration calibration_;    // PC function's smoothing parameter selection strategy
     int n_folds_ = 10;   // for a kcv calibration strategy, the number of folds
-    std::vector<DVector<double>> lambda_grid_;
+    DMatrix<double> lambda_grid_;
     // power iteration parameters
     double tolerance_ = 1e-6;   // relative tolerance between Jnew and Jold, used as stopping criterion
     int max_iter_ = 20;         // maximum number of allowed iterations
@@ -163,13 +163,13 @@ template <> class RegularizedSVD<sequential> {
     const DMatrix<double>& loadings() const { return loadings_; }
     const DVector<double>& loadings_norm() const { return loadings_norm_; }
     const std::vector<DVector<double>>& selected_lambdas() const { return selected_lambdas_; }
-    const std::vector<DVector<double>>& lambda_grid() const { return lambda_grid_; }
+    const DMatrix<double>& lambda_grid() const { return lambda_grid_; }
     Calibration calibration() const { return calibration_; }
     // setters
     void set_tolerance(double tolerance) { tolerance_ = tolerance; }
     void set_max_iter(int max_iter) { max_iter_ = max_iter; }
     void set_seed(int seed) { seed_ = seed; }
-    RegularizedSVD& set_lambda(const std::vector<DVector<double>>& lambda_grid) {
+    RegularizedSVD& set_lambda(const DMatrix<double>& lambda_grid) {
         fdapde_assert(calibration_ != Calibration::off);
         lambda_grid_ = lambda_grid;
         return *this;

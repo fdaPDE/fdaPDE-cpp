@@ -39,19 +39,18 @@ class GCV {
     using This = GCV;
     using VectorType = DVector<double>;
     using MatrixType = DMatrix<double>;
-    // type-erased wrapper for Tr[S] computation strategies
+    // type-erased wrapper for Tr[S] computation strategy
     struct EDFStrategy__ {
         template <typename M> using fn_ptrs = fdapde::mem_fn_ptrs<&M::compute, &M::set_model>;
         // forwardings
         decltype(auto) compute() { return fdapde::invoke<double, 0>(*this); }
         void set_model(const RegressionView<void>& model) { fdapde::invoke<void, 1>(*this, model); }
     };
-    using EDFStrategy = fdapde::erase<fdapde::heap_storage, EDFStrategy__>;
 
     RegressionView<void> model_;
-    EDFStrategy trS_;               // strategy used to evaluate the trace of smoothing matrix S
-    std::vector<double> edfs_;      // equivalent degrees of freedom q + Tr[S]
-    std::vector<double> gcvs_;      // computed values of GCV index
+    erase<heap_storage, EDFStrategy__> trS_;   // strategy used to evaluate the trace of smoothing matrix S
+    std::vector<double> edfs_;                 // equivalent degrees of freedom q + Tr[S]
+    std::vector<double> gcvs_;                 // computed values of GCV index
     // cache pairs (lambda, Tr[S]) for fast access if GCV is queried at an already computed point
     std::map<VectorType, double, fdapde::d_vector_compare<double>> cache_;
 
@@ -79,6 +78,7 @@ class GCV {
     }
    public:
     static constexpr int DomainDimension = fdapde::Dynamic;
+    using EDFStrategy = erase<heap_storage, EDFStrategy__>;
     // constructors
     template <typename ModelType_, typename EDFStrategy_>
     GCV(const ModelType_& model, EDFStrategy_&& trS) : model_(model), trS_(trS), gcv_(this, &This::gcv_impl) {
