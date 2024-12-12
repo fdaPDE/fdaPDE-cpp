@@ -23,6 +23,7 @@ using fdapde::core::FEM;
 using fdapde::core::Grid;
 using fdapde::core::laplacian;
 using fdapde::core::PDE;
+using fdapde::core::Triangulation;
 
 #include "../../fdaPDE/models/regression/srpde.h"
 #include "../../fdaPDE/models/regression/gcv.h"
@@ -54,16 +55,16 @@ using fdapde::testing::read_csv;
 //    GCV optimization: grid stochastic
 TEST(centering_test, srpde_gcv_stochastic_grid) {
     // define domain
-    MeshLoader<Mesh2D> domain("unit_square");
+    MeshLoader<Triangulation<2, 2>> domain("unit_square");
     // import data from files
     DMatrix<double> X = read_csv<double>("../data/models/centering/2D_test1/X.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> pde(domain.mesh, L, u);
     // perform centering
-    std::vector<DVector<double>> lambda_grid;
-    for (double x = -6.0; x <= 0.0; x += 0.5) lambda_grid.push_back(SVector<1>(std::pow(10, x)));
+    DMatrix<double> lambda_grid(12, 1);
+    for (int i = 0; i < 12; ++i) lambda_grid(i, 0) = std::pow(10, -6 + 0.5 * i);
     auto centered_data = center(
       X, SRPDE {pde, Sampling::mesh_nodes},
       fdapde::calibration::GCV<SpaceOnly> {Grid<fdapde::Dynamic> {}, StochasticEDF(100)}(lambda_grid));

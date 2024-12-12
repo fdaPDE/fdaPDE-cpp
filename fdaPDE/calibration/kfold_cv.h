@@ -71,24 +71,25 @@ class KCV : public CalibratorBase<KCV> {
 
     // selects best smoothing parameter of model according to a K-fold cross validation strategy
     template <typename ModelType, typename ScoreType>
-    DVector<double> fit(ModelType& model, const std::vector<DVector<double>>& lambdas, ScoreType cv_score) {
+    DVector<double> fit(ModelType& model, const DMatrix<double>& lambdas, ScoreType cv_score) {
+        fdapde_assert(lambdas.cols() == 1 || lambdas.cols() == 2);
         // reserve space for CV scores
-        scores_.resize(K_, lambdas.size());
+        scores_.resize(K_, lambdas.rows());
         if (shuffle_) {   // perform a first shuffling of the data if required
             model.set_data(model.data().shuffle(seed_));
 	}
         // cycle over all tuning parameters
-        for (std::size_t j = 0; j < lambdas.size(); ++j) {
+        for (int j = 0; j < lambdas.rows(); ++j) {
             for (int fold = 0; fold < K_; ++fold) {   // fixed a tuning parameter, cycle over all data splits
                 // compute train-test partition and evaluate CV score
                 TrainTestPartition partition_mask = split(model.data(), fold);
-                scores_.coeffRef(fold, j) = cv_score(lambdas[j], partition_mask.first, partition_mask.second);
+                scores_.coeffRef(fold, j) = cv_score(lambdas.row(j), partition_mask.first, partition_mask.second);
             }
         }
         // reserve space for storing results
-        avg_scores_ = DVector<double>::Zero(lambdas.size());
-        std_scores_ = DVector<double>::Zero(lambdas.size());
-        for (std::size_t j = 0; j < lambdas.size(); ++j) {
+        avg_scores_ = DVector<double>::Zero(lambdas.rows());
+        std_scores_ = DVector<double>::Zero(lambdas.rows());
+        for (int j = 0; j < lambdas.rows(); ++j) {
             // record the average score and its standard deviation computed among the K_ runs
             double avg_score = 0;
             for (int i = 0; i < K_; ++i) avg_score += scores_(i, j);
@@ -104,7 +105,7 @@ class KCV : public CalibratorBase<KCV> {
         // store optimal lambda according to given metric F
         Eigen::Index opt_score;
         avg_scores_.minCoeff(&opt_score);
-        optimum_ = lambdas[opt_score];
+        optimum_ = lambdas.row(opt_score);
 	return optimum_;
     }
 

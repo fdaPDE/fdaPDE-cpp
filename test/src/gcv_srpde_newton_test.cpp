@@ -23,6 +23,7 @@ using fdapde::core::FEM;
 using fdapde::core::Newton;
 using fdapde::core::laplacian;
 using fdapde::core::PDE;
+using fdapde::core::Triangulation;
 
 #include "../../fdaPDE/models/regression/srpde.h"
 #include "../../fdaPDE/models/regression/gcv.h"
@@ -55,7 +56,7 @@ using fdapde::testing::read_csv;
  */
 /*TEST(GCV_SRPDE, Test1_Laplacian_NonParametric_GeostatisticalAtNodes_NewtonExact) {
   // define domain and regularizing PDE
-  MeshLoader<Mesh2D<>> domain("unit_square_coarse");
+  MeshLoader<Triangulation<2, 2><>> domain("unit_square_coarse");
   auto L = Laplacian();
   DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.elements()*3, 1);
   PDE problem(domain.mesh, L, u); // definition of regularizing PDE
@@ -112,12 +113,12 @@ using fdapde::testing::read_csv;
 //   GCV optimization: newton finite differences, exact evaluation of Tr[S]
 TEST(gcv_srpde_newton_test, laplacian_nonparametric_samplingatnodes_newton_fd_exact) {
   // define domain
-  MeshLoader<Mesh2D> domain("unit_square_coarse");
+  MeshLoader<Triangulation<2, 2>> domain("unit_square_coarse");
   // import data from files
   DMatrix<double> y = read_csv<double>("../data/models/gcv/2D_test1/y.csv");
   // define regularizing PDE
   auto L = -laplacian<FEM>();
-  DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+  DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
   PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
   // define model
   SRPDE model(problem, Sampling::mesh_nodes);
@@ -153,12 +154,12 @@ TEST(gcv_srpde_newton_test, laplacian_nonparametric_samplingatnodes_newton_fd_ex
 //   GCV optimization: newton finite differences, stochastic evaluation of Tr[S]
 TEST(gcv_srpde_newton_test, laplacian_nonparametric_samplingatnodes_newton_fd_stochastic) {
   // define domain
-  MeshLoader<Mesh2D> domain("unit_square_coarse");
+  MeshLoader<Triangulation<2, 2>> domain("unit_square_coarse");
   // import data from files
   DMatrix<double> y = read_csv<double>("../data/models/gcv/2D_test1/y.csv");
   // define regularizing PDE
   auto L = -laplacian<FEM>();
-  DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+  DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
   PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
   // define model
   SRPDE model(problem, Sampling::mesh_nodes);
@@ -173,7 +174,7 @@ TEST(gcv_srpde_newton_test, laplacian_nonparametric_samplingatnodes_newton_fd_st
   GCV.set_step(4e-08);
   // optimize GCV
   Newton<fdapde::Dynamic> opt(10, 0.05, 1);
-  DVector<double> pt = SVector<1>(6.25e-06);
+  DMatrix<double> pt = SVector<1>(6.25e-06);
   opt.optimize(GCV, pt);
   auto best_lambda = opt.optimum();
   DVector<double> expected_lambda = SVector<1>(0.0000075627208132);

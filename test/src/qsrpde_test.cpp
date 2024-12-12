@@ -23,7 +23,7 @@ using fdapde::core::fem_order;
 using fdapde::core::laplacian;
 using fdapde::core::diffusion;
 using fdapde::core::PDE;
-using fdapde::core::Mesh;
+using fdapde::core::Triangulation;
 using fdapde::core::bilaplacian;
 using fdapde::core::SPLINE;
 using fdapde::core::spline_order;
@@ -52,12 +52,12 @@ using fdapde::testing::read_csv;
 //    order FE:     1
 TEST(qsrpde_test, laplacian_nonparametric_samplingatnodes) {
     // define domain
-    MeshLoader<Mesh2D> domain("unit_square_coarse");
+    MeshLoader<Triangulation<2, 2>> domain("unit_square_coarse");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/qsrpde/2D_test1/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda = 1.778279 * std::pow(0.1, 4);
@@ -84,14 +84,14 @@ TEST(qsrpde_test, laplacian_nonparametric_samplingatnodes) {
 //    order FE:     1
 TEST(qsrpde_test, laplacian_semiparametric_samplingatlocations) {
     // define domain and regularizing PDE
-    MeshLoader<Mesh2D> domain("c_shaped");
+    MeshLoader<Triangulation<2, 2>> domain("c_shaped");
     // import data from files
     DMatrix<double> locs = read_csv<double>("../data/models/qsrpde/2D_test2/locs.csv");
     DMatrix<double> y    = read_csv<double>("../data/models/qsrpde/2D_test2/y.csv");
     DMatrix<double> X    = read_csv<double>("../data/models/qsrpde/2D_test2/X.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define statistical model
     double alpha = 0.9;
@@ -121,14 +121,14 @@ TEST(qsrpde_test, laplacian_semiparametric_samplingatlocations) {
 //    order FE:     1
 TEST(qsrpde_test, costantcoefficientspde_nonparametric_samplingatnodes) {
     // define domain and regularizing PDE
-    MeshLoader<Mesh2D> domain("unit_square_coarse");
+    MeshLoader<Triangulation<2, 2>> domain("unit_square_coarse");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/qsrpde/2D_test3/y.csv");
     // define regularizing PDE
     SMatrix<2> K;
     K << 1, 0, 0, 4;
     auto L = -diffusion<FEM>(K);   // anisotropic diffusion
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define statistical model
     double alpha = 0.1;
@@ -155,14 +155,14 @@ TEST(qsrpde_test, costantcoefficientspde_nonparametric_samplingatnodes) {
 //    order FE:     1
 TEST(qsrpde_test, laplacian_semiparametric_samplingareal) {
     // define domain and regularizing PDE
-    MeshLoader<Mesh2D> domain("c_shaped_areal");
+    MeshLoader<Triangulation<2, 2>> domain("c_shaped_areal");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/qsrpde/2D_test4/y.csv");
     DMatrix<double> X = read_csv<double>("../data/models/qsrpde/2D_test4/X.csv");
     DMatrix<double> subdomains = read_csv<double>("../data/models/qsrpde/2D_test4/incidence_matrix.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define statistical model
     double alpha = 0.5;
@@ -195,19 +195,19 @@ TEST(qsrpde_test, laplacian_semiparametric_samplingareal) {
 //    time penalization: separable (mass penalization)
 TEST(qsrpde_test, laplacian_nonparametric_samplingatlocations_separable_monolithic) {
     // define temporal and spatial domain
-    Mesh<1, 1> time_mesh(0, fdapde::testing::pi, 6);   // interval [0, \pi] with 7 knots
-    MeshLoader<Mesh2D> domain("c_shaped_adj");
+    Triangulation<1, 1> time_mesh(0, fdapde::testing::pi, 6);   // interval [0, \pi] with 7 knots
+    MeshLoader<Triangulation<2, 2>> domain("c_shaped_adj");
     // import data from files
     DMatrix<double> space_locs = read_csv<double>("../data/models/qsrpde/2D_test5/locs.csv");
     DMatrix<double> time_locs  = read_csv<double>("../data/models/qsrpde/2D_test5/time_locations.csv");
     DMatrix<double> y          = read_csv<double>("../data/models/qsrpde/2D_test5/y.csv");
     // define regularizing PDE in space
     auto Ld = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.n_nodes(), 1);
-    PDE<Mesh<2, 2>, decltype(Ld), DMatrix<double>, FEM, fem_order<1>> space_penalty(domain.mesh, Ld, u);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3 * time_mesh.n_nodes(), 1);
+    PDE<Triangulation<2, 2>, decltype(Ld), DMatrix<double>, FEM, fem_order<1>> space_penalty(domain.mesh, Ld, u);
     // define regularizing PDE in time
     auto Lt = -bilaplacian<SPLINE>();
-    PDE<Mesh<1, 1>, decltype(Lt), DMatrix<double>, SPLINE, spline_order<3>> time_penalty(time_mesh, Lt);
+    PDE<Triangulation<1, 1>, decltype(Lt), DMatrix<double>, SPLINE, spline_order<3>> time_penalty(time_mesh, Lt);
     // define model
     double alpha = 0.5;
     double lambda_D = 1e-3;

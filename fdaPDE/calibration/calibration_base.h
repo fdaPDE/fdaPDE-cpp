@@ -24,7 +24,7 @@ namespace calibration {
 
 template <typename Calibrator, typename... Args_> class ConfiguredCalibrator {
    private:
-    using CalibratorType = std::decay_t<Calibrator>;
+    using CalibratorType = std::remove_const_t<Calibrator>;
     using ArgsPackType = std::tuple<std::decay_t<Args_>...>;
     CalibratorType c_;
     ArgsPackType args_;   // parameter pack forwarded to calibration strategy at fit time
@@ -32,16 +32,15 @@ template <typename Calibrator, typename... Args_> class ConfiguredCalibrator {
     auto call_(ModelType_& model, [[maybe_unused]] std::index_sequence<I...> seq) {
         return c_.fit(model, std::get<I>(args_)...);   // forward stored parameters to calibrator
     }
-
     // templated member detection trait for set_model()
     template <typename T, typename M, typename = void> struct callback_require_model : std::false_type { };
     template <typename T, typename M>
     struct callback_require_model<
-      T, M, std::void_t<decltype(std::declval<T>().template set_model<M>(std::declval<M>()))>> : std::true_type { };
+      T, M, std::void_t<decltype(std::declval<T>().template set_model<M>(std::declval<M>()))>
+      > : std::true_type { };
    public:
-    ConfiguredCalibrator() = default;
-    ConfiguredCalibrator(const CalibratorType& c, Args_&&... args) :
-        c_(c), args_(std::make_tuple(std::forward<Args_>(args)...)) {};
+    ConfiguredCalibrator(CalibratorType c, Args_&&... args) :
+        c_(c), args_(std::make_tuple(std::forward<Args_>(args)...)) { }
     template <typename ModelType_> DVector<double> fit(ModelType_&& model) {
         // forward model instance to callbacks which require it
         auto set_model = [&model](auto&& arg) {
@@ -56,18 +55,24 @@ template <typename Calibrator, typename... Args_> class ConfiguredCalibrator {
 };
 
 template <typename T> struct CalibratorBase {
-    template <typename... Args> ConfiguredCalibrator<T, Args...> operator()(Args&&... args) const {
-        return ConfiguredCalibrator<T, Args...>(static_cast<const T&>(*this), std::forward<Args>(args)...);
+    template <typename... Args>
+    ConfiguredCalibrator<std::add_lvalue_reference_t<T>, Args...> operator()(Args&&... args) & {
+        return ConfiguredCalibrator<std::add_lvalue_reference_t<T>, Args...>(
+          static_cast<std::add_lvalue_reference_t<T>>(*this), std::forward<Args>(args)...);
+    }
+    // rvalue ref-qualified overload pushes calibrator by copy
+    template <typename... Args> ConfiguredCalibrator<T, Args...> operator()(Args&&... args) && {
+        return {static_cast<T&>(*this), std::forward<Args>(args)...};
     }
 };
 
 // a type-erasure wrapper for a (configured) calibration algorithm for models of type ModelType
 template <typename ModelType_> struct Calibrator__ {
-    template <typename T> using fn_ptrs = fdapde::mem_fn_ptrs<&T::template fit<ModelType_>, &T::optimum>;
-    decltype(auto) fit(ModelType_& model) { return fdapde::invoke<DVector<double>, 0>(*this, model); }
-    decltype(auto) optimum(ModelType_& model) { return fdapde::invoke<DVector<double>, 1>(*this, model); }
+    template <typename T> using fn_ptrs = mem_fn_ptrs<&T::template fit<ModelType_>, &T::optimum>;
+    decltype(auto) fit(ModelType_& model) { return invoke<DVector<double>, 0>(*this, model); }
+    decltype(auto) optimum() { return invoke<DVector<double>, 1>(*this); }
 };
-template <typename ModelType_> using Calibrator = fdapde::erase<fdapde::heap_storage, Calibrator__<ModelType_>>;
+template <typename ModelType_> using Calibrator = erase<heap_storage, Calibrator__<ModelType_>>;
 
 }   // namespace calibration
 }   // namespace fdapde

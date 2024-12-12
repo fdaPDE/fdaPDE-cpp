@@ -4,7 +4,15 @@ project(TEST)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_WARNINGS_FLAGS "-Wall -Wpedantic -Wextra -Werror")
-set(CMAKE_CXX_FLAGS "-g -O2 -march=x86-64 -std=c++20 ${CMAKE_WARNINGS_FLAGS} -I${CMAKE_CURRENT_SOURCE_DIR}/../ -I${CMAKE_CURRENT_SOURCE_DIR}/../fdaPDE/core/")
+set(CMAKE_CXX_FLAGS "-g -O2 -march=x86-64 -std=c++20 ${CMAKE_WARNINGS_FLAGS} -I${CMAKE_CURRENT_SOURCE_DIR}/../ -I${CMAKE_CURRENT_SOURCE_DIR}/../fdaPDE/core/ -fPIE")
+
+find_package(OpenMP REQUIRED)
+
+if (OpenMP_CXX_FOUND)
+    # Aggiungi le flag OpenMP ai compilatori C e C++
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+endif()
 
 find_package (Eigen3 3.4 REQUIRED NO_MODULE)
 
@@ -28,6 +36,8 @@ enable_testing()
 add_executable(fdapde_test main.cpp)
 target_link_libraries (fdapde_test Eigen3::Eigen)
 target_link_libraries (fdapde_test gtest_main)
+target_link_libraries(fdapde_test OpenMP::OpenMP_CXX)
+
 
 add_test(NAME fdapde_test
 	 COMMAND $<TARGET_FILE:fdapde_test>)

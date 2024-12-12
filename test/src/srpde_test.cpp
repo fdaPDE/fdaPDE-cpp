@@ -26,6 +26,7 @@ using fdapde::core::laplacian;
 using fdapde::core::DiscretizedMatrixField;
 using fdapde::core::PDE;
 using fdapde::core::DiscretizedVectorField;
+using fdapde::core::Triangulation;
 
 #include "../../fdaPDE/models/regression/srpde.h"
 #include "../../fdaPDE/models/sampling_design.h"
@@ -48,12 +49,12 @@ using fdapde::testing::read_csv;
 //    order FE:     1
 TEST(srpde_test, laplacian_nonparametric_samplingatnodes) {
     // define domain 
-    MeshLoader<Mesh2D> domain("unit_square");
+    MeshLoader<Triangulation<2, 2>> domain("unit_square");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/srpde/2D_test1/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda = 5.623413 * std::pow(0.1, 5);
@@ -79,14 +80,14 @@ TEST(srpde_test, laplacian_nonparametric_samplingatnodes) {
 //    order FE:     1
 TEST(srpde_test, laplacian_semiparametric_samplingatlocations) {
     // define domain
-    MeshLoader<Mesh2D> domain("c_shaped");
+    MeshLoader<Triangulation<2, 2>> domain("c_shaped");
     // import data from files
     DMatrix<double> locs = read_csv<double>("../data/models/srpde/2D_test2/locs.csv");
     DMatrix<double> y    = read_csv<double>("../data/models/srpde/2D_test2/y.csv");
     DMatrix<double> X    = read_csv<double>("../data/models/srpde/2D_test2/X.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define statistical model
     double lambda = 0.2201047;
@@ -115,14 +116,14 @@ TEST(srpde_test, laplacian_semiparametric_samplingatlocations) {
 //    order FE:     1
 TEST(srpde_test, costantcoefficientspde_nonparametric_samplingatnodes) {
     // define domain
-    MeshLoader<Mesh2D> domain("unit_square");
+    MeshLoader<Triangulation<2, 2>> domain("unit_square");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/srpde/2D_test3/y.csv");
     // define regularizing PDE
     SMatrix<2> K;
     K << 1, 0, 0, 4;
     auto L = -diffusion<FEM>(K);   // anisotropic diffusion
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define  model
     double lambda = 10;
@@ -148,7 +149,7 @@ TEST(srpde_test, costantcoefficientspde_nonparametric_samplingatnodes) {
 //    order FE:     1
 TEST(srpde_test, noncostantcoefficientspde_nonparametric_samplingareal) {
     // define domain
-    MeshLoader<Mesh2D> domain("quasi_circle");
+    MeshLoader<Triangulation<2, 2>> domain("quasi_circle");
     // import data from files
     DMatrix<double, Eigen::RowMajor> K_data  = read_csv<double>("../data/models/srpde/2D_test4/K.csv");
     DMatrix<double, Eigen::RowMajor> b_data  = read_csv<double>("../data/models/srpde/2D_test4/b.csv");
@@ -185,12 +186,12 @@ TEST(srpde_test, noncostantcoefficientspde_nonparametric_samplingareal) {
 //    order FE:     1
 TEST(srpde_test, laplacian_nonparametric_samplingatnodes_surface) {
     // define domain 
-    MeshLoader<SurfaceMesh> domain("c_shaped_surface");
+  MeshLoader<Triangulation<2, 3>> domain("c_shaped_surface");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/srpde/2D_test5/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda = 1e-2;

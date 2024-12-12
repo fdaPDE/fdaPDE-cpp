@@ -47,7 +47,7 @@ class FPCA : public FunctionalBase<FPCA<RegularizationType_>, RegularizationType
         decltype(auto) scores()   const { return invoke<const DMatrix<double>&, 2>(*this); }
     };
     using SolverType = fdapde::erase<heap_storage, SolverType__>;
-    SolverType solver_;
+    SolverType solver_;   // RegularizedSVD solver
    public:
     using RegularizationType = std::decay_t<RegularizationType_>;
     using This = FPCA<RegularizationType>;
@@ -58,13 +58,13 @@ class FPCA : public FunctionalBase<FPCA<RegularizationType_>, RegularizationType
     // constructors
     FPCA() = default;
     // space-only constructor
-    FPCA(const Base::PDE& pde, Sampling s, SolverType solver)
-    requires(is_space_only<This>::value) : Base(pde, s), solver_(solver) { }
+    FPCA(const Base::PDE& pde, Sampling s, SolverType solver) requires(is_space_only<This>::value) :
+      Base(pde, s), solver_(solver) { }
     // space-time separable constructor
     FPCA(const Base::PDE& space_penalty, const Base::PDE& time_penalty, Sampling s, SolverType solver)
-    requires(is_space_time_separable<This>::value) : Base(space_penalty, time_penalty, s), solver_(solver) { }
+      requires(is_space_time_separable<This>::value) : Base(space_penalty, time_penalty, s), solver_(solver) { }
 
-    void init_model() { fdapde_assert(bool(solver_) == true); };   // check solver is assigned
+    void init_model() { fdapde_assert(bool(solver_) == true); };
     void solve() { solver_.compute(X(), *this, n_pc_); }
     // getters
     const DMatrix<double>& loadings() const { return solver_.loadings(); }

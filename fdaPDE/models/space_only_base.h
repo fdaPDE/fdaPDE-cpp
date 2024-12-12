@@ -65,14 +65,16 @@ template <typename Model> class SpaceOnlyBase : public ModelBase<Model> {
     int n_basis() const { return pde_.n_dofs(); };                 // number of basis functions
     int n_spatial_basis() const { return n_basis(); }              // number of basis functions in space
     const PDE& pde() const { return pde_; }                        // regularizing term Lf - u
-    const fdapde::SparseLU<SpMatrix<double>>& invR0() const {      // LU factorization of mass matrix R0
+    const fdapde::core::SparseLU<SpMatrix<double>>& invR0() const {      // LU factorization of mass matrix R0
         if (!invR0_) { invR0_.compute(R0()); }
         return invR0_;
     }
     const SpMatrix<double>& PD() const {   // space-penalty component (R1^T*R0^{-1}*R1)
-        if (is_empty(P_)) { P_ = R1().transpose() * invR0().solve(R1()); }
+        if (fdapde::core::is_empty(P_)) { P_ = R1().transpose() * invR0().solve(R1()); }
         return P_;
     }
+    // evaluation of x^\top*(R1^\top*R0^{-1}*R1)*x
+    double xtPDx(const DVector<double>& x) const { return x.dot(PD() * x); }
     // evaluation of penalty term \lambda*(R1^\top*R0^{-1}*R1) at \lambda
     auto P(const SVector<n_lambda>& lambda) const { return lambda[0] * PD(); }
     auto P() const { return P(lambda()); }
@@ -81,7 +83,7 @@ template <typename Model> class SpaceOnlyBase : public ModelBase<Model> {
    protected:
     PDE pde_ {};                   // differential penalty in space Lf - u
     mutable SpMatrix<double> P_;   // discretization of penalty term: R1^T*R0^{-1}*R1
-    mutable fdapde::SparseLU<SpMatrix<double>> invR0_;
+    mutable fdapde::core::SparseLU<SpMatrix<double>> invR0_;
     SpMatrix<double> R0_lumped_;   // lumped mass matrix, if mass_lumping == true, empty otherwise
     SVector<n_lambda> lambda_ = SVector<n_lambda>::Zero();
 };

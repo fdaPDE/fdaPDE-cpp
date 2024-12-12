@@ -60,7 +60,7 @@ template <typename Model> class SamplingBase {
   
     void init_sampling(bool forced = false) {
         // compute once if not forced to recompute
-        if (!is_empty(Psi_) && forced == false) return;
+        if (!fdapde::core::is_empty(Psi_) && forced == false) return;
 	
         switch (sampling_) {
         case Sampling::mesh_nodes: {  // data sampled at mesh nodes: \Psi is the identity matrix
@@ -68,7 +68,7 @@ template <typename Model> class SamplingBase {
             int n = model().n_spatial_basis();
             int N = model().n_spatial_basis();
             Psi_.resize(n, N);
-            std::vector<fdapde::Triplet<double>> triplet_list;
+            std::vector<fdapde::core::Triplet<double>> triplet_list;
             triplet_list.reserve(n);
             // if data locations are equal to mesh nodes then \Psi is the identity matrix.
             // \psi_i(p_i) = 1 and \psi_i(p_j) = 0 \forall i \neq j

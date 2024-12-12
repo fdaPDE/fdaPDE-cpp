@@ -19,6 +19,7 @@
 
 #include <fdaPDE/utils.h>
 using fdapde::core::BlockFrame;
+using fdapde::core::is_empty;
 
 #include "model_macros.h"
 #include "model_traits.h"

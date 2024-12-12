@@ -36,10 +36,11 @@ namespace models {
 
 class SRPDE : public RegressionBase<SRPDE, SpaceOnly> {
    private:
-    typedef RegressionBase<SRPDE, SpaceOnly> Base;
+    using Base = RegressionBase<SRPDE, SpaceOnly>;
     SparseBlockMatrix<double, 2, 2> A_ {};         // system matrix of non-parametric problem (2N x 2N matrix)
-    fdapde::SparseLU<SpMatrix<double>> invA_ {};   // factorization of matrix A
+    fdapde::core::SparseLU<SpMatrix<double>> invA_ {};   // factorization of matrix A
     DVector<double> b_ {};                         // right hand side of problem's linear system (1 x 2N vector)
+    SpMatrix<double> PsiESF_ {};
    public:
     IMPORT_REGRESSION_SYMBOLS
     using Base::lambda_D;   // smoothing parameter in space
@@ -51,6 +52,62 @@ class SRPDE : public RegressionBase<SRPDE, SpaceOnly> {
     // constructor
     SRPDE() = default;
     SRPDE(const Base::PDE& pde, Sampling s) : Base(pde, s) {};
+
+
+
+    // template <typename PDEType>
+    // SRPDE(PDETtype&& pde, Sampling s) : Base(pde, s) {};
+
+
+    template <typename PDEType>
+    void init_psi_esf(PDEType&& pde) {
+
+        // perchè psi cols e non psi rows??????
+        PsiESF_.resize(Psi().cols(), Psi().cols()); 
+
+        std::vector<Eigen::Triplet<double>> triplet_list;
+
+        // not sure about Psi().rows(, should be the number of nodes
+        // take a look at linear_network.h
+
+        // should be Psi().rows()
+        for(int i = 0; i < Psi().cols(); ++i) {
+            auto patch = pde.domain().node_patch(i);
+            std::set<int> s;
+            s.insert(i);
+            // should be that the matrix cells stores in the rows the nodes composing each cells
+            for (auto e : patch) {
+                // e.nodes() dovrebbe dare i nodi che sono presenti nella cell della patch
+                for(int j : pde.domain().cells().row(e)) {
+                    s.insert(j);
+                }
+            }
+            for(int j : s) {
+                triplet_list.emplace_back(i, j, 1.0);
+            }
+        }
+
+        /*
+        for (const auto& triplet : triplet_list) {
+        std::cout << "Row: " << triplet.row()
+                  << ", Col: " << triplet.col()
+                  << ", Value: " << triplet.value()
+                  << std::endl;
+        }
+        */
+
+
+        PsiESF_.setFromTriplets(triplet_list.begin(), triplet_list.end());
+        // std::cout << PsiESF_ << std::endl;
+        PsiESF_.makeCompressed();
+
+        // save PsiESF in private member
+
+    }
+
+    // getter for PsiESF (needed for inference)
+    const SpMatrix<double>& PsiESF() const{return PsiESF_;}
+
 
     void init_model() {
         if (runtime().query(runtime_status::is_lambda_changed)) {
@@ -102,7 +159,7 @@ class SRPDE : public RegressionBase<SRPDE, SpaceOnly> {
     double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const { return (op1 - op2).squaredNorm(); }
     // getters
     const SparseBlockMatrix<double, 2, 2>& A() const { return A_; }
-    const fdapde::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
+    const fdapde::core::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
     virtual ~SRPDE() = default;
 };
 

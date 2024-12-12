@@ -25,6 +25,7 @@ using fdapde::core::fem_order;
 using fdapde::core::laplacian;
 using fdapde::core::PDE;
 using fdapde::core::Grid;
+using fdapde::core::Triangulation;
 
 #include "../../fdaPDE/models/regression/srpde.h"
 using fdapde::models::SRPDE;
@@ -59,13 +60,13 @@ using fdapde::testing::read_mtx;
 //    solver: sequential (power iteration) without calibration
 TEST(fpls_test, laplacian_samplingatnodes_sequential_off) {
     // define domain
-    MeshLoader<Mesh2D> domain("unit_square");
+    MeshLoader<Triangulation<2, 2>> domain("unit_square");
     // import data from files
     DMatrix<double> X = read_csv<double>("../data/models/fpls/2D_test1/X.csv");
     DMatrix<double> Y = read_csv<double>("../data/models/fpls/2D_test1/Y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> pde(domain.mesh, L, u);
     // define model
     double lambda_D = 10.0;
@@ -104,19 +105,19 @@ TEST(fpls_test, laplacian_samplingatnodes_sequential_off) {
 //    solver: sequential (power iteration) with GCV calibration
 TEST(fpls_test, laplacian_samplingatnodes_sequential_gcv) {
     // define domain
-    MeshLoader<Mesh2D> domain("unit_square");
+    MeshLoader<Triangulation<2, 2>> domain("unit_square");
     // import data from files
     DMatrix<double> X = read_csv<double>("../data/models/fpls/2D_test2/X.csv");
     DMatrix<double> Y = read_csv<double>("../data/models/fpls/2D_test2/Y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> pde(domain.mesh, L, u);
     // define model
     std::size_t seed = 476813;
     // grid for smoothing parameter selection
-    std::vector<DVector<double>> lambda_grid;
-    for (double x = -4; x <= 0; x += 1) lambda_grid.push_back(SVector<1>(std::pow(10, x)));
+    DMatrix<double> lambda_grid(5, 1);
+    for (int i = 0; i < 5; ++i) lambda_grid(i, 0) = std::pow(10, -4 + 1.0 * i);
     RegularizedSVD<fdapde::sequential> rsvd {Calibration::gcv};
     rsvd.set_tolerance(1e-2);
     rsvd.set_max_iter(20);

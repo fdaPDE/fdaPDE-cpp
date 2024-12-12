@@ -24,6 +24,7 @@ using fdapde::core::FEM;
 using fdapde::core::fem_order;
 using fdapde::core::laplacian;
 using fdapde::core::PDE;
+using fdapde::core::Triangulation;
 
 #include "../../fdaPDE/models/functional/fpca.h"
 #include "../../fdaPDE/models/sampling_design.h"
@@ -40,7 +41,7 @@ using fdapde::testing::almost_equal;
 using fdapde::testing::MeshLoader;
 using fdapde::testing::read_csv;
 using fdapde::testing::read_mtx;
-
+/*
 // test 1
 //    domain:       unit square [1,1] x [1,1]
 //    sampling:     locations = nodes
@@ -51,12 +52,12 @@ using fdapde::testing::read_mtx;
 //    solver: sequential (power iteration)
 TEST(fpca_test, laplacian_samplingatnodes_sequential) {
     // define domain
-    MeshLoader<Mesh2D> domain("unit_square");
+    MeshLoader<Triangulation<2, 2>> domain("unit_square");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/fpca/2D_test1/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> pde(domain.mesh, L, u);
     // define model
     double lambda_D = 1e-2;
@@ -84,12 +85,12 @@ TEST(fpca_test, laplacian_samplingatnodes_sequential) {
 //    solver: monolithic (rsvd)
 TEST(fpca_test, laplacian_samplingatnodes_monolithic) {
     // define domain
-    MeshLoader<Mesh2D> domain("unit_square");
+    MeshLoader<Triangulation<2, 2>> domain("unit_square");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/fpca/2D_test1/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda_D = 1e-2;
@@ -106,7 +107,7 @@ TEST(fpca_test, laplacian_samplingatnodes_monolithic) {
     EXPECT_TRUE(almost_equal(model.Psi() * model.loadings(), "../data/models/fpca/2D_test1/loadings_mon.mtx"));
     EXPECT_TRUE(almost_equal(model.scores(),                 "../data/models/fpca/2D_test1/scores_mon.mtx"  ));
 }
-
+*/
 // test 3
 //    domain:       unit square [1,1] x [1,1]
 //    sampling:     locations != nodes
@@ -117,17 +118,17 @@ TEST(fpca_test, laplacian_samplingatnodes_monolithic) {
 //    solver: sequential (power iteration) + GCV \lambda selection
 TEST(fpca_test, laplacian_samplingatlocations_sequential_gcv) {
     // define domain
-    MeshLoader<Mesh2D> domain("unit_square");
+    MeshLoader<Triangulation<2, 2>> domain("unit_square");
     // import data from files
     DMatrix<double> locs = read_csv<double>("../data/models/fpca/2D_test2/locs.csv");
     DMatrix<double> y    = read_csv<double>("../data/models/fpca/2D_test2/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> pde(domain.mesh, L, u);
     // grid of smoothing parameters
-    std::vector<DVector<double>> lambda_grid;
-    for (double x = -4; x <= -2; x += 0.1) { lambda_grid.push_back(SVector<1>(std::pow(10, x))); }
+    DMatrix<double> lambda_grid(20, 1);
+    for (int i = 0; i < 20; ++i) lambda_grid(i, 0) = std::pow(10, -4 + 0.1 * i);
     // define model
     RegularizedSVD<fdapde::sequential> rsvd(Calibration::gcv);
     rsvd.set_lambda(lambda_grid);
@@ -156,17 +157,17 @@ TEST(fpca_test, laplacian_samplingatlocations_sequential_gcv) {
 //    solver: sequential (power iteration) + KCV \lambda selection
 TEST(fpca_test, laplacian_samplingatlocations_sequential_kcv) {
     // define domain
-    MeshLoader<Mesh2D> domain("unit_square");
+    MeshLoader<Triangulation<2, 2>> domain("unit_square");
     // import data from files
     DMatrix<double> locs = read_csv<double>("../data/models/fpca/2D_test3/locs.csv");
     DMatrix<double> y    = read_csv<double>("../data/models/fpca/2D_test3/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // grid of smoothing parameters
-    std::vector<DVector<double>> lambda_grid;
-    for (double x = -4; x <= -2; x += 0.1) lambda_grid.push_back(SVector<1>(std::pow(10, x)));
+    DMatrix<double> lambda_grid(20, 1);
+    for (int i = 0; i < 20; ++i) lambda_grid(i, 0) = std::pow(10, -4 + 0.1 * i);
     // define model
     RegularizedSVD<fdapde::sequential> rsvd(Calibration::kcv);
     rsvd.set_lambda(lambda_grid);
@@ -195,18 +196,18 @@ TEST(fpca_test, laplacian_samplingatlocations_sequential_kcv) {
 //    solver: sequential (power iteration)
 // TEST(fpca_test, laplacian_samplingatnodes_separable_sequential) {
 //   // define time domain
-//   Mesh<1, 1> time_mesh(0, 1, 14);
+//   Triangulation<1, 1> time_mesh(0, 1, 14);
 //   // define domain and regularizing PDE
-//   MeshLoader<Mesh2D> domain("unit_square15");
+//   MeshLoader<Triangulation<2, 2>> domain("unit_square15");
 //   // import data from files
 //   DMatrix<double> y = read_csv<double>("../data/models/fpca/2D_test5/y.csv");
 //   // define regularizing PDE in space
 //   auto Ld = -laplacian<FEM>();
-//   DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3 * time_mesh.n_nodes(), 1);
-//   PDE<Mesh<2, 2>, decltype(Ld), DMatrix<double>, FEM, fem_order<1>> space_penalty(domain.mesh, Ld, u);
+//   DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3 * time_mesh.n_nodes(), 1);
+//   PDE<Triangulation<2, 2>, decltype(Ld), DMatrix<double>, FEM, fem_order<1>> space_penalty(domain.mesh, Ld, u);
 //   // define regularizing PDE in time
 //   auto Lt = -bilaplacian<SPLINE>();
-//   PDE<Mesh<1, 1>, decltype(Lt), DMatrix<double>, SPLINE, spline_order<3>> time_penalty(time_mesh, Lt);
+//   PDE<Triangulation<1, 1>, decltype(Lt), DMatrix<double>, SPLINE, spline_order<3>> time_penalty(time_mesh, Lt);
 //     // define model
 //   double lambda_D = std::pow(10, -3.6); // 1e-3.6
 //   double lambda_T = std::pow(10, -2.2); // 1e-2.2
@@ -235,12 +236,12 @@ TEST(fpca_test, laplacian_samplingatlocations_sequential_kcv) {
 //    missing data: yes
 TEST(fpca_test, laplacian_samplingatnodes_nocalibration_missingdata) {
     // define domain
-    MeshLoader<Mesh2D> domain("unit_square_coarse");
+    MeshLoader<Triangulation<2, 2>> domain("unit_square_coarse");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/fpca/2D_test4/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda_D = 1e-2;

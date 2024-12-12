@@ -27,6 +27,7 @@ using fdapde::core::laplacian;
 using fdapde::core::DiscretizedMatrixField;
 using fdapde::core::PDE;
 using fdapde::core::DiscretizedVectorField;
+using fdapde::core::Triangulation;
 
 #include "../../fdaPDE/models/regression/srpde.h"
 #include "../../fdaPDE/models/regression/gcv.h"
@@ -57,12 +58,12 @@ using fdapde::testing::read_csv;
 //    GCV optimization: grid exact
 TEST(gcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridexact) {
     // define domain
-    MeshLoader<Mesh2D> domain("unit_square_coarse");
+    MeshLoader<Triangulation<2, 2>> domain("unit_square_coarse");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/gcv/2D_test1/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     SRPDE model(problem, Sampling::mesh_nodes);
@@ -73,8 +74,8 @@ TEST(gcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridexact
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    std::vector<DVector<double>> lambdas;
-    for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
+    DMatrix<double> lambdas(13, 1);
+    for (int i = 0; i < 13; ++i) { lambdas(i, 0) = std::pow(10, -6.0 + 0.25 * i); }
     // optimize GCV
     Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);
@@ -93,12 +94,12 @@ TEST(gcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridexact
 //    GCV optimization: grid stochastic
 TEST(gcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridstochastic) {
     // define domain
-    MeshLoader<Mesh2D> domain("unit_square_coarse");
+    MeshLoader<Triangulation<2, 2>> domain("unit_square_coarse");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/gcv/2D_test2/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     SRPDE model(problem, Sampling::mesh_nodes);
@@ -110,8 +111,8 @@ TEST(gcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridstoch
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 476813;
     auto GCV = model.gcv<StochasticEDF>(100, seed);
-    std::vector<DVector<double>> lambdas;
-    for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
+    DMatrix<double> lambdas(13, 1);
+    for (int i = 0; i < 13; ++i) { lambdas(i, 0) = std::pow(10, -6.0 + 0.25 * i); }
     // optimize GCV
     Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);
@@ -133,14 +134,14 @@ TEST(gcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_gridstoch
 //    GCV optimization: grid exact
 TEST(gcv_srpde_test, laplacian_semiparametric_samplingatlocations_gridexact) {
     // define domain
-    MeshLoader<Mesh2D> domain("c_shaped");
+    MeshLoader<Triangulation<2, 2>> domain("c_shaped");
     // import data from files
     DMatrix<double> locs = read_csv<double>("../data/models/gcv/2D_test3/locs.csv");
     DMatrix<double> y    = read_csv<double>("../data/models/gcv/2D_test3/y.csv"   );
     DMatrix<double> X    = read_csv<double>("../data/models/gcv/2D_test3/X.csv"   );
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     SRPDE model(problem, Sampling::pointwise);
@@ -153,14 +154,19 @@ TEST(gcv_srpde_test, laplacian_semiparametric_samplingatlocations_gridexact) {
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    std::vector<DVector<double>> lambdas;
-    for (double x = -3.0; x <= 3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
+    DMatrix<double> lambdas(25, 1);
+    for (int i = 0; i < 25; ++i) { lambdas(i, 0) = std::pow(10, -3.0 + 0.25 * i); }
     // optimize GCV
     Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);
     // test correctness
     EXPECT_TRUE(almost_equal(GCV.edfs(), "../data/models/gcv/2D_test3/edfs.mtx"));
     EXPECT_TRUE(almost_equal(GCV.gcvs(), "../data/models/gcv/2D_test3/gcvs.mtx"));
+    // check consistency with GCV calibrator
+    fdapde::calibration::GCV<SpaceOnly> GCV_(Grid<fdapde::Dynamic> {}, ExactEDF());
+    GCV_(lambdas).fit(model);   // should have a side-effect on GCV calibrator
+    EXPECT_TRUE(GCV_.optimum() == opt.optimum());
+
 }
 
 // test 4
@@ -173,14 +179,14 @@ TEST(gcv_srpde_test, laplacian_semiparametric_samplingatlocations_gridexact) {
 //    GCV optimization: grid stochastic
 TEST(gcv_srpde_test, laplacian_semiparametric_samplingatlocations_gridstochastic) {
     // define domain
-    MeshLoader<Mesh2D> domain("c_shaped");
+    MeshLoader<Triangulation<2, 2>> domain("c_shaped");
     // import data from files
     DMatrix<double> locs = read_csv<double>("../data/models/gcv/2D_test4/locs.csv");
     DMatrix<double> y    = read_csv<double>("../data/models/gcv/2D_test4/y.csv"   );
     DMatrix<double> X    = read_csv<double>("../data/models/gcv/2D_test4/X.csv"   );
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     SRPDE model(problem, Sampling::pointwise);
@@ -194,8 +200,8 @@ TEST(gcv_srpde_test, laplacian_semiparametric_samplingatlocations_gridstochastic
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 66546513;
     auto GCV = model.gcv<StochasticEDF>(100, seed);
-    std::vector<DVector<double>> lambdas;
-    for (double x = -3.0; x <= 3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
+    DMatrix<double> lambdas(25, 1);
+    for (int i = 0; i < 25; ++i) { lambdas(i, 0) = std::pow(10, -3.0 + 0.25 * i); }
     // optimize GCV
     Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);
@@ -214,14 +220,14 @@ TEST(gcv_srpde_test, laplacian_semiparametric_samplingatlocations_gridstochastic
 //    GCV optimization: grid exact
 TEST(gcv_srpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridexact) {
     // define domain
-    MeshLoader<Mesh2D> domain("unit_square_coarse");
+    MeshLoader<Triangulation<2, 2>> domain("unit_square_coarse");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/gcv/2D_test5/y.csv");
     // define regularizing PDE
     SMatrix<2> K;
     K << 1, 0, 0, 4;
     auto L = -diffusion<FEM>(K);   // anisotropic diffusion
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     SRPDE model(problem, Sampling::mesh_nodes);
@@ -232,8 +238,8 @@ TEST(gcv_srpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridex
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    std::vector<DVector<double>> lambdas;
-    for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
+    DMatrix<double> lambdas(13, 1);
+    for (int i = 0; i < 13; ++i) { lambdas(i, 0) = std::pow(10, -6.0 + 0.25 * i); }
     // optimize GCV
     Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);   // optimize gcv field
@@ -252,14 +258,14 @@ TEST(gcv_srpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridex
 //    GCV optimization: grid stochastic
 TEST(gcv_srpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridstochastic) {
     // define domain
-    MeshLoader<Mesh2D> domain("unit_square_coarse");
+    MeshLoader<Triangulation<2, 2>> domain("unit_square_coarse");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/gcv/2D_test5/y.csv");
     // define regularizing PDE
     SMatrix<2> K;
     K << 1, 0, 0, 4;
     auto L = -diffusion<FEM>(K);   // anisotropic diffusion
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     SRPDE model(problem, Sampling::mesh_nodes);
@@ -271,8 +277,8 @@ TEST(gcv_srpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridst
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 4564168;
     auto GCV = model.gcv<StochasticEDF>(100, seed);
-    std::vector<DVector<double>> lambdas;
-    for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
+    DMatrix<double> lambdas(13, 1);
+    for (int i = 0; i < 13; ++i) { lambdas(i, 0) = std::pow(10, -6.0 + 0.25 * i); }
     // optimize GCV
     Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);   // optimize gcv field
@@ -291,7 +297,7 @@ TEST(gcv_srpde_test, costantcoefficientspde_nonparametric_samplingatnodes_gridst
 //    GCV optimization: grid exact
 TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_gridexact) {
     // define domain and regularizing PDE
-    MeshLoader<Mesh2D> domain("quasi_circle");
+    MeshLoader<Triangulation<2, 2>> domain("quasi_circle");
     // import data from files
     DMatrix<double, Eigen::RowMajor> K_data = read_csv<double>("../data/models/gcv/2D_test7/K.csv");
     DMatrix<double, Eigen::RowMajor> b_data = read_csv<double>("../data/models/gcv/2D_test7/b.csv");
@@ -313,8 +319,8 @@ TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_gride
     model.init();
     // define GCV function and grid of \lambda_D values
     auto GCV = model.gcv<ExactEDF>();
-    std::vector<DVector<double>> lambdas;
-    for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
+    DMatrix<double> lambdas(13, 1);
+    for (int i = 0; i < 13; ++i) { lambdas(i, 0) = std::pow(10, -6.0 + 0.25 * i); }
     // optimize GCV
     Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);   // optimize gcv field
@@ -333,7 +339,7 @@ TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_gride
 //    GCV optimization: grid stochastic
 TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_gridstochastic) {
     // define domain and regularizing PDE
-    MeshLoader<Mesh2D> domain("quasi_circle");
+    MeshLoader<Triangulation<2, 2>> domain("quasi_circle");
     // import data from files
     DMatrix<double, Eigen::RowMajor> K_data = read_csv<double>("../data/models/gcv/2D_test8/K.csv");
     DMatrix<double, Eigen::RowMajor> b_data = read_csv<double>("../data/models/gcv/2D_test8/b.csv");
@@ -356,8 +362,8 @@ TEST(gcv_srpde_test, noncostantcoefficientspde_nonparametric_samplingareal_grids
     // define GCV function and grid of \lambda_D values
     std::size_t seed = 438172;
     auto GCV = model.gcv<StochasticEDF>(100, seed);
-    std::vector<DVector<double>> lambdas;
-    for (double x = -6.0; x <= -3.0; x += 0.25) lambdas.push_back(SVector<1>(std::pow(10, x)));
+    DMatrix<double> lambdas(13, 1);
+    for (int i = 0; i < 13; ++i) { lambdas(i, 0) = std::pow(10, -6.0 + 0.25 * i); }
     // optimize GCV
     Grid<fdapde::Dynamic> opt;
     opt.optimize(GCV, lambdas);

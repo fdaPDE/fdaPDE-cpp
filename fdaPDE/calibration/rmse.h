@@ -34,7 +34,7 @@ class RMSE {
     RegressionView<void> model_;
    public:
     RMSE() = default;
-    template <typename ModelType> RMSE(const ModelType& model) : model_(model) {};
+    template <typename ModelType> RMSE(const ModelType& model) : model_(model) {}
     template <typename ModelType> void set_model(const ModelType& model) { model_ = model; }
 
     double operator()(

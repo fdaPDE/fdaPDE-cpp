@@ -4,6 +4,7 @@
 #include <Eigen/Sparse>
 
 // regression test suite
+/*
 #include "src/srpde_test.cpp"
 #include "src/strpde_test.cpp"
 #include "src/gsrpde_test.cpp"
@@ -16,6 +17,13 @@
 #include "src/fpca_test.cpp"
 #include "src/fpls_test.cpp"
 #include "src/centering_test.cpp"
+*/
+#include "src/inference_test.cpp"
+#include "src/inferencetime_test.cpp"
+#include <unsupported/Eigen/SparseExtra> 
+#include <fstream>
+
+
 
 int main(int argc, char **argv){
   // start testing

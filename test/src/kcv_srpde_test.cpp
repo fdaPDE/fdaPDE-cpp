@@ -22,6 +22,7 @@ using fdapde::core::fem_order;
 using fdapde::core::FEM;
 using fdapde::core::laplacian;
 using fdapde::core::PDE;
+using fdapde::core::Triangulation;
 
 #include "../../fdaPDE/models/regression/srpde.h"
 #include "../../fdaPDE/models/regression/qsrpde.h"
@@ -53,12 +54,12 @@ using fdapde::testing::read_csv;
 //    GCV optimization: grid exact
 TEST(kcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_rmse) {
     // define domain
-    MeshLoader<Mesh2D> domain("unit_square_coarse");
+    MeshLoader<Triangulation<2, 2>> domain("unit_square_coarse");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/gcv/2D_test1/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     SRPDE model(problem, Sampling::mesh_nodes);
@@ -84,12 +85,12 @@ TEST(kcv_srpde_test, laplacian_nonparametric_samplingatnodes_spaceonly_rmse) {
 
 TEST(kcv_srpde_test, qsrpde_laplacian_nonparametric_samplingatnodes_spaceonly_rmse) {
     // define domain
-    MeshLoader<Mesh2D> domain("unit_square_coarse");
+    MeshLoader<Triangulation<2, 2>> domain("unit_square_coarse");
     // import data from files
     DMatrix<double> y = read_csv<double>("../data/models/qsrpde/2D_test1/y.csv");
     // define regularizing PDE
     auto L = -laplacian<FEM>();
-    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_elements() * 3, 1);
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
     PDE<decltype(domain.mesh), decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
     // define model
     double lambda = 1.778279 * std::pow(0.1, 4);

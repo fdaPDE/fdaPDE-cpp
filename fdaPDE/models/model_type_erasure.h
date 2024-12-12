@@ -64,7 +64,7 @@ template <typename RegularizationType> struct StatisticalModel__ { };
 template <> struct StatisticalModel__<void> {
     using RegularizationType = void;
     template <typename M> using Base = ModelBase<M>;  
-    static constexpr int n_lambda = fdapde::Dynamic;
+    static constexpr int n_lambda = fdapde::core::Dynamic;
     // interface implementation
     template <typename M>
     using fn_ptrs = fdapde::mem_fn_ptrs<
@@ -74,7 +74,7 @@ template <> struct StatisticalModel__<void> {
     // interface implementation
     BASE_MODEL_ERASED_INTERFACE
     void set_lambda(const DVector<double>& lambda) { invoke<void, 12>(*this, lambda); }
-    decltype(auto) lambda() const { return invoke<DVector<double>, 13>(*this, fdapde::Dynamic); }
+    decltype(auto) lambda() const { return invoke<DVector<double>, 13>(*this, fdapde::core::Dynamic); }
 };
 
 // space-only statistical model interface

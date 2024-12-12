@@ -48,7 +48,7 @@ class STRPDE<SpaceTimeSeparable, monolithic> :
     public RegressionBase<STRPDE<SpaceTimeSeparable, monolithic>, SpaceTimeSeparable> {
    private:
     SparseBlockMatrix<double, 2, 2> A_ {};      // system matrix of non-parametric problem (2N x 2N matrix)
-    fdapde::SparseLU<SpMatrix<double>> invA_;   // factorization of matrix A
+    fdapde::core::SparseLU<SpMatrix<double>> invA_;   // factorization of matrix A
     DVector<double> b_ {};                      // right hand side of problem's linear system (1 x 2N vector)
     DMatrix<double> T_;                         // T = \Psi^T*Q*\Psi + \lambda*R
     SpMatrix<double> K_;                        // P1 \kron R0
@@ -70,7 +70,7 @@ class STRPDE<SpaceTimeSeparable, monolithic> :
     void init_model() {
         if (runtime().query(runtime_status::is_lambda_changed)) {
             // assemble system matrix for the nonparameteric part
-            if (is_empty(K_)) K_ = Kronecker(P1(), pde().mass());
+            if (fdapde::core::is_empty(K_)) K_ = Kronecker(P1(), pde().mass());
             A_ = SparseBlockMatrix<double, 2, 2>(
               -PsiTD() * W() * Psi() - lambda_T() * K_, lambda_D() * R1().transpose(),
 	      lambda_D() * R1(),                        lambda_D() * R0()            );
@@ -118,7 +118,7 @@ class STRPDE<SpaceTimeSeparable, monolithic> :
     double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const { return (op1 - op2).squaredNorm(); }
     // getters
     const SparseBlockMatrix<double, 2, 2>& A() const { return A_; }
-    const fdapde::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
+    const fdapde::core::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
 };
 
 // implementation of STRPDE for parabolic space-time regularization, monolithic approach
@@ -127,7 +127,7 @@ class STRPDE<SpaceTimeParabolic, monolithic> :
     public RegressionBase<STRPDE<SpaceTimeParabolic, monolithic>, SpaceTimeParabolic> {
    private:
     SparseBlockMatrix<double, 2, 2> A_ {};      // system matrix of non-parametric problem (2N x 2N matrix)
-    fdapde::SparseLU<SpMatrix<double>> invA_;   // factorization of matrix A
+    fdapde::core::SparseLU<SpMatrix<double>> invA_;   // factorization of matrix A
     DVector<double> b_ {};                      // right hand side of problem's linear system (1 x 2N vector)
     SpMatrix<double> L_;                        // L \kron R0
    public:
@@ -146,7 +146,7 @@ class STRPDE<SpaceTimeParabolic, monolithic> :
 
     void init_model() {   // update model object in case of **structural** changes in its definition
         // assemble system matrix for the nonparameteric part of the model
-        if (is_empty(L_)) L_ = Kronecker(L(), pde().mass());
+        if (fdapde::core::is_empty(L_)) L_ = Kronecker(L(), pde().mass());
         A_ = SparseBlockMatrix<double, 2, 2>(
           -PsiTD() * W() * Psi(), lambda_D() * (R1() + lambda_T() * L_).transpose(),
           lambda_D() * (R1() + lambda_T() * L_), lambda_D() * R0());
@@ -192,7 +192,7 @@ class STRPDE<SpaceTimeParabolic, monolithic> :
     }
     // getters
     const SparseBlockMatrix<double, 2, 2>& A() const { return A_; }
-    const fdapde::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
+    const fdapde::core::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
     double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {   // euclidian norm of op1 - op2
         return (op1 - op2).squaredNorm(); // NB: to check, defined just for compiler
     }
@@ -204,7 +204,7 @@ class STRPDE<SpaceTimeParabolic, iterative> :
     public RegressionBase<STRPDE<SpaceTimeParabolic, iterative>, SpaceTimeParabolic> {
    private:
     SparseBlockMatrix<double, 2, 2> A_ {};      // system matrix of non-parametric problem (2N x 2N matrix)
-    fdapde::SparseLU<SpMatrix<double>> invA_;   // factorization of matrix A
+    fdapde::core::SparseLU<SpMatrix<double>> invA_;   // factorization of matrix A
     DVector<double> b_ {};                      // right hand side of problem's linear system (1 x 2N vector)
 
     // the functional minimized by the iterative scheme
