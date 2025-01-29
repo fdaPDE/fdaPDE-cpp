@@ -22,8 +22,8 @@
 // include core
 #include <fdaPDE/core.h>
 
-#include "formula.h"
-#include "drivers/utility.h"
+#include "src/formula.h"
+#include "src/drivers/utility.h"
 
 namespace fdapde {
 
@@ -32,8 +32,8 @@ struct iterative_tag  { } Iterative;
   
 }   // namespace fdapde
 
-#include "drivers/fe_elliptic.h"
-#include "drivers/fe_separable.h"
+#include "src/drivers/fe_elliptic.h"
+// #include "src/drivers/fe_separable.h"
 
 // clang-format on
 

@@ -52,8 +52,8 @@ areal_basis_eval(FeSpace_ fe_space, const BinaryMatrix<Dynamic, Dynamic>& incide
 
 // pointwise basis evaluation for finite element basis system
 template <typename Triangulation_, typename FeType_>
-Eigen::SparseMatrix<double>
-point_basis_eval(const FeSpace<Triangulation_, FeType_>& fe_space, const Eigen::Matrix<double, Dynamic, Dynamic>& coords) {
+Eigen::SparseMatrix<double> point_basis_eval(
+  const FeSpace<Triangulation_, FeType_>& fe_space, const Eigen::Matrix<double, Dynamic, Dynamic>& coords) {
     static constexpr int local_dim = Triangulation_::local_dim;
     static constexpr int embed_dim = Triangulation_::embed_dim;
     fdapde_assert(coords.rows() > 0 && coords.cols() == embed_dim);
@@ -180,6 +180,9 @@ std::pair<Eigen::SparseMatrix<double>, Eigen::Matrix<double, Dynamic, 1>> areal_
     return std::make_pair(std::move(psi_), std::move(D));
 }
 
+  // utilities to build masks for missing data
+
+  
 }   // namespace internals
 }   // namespace fdapde
 

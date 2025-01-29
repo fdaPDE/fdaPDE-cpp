@@ -87,8 +87,8 @@ struct fe_separable_driver_base {
         K_  = kronecker(R1__[1], R0__[0]);
         // number of basis functions on physical domain
         n_dofs_ = fe_bilinear_form.n_dofs() * other_bilinear_form.n_dofs();
-	u_ = Eigen::Matrix<double, Dynamic, 1>::Zero(n_dofs_);
-	
+	u_ = Eigen::Matrix<double, Dynamic, 1>::Zero(n_dofs_); // ----------------------------------- TODO
+
         // evaluate basis system
         std::array<SparseMatrixType, 2> Psi__;
         switch (gf.layer_category(0).value()) {

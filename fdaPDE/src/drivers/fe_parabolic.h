@@ -23,13 +23,6 @@ namespace fdapde {
 namespace internals {
 
 struct fe_parabolic_driver_base {
-   private:
-    template <typename Tuple> struct function_space_tuple {
-        using type = decltype([]<size_t... Is_>(std::index_sequence<Is_...>) {
-            return std::make_tuple(typename std::tuple_element_t<Is_, Tuple>::TrialSpace {}...);
-        }(std::make_index_sequence<std::tuple_size_v<Tuple>>()));
-    };
-   public:
     using VectorType = Eigen::Matrix<double, Dynamic, 1>;
     using MatrixType = Eigen::Matrix<double, Dynamic, Dynamic>;
     using SparseMatrixType = Eigen::SparseMatrix<double>;
@@ -38,92 +31,76 @@ struct fe_parabolic_driver_base {
     using DenseSolverType  = Eigen::PartialPivLU<MatrixType>;
   
     fe_parabolic_driver_base() noexcept = default;
-    template <typename BilinearForm_, typename LinearForm_, typename GeoFrame>
-    fe_parabolic_driver_base(const GeoFrame& gf, BilinearForm_&& bilinear_form, LinearForm_&& linear_form) {
+
+  // need setters for initial condition
+  // need to handle boundary conditions
+  
+    template <typename BilinearForm_, typename LinearForm_, typename GeoFrame, typename InitialCondition_>
+    fe_parabolic_driver_base(
+      const GeoFrame& gf, BilinearForm_&& bilinear_form, LinearForm_&& linear_form, const InitialCondition_& s) :
+      R1_(bilinear_form.assemble()), u_(linear_form.assemble()), s_(s) {
         using BilinearForm = std::decay_t<BilinearForm_>;
         using LinearForm   = std::decay_t<LinearForm_>;
         using FeSpace = typename BilinearForm::TrialSpace;
 
-	
-        // auto& fe_bilinear_form = std::get<internals::index_of<FeSpace, FunctionSpaces>::value>(bilinear_form);
-        // const FeSpace& fe_space = fe_bilinear_form.trial_space();
-        // // check not finite element space has a sufficiently high regularity
-        // auto& other_bilinear_form = std::get<internals::index_of<OtherSpace, FunctionSpaces>::value>(bilinear_form);
-        // const OtherSpace& other_space = other_bilinear_form.trial_space();
-        // fdapde_assert(other_space.sobolev_regularity() > 1);
+	internals::fe_mass_assembly_loop<FeSpace> mass_assembler(bilinear_form.trial_space());
+        R0_ = mass_assembler.assemble();     // mass matrix
+        n_dofs_ = bilinear_form.n_dofs();    // number of basis functions over physical domain
 
-        // assemble (take care of spaces position in function call, as this will influence the tensor basis expansion)
-        // std::array<SparseMatrixType, 2> R0__;
-        // std::array<SparseMatrixType, 2> R1__;
-        // auto assemble_ = [&, this]<int Index>() {
-        //     auto& space = std::get<Index>(bilinear_form).trial_space();
-        //     // assemble mass matrix
-        //     TrialFunction u(space);
-        //     TestFunction  v(space);
-        //     R0__[Index] = integral(space.triangulation())(u * v).assemble();
-        //     R1__[Index] = std::get<Index>(bilinear_form).assemble();
-        // };
-        // assemble_.template operator()<0>();
-        // assemble_.template operator()<1>();
-	// // compute tensor products
-        // R0_ = kronecker(R0__[1], R0__[0]);
-        // R1_ = kronecker(R0__[1], R1__[0]);
-        // K_  = kronecker(R1__[1], R0__[0]);
-        // // number of basis functions on physical domain
-        // n_dofs_ = fe_bilinear_form.n_dofs() * other_bilinear_form.n_dofs();
-	// u_ = Eigen::Matrix<double, Dynamic, 1>::Zero(n_dofs_);
-	
-        // evaluate basis system
-        // std::array<SparseMatrixType, 2> Psi__;
-        // switch (gf.layer_category(0).value()) {
-        // case ltype::point: {
-        //     const auto& layer = gf.get_as(layer_t::point, 0);
-	//     // O(n) unique coordinates extraction
-        //     auto extract_unique_coords = [](int start_col, int dim, const MatrixType& coords) {
-        //         auto cols = coords.middleCols(start_col, dim);
-        //         // find unique coordinates
-        //         std::unordered_set<MatrixType, eigen_matrix_hash> coords_set;
-        //         std::vector<int> coords_idx;
-        //         for (int i = 0; i < cols.rows(); ++i) {
-        //             MatrixType p(cols.row(i));
-        //             if (!coords_set.contains(p)) {
-        //                 coords_set.insert(p);
-        //                 coords_idx.push_back(i);
-        //             }
-        //         }
-        //         MatrixType coords_unique(coords_set.size(), dim);
-        //         int i = 0;
-        //         for (int idx : coords_idx) { coords_unique.row(i++) = cols.row(idx); }
-        //         return coords_unique;
-        //     };
-        //     // derive coordinates from geoframe
-        //     int lhs_embed_dim = std::tuple_element_t<0, FunctionSpaces>::embed_dim;
-        //     int rhs_embed_dim = std::tuple_element_t<1, FunctionSpaces>::embed_dim;
+	// extract spatial and temporal locations (only SpaceMajor format support)
+	std::vector<double> space_locs;
+	std::vector<double> time_locs;
 
-        //     Eigen::Matrix<double, Dynamic, Dynamic> lhs_coords =
-        //       extract_unique_coords(0, lhs_embed_dim, layer.coordinates());
-        //     Eigen::Matrix<double, Dynamic, Dynamic> rhs_coords =
-        //       extract_unique_coords(lhs_embed_dim, rhs_embed_dim, layer.coordinates());
-	//     // evaluate basis at locations
-	//     Psi__[0] = internals::point_basis_eval(std::get<0>(bilinear_form).trial_space(), lhs_coords);
-	//     Psi__[1] = internals::point_basis_eval(std::get<1>(bilinear_form).trial_space(), rhs_coords);		    
-	//     // tensorize
-	//     Psi_ = kronecker(Psi__[1], Psi__[0]);
-        //     D_ = VectorType::Ones(Psi_.rows()).asDiagonal();
-	    
-	//     // can we avoid to evaluate the basis system if finite element and nodes coincide with coordinates?
-	//     // we need some idea on how to represent the data at geoframe layer
-        //     break;
-        // }
-        // // case ltype::areal: {
-        // //     const auto& layer = gf.get_as(layer_t::areal, 0);
-        // //     const auto& [psi, measure_vect] =
-        // //       internals::fe_areal_basis_eval(bilinear_form.trial_space(), layer.incidence_matrix());
-        // //     Psi_ = psi;
-        // //     D_ = measure_vect.asDiagonal();   // regions' measure
-        // //     break;
-        // // }
-        // }
+	// get n_spatial_locations, n_temporal_locations
+	
+	// then we can derive the observational mask (for each time instant, which spatial location is observed)
+
+	// then we can assemble the Psi (which, for fully observed, same number of locations, is exactly the tensorized Psi with the identity)
+
+	// then derive delta (assert locations are at same time distance)
+
+	// assemble matrix associated with derivation in time L_
+        // [L_]_{ii} = 1/DeltaT for i \in {1 ... m} and [L_]_{i,i-1} = -1/DeltaT for i \in {1 ... m-1}
+        std::vector<fdapde::Triplet<double>> triplet_list;
+        triplet_list.reserve(2 * m_);
+        // start assembly loop
+        double invDeltaT = 1.0 / DeltaT_;
+        triplet_list.emplace_back(0, 0, invDeltaT);
+        for (int i = 1; i < m_; ++i) {
+            triplet_list.emplace_back(i, i, invDeltaT);
+            triplet_list.emplace_back(i, i - 1, -invDeltaT);
+        }
+        L_.resize(m_, m_);
+        L_.setFromTriplets(triplet_list.begin(), triplet_list.end());
+        L_.makeCompressed();
+
+	// correct first n rows of discretized force as (u_1 + R0*s/DeltaT)
+        u_.block(0, 0, n_dofs_, 1) += (1.0 / DeltaT_) * (R0_ * s_); // ------------------------- this might be ok only for the monolithic
+
+        // evaluate basis system on physical domain
+        switch (gf.layer_category(0).value()) {
+        case ltype::point: {
+            const auto& layer = gf.get_as(layer_t::point, 0);
+            if (layer.locs_at_mesh_nodes()) {
+                // locations at mesh nodes
+                Psi_.resize(n_dofs_, n_dofs_);
+                Psi_.setIdentity();   // \psi_i(p_j) = 1 \iff i == j, otherwise \psi_i(p_j) = 0
+            } else {
+                Psi_ = internals::point_basis_eval(bilinear_form.trial_space(), layer.coordinates());
+            }
+            D_ = VectorType::Ones(Psi_.rows()).asDiagonal();
+            break;
+        }
+        case ltype::areal: {
+            const auto& layer = gf.get_as(layer_t::areal, 0);
+            const auto& [psi, measure_vect] =
+              internals::areal_basis_eval(bilinear_form.trial_space(), layer.incidence_matrix());
+            Psi_ = psi;
+            D_ = measure_vect.asDiagonal();   // regions' measure
+            break;
+        }
+        }
+	// we build only one Psi on the full grid, and a vector of observational masks for each time instant
     }
     // observers
     int n_dofs() const { return n_dofs_; }
@@ -179,6 +156,10 @@ template <> struct fe_parabolic_driver_impl<monolithic_tag> : fe_parabolic_drive
             V_ = MatrixType::Zero(q_, 2 * n_dofs_);
             V_.block(0, 0, q_, n_dofs_) = X_.transpose() * W * Psi_;
         }
+	// tensorize
+	L_ = kronecker(L_, R0_); // ------------------------ this L_ is the one of the basis, need to correct
+	R0_ = kronecker(Im_, R0_); // ----------------------- Im_ identity matrix
+        R1_ = kronecker(Im_, R1_);
 	return;
     }
    public:
@@ -199,11 +180,12 @@ template <> struct fe_parabolic_driver_impl<monolithic_tag> : fe_parabolic_drive
 
     void operator()(double lambda_D, double lambda_T) {
         // assemble system matrix for the nonparameteric part
-        SparseBlockMatrix<double, 2, 2> A_(
-          -Psi_.transpose() * D_ * Psi_ - lambda_T * K_, lambda_D * R1_.transpose(), lambda_D * R1_, lambda_D * R0_);
+        A_ = SparseBlockMatrix<double, 2, 2>(
+          -Psi_.transpose() * D_ * Psi_, lambda_D * (R1_ + lambda_T * L_).transpose(), lambda_D * (R1_ + lambda_T * L_),
+          lambda_D * R0_);
         invA_.compute(A_);
         // linear system rhs
-        VectorType b_(2 * n_dofs_);
+        b_.resize(2 * n_dofs_);
         b_.block(n_dofs_, 0, n_dofs_, 1) = lambda_D * u_;
 	
         VectorType x;
@@ -222,9 +204,9 @@ template <> struct fe_parabolic_driver_impl<monolithic_tag> : fe_parabolic_drive
     }
     template <typename WeightMatrix> void operator()(double lambda_D, double lambda_T, WeightMatrix&& W) {
         // assemble system matrix for the nonparameteric part
-        SparseBlockMatrix<double, 2, 2> A_(
-          -Psi_.transpose() * D_ * W * Psi_ - lambda_T * K_, lambda_D * R1_.transpose(), lambda_D * R1_,
-          lambda_D * R0_);
+        A_ = SparseBlockMatrix<double, 2, 2>(
+          -Psi_.transpose() * D_ * W * Psi_, lambda_D * (R1_ + lambda_T * L_).transpose(),
+          lambda_D * (R1_ + lambda_T * L_), lambda_D * R0_);
         invA_.compute(A_);
         // linear system rhs
         VectorType b_(2 * n_dofs_);
@@ -266,6 +248,10 @@ template <> struct fe_parabolic_driver_impl<monolithic_tag> : fe_parabolic_drive
     VectorType f_, beta_, g_;
 };
 
+template <> struct fe_parabolic_driver_impl<iterative_tag> : fe_parabolic_driver_base {
+
+};
+  
 }   // namespace internals
 }   // namespace fdapde
 

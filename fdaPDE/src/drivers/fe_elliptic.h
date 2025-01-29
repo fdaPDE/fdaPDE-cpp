@@ -34,6 +34,7 @@ struct fe_elliptic_driver_base {
     template <typename BilinearForm_, typename LinearForm_, typename GeoFrame>
     fe_elliptic_driver_base(const GeoFrame& gf, BilinearForm_&& bilinear_form, LinearForm_&& linear_form) :
         R1_(bilinear_form.assemble()), u_(linear_form.assemble()) {
+        fdapde_static_assert(GeoFrame::Order == 1, FE_ELLIPTIC_DRIVER_REQUIRES_AN_ORDER_ONE_GEOFRAME);
         using BilinearForm = std::decay_t<BilinearForm_>;
         using LinearForm = std::decay_t<LinearForm_>;
         using FeSpace = typename BilinearForm::TrialSpace;
@@ -43,21 +44,22 @@ struct fe_elliptic_driver_base {
         n_dofs_ = bilinear_form.n_dofs();    // number of basis functions over physical domain
 
         // evaluate basis system on physical domain
-        switch (gf.layer_category(0).value()) {
+        switch (gf.layer_category(0)[0]) {
         case ltype::point: {
-            const auto& layer = gf.get_as(layer_t::point, 0);
-            if (layer.locs_at_mesh_nodes()) {
-                // locations at mesh nodes
-                Psi_.resize(n_dofs_, n_dofs_);
-                Psi_.setIdentity();   // \psi_i(p_j) = 1 \iff i == j, otherwise \psi_i(p_j) = 0
-            } else {
+	  const auto& layer = geo_cast<POINT>(gf[0])->template geometry<0>();
+            // if (layer.locs_at_mesh_nodes()) {
+            //     // locations at mesh nodes
+            //     Psi_.resize(n_dofs_, n_dofs_);
+            //     Psi_.setIdentity();   // \psi_i(p_j) = 1 \iff i == j, otherwise \psi_i(p_j) = 0
+            // } else {
                 Psi_ = internals::point_basis_eval(bilinear_form.trial_space(), layer.coordinates());
-            }
+
+            // }
             D_ = VectorType::Ones(Psi_.rows()).asDiagonal();
             break;
         }
         case ltype::areal: {
-            const auto& layer = gf.get_as(layer_t::areal, 0);
+            const auto& layer = geo_cast<POLYGON>(gf[0])->template geometry<0>();
             const auto& [psi, measure_vect] =
               internals::areal_basis_eval(bilinear_form.trial_space(), layer.incidence_matrix());
             Psi_ = psi;
@@ -96,17 +98,17 @@ struct fe_elliptic_driver_impl : fe_elliptic_driver_base {
         Formula formula_(formula);
         std::vector<std::string> covs;
         for (const std::string& token : formula_.rhs()) {
-            if (gf.contains(token)) { covs.push_back(token); }
+            // if (gf.contains(token)) { covs.push_back(token); } currently disabeled---- penging core support
         }
         q_ = covs.size();
         // extract data from geoframe
-	n_obs_ = gf[0].rows();
+	n_obs_ = gf[0].data_->rows(); // --------------------- expose from layer_t access to data(), pending for core support
         y_.resize(n_obs_);
-        gf[0].template col<double>(formula_.lhs()).data().assign_to(y_);
+        gf[0].data_->template col<double>(formula_.lhs()).data().assign_to(y_);
         if (q_ != 0) {
             // assemble design matrix
-            X_.resize(gf[0].rows(), q_);
-            for (int i = 0; i < q_; ++i) { gf[0].template col<double>(covs[i]).data().assign_to(X_.col(i)); }
+            X_.resize(n_obs_, q_);
+            for (int i = 0; i < q_; ++i) { gf[0].data_->template col<double>(covs[i]).data().assign_to(X_.col(i)); }
             XtX_ = X_.transpose() * W * X_;
             invXtX_ = XtX_.partialPivLu();
             invXtXXt_ = invXtX_.solve(X_.transpose() * W);   // (X^\top * X)^{-1} * X^\top * W
