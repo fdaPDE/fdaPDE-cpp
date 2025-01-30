@@ -15,22 +15,12 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-// QUESTO FILE VA SPOSTATO IN FDAPDE-CORE/TEST/SRC
-// NEL MAIN.CPP DELLA REPOSITORY FDAPDE-CORE/TEST VA AGGIUNTO 
-// #include inference_test.cpp
-// e la parte che chiama la classe inference_test 
 
-
-// questi sono da controllare 
 #include <fdaPDE/core.h>
 #include <gtest/gtest.h>   // testing framework
 #include <cstddef>
 #include <chrono>
 
-#include <cstddef>
-#include <gtest/gtest.h>   // testing framework
-
-#include <fdaPDE/core.h>
 using fdapde::core::advection;
 using fdapde::core::diffusion;
 using fdapde::core::FEM;
@@ -54,15 +44,11 @@ using fdapde::testing::MeshLoader;
 using fdapde::testing::read_csv;
 using fdapde::testing::read_mtx;
 
-
 #include "../../fdaPDE/models/regression/wald.h"
 #include "../../fdaPDE/models/regression/speckman.h"
 #include "../../fdaPDE/models/regression/esf.h"
 #include "../../fdaPDE/models/regression/pesf.h"
 
-//#include <../../../fdaPDE-core/fdaPDE/core.h>
-using fdapde::core::DiscretizedMatrixField;
-using fdapde::core::DiscretizedVectorField;
 
 
 // test 

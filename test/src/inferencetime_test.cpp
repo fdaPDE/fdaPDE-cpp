@@ -32,14 +32,7 @@ using fdapde::testing::read_csv;
 #include "../../fdaPDE/models/regression/speckman.h"
 #include "../../fdaPDE/models/regression/esf.h"
 
-
-// questi sono da controllare 
-#include <fdaPDE/core.h>
-#include <gtest/gtest.h>   // testing framework
-#include <cstddef>
-
 using fdapde::core::fem_order;
-using fdapde::core::FEM;
 using fdapde::core::Newton;
 using fdapde::core::laplacian;
 using fdapde::core::PDE;
@@ -60,69 +53,8 @@ using fdapde::models::GCV;
 using fdapde::models::StochasticEDF;
 using fdapde::models::Sampling;
 using fdapde::models::RegressionView;
+
 #include "../../fdaPDE/calibration/gcv.h"
-
-#include "../../fdaPDE/models/regression/strpde.h"
-#include "../../fdaPDE/models/sampling_design.h"
-using fdapde::models::STRPDE;
-using fdapde::models::SpaceTimeSeparable;
-using fdapde::models::SpaceTimeParabolic;
-using fdapde::models::Sampling;
-
-#include "utils/constants.h"
-#include "utils/mesh_loader.h"
-#include "utils/utils.h"
-using fdapde::testing::almost_equal;
-using fdapde::testing::MeshLoader;
-using fdapde::testing::read_mtx;
-using fdapde::testing::read_csv;
-
-#include "../../fdaPDE/models/regression/wald.h"
-#include "../../fdaPDE/models/regression/speckman.h"
-#include "../../fdaPDE/models/regression/esf.h"
-
-
-
-// This file is part of fdaPDE, a C++ library for physics-informed
-// spatial and functional data analysis.
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-#include <cstddef>
-#include <gtest/gtest.h>   // testing framework
-
-//#include <../../../fdaPDE-core/fdaPDE/core.h>
-using fdapde::core::advection;
-using fdapde::core::diffusion;
-using fdapde::core::FEM;
-using fdapde::core::fem_order;
-using fdapde::core::laplacian;
-using fdapde::core::DiscretizedMatrixField;
-using fdapde::core::PDE;
-using fdapde::core::DiscretizedVectorField;
-
-#include "../../fdaPDE/models/regression/srpde.h"
-#include "../../fdaPDE/models/sampling_design.h"
-using fdapde::models::SRPDE;
-using fdapde::models::Sampling;
-
-#include "utils/constants.h"
-#include "utils/mesh_loader.h"
-#include "utils/utils.h"
-using fdapde::testing::almost_equal;
-using fdapde::testing::MeshLoader;
-using fdapde::testing::read_csv;
 
 
 // test 2
