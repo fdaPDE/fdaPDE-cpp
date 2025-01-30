@@ -102,7 +102,7 @@ using fdapde::testing::read_csv;
 #include <cstddef>
 #include <gtest/gtest.h>   // testing framework
 
-#include <../../../fdaPDE-core/fdaPDE/core.h>
+//#include <../../../fdaPDE-core/fdaPDE/core.h>
 using fdapde::core::advection;
 using fdapde::core::diffusion;
 using fdapde::core::FEM;

@@ -60,7 +60,7 @@ using fdapde::testing::read_mtx;
 #include "../../fdaPDE/models/regression/esf.h"
 #include "../../fdaPDE/models/regression/pesf.h"
 
-#include <../../../fdaPDE-core/fdaPDE/core.h>
+//#include <../../../fdaPDE-core/fdaPDE/core.h>
 using fdapde::core::DiscretizedMatrixField;
 using fdapde::core::DiscretizedVectorField;
 
