@@ -17,7 +17,6 @@
 #ifndef __PESF_H__
 #define __PESF_H__
 
-// questi sono da controllare 
 #include <fdaPDE/linear_algebra.h>
 #include <fdaPDE/utils.h>
 
@@ -32,10 +31,6 @@
 #include "inference.h"
 
 #include <algorithm>
-
-// for parallelization
-#include <omp.h>
-
 
 namespace fdapde {
 namespace models {
@@ -82,7 +77,6 @@ template <typename Model, typename Strategy> class PESF: public InferenceBase<Mo
         using Base::beta0_;
         using Solver = typename std::conditional<std::is_same<Strategy, exact>::value, ExactInverse, NonExactInverse>::type;
         Solver s_;
-        // aggiunta per CI 
         using Base::V_;
 
         // constructors
@@ -91,8 +85,7 @@ template <typename Model, typename Strategy> class PESF: public InferenceBase<Mo
 
         
 
-        DVector<double> p_value(CIType type){
-            // extract matrix C (in the eigen-sign-flip case we cannot have linear combinations, but we can have at most one 1 for each column of C) 
+        DVector<double> p_value(CIType type){ 
             fdapde_assert(!is_empty(C_));      // throw an exception if condition is not met  
 
             if(is_empty(beta0_)){ 
@@ -108,18 +101,18 @@ template <typename Model, typename Strategy> class PESF: public InferenceBase<Mo
                 V();
             }
 
-            Eigen::SelfAdjointEigenSolver<DMatrix<double>> solver(Lambda_); // compute eigenvectors and eigenvalues of Lambda
+            Eigen::SelfAdjointEigenSolver<DMatrix<double>> solver(Lambda_); // eigenvectors and eigenvalues of Lambda
 
             DMatrix<double> eigenvalues = solver.eigenvalues();
             DMatrix<double> eigenvectors = solver.eigenvectors();
 
-            // Store beta_hat
+            // beta_hat
             DVector<double> beta_hat = m_.beta();
             DVector<double> beta_hat_mod = beta_hat;
             
             if(type == simultaneous){  
                 // SIMULTANEOUS   
-                // extract the current betas in test
+                // betas under test
                 for(int i = 0; i < p; ++i){
                     for(int j = 0; j < C_.cols(); j++){
                         if(C_(i,j) > 0){
@@ -137,19 +130,19 @@ template <typename Model, typename Strategy> class PESF: public InferenceBase<Mo
 
                 DVector<double> Tilder_hat= eigenvectors.transpose()*(m_.y() - m_.X()* beta_hat);
 
-                // Estimate the standard error
+                // standard error estimated
                 DVector<double> eps_hat =  m_.y() - m_.fitted();
                 double SS_res = eps_hat.squaredNorm();
                 double Sigma_hat = std::sqrt(SS_res/(n_obs-1));
 
-                double threshold = 10*Sigma_hat; // This threshold is used to determine how many components will not be flipped: we drop those that show large alpha_hat w.r.t. the expected standar error
-                int N_Eig_Out=0; // It will store the number of biased components that will be kept fixed if enhanced-ESF is required
+                double threshold = 10 * Sigma_hat; // This threshold is used to determine how many components will not be flipped: we drop those that show large alpha_hat w.r.t. the expected standar error
+                int N_Eig_Out = 0; // It will store the number of biased components that will be kept fixed if enhanced-ESF is required
                 
-                // Initialize observed statistic and sign-flipped statistic
+                // observed and sign-flipped statistic
                 DVector<double> stat = Xt * Tilder;
                 DVector<double> stat_flip = stat;
 
-                //Random sign-flips
+                // Random sign-flips
                 std::default_random_engine eng;
                 std::uniform_int_distribution<int> distr(0, 1); 
 
@@ -171,19 +164,20 @@ template <typename Model, typename Strategy> class PESF: public InferenceBase<Mo
                         int flip;
                         if((N_Eig_Out<n_obs/2) && (fabs(Tilder_hat(j))>threshold)){
                             flip=1;
-                        }else{
+                        }
+                        else{
                             flip=2 * distr(eng) - 1;
                         }
                         Tilder_perm.row(j) = Tilder.row(j) * flip;
                     }
-                    stat_flip = Xt * Tilder_perm; // Flipped statistic
+                    stat_flip = Xt * Tilder_perm; 
 
                     if(is_Unilaterally_Greater(stat_flip, stat)){ 
                         up = up + 1;
                     }
                     else{ 
-                    if(is_Unilaterally_Smaller(stat_flip, stat)){ 
-                        down = down + 1;
+                        if(is_Unilaterally_Smaller(stat_flip, stat)){ 
+                            down = down + 1;
                         }                    
                     }
                 }
@@ -191,8 +185,8 @@ template <typename Model, typename Strategy> class PESF: public InferenceBase<Mo
                 double pval_up = static_cast<double>(up) / n_flip;
                 double pval_down = static_cast<double>(down) / n_flip;
 
-                result.resize(p); // Allocate more space so that R receives a well defined object (different implementations may require higher number of pvalues)
-                result(0) = 2 * std::min(pval_up, pval_down); // Obtain the bilateral p_value starting from the unilateral
+                result.resize(p); 
+                result(0) = 2 * std::min(pval_up, pval_down); 
                 for(int k = 1; k < p; k++){
                 result(k) = 0.0;
                 }
@@ -201,7 +195,7 @@ template <typename Model, typename Strategy> class PESF: public InferenceBase<Mo
                 // ONE AT THE TIME   
                 DMatrix<double> res_H0(Lambda_.cols(), p);
                 for(int i = 0; i < p; ++i){
-                // Extract the current beta in test
+                // beta under test
                 beta_hat_mod = beta_hat;
 
                 for(int j = 0; j < C_.cols(); ++j){
@@ -209,7 +203,7 @@ template <typename Model, typename Strategy> class PESF: public InferenceBase<Mo
                         beta_hat_mod[j] = beta0_[j];
                     }
                 }
-                // compute the partial residuals
+                // partial residuals
                 res_H0.col(i) = m_.y() - m_.X()* beta_hat_mod;
                 }
                 // compute the vectors needed for the statistic
@@ -220,13 +214,13 @@ template <typename Model, typename Strategy> class PESF: public InferenceBase<Mo
 
                 DVector<double> Tilder_hat= eigenvectors.transpose()*(m_.y() - m_.X()* beta_hat);
 
-                // Estimate the standard error
+                // standard error estimated
                 DVector<double> eps_hat =  m_.y() - m_.fitted();
                 double SS_res = eps_hat.squaredNorm();
                 double Sigma_hat = std::sqrt(SS_res/(n_obs-1));
             
-                double threshold = 10*Sigma_hat; // This threshold is used to determine how many components will not be flipped: we drop those that show large alpha_hat w.r.t. the expected standar error
-                int N_Eig_Out=0; // It will store the number of biased components that will be kept fixed if enhanced-ESF is required
+                double threshold = 10 * Sigma_hat; // This threshold is used to determine how many components will not be flipped: we drop those that show large alpha_hat w.r.t. the expected standar error
+                int N_Eig_Out = 0; // It will store the number of biased components that will be kept fixed if enhanced-ESF is required
                 
                 
                 // Observed statistic
@@ -260,7 +254,7 @@ template <typename Model, typename Strategy> class PESF: public InferenceBase<Mo
                         }
                         Tilder_perm.row(j) = Tilder.row(j) * flip;
                     }
-                    stat_flip = Xt * Tilder_perm; // Flipped statistic
+                    stat_flip = Xt * Tilder_perm; 
                 
                     for(int k = 0; k < p; ++k){
                         if(stat_flip(k, k) > stat(k, k)){
@@ -275,7 +269,7 @@ template <typename Model, typename Strategy> class PESF: public InferenceBase<Mo
                 DVector<double> pval_down = down.array() / static_cast<double>(n_flip);
 
                 result.resize(p);
-                result = 2 * min(pval_up, pval_down); // Obtain the blateral p_value starting from the unilateral
+                result = 2 * min(pval_up, pval_down); 
             } 
             return result;
         }   
@@ -286,14 +280,14 @@ template <typename Model, typename Strategy> class PESF: public InferenceBase<Mo
                 V();
             }
 
-            // Store beta_hat
+            // beta_hat
             DVector<double> beta_hat = m_.beta();
             DVector<double> beta_hat_mod = beta_hat;
             
             fdapde_assert(!is_empty(C_));      // throw an exception if condition is not met  
             int p = C_.rows(); 
 
-            DVector<int> beta_in_test; // In this vector are stored the respective positions of the beta we are testing in the actual test (ie le posizioni dei beta che vengono testate perchè in C abbiamo un 1 nella corrispondente posizione)
+            DVector<int> beta_in_test; 
             beta_in_test.resize(p);
             for(int i=0; i<p; i++){
                 for(int j=0; j<C_.cols(); j++){
@@ -308,11 +302,11 @@ template <typename Model, typename Strategy> class PESF: public InferenceBase<Mo
 
             DMatrix<double> eigenvalues = solver.eigenvalues();
             DMatrix<double> eigenvectors = solver.eigenvectors();
-            // declare the matrix that will store the intervals
+            // intervals
             DMatrix<double> result;
             result.resize(p, 2);
 
-            // compute the initial ranges from speckman's CI (initial guess for CI) 
+            // speckman's CI (initial guess for CI) 
             if(!is_speckman_aux_computed){
                 Compute_speckman_aux();
             }
@@ -401,8 +395,6 @@ template <typename Model, typename Strategy> class PESF: public InferenceBase<Mo
             int Count_Iter=0;
             while((!all_betas_converged) & (Count_Iter<Max_Iter)){
 
-            
-                // Compute all p_values (only those needed)
                 for (int i=0; i<p; i++){
 
                 DMatrix<double> TildeX_loc= TildeX.row(beta_in_test[i]);

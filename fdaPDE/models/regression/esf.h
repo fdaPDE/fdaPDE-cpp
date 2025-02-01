@@ -17,7 +17,6 @@
 #ifndef __ESF_H__
 #define __ESF_H__
 
-// questi sono da controllare 
 #include <fdaPDE/linear_algebra.h>
 #include <fdaPDE/utils.h>
 
@@ -103,11 +102,11 @@ template <typename Model, typename Strategy> class ESF: public InferenceBase<Mod
                 V();
             }
 
-            Eigen::SelfAdjointEigenSolver<DMatrix<double>> solver(Lambda_); // compute eigenvectors and eigenvalues of Lambda
+            Eigen::SelfAdjointEigenSolver<DMatrix<double>> solver(Lambda_); // eigenvectors and eigenvalues of Lambda
 
             DMatrix<double> eigenvalues = solver.eigenvalues();
             DMatrix<double> eigenvectors = solver.eigenvectors();
-            // Store beta_hat
+            // beta_hat
             DVector<double> beta_hat = m_.beta();
             DVector<double> beta_hat_mod = beta_hat;
             
@@ -128,15 +127,15 @@ template <typename Model, typename Strategy> class ESF: public InferenceBase<Mod
                 DMatrix<double> Xt = (C_ * X.transpose()) * eigenvectors * eigenvalues.asDiagonal();   
                 DVector<double> Tilder = eigenvectors.transpose() * res_H0;   
 
-                // Initialize observed statistic and sign-flipped statistic
+                // observed and sign-flipped statistic
                 DVector<double> stat = Xt * Tilder;
                 DVector<double> stat_flip = stat;
 
-                //Random sign-flips
+                // Random sign-flips
                 std::default_random_engine eng;
                 std::uniform_int_distribution<int> distr(0, 1); 
 
-                //if we have a seed 
+                // if we have a seed 
                 if(set_seed != 0) {
                     eng.seed(set_seed);
                 } else {
@@ -203,7 +202,7 @@ template <typename Model, typename Strategy> class ESF: public InferenceBase<Mod
                 std::default_random_engine eng;
                 std::uniform_int_distribution<int> distr(0, 1); 
 
-                //if we have a seed 
+                // if we have a seed 
                 if(set_seed != 0) {
                     eng.seed(set_seed);
                 } else {
@@ -235,7 +234,7 @@ template <typename Model, typename Strategy> class ESF: public InferenceBase<Mod
                 DVector<double> pval_down = down.array() / static_cast<double>(n_flip);
 
                 result.resize(p);
-                result = 2 * min(pval_up, pval_down); // Obtain the bilateral p_value starting from the unilateral
+                result = 2 * min(pval_up, pval_down); 
             } 
             return result;
         }   
@@ -246,7 +245,7 @@ template <typename Model, typename Strategy> class ESF: public InferenceBase<Mod
             if(is_empty(Lambda_)){
                 V();  // compute Lambda
             }
-            DVector<double> beta_hat = m_.beta(); // store beta_hat
+            DVector<double> beta_hat = m_.beta(); // beta_hat
             DVector<double> beta_hat_mod = beta_hat;
             
             fdapde_assert(!is_empty(C_));     
@@ -262,15 +261,15 @@ template <typename Model, typename Strategy> class ESF: public InferenceBase<Mod
                 }
             }
 
-            Eigen::SelfAdjointEigenSolver<DMatrix<double>> solver(Lambda_); // compute eigenvectors and eigenvalues of Lambda
+            Eigen::SelfAdjointEigenSolver<DMatrix<double>> solver(Lambda_); // eigenvectors and eigenvalues of Lambda
             DMatrix<double> eigenvalues = solver.eigenvalues();
             DMatrix<double> eigenvectors = solver.eigenvectors();
 
-            // declare the matrix that will store the intervals
+            // intervals
             DMatrix<double> result;
             result.resize(p, 2);
 
-            // compute the initial ranges from speckman's CI (initial guess for CI) 
+            // speckman's CI (initial guess for CI) 
             if(!is_speckman_aux_computed){
                 Compute_speckman_aux();
             }
