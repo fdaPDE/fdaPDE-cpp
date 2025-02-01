@@ -91,7 +91,7 @@ template <typename Model, typename Strategy> class PESF: public InferenceBase<Mo
 
         
 
-        DVector<double> p_value_serial(CIType type){
+        DVector<double> p_value(CIType type){
             // extract matrix C (in the eigen-sign-flip case we cannot have linear combinations, but we can have at most one 1 for each column of C) 
             fdapde_assert(!is_empty(C_));      // throw an exception if condition is not met  
 
@@ -150,7 +150,6 @@ template <typename Model, typename Strategy> class PESF: public InferenceBase<Mo
                 DVector<double> stat_flip = stat;
 
                 //Random sign-flips
-                //Random sign-flips
                 std::default_random_engine eng;
                 std::uniform_int_distribution<int> distr(0, 1); 
 
@@ -178,24 +177,19 @@ template <typename Model, typename Strategy> class PESF: public InferenceBase<Mo
                         Tilder_perm.row(j) = Tilder.row(j) * flip;
                     }
                     stat_flip = Xt * Tilder_perm; // Flipped statistic
-                    //std::cout<<"questo è stat flip: "<<stat_flip<<std::endl;
 
                     if(is_Unilaterally_Greater(stat_flip, stat)){ 
                         up = up + 1;
-                        //std::cout<<"count up è: "<<up<<std::endl;
                     }
                     else{ 
                     if(is_Unilaterally_Smaller(stat_flip, stat)){ 
                         down = down + 1;
-                        //std::cout<<"count down è: "<<dwon<<std::endl;
                         }                    
                     }
                 }
                 
                 double pval_up = static_cast<double>(up) / n_flip;
                 double pval_down = static_cast<double>(down) / n_flip;
-                //std::cout<<"il valore di pvalup è : "<<pval_up<<std::endl;
-                //std::cout<<"il valore di pvaldown è : "<<pval_down<<std::endl;
 
                 result.resize(p); // Allocate more space so that R receives a well defined object (different implementations may require higher number of pvalues)
                 result(0) = 2 * std::min(pval_up, pval_down); // Obtain the bilateral p_value starting from the unilateral
@@ -280,8 +274,6 @@ template <typename Model, typename Strategy> class PESF: public InferenceBase<Mo
                 DVector<double> pval_up = up.array() / static_cast<double>(n_flip);
                 DVector<double> pval_down = down.array() / static_cast<double>(n_flip);
 
-                //std::cout<<"il valore di pvalup è : "<<pval_up<<std::endl;
-                //std::cout<<"il valore di pvaldown è : "<<pval_down<<std::endl;
                 result.resize(p);
                 result = 2 * min(pval_up, pval_down); // Obtain the blateral p_value starting from the unilateral
             } 

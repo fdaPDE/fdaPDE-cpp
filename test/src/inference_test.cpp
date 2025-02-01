@@ -59,8 +59,6 @@ using fdapde::testing::read_mtx;
 //    BC:           no
 //    order FE:     1
 
-
-
 TEST(inference_test, exact27) {
     // define domain
     MeshLoader<Triangulation<2, 2>> domain("c_shaped");
@@ -297,7 +295,6 @@ TEST(inference_test, inference3D){
     inferenceESF.setMesh_loc(locs_ind);
 
     DVector<double> Wald_beta_p = inferenceWald.p_value(fdapde::models::simultaneous);
-    //double wald_f_p_val = inferenceWald.f_p_value();
     DVector<double> Speck_beta_p = inferenceSpeck.p_value(fdapde::models::one_at_the_time); 
 
     double pvalueesf_f = inferenceESF.f_p_value();
@@ -306,10 +303,7 @@ TEST(inference_test, inference3D){
     EXPECT_TRUE(almost_equal(Wald_beta_p(0), 0.9684002 , 1e-7));
     EXPECT_TRUE(almost_equal(Speck_beta_p(0), 0.6479218 , 1e-7));
     EXPECT_TRUE(almost_equal(Speck_beta_p(1), 0.4182482 , 1e-7));
-    //EXPECT_TRUE(almost_equal(wald_f_p_val, 0.00003363157 , 1e-7));
     EXPECT_TRUE(almost_equal(pvalueesf_f, 0.3525 , 1e-7));
     EXPECT_TRUE(almost_equal(pvalueesf_sf, 0.5488 , 1e-7));
 
 }
-
-

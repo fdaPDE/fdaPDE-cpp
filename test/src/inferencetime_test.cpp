@@ -118,7 +118,6 @@ TEST(inferencetime_test, Exact24) {
     
     EXPECT_TRUE(almost_equal(inferenceW.p_value(fdapde::models::one_at_the_time)(0), 0.7660934 , 1e-7));
     EXPECT_TRUE(almost_equal(inferenceS.p_value(fdapde::models::one_at_the_time)(0), 0.715712 , 1e-7));
-    //EXPECT_TRUE(almost_equal(inferenceW.f_p_value(), 0.715712 , 1e-7));
     EXPECT_TRUE(almost_equal(inferenceESF.p_value(fdapde::models::one_at_the_time)(0), 0.8168 , 1e-7));
 
 }
@@ -182,8 +181,6 @@ TEST(inferencetime_test, spacetime25D) {
 
     EXPECT_TRUE(almost_equal(waldpval(0), 9.184956e-08 , 1e-7));
     EXPECT_TRUE(almost_equal(speckpval(0), 0.9566908 , 1e-7));
-    //EXPECT_TRUE(almost_equal(esfpval(0), 0.5652 , 1e-3));
-
 
 }
 
