@@ -58,25 +58,37 @@ done
 
 ## set CMake compiler
 if [ "$COMPILER" = "gcc" ]; then
-    export CC=/usr/local/Cellar/gcc/14.1.0_1/bin/gcc-14
-    export CXX=/usr/local/Cellar/gcc/14.1.0_1/bin/g++-14
+    # find GCC in the sytem
+    export CC=$(which gcc)
+    export CXX=$(which g++)
 elif [ "$COMPILER" = "clang" ]; then
-    export CC=/usr/bin/clang
-    export CXX=/usr/bin/clang++
+    # find Clang in the system
+    export CC=$(which clang)
+    export CXX=$(which clang++)
 fi
 
-# cd into build directory
-if [ -d "$BUILD_DIR" ];
-then
-    clean_build_dir
+
+if [ -d "$BUILD_DIR" ]; then
+    # If the build directory exists, check if cmake has already been run
+    if [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
+        echo "CMake not executed. Running configuration..."
+        clean_build_dir
+        cmake -Wno-dev ../CMakeLists.txt
+    fi
     cd build/
 else
     mkdir build/
     cd build/
+    cmake -Wno-dev ../CMakeLists.txt
 fi
 
-cmake -Wno-dev ../CMakeLists.txt
-make
+
+# Check if the executable already exists, if so, do not run make
+if [ ! -f "./fdapde_test" ]; then
+    echo "Compilation needed. Running make..."
+    make
+fi
+
 
 if [ "$MEMCHECK" = true ]; then
     valgrind --leak-check=full --track-origins=yes ./fdapde_test

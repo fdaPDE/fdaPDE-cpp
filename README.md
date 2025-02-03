@@ -12,3 +12,33 @@ It is built on top of the [fdaPDE Core Library](https://github.com/fdaPDE/fdaPDE
 
 ## Documentation
 Documentation can be found on our [documentation site](https://fdapde.github.io/)
+
+## Installation
+The source code of this project can be found at [https://github.com/RiccardoSena/fdaPDE-cpp.git](https://github.com/RiccardoSena/fdaPDE-cpp.git), which is a fork of the fdaPDE repository. The prerequisites to install and run test cases are:
+
+- A C++17 compliant compiler
+- Make
+- CMake
+- The **Eigen** library (at least version 3.3)
+
+### Instructions to install the library:
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/RiccardoSena/fdaPDE-cpp.git
+2. Then, navigate into the develop branch and update the core submodule:
+   ```bash
+    cd fdaPDE-cpp
+    git submodule init
+    git submodule update
+3. To run the test cases, use the following commands inside the fdaPDE-cpp directory:
+   ```bash
+    cd test
+    mkdir build
+    cd build
+    cmake ..
+    make
+    cd ..
+    ./run_tests.sh
+It should be noted that in the test/main.cpp file, one can choose to run all tests about different models and methods. The ones that are compliant to our development are test/src/inference_test.cpp and test/src/inferencetime_test.cpp
+
