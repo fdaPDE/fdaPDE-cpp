@@ -33,7 +33,7 @@ struct iterative  { } Iterative;
 }   // namespace fdapde
 
 #include "src/drivers/fe_elliptic.h"
-// #include "src/drivers/fe_separable.h"
+#include "src/drivers/fe_separable.h"
 
 // clang-format on
 

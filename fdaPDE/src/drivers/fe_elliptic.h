@@ -32,21 +32,20 @@ struct fe_elliptic_driver {
     using sparse_solver_t = Eigen::SparseLU<sparse_matrix_t>;
     using dense_solver_t  = Eigen::PartialPivLU<matrix_t>;
 
-    template <typename Penalty, typename GeoFrame, typename WeightMatrix>
+    template <typename GeoFrame, typename Penalty, typename WeightMatrix>
     void init_(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) {
         using BilinearForm = std::tuple_element_t<0, std::decay_t<Penalty>>;
         using LinearForm = std::tuple_element_t<1, std::decay_t<Penalty>>;
         using FeSpace = typename BilinearForm::TrialSpace;
-	
+	// discretization
         const BilinearForm& bilinear_form = std::get<0>(penalty);
         const LinearForm& linear_form     = std::get<1>(penalty);
         n_dofs_ = bilinear_form.n_dofs();   // number of basis functions over physical domain
         internals::fe_mass_assembly_loop<FeSpace> mass_assembler(bilinear_form.trial_space());
         R0_ = mass_assembler.assemble();
 	R1_ = bilinear_form.assemble();
-	u_  = linear_form.assemble();
-	
-        // evaluate basis system on physical domain
+	u_  = linear_form.assemble();	
+        // basis system evaluation
         switch (gf.category(0)[0]) {
         case ltype::point: {
             const auto& layer = geo_cast<POINT>(gf[0]).template geometry<0>();
@@ -69,7 +68,7 @@ struct fe_elliptic_driver {
         }
         }
       
-        // parse formula, extract data from geoframe
+        // data extraction
         Formula formula_(formula);
         std::vector<std::string> covs;
         for (const std::string& token : formula_.rhs()) {
@@ -101,7 +100,7 @@ struct fe_elliptic_driver {
     }
    public:
     fe_elliptic_driver() noexcept = default;
-    template <typename Penalty, typename GeoFrame>
+    template <typename GeoFrame, typename Penalty>
         requires(internals::is_pair_v<Penalty>)
     fe_elliptic_driver(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
@@ -109,7 +108,7 @@ struct fe_elliptic_driver {
         n_obs_ = gf[0].rows();   // number of data locations on physical domain
         init_(formula, gf, penalty, Eigen::Matrix<double, Dynamic, 1>::Ones(n_obs_).asDiagonal());
     }
-    template <typename Penalty, typename GeoFrame, typename WeightMatrix>
+    template <typename GeoFrame, typename Penalty, typename WeightMatrix>
         requires(internals::is_pair_v<Penalty>)
     fe_elliptic_driver(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);

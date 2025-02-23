@@ -22,195 +22,170 @@
 namespace fdapde {
 namespace internals {
 
-struct fe_separable_driver_base {
+template <typename Strategy> class fe_separable_driver;
+  
+// solves \min_{f, \beta} \| W^{1/2} * (y_i - x_i^\top * \beta - f(p_i, t_j)) \|_2^2 + \int_D \int_T (L_D(f) - u_D)^2 +
+// \int_T \int_D (L_T(f) - u_T)^2
+template <> class fe_separable_driver<monolithic> {
    private:
     template <typename Tuple> struct function_space_tuple {
         using type = decltype([]<size_t... Is_>(std::index_sequence<Is_...>) {
             return std::make_tuple(typename std::tuple_element_t<Is_, Tuple>::TrialSpace {}...);
         }(std::make_index_sequence<std::tuple_size_v<Tuple>>()));
     };
-   public:
-    using VectorType = Eigen::Matrix<double, Dynamic, 1>;
-    using MatrixType = Eigen::Matrix<double, Dynamic, Dynamic>;
-    using SparseMatrixType = Eigen::SparseMatrix<double>;
-    using DiagonalMatrixType = Eigen::DiagonalMatrix<double, Dynamic, Dynamic>;
-    using SparseSolverType = Eigen::SparseLU<SparseMatrixType>;
-    using DenseSolverType  = Eigen::PartialPivLU<MatrixType>;
+    // select one between arg1 and arg2 based on condition f
+    template <typename F, typename Arg1, typename Arg2>
+    const auto& select_arg_(F&& f, const Arg1& arg1, const Arg2& arg2) const {
+        if constexpr (f(arg1, arg2)) {
+            return arg1;
+        } else {
+            return arg2;
+        }
+    }
+    template <typename FuncSpace>
+    static constexpr bool is_fe_space_v =
+      std::is_same_v<typename FuncSpace::discretization_category, finite_element_tag>;
+    template <typename Penalty1, typename Penalty2>
+    const auto& fe_penalty_(const Penalty1& penalty1, const Penalty2& penalty2) const {
+        return select_arg_([]<typename Pen1_, typename Pen2_>(const Pen1_&, const Pen2_&) {
+            return  is_fe_space_v<typename std::tuple_element_t<0, Pen1_>::TrialSpace>;
+	  }, penalty1, penalty2);
+    }
+    template <typename Penalty1, typename Penalty2>
+    const auto& bs_penalty_(const Penalty1& penalty1, const Penalty2& penalty2) const {
+        return select_arg_([]<typename Pen1_, typename Pen2_>(const Pen1_&, const Pen2_&) {
+            return !is_fe_space_v<typename std::tuple_element_t<0, Pen1_>::TrialSpace>;
+	  }, penalty1, penalty2);
+    }
   
-    fe_separable_driver_base() noexcept = default;
-    template <typename BilinearForm_, typename LinearForm_, typename GeoFrame>
-        requires(
-          (internals::is_tuple_v<BilinearForm_> || internals::is_pair_v<BilinearForm_>) &&
-          (internals::is_tuple_v<LinearForm_> || internals::is_pair_v<LinearForm_>))
-    fe_separable_driver_base(const GeoFrame& gf, BilinearForm_&& bilinear_form, LinearForm_&& linear_form) {
-        using BilinearForm = std::decay_t<BilinearForm_>;
-        using LinearForm   = std::decay_t<LinearForm_>;
-        fdapde_static_assert(
-          std::tuple_size_v<BilinearForm> == 2 && std::tuple_size_v<LinearForm> == 2,
-          THIS_CLASS_IS_FOR_EXACTLY_TWO_PENALTY_TERMS_ONLY);
-        // check that function spaces are appropriate for the discretization
-        using FunctionSpaces = typename function_space_tuple<BilinearForm>::type;
-        using FeSpace = std::conditional_t<
-          std::is_same_v<typename std::tuple_element_t<0, FunctionSpaces>::discretization_category, finite_element_tag>,
-          std::tuple_element_t<0, FunctionSpaces>, std::tuple_element_t<1, FunctionSpaces>>;
-        using Triangulation = typename FeSpace::Triangulation;
-        fdapde_static_assert(
-          Triangulation::embed_dim == 1 ||
-            std::is_same_v<typename FeSpace::discretization_category FDAPDE_COMMA finite_element_tag>,
-          SPACE_EMBED_DIMENSION_LARGER_THAN_ONE_AND_NO_FINITE_ELEMENT_SPACE_DETECTED);
-        using OtherSpace = std::conditional_t<
-          std::is_same_v<std::tuple_element_t<0, FunctionSpaces>, FeSpace>, std::tuple_element_t<1, FunctionSpaces>,
-          std::tuple_element_t<0, FunctionSpaces>>;
-        auto& fe_bilinear_form = std::get<internals::index_of<FeSpace, FunctionSpaces>::value>(bilinear_form);
-        const FeSpace& fe_space = fe_bilinear_form.trial_space();
-        // check not finite element space has a sufficiently high regularity
-        auto& other_bilinear_form = std::get<internals::index_of<OtherSpace, FunctionSpaces>::value>(bilinear_form);
-        const OtherSpace& other_space = other_bilinear_form.trial_space();
-        fdapde_assert(other_space.sobolev_regularity() > 1);
+    using vector_t        = Eigen::Matrix<double, Dynamic, 1>;
+    using matrix_t        = Eigen::Matrix<double, Dynamic, Dynamic>;
+    using sparse_matrix_t = Eigen::SparseMatrix<double>;
+    using diag_matrix_t   = Eigen::DiagonalMatrix<double, Dynamic, Dynamic>;
+    using sparse_solver_t = Eigen::SparseLU<sparse_matrix_t>;
+    using dense_solver_t  = Eigen::PartialPivLU<matrix_t>;
 
-        // assemble (take care of spaces position in function call, as this will influence the tensor basis expansion)
-        std::array<SparseMatrixType, 2> R0__;
-        std::array<SparseMatrixType, 2> R1__;
+    template <typename GeoFrame, typename Penalty1, typename Penalty2, typename WeightMatrix>
+    void init_(
+      const std::string& formula, const GeoFrame& gf, Penalty1&& penalty1, Penalty2&& penalty2, const WeightMatrix& W) {
+        using BilinearForms =
+          std::tuple<std::tuple_element_t<0, std::decay_t<Penalty1>>, std::tuple_element_t<0, std::decay_t<Penalty2>>>;
+        using FunctionSpaces = typename function_space_tuple<BilinearForms>::type;
+        using FS1 = std::tuple_element_t<0, FunctionSpaces>;
+        using FS2 = std::tuple_element_t<1, FunctionSpaces>;
+        // one penalty must be on a FeSpace
+        fdapde_static_assert(is_fe_space_v<FS1> || is_fe_space_v<FS2>, NO_FINITE_ELEMENT_SPACE_DETECTED);
+	constexpr int fe_space_index = is_fe_space_v<FS1> ? 0 : 1;
+	using FeSpace = std::tuple_element_t<fe_space_index, FunctionSpaces>;
+	constexpr int bs_space_index = is_fe_space_v<FS1> ? 1 : 0;
+	using BsSpace = std::tuple_element_t<bs_space_index, FunctionSpaces>;
+        // we enforce a space-time (or SpaceMajor) expansion of the field by reordering the forms so that, index 0
+        // always refer to the spatial finite element discretization
+	const auto& fe_penalty = fe_penalty_(penalty1, penalty2);
+	const auto& bs_penalty = bs_penalty_(penalty1, penalty2);
+        // get references to bilinear and linear forms
+        auto bilinear_form = std::tie(std::get<0>(fe_penalty), std::get<0>(bs_penalty));
+        auto linear_form   = std::tie(std::get<1>(fe_penalty), std::get<1>(bs_penalty));
+        {
+            const BsSpace& bs_space = std::get<bs_space_index>(bilinear_form).trial_space();
+            fdapde_assert(bs_space.sobolev_regularity() > 1);
+        }	
+        // discretization
         auto assemble_ = [&, this]<int Index>() {
             auto& space = std::get<Index>(bilinear_form).trial_space();
             // assemble mass matrix
             TrialFunction u(space);
             TestFunction  v(space);
-            R0__[Index] = integral(space.triangulation())(u * v).assemble();
+            R0__[Index] = integral(space.triangulation())(u * v).assemble();	    
             R1__[Index] = std::get<Index>(bilinear_form).assemble();
         };
         assemble_.template operator()<0>();
         assemble_.template operator()<1>();
-	// compute tensor products
-        R0_ = kronecker(R0__[1], R0__[0]);
-        R1_ = kronecker(R0__[1], R1__[0]);
-        K_  = kronecker(R1__[1], R0__[0]);
+        // tensorization
+        R0_ = kronecker(R0__[1], R0__[0]);   // R0_T \kron R0_D
+        R1_ = kronecker(R0__[1], R1__[0]);   // R0_T \kron R1_D
+        K_  = kronecker(R1__[1], R0__[0]);   // R1_T \kron R0_D
         // number of basis functions on physical domain
-        n_dofs_ = fe_bilinear_form.n_dofs() * other_bilinear_form.n_dofs();
-	u_ = Eigen::Matrix<double, Dynamic, 1>::Zero(n_dofs_); // ----------------------------------- TODO
-
-        // evaluate basis system
-        std::array<SparseMatrixType, 2> Psi__;
-        switch (gf.layer_category(0).value()) {
-        case ltype::point: {
-            const auto& layer = gf.get_as(layer_t::point, 0);
-	    // O(n) unique coordinates extraction
-            auto extract_unique_coords = [](int start_col, int dim, const MatrixType& coords) {
-                auto cols = coords.middleCols(start_col, dim);
-                // find unique coordinates
-                std::unordered_set<MatrixType, eigen_matrix_hash> coords_set;
-                std::vector<int> coords_idx;
-                for (int i = 0; i < cols.rows(); ++i) {
-                    MatrixType p(cols.row(i));
-                    if (!coords_set.contains(p)) {
-                        coords_set.insert(p);
-                        coords_idx.push_back(i);
-                    }
-                }
-                MatrixType coords_unique(coords_set.size(), dim);
-                int i = 0;
-                for (int idx : coords_idx) { coords_unique.row(i++) = cols.row(idx); }
-                return coords_unique;
-            };
-            // derive coordinates from geoframe
-            int lhs_embed_dim = std::tuple_element_t<0, FunctionSpaces>::embed_dim;
-            int rhs_embed_dim = std::tuple_element_t<1, FunctionSpaces>::embed_dim;
-
-            Eigen::Matrix<double, Dynamic, Dynamic> lhs_coords =
-              extract_unique_coords(0, lhs_embed_dim, layer.coordinates());
-            Eigen::Matrix<double, Dynamic, Dynamic> rhs_coords =
-              extract_unique_coords(lhs_embed_dim, rhs_embed_dim, layer.coordinates());
-	    // evaluate basis at locations
-	    Psi__[0] = internals::point_basis_eval(std::get<0>(bilinear_form).trial_space(), lhs_coords);
-	    Psi__[1] = internals::point_basis_eval(std::get<1>(bilinear_form).trial_space(), rhs_coords);		    
-	    // tensorize
-	    Psi_ = kronecker(Psi__[1], Psi__[0]);
-            D_ = VectorType::Ones(Psi_.rows()).asDiagonal();
-	    
-	    // can we avoid to evaluate the basis system if finite element and nodes coincide with coordinates?
-	    // we need some idea on how to represent the data at geoframe layer
-            break;
+        n_dofs__[0] = std::get<0>(bilinear_form).trial_space().n_dofs();
+        n_dofs__[1] = std::get<1>(bilinear_form).trial_space().n_dofs();
+        n_dofs_ = n_dofs__[0] * n_dofs__[1];
+	// forcing discretization
+        u_.resize(n_dofs_);
+        {
+            vector_t u = std::get<0>(linear_form).assemble();
+            for (int i = 0; i < n_dofs__[1]; ++i) { u_.segment(i * n_dofs__[0], n_dofs__[0]) = u; }
         }
-        // case ltype::areal: {
-        //     const auto& layer = gf.get_as(layer_t::areal, 0);
-        //     const auto& [psi, measure_vect] =
-        //       internals::fe_areal_basis_eval(bilinear_form.trial_space(), layer.incidence_matrix());
-        //     Psi_ = psi;
-        //     D_ = measure_vect.asDiagonal();   // regions' measure
-        //     break;
-        // }
-        }
-    }
-    // observers
-    int n_dofs() const { return n_dofs_; }
-    const SparseMatrixType& R0() const { return R0_; }
-    const SparseMatrixType& R1() const { return R1_; }
-    const SparseMatrixType& Psi() const { return Psi_; }
-    const VectorType& u() const { return u_; }
-    // penalty matrix
-    // MatrixType P(double lambda) const {
-    //     if (invR0_.info() != Eigen::Success) { invR0_.compute(R0_); }
-    //     return lambda * R1_.transpose() * invR0_.solve(R1_);
-    // }
-   protected:
-    int n_dofs_ = 0;         // number of basis on physical domain
-    SparseMatrixType R0_;    // mass matrix: [R0]_{ij} = \int_D \psi_i * \psi_j
-    SparseMatrixType R1_;    // discretization of bilinear form a: [R1]_{ij} = \int_D a(\psi_i, \psi_j)
-    SparseMatrixType Psi_;   // evaluation of basis system \psi_1, ..., \psi_{n_dofs_} on physical domain
-    SparseMatrixType K_;
-    VectorType u_;           // discretized forcing term u_i = \int_D u * \psi_i
-    DiagonalMatrixType D_;   // vector of regions' measures (areal sampling)
-    mutable SparseSolverType invR0_;
-};
-
-template <typename SolutionStrategy> struct fe_separable_driver_impl;
-
-// solves \min_{f, \beta} \| W^{1/2} * (y_i - x_i^\top * \beta - f(p_i, t_j)) \|_2^2 + \int_D \int_T (L_D(f) - u_D)^2 +
-// \int_T \int_D (L_T(f) - u_T)^2
-template <> struct fe_separable_driver_impl<monolithic_tag> : fe_separable_driver_base {
-   private:
-    template <typename GeoFrame, typename WeightMatrix>
-    void init_(const std::string& formula, const GeoFrame& gf, const WeightMatrix& W) {
-        // parse formula
+        // basis system evaluation
+        std::array<sparse_matrix_t, 2> Psi__;
+        internals::for_each_index_in_pack<2>([&]<int Ns>() {
+            switch (gf.category(0)[Ns]) {
+            case ltype::point: {
+                const auto& spatial_index = geo_index<POINT, Ns>(gf[0]);
+                // evaluate basis at locations
+                Psi__[Ns] = internals::point_basis_eval(std::get<Ns>(bilinear_form).trial_space(), spatial_index);
+                break;
+            }
+            case ltype::areal: {
+  	        const auto& spatial_index = geo_index<POLYGON, Ns>(gf[0]);
+                const auto& [psi, measure_vect] = internals::areal_basis_eval(
+                  std::get<Ns>(bilinear_form).trial_space(), spatial_index.incidence_matrix());
+                Psi__[Ns] = psi;
+                D_ = measure_vect.asDiagonal();   // regions' measure
+                break;
+            }
+            }
+        });
+        Psi_ = kronecker(Psi__[1], Psi__[0]);
+        D_ = vector_t::Ones(n_obs_).asDiagonal();
+	
+        // data extraction
         Formula formula_(formula);
         std::vector<std::string> covs;
         for (const std::string& token : formula_.rhs()) {
             if (gf.contains(token)) { covs.push_back(token); }
         }
-        q_ = covs.size();
-        // extract data from geoframe
-	n_obs_ = gf[0].rows();
+        n_covs_ = covs.size();
         y_.resize(n_obs_);
-        gf[0].template col<double>(formula_.lhs()).data().assign_to(y_);
-        if (q_ != 0) {
+        {
+            const auto& y_data = gf[0].data().template col<double>(formula_.lhs());
+            y_data.assign_to(y_);
+            if (y_data.has_nan()) {   // correct \Psi for missing observations
+                Psi_ = y_data.nan().as_matrix().repeat(1, n_dofs_).select(Psi_);
+            }
+        }
+        if (n_covs_ != 0) {
             // assemble design matrix
-            X_.resize(gf[0].rows(), q_);
-            for (int i = 0; i < q_; ++i) { gf[0].template col<double>(covs[i]).data().assign_to(X_.col(i)); }
-            XtX_ = X_.transpose() * W * X_;
-            invXtX_ = XtX_.partialPivLu();
-            invXtXXt_ = invXtX_.solve(X_.transpose() * W);   // (X^\top * X)^{-1} * X^\top * W
+            X_.resize(n_obs_, n_covs_);
+            for (int i = 0; i < n_covs_; ++i) { gf[0].template col<double>(covs[i]).assign_to(X_.col(i)); }
+            XtWX_ = X_.transpose() * W * X_;
+            invXtWX_ = XtWX_.partialPivLu();
+            invXtWXXtW_ = invXtWX_.solve(X_.transpose() * W);   // (X^\top * W * X)^{-1} * X^\top * W
             // woodbury decomposition matrices
-            U_ = MatrixType::Zero(2 * n_dofs_, q_);
-            U_.block(0, 0, n_dofs_, q_) = Psi_.transpose() * D_ * W * X_;
-            V_ = MatrixType::Zero(q_, 2 * n_dofs_);
-            V_.block(0, 0, q_, n_dofs_) = X_.transpose() * W * Psi_;
+            U_ = matrix_t::Zero(2 * n_dofs_, n_covs_);
+            U_.block(0, 0, n_dofs_, n_covs_) = Psi_.transpose() * D_ * W * X_;
+            V_ = matrix_t::Zero(n_covs_, 2 * n_dofs_);
+            V_.block(0, 0, n_covs_, n_dofs_) = X_.transpose() * W * Psi_;
         }
 	return;
     }
    public:
-    fe_separable_driver_impl() noexcept = default;
-    template <typename BilinearForm, typename LinearForm, typename GeoFrame, typename WeightMatrix>
-    fe_separable_driver_impl(
-      const std::string& formula, const GeoFrame& gf, BilinearForm&& bilinear_form,
-      LinearForm&& linear_form, const WeightMatrix& W) :
-        fe_separable_driver_base(gf, bilinear_form, linear_form) {
-        init_(formula, gf, W);
+    using solution_policy = monolithic;
+
+    fe_separable_driver() noexcept = default;
+    template <typename GeoFrame, typename Penalty1, typename Penalty2>
+        requires(internals::is_pair_v<Penalty1> && internals::is_pair_v<Penalty2>)
+    fe_separable_driver(const std::string& formula, const GeoFrame& gf, Penalty1&& penalty1, Penalty2&& penalty2) {
+        fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
+        n_obs_ = gf[0].rows();   // number of data locations on physical domain
+        init_(formula, gf, penalty1, penalty2, Eigen::Matrix<double, Dynamic, 1>::Ones(n_obs_).asDiagonal());
     }
-    template <typename BilinearForm, typename LinearForm, typename GeoFrame>
-    fe_separable_driver_impl(
-      const std::string& formula, const GeoFrame& gf, BilinearForm&& bilinear_form, LinearForm&& linear_form) :
-        fe_separable_driver_base(gf, bilinear_form, linear_form) {
-        init_(formula, gf, Eigen::Matrix<double, Dynamic, 1>::Ones(y_.rows()).asDiagonal());
+    template <typename GeoFrame, typename Penalty1, typename Penalty2, typename WeightMatrix>
+        requires(internals::is_pair_v<Penalty1> && internals::is_pair_v<Penalty2>)
+    fe_separable_driver(
+      const std::string& formula, const GeoFrame& gf, Penalty1&& penalty1, Penalty2&& penalty2, const WeightMatrix& W) {
+        fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
+        n_obs_ = gf[0].rows();   // number of data locations on physical domain
+        init_(formula, gf, penalty1, penalty2, W);
     }
 
     void operator()(double lambda_D, double lambda_T) {
@@ -219,19 +194,19 @@ template <> struct fe_separable_driver_impl<monolithic_tag> : fe_separable_drive
           -Psi_.transpose() * D_ * Psi_ - lambda_T * K_, lambda_D * R1_.transpose(), lambda_D * R1_, lambda_D * R0_);
         invA_.compute(A_);
         // linear system rhs
-        VectorType b_(2 * n_dofs_);
+        vector_t b_(2 * n_dofs_);
         b_.block(n_dofs_, 0, n_dofs_, 1) = lambda_D * u_;
 	
-        VectorType x;
-        if (q_ == 0) {   // nonparametric case
+        vector_t x;
+        if (n_covs_ == 0) {   // nonparametric case
             b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * y_;
             x = invA_.solve(b_);
             f_ = x.head(n_dofs_);
         } else {   // parametric case
-            b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * internals::lmbQ(X_, invXtX_, y_);
-            x = woodbury_system_solve(invA_, U_, XtX_, V_, b_);
+            b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * internals::lmbQ(X_, invXtWX_, y_);
+            x = woodbury_system_solve(invA_, U_, XtWX_, V_, b_);
             f_ = x.head(n_dofs_);
-            beta_ = invXtXXt_ * (y_ - Psi_ * f_);
+            beta_ = invXtWXXtW_ * (y_ - Psi_ * f_);
         } 
         g_ = x.tail(n_dofs_);   // PDE misfit
         return;
@@ -243,45 +218,73 @@ template <> struct fe_separable_driver_impl<monolithic_tag> : fe_separable_drive
           lambda_D * R0_);
         invA_.compute(A_);
         // linear system rhs
-        VectorType b_(2 * n_dofs_);
+        vector_t b_(2 * n_dofs_);
         b_.block(n_dofs_, 0, n_dofs_, 1) = lambda_D * u_;
 
-        VectorType x;
-        if (q_ == 0) {   // nonparametric case
+        vector_t x;
+        if (n_covs_ == 0) {   // nonparametric case
             b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * W * y_;
             x = invA_.solve(b_);
             f_ = x.head(n_dofs_);
         } else {   // parametric case
-            XtX_ = X_.transpose() * W * X_;
-            invXtX_ = XtX_.partialPivLu();
-            b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * internals::lmbQ(W, X_, invXtX_, y_);
+            XtWX_ = X_.transpose() * W * X_;
+            invXtWX_ = XtWX_.partialPivLu();
+            b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * internals::lmbQ(W, X_, invXtWX_, y_);
             // woodbury matrices
-            U_.block(0, 0, n_dofs_, q_) = Psi_.transpose() * D_ * W * X_;
-            V_.block(0, 0, q_, n_dofs_) = X_.transpose() * W * Psi_;
+            U_.block(0, 0, n_dofs_, n_covs_) = Psi_.transpose() * D_ * W * X_;
+            V_.block(0, 0, n_covs_, n_dofs_) = X_.transpose() * W * Psi_;
             // solve A * x = (A_ + U_ * (X^\top*W*X) * V_) * x = b
-            x = woodbury_system_solve(invA_, U_, XtX_, V_, b_);
+            x = woodbury_system_solve(invA_, U_, XtWX_, V_, b_);
             f_ = x.head(n_dofs_);
-            beta_ = invXtX_.solve(X_.transpose() * W) * (y_ - Psi_ * f_);
+            beta_ = invXtWX_.solve(X_.transpose() * W) * (y_ - Psi_ * f_);
         }
         g_ = x.tail(n_dofs_);   // PDE misfit
         return;
     }
+  
     // observers
-    const VectorType& f() const { return f_; }
-    const VectorType& beta() const { return beta_; }
-    const VectorType& g() const { return g_; }
-   private:
-    int q_;                       // number of covariates
-    int n_obs_;
-    MatrixType X_;                // n_obs x q design matrix
-    VectorType y_;                // n_obs x 1 observation vector
-    MatrixType U_, V_;            // (2 * n_dofs) x q matrices [\Psi^\top * D * y, 0] and [X^\top * \Psi, 0]
-    MatrixType XtX_, invXtXXt_;   // q x q matrix X^\top * X and q x n_obs matrix (X^\top * X)^{-1} * X^\top
-    DenseSolverType invXtX_;      // factorization of q x q matrix X^\top * X
-    SparseSolverType invA_;
-    VectorType f_, beta_, g_;
-};
+    int n_dofs() const { return n_dofs_; }
+    const sparse_matrix_t& R0() const { return R0_; }
+    const sparse_matrix_t& R1() const { return R1_; }
+    const sparse_matrix_t& Psi() const { return Psi_; }
+    const vector_t& u() const { return u_; }
+    const vector_t& f() const { return f_; }
+    const vector_t& beta() const { return beta_; }
+    const vector_t& g() const { return g_; }
+    // penalty matrix: \lambda_D * P0 \kron (R1^\top * R0^{-1} * R1) + \lambda_T * P1 \kron R0
+    matrix_t P(double lambda_D, double lambda_T) const {
+        if (!invR0_.has_value()) { invR0_->compute(R0__[0]); }
+        if (!PD_.has_value()) { PD_ = kronecker(R0__[1], R1__[0].transpose() * invR0_->solve(R1__[0])); }
+        if (!PT_.has_value()) { PT_ = kronecker(R1__[1], R0__[0]); }
+        return lambda_D * (*PD_) + lambda_T * (*PT_);
+    }
+   protected:
+    int n_dofs_ = 0, n_obs_ = 0, n_covs_ = 0;
+    // not tensorized quantities
+    std::array<int, 2> n_dofs__;           // number of spatial and temporal degrees of freedom {n_dofs_D, n_dofs_T}
+    std::array<sparse_matrix_t, 2> R0__;   // matrices { \int_D \psi_i * \psi_j, \int_T \phi_i * \phi_j }
+    std::array<sparse_matrix_t, 2> R1__;   // matrices { \int_D a_D(\psi_i, \psi_j), \int_T a_T(\phi_T, \phi_D) }
 
+    sparse_matrix_t R0_;    // n_dofs x n_dofs matrix R0 = R0_T \kron R0_D
+    sparse_matrix_t R1_;    // n_dofs x n_dofs matrix R1 = R0_T \kron R1_D
+    sparse_matrix_t Psi_;   // n_obs x n_dofs matrix Psi = \Psi_T \kron \Psi_D
+    sparse_matrix_t K_;     // n_dofs x n_dofs matrix K = R1_T \kron R0_D
+    vector_t u_;            // (n_dofs_D * n_dofs_T) x 1 vector u = [u_1 \ldots u_n, \ldots, u_1 \ldots u_n]
+    diag_matrix_t D_;       // vector of regions' measures (areal sampling)
+    mutable std::optional<sparse_solver_t> invR0_;
+    mutable std::optional<sparse_matrix_t> PD_;   // n_dofs x n_dofs matrix PD = P0 \kron (R1^\top * R0^{-1} * R1)
+    mutable std::optional<sparse_matrix_t> PT_;   // n_dofs x n_dofs matrix PT = P1 \kron R0
+    vector_t f_, beta_, g_;
+    sparse_solver_t invA_;   // factorization of (2 * n_dofs) x (2 * n_dofs) nonparametric matrix
+
+    matrix_t X_;               // n_obs x n_covs design matrix
+    vector_t y_;               // n_obs x 1 observation vector
+    matrix_t U_, V_;           // (2 * n_dofs) x n_covs matrices [\Psi^\top * D * W * y, 0] and [X^\top * W * \Psi, 0]
+    matrix_t XtWX_;            // n_covs x n_covs matrix X^\top * W * X
+    matrix_t invXtWXXtW_;      // n_covs x n_obs matrix (X^\top * X)^{-1} * (X^\top W)
+    dense_solver_t invXtWX_;   // factorization of n_covs x n_covs matrix X^\top * W * X
+};
+  
 }   // namespace internals
 }   // namespace fdapde
 

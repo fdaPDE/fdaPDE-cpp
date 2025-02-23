@@ -51,17 +51,23 @@ std::pair<Eigen::SparseMatrix<double>, Eigen::Matrix<double, Dynamic, 1>>
 areal_basis_eval(FeSpace_ fe_space, const BinaryMatrix<Dynamic, Dynamic>& incidence_mat);
 
 // pointwise basis evaluation for finite element basis system
-template <typename Triangulation_, typename FeType_>
-Eigen::SparseMatrix<double> point_basis_eval(
-  const FeSpace<Triangulation_, FeType_>& fe_space, const Eigen::Matrix<double, Dynamic, Dynamic>& coords) {
+template <typename Triangulation_, typename FeType_, typename GeoIndex>
+Eigen::SparseMatrix<double>
+point_basis_eval(const FeSpace<Triangulation_, FeType_>& fe_space, const GeoIndex& geo_index) {
     static constexpr int local_dim = Triangulation_::local_dim;
     static constexpr int embed_dim = Triangulation_::embed_dim;
-    fdapde_assert(coords.rows() > 0 && coords.cols() == embed_dim);
 
     int n_shape_functions = fe_space.n_shape_functions();
     int n_dofs = fe_space.n_dofs();
-    int n_locs = coords.rows();
+    int n_locs = geo_index.rows();
     Eigen::SparseMatrix<double> psi_(n_locs, n_dofs);
+    if (geo_index.points_at_dofs()) {
+        psi_.setIdentity();   // \psi_i(p_j) = 1 \iff i == j, otherwise \psi_i(p_j) = 0
+        return psi_;
+    }
+    // evaluate basis system at locations
+    Eigen::Matrix<double, Dynamic, Dynamic> coords = geo_index.coordinates(); // here a copy is made because locate cannot handle Eigen::Map, adjust
+    fdapde_assert(coords.rows() > 0 && coords.cols() == embed_dim);
     std::vector<fdapde::Triplet<double>> triplet_list;
     triplet_list.reserve(n_locs * n_shape_functions);
 
@@ -86,17 +92,18 @@ Eigen::SparseMatrix<double> point_basis_eval(
 }
 
 // pointwise basis evaluation for spline basis system
-template <typename Triangulation_>
-Eigen::SparseMatrix<double>
-point_basis_eval(const BsSpace<Triangulation_>& bs_space, const Eigen::Matrix<double, Dynamic, Dynamic>& coords) {
+template <typename Triangulation_, typename GeoIndex>
+Eigen::SparseMatrix<double> point_basis_eval(const BsSpace<Triangulation_>& bs_space, const GeoIndex& geo_index) {
     static constexpr int local_dim = Triangulation_::local_dim;
     static constexpr int embed_dim = Triangulation_::embed_dim;
-    fdapde_assert(coords.rows() > 0 && coords.cols() == embed_dim);
 
     int n_shape_functions = bs_space.n_shape_functions();
     int n_dofs = bs_space.n_dofs();
-    int n_locs = coords.rows();
+    int n_locs = geo_index.rows();
     Eigen::SparseMatrix<double> psi_(n_locs, n_dofs);
+    Eigen::Matrix<double, Dynamic, Dynamic> coords = geo_index.unique_coordinates();
+
+    fdapde_assert(coords.rows() > 0 && coords.cols() == embed_dim);
     std::vector<Triplet<double>> triplet_list;
     triplet_list.reserve(n_locs * n_shape_functions);
 
@@ -180,9 +187,12 @@ std::pair<Eigen::SparseMatrix<double>, Eigen::Matrix<double, Dynamic, 1>> areal_
     return std::make_pair(std::move(psi_), std::move(D));
 }
 
-  // utilities to build masks for missing data
+template <typename Triangulation_>
+std::pair<Eigen::SparseMatrix<double>, Eigen::Matrix<double, Dynamic, 1>>
+areal_basis_eval(const BsSpace<Triangulation_>& bs_space, const fdapde::BinaryMatrix<Dynamic, Dynamic>& incidence_mat) {
+    return {};   // TODO
+}
 
-  
 }   // namespace internals
 }   // namespace fdapde
 
