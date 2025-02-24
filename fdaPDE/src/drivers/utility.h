@@ -20,6 +20,23 @@
 namespace fdapde {
 namespace internals {
 
+// checks if supplied penalty is valid
+template <typename Penalty> class is_valid_penalty_pair {
+    using Penalty_ = std::decay_t<Penalty>;
+   public:
+    static constexpr bool value =
+      is_pair_v<Penalty> &&
+      requires(std::tuple_element_t<0, Penalty_> t) {   // first pair element: bilinear form
+          { t.assemble() } -> std::same_as<Eigen::SparseMatrix<double>>;
+      } &&
+      requires(std::tuple_element_t<1, Penalty_> t) {   // second pair element: linear form
+          { t.assemble() } -> std::same_as<Eigen::Matrix<double, Dynamic, 1>>;
+      } &&   // linear and bilinear form have same discretization category
+      std::is_same_v<typename std::tuple_element_t<0, Penalty_>::discretization_category FDAPDE_COMMA
+                     typename std::tuple_element_t<1, Penalty_>::discretization_category>;
+};
+template <typename Penalty> constexpr bool is_valid_penalty_pair_v = is_valid_penalty_pair<Penalty>::value;
+
 // efficient left multiplication Q*x, with Q = W * (I - X * (X^\top * W * X)^{-1} * X^\top * W)
 template <typename WeightMatrix, typename DesignMatrix, typename InvDesignMatrix>
 Eigen::Matrix<double, Dynamic, Dynamic> lmbQ(
@@ -51,9 +68,9 @@ std::pair<Eigen::SparseMatrix<double>, Eigen::Matrix<double, Dynamic, 1>>
 areal_basis_eval(FeSpace_ fe_space, const BinaryMatrix<Dynamic, Dynamic>& incidence_mat);
 
 // pointwise basis evaluation for finite element basis system
-template <typename Triangulation_, typename FeType_, typename GeoIndex>
+template <typename Triangulation_, typename FeType_, typename GeoIndex_>
 Eigen::SparseMatrix<double>
-point_basis_eval(const FeSpace<Triangulation_, FeType_>& fe_space, const GeoIndex& geo_index) {
+point_basis_eval(const FeSpace<Triangulation_, FeType_>& fe_space, const GeoIndex_& geo_index) {
     static constexpr int local_dim = Triangulation_::local_dim;
     static constexpr int embed_dim = Triangulation_::embed_dim;
 
@@ -92,8 +109,8 @@ point_basis_eval(const FeSpace<Triangulation_, FeType_>& fe_space, const GeoInde
 }
 
 // pointwise basis evaluation for spline basis system
-template <typename Triangulation_, typename GeoIndex>
-Eigen::SparseMatrix<double> point_basis_eval(const BsSpace<Triangulation_>& bs_space, const GeoIndex& geo_index) {
+template <typename Triangulation_, typename GeoIndex_>
+Eigen::SparseMatrix<double> point_basis_eval(const BsSpace<Triangulation_>& bs_space, const GeoIndex_& geo_index) {
     static constexpr int local_dim = Triangulation_::local_dim;
     static constexpr int embed_dim = Triangulation_::embed_dim;
 
@@ -128,10 +145,11 @@ Eigen::SparseMatrix<double> point_basis_eval(const BsSpace<Triangulation_>& bs_s
 }
 
 // areal basis evaluation for finite element basis system
-template <typename Triangulation_, typename FeType_>
+template <typename Triangulation_, typename FeType_, typename GeoIndex_>
 std::pair<Eigen::SparseMatrix<double>, Eigen::Matrix<double, Dynamic, 1>> areal_basis_eval(
-  const FeSpace<Triangulation_, FeType_>& fe_space, const fdapde::BinaryMatrix<Dynamic, Dynamic>& incidence_mat) {
+  const FeSpace<Triangulation_, FeType_>& fe_space, const GeoIndex_& geo_index) {
     using FeSpace_ = FeSpace<Triangulation_, FeType_>;
+    const fdapde::BinaryMatrix<Dynamic, Dynamic>& incidence_mat = geo_index.incidence_matrix();
     fdapde_assert(incidence_mat.rows() > 0 && incidence_mat.cols() == fe_space.triangulation().n_cells());
     static constexpr int local_dim = Triangulation_::local_dim;
     static constexpr int embed_dim = Triangulation_::embed_dim;
@@ -187,9 +205,9 @@ std::pair<Eigen::SparseMatrix<double>, Eigen::Matrix<double, Dynamic, 1>> areal_
     return std::make_pair(std::move(psi_), std::move(D));
 }
 
-template <typename Triangulation_>
+template <typename Triangulation_, typename GeoIndex_>
 std::pair<Eigen::SparseMatrix<double>, Eigen::Matrix<double, Dynamic, 1>>
-areal_basis_eval(const BsSpace<Triangulation_>& bs_space, const fdapde::BinaryMatrix<Dynamic, Dynamic>& incidence_mat) {
+areal_basis_eval(const BsSpace<Triangulation_>& bs_space, const GeoIndex_& incidence_mat) {
     return {};   // TODO
 }
 

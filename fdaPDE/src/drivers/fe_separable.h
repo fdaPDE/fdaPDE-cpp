@@ -57,7 +57,6 @@ template <> class fe_separable_driver<monolithic> {
             return !is_fe_space_v<typename std::tuple_element_t<0, Pen1_>::TrialSpace>;
 	  }, penalty1, penalty2);
     }
-  
     using vector_t        = Eigen::Matrix<double, Dynamic, 1>;
     using matrix_t        = Eigen::Matrix<double, Dynamic, Dynamic>;
     using sparse_matrix_t = Eigen::SparseMatrix<double>;
@@ -68,6 +67,9 @@ template <> class fe_separable_driver<monolithic> {
     template <typename GeoFrame, typename Penalty1, typename Penalty2, typename WeightMatrix>
     void init_(
       const std::string& formula, const GeoFrame& gf, Penalty1&& penalty1, Penalty2&& penalty2, const WeightMatrix& W) {
+        fdapde_static_assert(
+          internals::is_valid_penalty_pair_v<Penalty1> && internals::is_valid_penalty_pair_v<Penalty2>,
+          INVALID_PENALTY_DESCRIPTION);
         using BilinearForms =
           std::tuple<std::tuple_element_t<0, std::decay_t<Penalty1>>, std::tuple_element_t<0, std::decay_t<Penalty2>>>;
         using FunctionSpaces = typename function_space_tuple<BilinearForms>::type;
@@ -120,17 +122,19 @@ template <> class fe_separable_driver<monolithic> {
         internals::for_each_index_in_pack<2>([&]<int Ns>() {
             switch (gf.category(0)[Ns]) {
             case ltype::point: {
-                const auto& spatial_index = geo_index<POINT, Ns>(gf[0]);
+                const auto& spatial_index = geo_index_cast<Ns, POINT>(gf[0]);
                 // evaluate basis at locations
                 Psi__[Ns] = internals::point_basis_eval(std::get<Ns>(bilinear_form).trial_space(), spatial_index);
                 break;
             }
             case ltype::areal: {
-  	        const auto& spatial_index = geo_index<POLYGON, Ns>(gf[0]);
-                const auto& [psi, measure_vect] = internals::areal_basis_eval(
-                  std::get<Ns>(bilinear_form).trial_space(), spatial_index.incidence_matrix());
+                const auto& spatial_index = geo_index_cast<Ns, POLYGON>(gf[0]);
+                const auto& [psi, measure_vec] =
+                  internals::areal_basis_eval(std::get<Ns>(bilinear_form).trial_space(), spatial_index);
                 Psi__[Ns] = psi;
-                D_ = measure_vect.asDiagonal();   // regions' measure
+                vector_t D(n_obs_);
+                for (int i = 0; i < m_; ++i) { D.segment(i * measure_vec.rows(), measure_vec.rows()) = measure_vec; }
+                D_ = D.asDiagonal();
                 break;
             }
             }
@@ -251,7 +255,7 @@ template <> class fe_separable_driver<monolithic> {
     const vector_t& f() const { return f_; }
     const vector_t& beta() const { return beta_; }
     const vector_t& g() const { return g_; }
-    // penalty matrix: \lambda_D * P0 \kron (R1^\top * R0^{-1} * R1) + \lambda_T * P1 \kron R0
+    // penalty matrix: \lambda_D * R0_T \kron (R1_D^\top * R0_D^{-1} * R1_D) + \lambda_T * R1_T \kron R0_D
     matrix_t P(double lambda_D, double lambda_T) const {
         if (!invR0_.has_value()) { invR0_->compute(R0__[0]); }
         if (!PD_.has_value()) { PD_ = kronecker(R0__[1], R1__[0].transpose() * invR0_->solve(R1__[0])); }
@@ -262,8 +266,8 @@ template <> class fe_separable_driver<monolithic> {
     int n_dofs_ = 0, n_obs_ = 0, n_covs_ = 0;
     // not tensorized quantities
     std::array<int, 2> n_dofs__;           // number of spatial and temporal degrees of freedom {n_dofs_D, n_dofs_T}
-    std::array<sparse_matrix_t, 2> R0__;   // matrices { \int_D \psi_i * \psi_j, \int_T \phi_i * \phi_j }
-    std::array<sparse_matrix_t, 2> R1__;   // matrices { \int_D a_D(\psi_i, \psi_j), \int_T a_T(\phi_T, \phi_D) }
+    std::array<sparse_matrix_t, 2> R0__;   // {R0_D, R0_T} = { \int_D \psi_i * \psi_j, \int_T \phi_i * \phi_j }
+    std::array<sparse_matrix_t, 2> R1__;   // {R1_D, R1_T} = { \int_D a_D(\psi_i, \psi_j), \int_T a_T(\phi_T, \phi_D) }
 
     sparse_matrix_t R0_;    // n_dofs x n_dofs matrix R0 = R0_T \kron R0_D
     sparse_matrix_t R1_;    // n_dofs x n_dofs matrix R1 = R0_T \kron R1_D
@@ -272,8 +276,8 @@ template <> class fe_separable_driver<monolithic> {
     vector_t u_;            // (n_dofs_D * n_dofs_T) x 1 vector u = [u_1 \ldots u_n, \ldots, u_1 \ldots u_n]
     diag_matrix_t D_;       // vector of regions' measures (areal sampling)
     mutable std::optional<sparse_solver_t> invR0_;
-    mutable std::optional<sparse_matrix_t> PD_;   // n_dofs x n_dofs matrix PD = P0 \kron (R1^\top * R0^{-1} * R1)
-    mutable std::optional<sparse_matrix_t> PT_;   // n_dofs x n_dofs matrix PT = P1 \kron R0
+    mutable std::optional<sparse_matrix_t> PD_;   // matrix PD = R0_T \kron (R1_D^\top * R0_D^{-1} * R1_D)
+    mutable std::optional<sparse_matrix_t> PT_;   // matrix PT = R1_T \kron R0_D
     vector_t f_, beta_, g_;
     sparse_solver_t invA_;   // factorization of (2 * n_dofs) x (2 * n_dofs) nonparametric matrix
 

@@ -34,12 +34,13 @@ struct fe_elliptic_driver {
 
     template <typename GeoFrame, typename Penalty, typename WeightMatrix>
     void init_(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) {
+        fdapde_static_assert(internals::is_valid_penalty_pair_v<Penalty>, INVALID_PENALTY_DESCRIPTION);
         using BilinearForm = std::tuple_element_t<0, std::decay_t<Penalty>>;
         using LinearForm = std::tuple_element_t<1, std::decay_t<Penalty>>;
         using FeSpace = typename BilinearForm::TrialSpace;
 	// discretization
         const BilinearForm& bilinear_form = std::get<0>(penalty);
-        const LinearForm& linear_form     = std::get<1>(penalty);
+        const LinearForm& linear_form = std::get<1>(penalty);
         n_dofs_ = bilinear_form.n_dofs();   // number of basis functions over physical domain
         internals::fe_mass_assembly_loop<FeSpace> mass_assembler(bilinear_form.trial_space());
         R0_ = mass_assembler.assemble();
@@ -48,20 +49,16 @@ struct fe_elliptic_driver {
         // basis system evaluation
         switch (gf.category(0)[0]) {
         case ltype::point: {
-            const auto& layer = geo_cast<POINT>(gf[0]).template geometry<0>();
-            if (layer.points_at_dofs()) {
-                Psi_.resize(n_dofs_, n_dofs_);
-                Psi_.setIdentity();   // \psi_i(p_j) = 1 \iff i == j, otherwise \psi_i(p_j) = 0
-            } else {
-                Psi_ = internals::point_basis_eval(bilinear_form.trial_space(), layer.coordinates());
-            }
+            const auto& spatial_index = geo_index_cast<0, POINT>(gf[0]);
+            // evaluate basis at locations
+            Psi_ = internals::point_basis_eval(bilinear_form.trial_space(), spatial_index);
             D_ = vector_t::Ones(n_obs_).asDiagonal();
             break;
         }
         case ltype::areal: {
-            const auto& layer = geo_cast<POLYGON>(gf[0]).template geometry<0>();
+            const auto& spatial_index = geo_index_cast<0, POLYGON>(gf[0]);
             const auto& [psi, measure_vect] =
-              internals::areal_basis_eval(bilinear_form.trial_space(), layer.incidence_matrix());
+              internals::areal_basis_eval(bilinear_form.trial_space(), spatial_index);
             Psi_ = psi;
             D_ = measure_vect.asDiagonal();   // regions' measure
             break;

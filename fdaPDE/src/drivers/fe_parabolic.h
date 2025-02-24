@@ -22,235 +22,252 @@
 namespace fdapde {
 namespace internals {
 
-struct fe_parabolic_driver_base {
-    using VectorType = Eigen::Matrix<double, Dynamic, 1>;
-    using MatrixType = Eigen::Matrix<double, Dynamic, Dynamic>;
-    using SparseMatrixType = Eigen::SparseMatrix<double>;
-    using DiagonalMatrixType = Eigen::DiagonalMatrix<double, Dynamic, Dynamic>;
-    using SparseSolverType = Eigen::SparseLU<SparseMatrixType>;
-    using DenseSolverType  = Eigen::PartialPivLU<MatrixType>;
-  
-    fe_parabolic_driver_base() noexcept = default;
+template <typename Strategy> class fe_parabolic_driver;
 
-  // need setters for initial condition
-  // need to handle boundary conditions
-  
-    template <typename BilinearForm_, typename LinearForm_, typename GeoFrame, typename InitialCondition_>
-    fe_parabolic_driver_base(
-      const GeoFrame& gf, BilinearForm_&& bilinear_form, LinearForm_&& linear_form, const InitialCondition_& s) :
-      R1_(bilinear_form.assemble()), u_(linear_form.assemble()), s_(s) {
-        using BilinearForm = std::decay_t<BilinearForm_>;
-        using LinearForm   = std::decay_t<LinearForm_>;
+// solves \min_{f, \beta} \| W^{1/2} * (y_i - x_i^\top * \beta - f(p_i, t_j)) \|_2^2 +
+// \int_D \int_T (\frac{\partial f}{\partial t} + L(f) - u)^2
+template <> class fe_parabolic_driver<monolithic> {
+   private:
+    using vector_t        = Eigen::Matrix<double, Dynamic, 1>;
+    using matrix_t        = Eigen::Matrix<double, Dynamic, Dynamic>;
+    using sparse_matrix_t = Eigen::SparseMatrix<double>;
+    using diag_matrix_t   = Eigen::DiagonalMatrix<double, Dynamic, Dynamic>;
+    using sparse_solver_t = Eigen::SparseLU<sparse_matrix_t>;
+    using dense_solver_t  = Eigen::PartialPivLU<matrix_t>;
+
+    template <typename GeoFrame, typename Penalty, typename WeightMatrix, typename InitialCondition>
+    void init_(
+      const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const InitialCondition& s,
+      const WeightMatrix& W) {
+        fdapde_static_assert(internals::is_valid_penalty_pair_v<Penalty>, INVALID_PENALTY_DESCRIPTION);
+	// enforce POINT indexing in time
+	fdapde_assert(gf.category(0)[1] == ltype::point);
+        using BilinearForm = std::tuple_element_t<0, std::decay_t<Penalty>>;
+        using LinearForm = std::tuple_element_t<1, std::decay_t<Penalty>>;
         using FeSpace = typename BilinearForm::TrialSpace;
+	// discretization
+        const BilinearForm& bilinear_form = std::get<0>(penalty);
+        const LinearForm& linear_form = std::get<1>(penalty);
+        n_dofs_ = bilinear_form.n_dofs();
+        internals::fe_mass_assembly_loop<FeSpace> mass_assembler(bilinear_form.trial_space());
+        R0__ = mass_assembler.assemble();
+        R1__ = bilinear_form.assemble();
+        u__  = linear_form.assemble();
+	// extract time step and number of time instants
+        const auto& time_index = geo_index_cast<1, POINT>(gf[0]);
+        const auto& time_coords = time_index.coordinates();
+        m_ = time_coords.rows();
+        fdapde_assert(m_ > 0 && time_coords.cols() == 1);
+        DeltaT_ = time_coords(1, 0) - time_coords(0, 0);
+        for (int i = 1; i < m_ - 1; ++i) {
+            double lag_i = time_coords(i + 1, 0) - time_coords(i, 0);
+            fdapde_assert(DeltaT_ > 0 && lag_i > 0 && internals::almost_equal(DeltaT_ FDAPDE_COMMA lag_i));
+        }
 
-	internals::fe_mass_assembly_loop<FeSpace> mass_assembler(bilinear_form.trial_space());
-        R0_ = mass_assembler.assemble();     // mass matrix
-        n_dofs_ = bilinear_form.n_dofs();    // number of basis functions over physical domain
-
-	// extract spatial and temporal locations (only SpaceMajor format support)
-	std::vector<double> space_locs;
-	std::vector<double> time_locs;
-
-	// get n_spatial_locations, n_temporal_locations
-	
-	// then we can derive the observational mask (for each time instant, which spatial location is observed)
-
-	// then we can assemble the Psi (which, for fully observed, same number of locations, is exactly the tensorized Psi with the identity)
-
-	// then derive delta (assert locations are at same time distance)
-
-	// assemble matrix associated with derivation in time L_
-        // [L_]_{ii} = 1/DeltaT for i \in {1 ... m} and [L_]_{i,i-1} = -1/DeltaT for i \in {1 ... m-1}
-        std::vector<fdapde::Triplet<double>> triplet_list;
+        // tensorization
+        sparse_matrix_t Im(m_, m_);   // m x m identity matrix
+        Im.setIdentity();
+	R0_ = kronecker(Im, R0__);
+        R1_ = kronecker(Im, R1__);
+        // assemble matrix associated with derivation in time L_
+        // [L]_{ii} = 1/DeltaT for i \in {1 ... m} and [L_]_{i,i-1} = -1/DeltaT for i \in {1 ... m-1}
+        std::vector<Eigen::Triplet<double>> triplet_list;
         triplet_list.reserve(2 * m_);
         // start assembly loop
-        double invDeltaT = 1.0 / DeltaT_;
-        triplet_list.emplace_back(0, 0, invDeltaT);
+        triplet_list.emplace_back(0, 0, 1.0 / DeltaT_);
         for (int i = 1; i < m_; ++i) {
-            triplet_list.emplace_back(i, i, invDeltaT);
-            triplet_list.emplace_back(i, i - 1, -invDeltaT);
+            triplet_list.emplace_back(i, i, 1.0 / DeltaT_);
+            triplet_list.emplace_back(i, i - 1, -1.0 / DeltaT_);
         }
-        L_.resize(m_, m_);
-        L_.setFromTriplets(triplet_list.begin(), triplet_list.end());
-        L_.makeCompressed();
+        sparse_matrix_t L(m_, m_);
+        L.setFromTriplets(triplet_list.begin(), triplet_list.end());
+        L.makeCompressed();
+        L_ = kronecker(L, R0__);
+        // correct first n discretized force rows as (u_1 + R0*s / DeltaT)
+        u_.resize(n_dofs_ * m_);
+        for (int i = 0; i < m_; ++i) { u_.segment(i * n_dofs_, n_dofs_) = u__; }
+        u_.segment(0, n_dofs_) += (1.0 / DeltaT_) * (R0__ * s_);
 
-	// correct first n rows of discretized force as (u_1 + R0*s/DeltaT)
-        u_.block(0, 0, n_dofs_, 1) += (1.0 / DeltaT_) * (R0_ * s_); // ------------------------- this might be ok only for the monolithic
-
-        // evaluate basis system on physical domain
-        switch (gf.layer_category(0).value()) {
+        // basis system evaluation
+	sparse_matrix_t Psi__;
+        switch (gf.category(0)[0]) {
         case ltype::point: {
-            const auto& layer = gf.get_as(layer_t::point, 0);
-            if (layer.locs_at_mesh_nodes()) {
-                // locations at mesh nodes
-                Psi_.resize(n_dofs_, n_dofs_);
-                Psi_.setIdentity();   // \psi_i(p_j) = 1 \iff i == j, otherwise \psi_i(p_j) = 0
-            } else {
-                Psi_ = internals::point_basis_eval(bilinear_form.trial_space(), layer.coordinates());
-            }
-            D_ = VectorType::Ones(Psi_.rows()).asDiagonal();
+            const auto& spatial_index = geo_index_cast<0, POINT>(gf[0]);
+	    n_ = spatial_index.rows();
+            // evaluate basis at locations
+            Psi__ = internals::point_basis_eval(bilinear_form.trial_space(), spatial_index);
+            D_ = vector_t::Ones(n_obs_).asDiagonal();
             break;
         }
         case ltype::areal: {
-            const auto& layer = gf.get_as(layer_t::areal, 0);
-            const auto& [psi, measure_vect] =
-              internals::areal_basis_eval(bilinear_form.trial_space(), layer.incidence_matrix());
-            Psi_ = psi;
-            D_ = measure_vect.asDiagonal();   // regions' measure
+            const auto& spatial_index = geo_index_cast<0, POLYGON>(gf[0]);
+            n_ = spatial_index.rows();
+            const auto& [psi, measure_vec] =
+              internals::areal_basis_eval(bilinear_form.trial_space(), spatial_index);
+            Psi__ = psi;
+            vector_t D(n_obs_);
+            for (int i = 0; i < m_; ++i) { D.segment(i * measure_vec.rows(), measure_vec.rows()) = measure_vec; }
+            D_ = D.asDiagonal();
             break;
         }
         }
-	// we build only one Psi on the full grid, and a vector of observational masks for each time instant
-    }
-    // observers
-    int n_dofs() const { return n_dofs_; }
-    const SparseMatrixType& R0() const { return R0_; }
-    const SparseMatrixType& R1() const { return R1_; }
-    const SparseMatrixType& Psi() const { return Psi_; }
-    const VectorType& u() const { return u_; }
-    // penalty matrix
-    // MatrixType P(double lambda) const {
-    //     if (invR0_.info() != Eigen::Success) { invR0_.compute(R0_); }
-    //     return lambda * R1_.transpose() * invR0_.solve(R1_);
-    // }
-   protected:
-    int n_dofs_ = 0;         // number of basis on physical domain
-    SparseMatrixType R0_;    // mass matrix: [R0]_{ij} = \int_D \psi_i * \psi_j
-    SparseMatrixType R1_;    // discretization of bilinear form a: [R1]_{ij} = \int_D a(\psi_i, \psi_j)
-    SparseMatrixType Psi_;   // evaluation of basis system \psi_1, ..., \psi_{n_dofs_} on physical domain
-    SparseMatrixType K_;
-    VectorType u_;           // discretized forcing term u_i = \int_D u * \psi_i
-    DiagonalMatrixType D_;   // vector of regions' measures (areal sampling)
-    mutable SparseSolverType invR0_;
-};
-
-template <typename SolutionStrategy> struct fe_parabolic_driver_impl;
-
-// solves \min_{f, \beta} \| W^{1/2} * (y_i - x_i^\top * \beta - f(p_i, t_j)) \|_2^2 + \int_D \int_T (L_D(f) - u_D)^2 +
-// \int_T \int_D (L_T(f) - u_T)^2
-template <> struct fe_parabolic_driver_impl<monolithic_tag> : fe_parabolic_driver_base {
-   private:
-    template <typename GeoFrame, typename WeightMatrix>
-    void init_(const std::string& formula, const GeoFrame& gf, const WeightMatrix& W) {
-        // parse formula
+	Psi_ = kronecker(Im, Psi__);
+	
+        // data extraction
         Formula formula_(formula);
         std::vector<std::string> covs;
         for (const std::string& token : formula_.rhs()) {
             if (gf.contains(token)) { covs.push_back(token); }
         }
-        q_ = covs.size();
-        // extract data from geoframe
-	n_obs_ = gf[0].rows();
+        n_covs_ = covs.size();
         y_.resize(n_obs_);
-        gf[0].template col<double>(formula_.lhs()).data().assign_to(y_);
-        if (q_ != 0) {
-            // assemble design matrix
-            X_.resize(gf[0].rows(), q_);
-            for (int i = 0; i < q_; ++i) { gf[0].template col<double>(covs[i]).data().assign_to(X_.col(i)); }
-            XtX_ = X_.transpose() * W * X_;
-            invXtX_ = XtX_.partialPivLu();
-            invXtXXt_ = invXtX_.solve(X_.transpose() * W);   // (X^\top * X)^{-1} * X^\top * W
-            // woodbury decomposition matrices
-            U_ = MatrixType::Zero(2 * n_dofs_, q_);
-            U_.block(0, 0, n_dofs_, q_) = Psi_.transpose() * D_ * W * X_;
-            V_ = MatrixType::Zero(q_, 2 * n_dofs_);
-            V_.block(0, 0, q_, n_dofs_) = X_.transpose() * W * Psi_;
+        {
+            const auto& y_data = gf[0].data().template col<double>(formula_.lhs());
+            y_data.assign_to(y_);
+            if (y_data.has_nan()) {   // correct \Psi for missing observations
+                Psi_ = y_data.nan().as_matrix().repeat(1, n_dofs_).select(Psi_);
+            }
         }
-	// tensorize
-	L_ = kronecker(L_, R0_); // ------------------------ this L_ is the one of the basis, need to correct
-	R0_ = kronecker(Im_, R0_); // ----------------------- Im_ identity matrix
-        R1_ = kronecker(Im_, R1_);
-	return;
+        if (n_covs_ != 0) {
+            // assemble design matrix
+            X_.resize(n_obs_, n_covs_);
+            for (int i = 0; i < n_covs_; ++i) { gf[0].data().template col<double>(covs[i]).assign_to(X_.col(i)); }
+            XtWX_ = X_.transpose() * W * X_;
+            invXtWX_ = XtWX_.partialPivLu();
+            invXtWXXtW_ = invXtWX_.solve(X_.transpose() * W);   // (X^\top * W * X)^{-1} * (X^\top * W)
+            // woodbury decomposition matrices
+            U_ = matrix_t::Zero(2 * n_dofs_ * m_, n_covs_);
+            U_.block(0, 0, n_dofs_ * m_, n_covs_) = Psi_.transpose() * D_ * W * X_;
+            V_ = matrix_t::Zero(n_covs_, 2 * n_dofs_ * m_);
+            V_.block(0, 0, n_covs_ * m_, n_dofs_) = X_.transpose() * W * Psi_;
+        }
+        return;
     }
    public:
-    fe_parabolic_driver_impl() noexcept = default;
-    template <typename BilinearForm, typename LinearForm, typename GeoFrame, typename WeightMatrix>
-    fe_parabolic_driver_impl(
-      const std::string& formula, const GeoFrame& gf, BilinearForm&& bilinear_form, LinearForm&& linear_form,
-      const WeightMatrix& W) :
-        fe_parabolic_driver_base(gf, bilinear_form, linear_form) {
-        init_(formula, gf, W);
+    using solution_policy = monolithic;
+
+    fe_parabolic_driver() noexcept = default;
+    template <typename GeoFrame, typename Penalty, typename InitialCondition>
+        requires(internals::is_pair_v<Penalty>)
+    fe_parabolic_driver(
+      const std::string& formula, const GeoFrame& gf, BilinearForm_&& bilinear_form, LinearForm_&& linear_form,
+      const InitialCondition_& s) {
+        fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
+        n_obs_ = gf[0].rows();   // number of data locations on physical domain
+        init_(formula, gf, penalty, s, Eigen::Matrix<double, Dynamic, 1>::Ones(n_obs_).asDiagonal());
     }
-    template <typename BilinearForm, typename LinearForm, typename GeoFrame>
-    fe_parabolic_driver_impl(
-      const std::string& formula, const GeoFrame& gf, BilinearForm&& bilinear_form, LinearForm&& linear_form) :
-        fe_parabolic_driver_base(gf, bilinear_form, linear_form) {
-        init_(formula, gf, Eigen::Matrix<double, Dynamic, 1>::Ones(y_.rows()).asDiagonal());
+    template <typename GeoFrame, typename Penalty, typename InitialCondition, typename WeightMatrix>
+        requires(internals::is_pair_v<Penalty>)
+    fe_parabolic_driver(
+      const std::string& formula, const GeoFrame& gf, BilinearForm_&& bilinear_form, LinearForm_&& linear_form,
+      const InitialCondition_& s, const WeightMatrix& W) {
+        fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
+        n_obs_ = gf[0].rows();   // number of data locations on physical domain
+        init_(formula, gf, penalty, s, W);
     }
 
     void operator()(double lambda_D, double lambda_T) {
         // assemble system matrix for the nonparameteric part
-        A_ = SparseBlockMatrix<double, 2, 2>(
+        SparseBlockMatrix<double, 2, 2> A_(
           -Psi_.transpose() * D_ * Psi_, lambda_D * (R1_ + lambda_T * L_).transpose(), lambda_D * (R1_ + lambda_T * L_),
           lambda_D * R0_);
         invA_.compute(A_);
         // linear system rhs
-        b_.resize(2 * n_dofs_);
-        b_.block(n_dofs_, 0, n_dofs_, 1) = lambda_D * u_;
+        vector_t b_(2 * n_dofs_ * m_);
+        b_.block(n_dofs_ * m_, 0, n_dofs_ * m_, 1) = lambda_D * u_;
 	
-        VectorType x;
-        if (q_ == 0) {   // nonparametric case
-            b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * y_;
+        vector_t x;
+        if (n_covs_ == 0) {   // nonparametric case
+            b_.block(0, 0, n_dofs_ * m_, 1) = -Psi_.transpose() * D_ * y_;
             x = invA_.solve(b_);
-            f_ = x.head(n_dofs_);
+            f_ = x.head(n_dofs_ * m_);
         } else {   // parametric case
-            b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * internals::lmbQ(X_, invXtX_, y_);
+            b_.block(0, 0, n_dofs_ * m_, 1) = -Psi_.transpose() * D_ * internals::lmbQ(X_, invXtX_, y_);
             x = woodbury_system_solve(invA_, U_, XtX_, V_, b_);
-            f_ = x.head(n_dofs_);
+            f_ = x.head(n_dofs_ * m_);
             beta_ = invXtXXt_ * (y_ - Psi_ * f_);
         } 
-        g_ = x.tail(n_dofs_);   // PDE misfit
+        g_ = x.tail(n_dofs_ * m_);   // PDE misfit
         return;
     }
     template <typename WeightMatrix> void operator()(double lambda_D, double lambda_T, WeightMatrix&& W) {
         // assemble system matrix for the nonparameteric part
-        A_ = SparseBlockMatrix<double, 2, 2>(
+        SparseBlockMatrix<double, 2, 2> A_(
           -Psi_.transpose() * D_ * W * Psi_, lambda_D * (R1_ + lambda_T * L_).transpose(),
           lambda_D * (R1_ + lambda_T * L_), lambda_D * R0_);
         invA_.compute(A_);
         // linear system rhs
-        VectorType b_(2 * n_dofs_);
-        b_.block(n_dofs_, 0, n_dofs_, 1) = lambda_D * u_;
+        vector_t b_(2 * n_dofs_ * m_);
+        b_.block(n_dofs_ * m_, 0, n_dofs_ * m_, 1) = lambda_D * u_;
 
-        VectorType x;
-        if (q_ == 0) {   // nonparametric case
-            b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * W * y_;
+        vector_t x;
+        if (n_covs_ == 0) {   // nonparametric case
+            b_.block(0, 0, n_dofs_ * m_, 1) = -Psi_.transpose() * D_ * W * y_;
             x = invA_.solve(b_);
-            f_ = x.head(n_dofs_);
+            f_ = x.head(n_dofs_ * m_);
         } else {   // parametric case
             XtX_ = X_.transpose() * W * X_;
             invXtX_ = XtX_.partialPivLu();
-            b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * internals::lmbQ(W, X_, invXtX_, y_);
+            b_.block(0, 0, n_dofs_ * m_, 1) = -Psi_.transpose() * D_ * internals::lmbQ(W, X_, invXtX_, y_);
             // woodbury matrices
-            U_.block(0, 0, n_dofs_, q_) = Psi_.transpose() * D_ * W * X_;
-            V_.block(0, 0, q_, n_dofs_) = X_.transpose() * W * Psi_;
+            U_.block(0, 0, n_dofs_ * m_, n_covs_) = Psi_.transpose() * D_ * W * X_;
+            V_.block(0, 0, n_covs_, n_dofs_ * m_) = X_.transpose() * W * Psi_;
             // solve A * x = (A_ + U_ * (X^\top*W*X) * V_) * x = b
             x = woodbury_system_solve(invA_, U_, XtX_, V_, b_);
-            f_ = x.head(n_dofs_);
+            f_ = x.head(n_dofs_ * m_);
             beta_ = invXtX_.solve(X_.transpose() * W) * (y_ - Psi_ * f_);
         }
-        g_ = x.tail(n_dofs_);   // PDE misfit
+        g_ = x.tail(n_dofs_ * m_);   // PDE misfit
         return;
     }
+  
     // observers
-    const VectorType& f() const { return f_; }
-    const VectorType& beta() const { return beta_; }
-    const VectorType& g() const { return g_; }
-   private:
-    int q_;                       // number of covariates
-    int n_obs_;
-    MatrixType X_;                // n_obs x q design matrix
-    VectorType y_;                // n_obs x 1 observation vector
-    MatrixType U_, V_;            // (2 * n_dofs) x q matrices [\Psi^\top * D * y, 0] and [X^\top * \Psi, 0]
-    MatrixType XtX_, invXtXXt_;   // q x q matrix X^\top * X and q x n_obs matrix (X^\top * X)^{-1} * X^\top
-    DenseSolverType invXtX_;      // factorization of q x q matrix X^\top * X
-    SparseSolverType invA_;
-    VectorType f_, beta_, g_;
+    int n_dofs() const { return n_dofs_; }
+    const sparse_matrix_t& R0() const { return R0_; }
+    const sparse_matrix_t& R1() const { return R1_; }
+    const sparse_matrix_t& Psi() const { return Psi_; }
+    const vector_t& u() const { return u_; }
+    const vector_t& f() const { return f_; }
+    const vector_t& beta() const { return beta_; }
+    const vector_t& g() const { return g_; }
+    // penalty matrix
+    matrix_t P(double lambda_D, double lambda_T) const {
+        if (!invR0_.has_value()) { invR0_->compute(R0__); }
+        if (!PT_.has_value()) { PT_ = kronecker(L__, R0__); }
+        return lambda_D * (R1__ + lambda_T * PT_).transpose() * invR0_->solve(R1__ + lambda_T * PT_);
+    }
+   protected:
+    int n_dofs_ = 0, n_obs_ = 0, n_covs_ = 0;
+    double DeltaT_ = 0;
+    // not tensorized quantities
+    sparse_matrix_t R0__;   // n_dofs x n_dofs matrix [R0]_{ij} = \int_D \psi_i * \psi_j
+    sparse_matrix_t R1__;   // n_dofs x n_dofs matrix [R1]_{ij} = \int_D a(\psi_i, \psi_j)
+    sparse_matrix_t L__;    // [L]_{ii} = 1/DeltaT for i \in {1 ... m}, [L_]_{i,i-1} = -1/DeltaT for i \in {1 ... m-1}
+
+    sparse_matrix_t R0_;    // (n_dofs * m) x (n_dofs * m) matrix R0 = Im \kron R0__
+    sparse_matrix_t R1_;    // (n_dofs * m) x (n_dofs * m) matrix R1 = Im \kron R1__
+    sparse_matrix_t Psi_;   // (n_obs * m) x (n_dofs * m) matrix Psi = Im \kron Psi__
+    sparse_matrix_t L_;     // (n_dofs * m) x (n_dofs * m) matrix L = L__ \kron R0__
+    vector_t u_;            // (n_dofs * m) x 1 vector u = [u_1 + + R0__*s / DeltaT, u_2, \ldots, u_n]
+    diag_matrix_t D_;       // vector of regions' measures (areal sampling)
+    mutable sparse_solver_t invR0_;
+    mutable std::optional<sparse_matrix_t> PT_;   // (n_dofs * m) x (n_dofs * m) matrix PT = L__ \kron R0__
+    vector_t f_, beta_, g_;
+    sparse_solver_t invA_;   // factorization of (2 * n_dofs * m) x (2 * n_dofs * m) nonparametric matrix
+
+    int n_, m_;                // number of spatial and temporal locations
+    matrix_t X_;               // n_obs x n_covs design matrix
+    vector_t y_;               // n_obs x 1 observation vector
+    matrix_t U_, V_;           // (2*n_dofs*m) x n_covs matrices [\Psi^\top * D * W * y, 0] and [X^\top * W * \Psi, 0]
+    matrix_t XtWX_;            // n_covs x n_covs matrix X^\top * W * X
+    matrix_t invXtWXXtW_;      // n_covs x n_obs matrix (X^\top * X)^{-1} * (X^\top W)
+    dense_solver_t invXtWX_;   // factorization of n_covs x n_covs matrix X^\top * W * X
+
 };
 
-template <> struct fe_parabolic_driver_impl<iterative_tag> : fe_parabolic_driver_base {
+// template <> struct fe_parabolic_driver_impl<iterative_tag> : fe_parabolic_driver_base {
 
-};
+// };
   
 }   // namespace internals
 }   // namespace fdapde
