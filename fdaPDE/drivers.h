@@ -34,6 +34,7 @@ struct iterative  { } Iterative;
 
 #include "src/drivers/fe_elliptic.h"
 #include "src/drivers/fe_separable.h"
+#include "src/drivers/fe_parabolic.h"
 
 // clang-format on
 

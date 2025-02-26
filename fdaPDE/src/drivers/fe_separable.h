@@ -271,8 +271,8 @@ template <> class fe_separable_driver<monolithic> {
 
     sparse_matrix_t R0_;    // n_dofs x n_dofs matrix R0 = R0_T \kron R0_D
     sparse_matrix_t R1_;    // n_dofs x n_dofs matrix R1 = R0_T \kron R1_D
-    sparse_matrix_t Psi_;   // n_obs x n_dofs matrix Psi = \Psi_T \kron \Psi_D
-    sparse_matrix_t K_;     // n_dofs x n_dofs matrix K = R1_T \kron R0_D
+    sparse_matrix_t K_;     // n_dofs x n_dofs matrix  K = R1_T \kron R0_D
+    sparse_matrix_t Psi_;   // n_obs x n_dofs matrix Psi = Psi_T \kron Psi_D
     vector_t u_;            // (n_dofs_D * n_dofs_T) x 1 vector u = [u_1 \ldots u_n, \ldots, u_1 \ldots u_n]
     diag_matrix_t D_;       // vector of regions' measures (areal sampling)
     mutable std::optional<sparse_solver_t> invR0_;
