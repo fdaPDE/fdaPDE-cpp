@@ -282,7 +282,7 @@ template <> struct fe_parabolic_driver<iterative> {
         using storage_t = MdMap<Scalar, full_dynamic_extent_t<Order>, internals::layout_left>;
 
         storage_t data_;
-        int rows_ = 0;
+        int rows_ = 0, cols_ = 0;
         int blk_rows_ = 0, blk_cols_ = 0;   // single block size
        public:
         block_map_t() noexcept = default;
@@ -292,6 +292,7 @@ template <> struct fe_parabolic_driver<iterative> {
         block_map_t(DataT&& data, int rows, int blk_rows, int blk_cols) :
             data_(data.data(), rows, data.cols(), (data.rows() / rows)),
             rows_(rows),
+            cols_(data.cols()),
             blk_rows_(blk_rows),
             blk_cols_(blk_cols) {
             fdapde_assert(data.rows() % rows == 0 && rows % blk_rows == 0 && data.cols() % blk_cols == 0);
@@ -302,19 +303,23 @@ template <> struct fe_parabolic_driver<iterative> {
         block_map_t(DataT&& data, int rows) :   // divide data in (data.rows() / rows) blocks of size rows x data.cols()
             data_(data.data(), rows, data.cols(), (data.rows() / rows)),
             rows_(rows),
+	    cols_(data.cols()),
             blk_rows_(rows),
             blk_cols_(data.cols()) {
             fdapde_assert(data.rows() % rows == 0);
         }
         // observers
-        auto operator()(int i, int j, int k) const {
+        auto operator()(int i, int j, int k) const {   // get (i, j)-th block of k-th time instant
             auto slice_ = data_.template slice<2>(k);
-            return slice_.as_eigen_map().block(
-              i * blk_rows_, j * blk_cols_, (i + 1) * blk_rows_ - 1, (j + 1) * blk_cols_ - 1);
+            return slice_.as_eigen_map().block(i * blk_rows_, j * blk_cols_, blk_rows_, blk_cols_);
         }
-        auto operator()(int j, int k) const {   // get j-th column of k-th time instant
+        auto col(int j, int k) const {   // get j-th column of k-th time instant
             auto slice_ = data_.template slice<2>(k);
-            return slice_.as_eigen_map().block(0, j * blk_cols_, rows_ - 1, (j + 1) * blk_cols_ - 1);
+            return slice_.as_eigen_map().block(0, j * blk_cols_, rows_, blk_cols_);
+        }
+        auto row(int i, int k) const {   // get i-th row of k-th time instant
+            auto slice_ = data_.template slice<2>(k);
+            return slice_.as_eigen_map().block(i * blk_rows_, 0, blk_rows_, cols_);
         }
         auto operator()(int k) const { return data_.template slice<2>(k).as_eigen_map(); }
         int size() const { return data_.size(); }
@@ -324,22 +329,27 @@ template <> struct fe_parabolic_driver<iterative> {
         const double* data() const { return data_.data(); }
         // modifiers
         double* data() { return data_.data(); }
-        auto operator()(int i, int j, int k) {
+        auto operator()(int i, int j, int k) {   // get (i, j)-th block of k-th time instant
             auto slice_ = data_.template slice<2>(k);
-            return slice_.as_eigen_map().block(
-              i * blk_rows_, j * blk_cols_, (i + 1) * blk_rows_ - 1, (j + 1) * blk_cols_ - 1);
+            return slice_.as_eigen_map().block(i * blk_rows_, j * blk_cols_, blk_rows_, blk_cols_);
         }
-        auto operator()(int j, int k) {   // get j-th column of k-th time instant
+        auto col(int j, int k) {   // get j-th column of k-th time instant
             auto slice_ = data_.template slice<2>(k);
-            return slice_.as_eigen_map().block(0, j * blk_cols_, rows_ - 1, (j + 1) * blk_cols_ - 1);
+            return slice_.as_eigen_map().block(0, j * blk_cols_, rows_, blk_cols_);
+        }
+        auto row(int i, int k) {   // get i-th row of k-th time instant
+            auto slice_ = data_.template slice<2>(k);
+            return slice_.as_eigen_map().block(i * blk_rows_, 0, blk_rows_, cols_);
         }
         auto operator()(int k) { return data_.template slice<2>(k).as_eigen_map(); }
     };
 
     // J(f,g) = \sum_{k=1}^m (y^(k) - \Psi * f^(k))^\top * (y^(k) - \Psi * f^(k)) + \lambda_D * (g^(k))^\top * (g^(k))
-    double J_(const block_map_t& y, const block_map_t& f, const block_map_t& g, double lambda) const {
+    double J_(const block_map_t& y, const block_map_t& x, double lambda) const {
         double sse = 0;
-        for (int t = 0; t < m_; ++t) { sse += ((y(t) - Psi_ * f(t)).squaredNorm() + lambda * g(t).squaredNorm()); }
+        for (int t = 0; t < m_; ++t) {
+            sse += ((y(t) - Psi_ * x.row(0, t)).squaredNorm() + lambda * x.row(1, t).squaredNorm());
+        }
         return sse;
     }
 
@@ -441,75 +451,69 @@ template <> struct fe_parabolic_driver<iterative> {
           formula, gf, penalty, s, Eigen::Matrix<double, Dynamic, 1>::Ones(gf[0].rows()).asDiagonal(), 1e-4, 50) { }
 
     void operator()(double lambda_D, double lambda_T) {
-        // define auxiliary storage
-        f_.resize(n_dofs_ * m_, y_.cols());
-        g_.resize(n_dofs_ * m_, y_.cols());
-        matrix_t f_old_buff(n_dofs_ * m_, y_.cols()), g_old_buff(n_dofs_ * m_, y_.cols());
-        // map to space-time structures
+        // define auxiliary structures
         block_map_t y(y_, n_);
         block_map_t u(u_, n_dofs_);
-        block_map_t f_old(f_old_buff, n_dofs_), f_new(f_, n_dofs_);
-        block_map_t g_old(g_old_buff, n_dofs_), g_new(g_, n_dofs_);
+        matrix_t x_old_buff(2 * n_dofs_ * m_, y_.cols()), x_new_buff(2 * n_dofs_ * m_, y_.cols());
+        block_map_t x_old(x_old_buff, 2 * n_dofs_, n_dofs_, y_.cols());
+	block_map_t x_new(x_new_buff, 2 * n_dofs_, n_dofs_, y_.cols());
         double alpha = lambda_D * lambda_T / DeltaT_;
-	
-        // compute starting point (f^(k,0), g^(k,0)) k = 1 ... m
-        {
+
+        {   // compute starting point (f^(k,0), g^(k,0)) k = 1 ... m
             SparseBlockMatrix<double, 2, 2> A_(
               Psi_.transpose() * D_ * Psi_, lambda_D * R1_.transpose(), lambda_D * R1_, -lambda_D * R0_);
             invA_.compute(A_);
             vector_t b_(2 * n_dofs_);
             for (int t = 0; t < m_; ++t) {
                 b_ << Psi_.transpose() * D_ * y(t), lambda_D * lambda_T * u(t);
-                f_old(t) = invA_.solve(b_).head(n_dofs_);
-            }
-	    
+                x_old.row(0, t) = invA_.solve(b_).head(n_dofs_);
+            }	    
             sparse_matrix_t G0 = alpha * R0_.transpose() + lambda_D * R1_.transpose();
             sparse_solver_t invG0;
             invG0.compute(G0);
-            b_ = Psi_.transpose() * D_ * (y(m_ - 1) - Psi_ * f_old(m_ - 1));   // g^(t + 1,0) = 0
-            g_old(m_ - 1) = invG0.solve(b_);
+            b_ = Psi_.transpose() * D_ * (y(m_ - 1) - Psi_ * x_old.row(0, m_ - 1));   // g^(t + 1,0) = 0
+            x_old.row(1, m_ - 1) = invG0.solve(b_);
             // general step
             for (int t = m_ - 2; t >= 0; --t) {
-                b_ = Psi_.transpose() * D_ * (y(t) - Psi_ * f_old(t)) + alpha * R0_ * g_old(t + 1);
-                g_old(t) = invG0.solve(b_);
+                b_ = Psi_.transpose() * D_ * (y(t) - Psi_ * x_old.row(0, t)) + alpha * R0_ * x_old.row(1, t + 1);
+                x_old.row(1, t) = invG0.solve(b_);
             }
         }
-
         // iterative scheme initialization
         double Jold = std::numeric_limits<double>::max();
-        double Jnew = J_(y, f_old, g_old, lambda_D);
+        double Jnew = J_(y, x_old, lambda_D);
         int i = 1;
         SparseBlockMatrix<double, 2, 2> A_(
           Psi_.transpose() * D_ * Psi_, lambda_D * R1_.transpose() + alpha * R0_.transpose(),
           lambda_D * R1_ + alpha * R0_, -lambda_D * R0_);
         invA_.compute(A_);
 	vector_t b_(2 * n_dofs_);
-        // start loop
-	Eigen::Matrix<double, Dynamic, 1> x;
+        // iterative loop
         while (i < max_iter_ && std::abs((Jnew - Jold) / Jnew) > tol_) {
-            b_ << Psi_.transpose() * D_ * y(0) + alpha * R0_ * g_old(1), lambda_D * u(0);
-	    x = invA_.solve(b_);
-	    f_new(0) = x.topRows(n_dofs_);
-	    g_new(0) = x.bottomRows(n_dofs_);
+            // at step 0, f^(k-1,i-1) is zero
+            b_ << Psi_.transpose() * D_ * y(0) + alpha * R0_ * x_old.row(1, 1), lambda_D * u(0);
+            x_new(0) = invA_.solve(b_);
             // general step
             for (int t = 1; t < m_ - 1; ++t) {
-                b_ << Psi_.transpose() * D_ * y(t) + alpha * R0_ * g_old(t + 1),
-                  alpha * R0_ * f_old(t - 1) + lambda_D * u(t);
-                x = invA_.solve(b_);
-                f_new(t) = x.topRows(n_dofs_);
-                g_new(t) = x.bottomRows(n_dofs_);
+                b_ << Psi_.transpose() * D_ * y(t) + alpha * R0_ * x_old.row(1, t + 1),
+                  alpha * R0_ * x_old.row(0, t - 1) + lambda_D * u(t);
+                x_new(t) = invA_.solve(b_);
             }
-            // at last step g^(k+1,i-1) is zero
-            b_ << Psi_.transpose() * D_ * y(m_ - 1), alpha * R0_ * f_old(m_ - 2) + lambda_D * u(m_ - 1);
-            x = invA_.solve(b_);
-            f_new(m_ - 1) = x.topRows(n_dofs_);
-            g_new(m_ - 1) = x.bottomRows(n_dofs_);
+            // at step m_ - 1, g^(k+1,i-1) is zero
+            b_ << Psi_.transpose() * D_ * y(m_ - 1), alpha * R0_ * x_old.row(0, m_ - 2) + lambda_D * u(m_ - 1);
+            x_new(m_ - 1) = invA_.solve(b_);
             // prepare for next iteration
             Jold = Jnew;
-            f_old = f_new;
-            g_old = g_new;
-            Jnew = J_(y, f_old, g_old, lambda_D);
+	    x_old = x_new;
+            Jnew = J_(y, x_new, lambda_D);
             i++;
+        }
+        // store result
+        f_.resize(n_dofs_ * m_, y_.cols());
+        g_.resize(n_dofs_ * m_, y_.cols());
+        for (int i = 0; i < m_; ++i) {
+            f_.middleRows(i * n_dofs_, n_dofs_) = x_new.row(0, i);
+            g_.middleRows(i * n_dofs_, n_dofs_) = x_new.row(1, i);
         }
         return;
     }
@@ -523,6 +527,8 @@ template <> struct fe_parabolic_driver<iterative> {
     const vector_t& beta() const { return beta_; }
     const vector_t& g() const { return g_; }
    protected:
+    int max_iter_ = 50;   // maximum number of iterations
+    double tol_ = 1e-4;   // convergence tolerance
     int n_dofs_ = 0, n_obs_ = 0, n_covs_ = 0;
     double DeltaT_ = 0;
     sparse_matrix_t R0_;    // n_dofs x n_dofs matrix [R0]_{ij} = \int_D \psi_i * \psi_j
@@ -537,9 +543,6 @@ template <> struct fe_parabolic_driver<iterative> {
 
     int n_, m_;    // number of spatial and temporal locations
     vector_t y_;   // n_obs x 1 observation vector
-
-    int max_iter_ = 50;   // maximum number of iterations
-    double tol_ = 1e-4;   // convergence tolerance
 };
 
 }   // namespace internals
