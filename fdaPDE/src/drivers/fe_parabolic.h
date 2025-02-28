@@ -283,7 +283,7 @@ template <> struct fe_parabolic_driver<iterative> {
 
         storage_t data_;
         int rows_ = 0, cols_ = 0;
-        int blk_rows_ = 0, blk_cols_ = 0;   // single block size
+        int blk_rows_ = 0, blk_cols_ = 0;
        public:
         block_map_t() noexcept = default;
         template <typename DataT>
@@ -303,41 +303,20 @@ template <> struct fe_parabolic_driver<iterative> {
         block_map_t(DataT&& data, int rows) :   // divide data in (data.rows() / rows) blocks of size rows x data.cols()
             data_(data.data(), rows, data.cols(), (data.rows() / rows)),
             rows_(rows),
-	    cols_(data.cols()),
+            cols_(data.cols()),
             blk_rows_(rows),
             blk_cols_(data.cols()) {
             fdapde_assert(data.rows() % rows == 0);
         }
         // observers
-        auto operator()(int i, int j, int k) const {   // get (i, j)-th block of k-th time instant
-            auto slice_ = data_.template slice<2>(k);
-            return slice_.as_eigen_map().block(i * blk_rows_, j * blk_cols_, blk_rows_, blk_cols_);
-        }
-        auto col(int j, int k) const {   // get j-th column of k-th time instant
-            auto slice_ = data_.template slice<2>(k);
-            return slice_.as_eigen_map().block(0, j * blk_cols_, rows_, blk_cols_);
-        }
-        auto row(int i, int k) const {   // get i-th row of k-th time instant
+        auto operator()(int i, int k) const {   // get i-th row-block of k-th time instant
             auto slice_ = data_.template slice<2>(k);
             return slice_.as_eigen_map().block(i * blk_rows_, 0, blk_rows_, cols_);
         }
         auto operator()(int k) const { return data_.template slice<2>(k).as_eigen_map(); }
         int size() const { return data_.size(); }
-        int blk_size() const { return blk_rows_ * blk_cols_; }
-        int blk_rows() const { return blk_rows_; }
-        int blk_cols() const { return blk_cols_; }
-        const double* data() const { return data_.data(); }
         // modifiers
-        double* data() { return data_.data(); }
-        auto operator()(int i, int j, int k) {   // get (i, j)-th block of k-th time instant
-            auto slice_ = data_.template slice<2>(k);
-            return slice_.as_eigen_map().block(i * blk_rows_, j * blk_cols_, blk_rows_, blk_cols_);
-        }
-        auto col(int j, int k) {   // get j-th column of k-th time instant
-            auto slice_ = data_.template slice<2>(k);
-            return slice_.as_eigen_map().block(0, j * blk_cols_, rows_, blk_cols_);
-        }
-        auto row(int i, int k) {   // get i-th row of k-th time instant
+        auto operator()(int i, int k) {
             auto slice_ = data_.template slice<2>(k);
             return slice_.as_eigen_map().block(i * blk_rows_, 0, blk_rows_, cols_);
         }
@@ -348,11 +327,10 @@ template <> struct fe_parabolic_driver<iterative> {
     double J_(const block_map_t& y, const block_map_t& x, double lambda) const {
         double sse = 0;
         for (int t = 0; t < m_; ++t) {
-            sse += ((y(t) - Psi_ * x.row(0, t)).squaredNorm() + lambda * x.row(1, t).squaredNorm());
+            sse += ((y(t) - Psi_ * x(0, t)).squaredNorm() + lambda * x(1, t).squaredNorm());
         }
         return sse;
     }
-
     template <typename GeoFrame, typename Penalty, typename WeightMatrix>
     void init_(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) {     
         fdapde_static_assert(internals::is_valid_penalty_pair_v<Penalty>, INVALID_PENALTY_DESCRIPTION);
@@ -361,7 +339,10 @@ template <> struct fe_parabolic_driver<iterative> {
         using BilinearForm = std::tuple_element_t<0, std::decay_t<Penalty>>;
         using LinearForm = std::tuple_element_t<1, std::decay_t<Penalty>>;
         using FeSpace = typename BilinearForm::TrialSpace;
-	// discretization
+        fdapde_static_assert(
+          std::is_same_v<typename FeSpace::discretization_category FDAPDE_COMMA finite_element_tag>,
+          NO_FINITE_ELEMENT_SPACE_DETECTED);
+        // discretization
         const BilinearForm& bilinear_form = std::get<0>(penalty);
         const LinearForm& linear_form = std::get<1>(penalty);
         n_dofs_ = bilinear_form.n_dofs();
@@ -448,7 +429,7 @@ template <> struct fe_parabolic_driver<iterative> {
         requires(internals::is_pair_v<Penalty>)
     fe_parabolic_driver(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const InitialCondition& s) :
         fe_parabolic_driver(
-          formula, gf, penalty, s, Eigen::Matrix<double, Dynamic, 1>::Ones(gf[0].rows()).asDiagonal(), 1e-4, 50) { }
+          formula, gf, penalty, s, Eigen::Matrix<double, Dynamic, 1>::Ones(gf[0].rows()).asDiagonal()) { }
 
     void operator()(double lambda_D, double lambda_T) {
         // define auxiliary structures
@@ -466,17 +447,17 @@ template <> struct fe_parabolic_driver<iterative> {
             vector_t b_(2 * n_dofs_);
             for (int t = 0; t < m_; ++t) {
                 b_ << Psi_.transpose() * D_ * y(t), lambda_D * lambda_T * u(t);
-                x_old.row(0, t) = invA_.solve(b_).head(n_dofs_);
+                x_old(0, t) = invA_.solve(b_).head(n_dofs_);
             }	    
             sparse_matrix_t G0 = alpha * R0_.transpose() + lambda_D * R1_.transpose();
             sparse_solver_t invG0;
             invG0.compute(G0);
-            b_ = Psi_.transpose() * D_ * (y(m_ - 1) - Psi_ * x_old.row(0, m_ - 1));   // g^(t + 1,0) = 0
-            x_old.row(1, m_ - 1) = invG0.solve(b_);
+            b_ = Psi_.transpose() * D_ * (y(m_ - 1) - Psi_ * x_old(0, m_ - 1));
+            x_old(1, m_ - 1) = invG0.solve(b_);
             // general step
             for (int t = m_ - 2; t >= 0; --t) {
-                b_ = Psi_.transpose() * D_ * (y(t) - Psi_ * x_old.row(0, t)) + alpha * R0_ * x_old.row(1, t + 1);
-                x_old.row(1, t) = invG0.solve(b_);
+                b_ = Psi_.transpose() * D_ * (y(t) - Psi_ * x_old(0, t)) + alpha * R0_ * x_old(1, t + 1);
+                x_old(1, t) = invG0.solve(b_);
             }
         }
         // iterative scheme initialization
@@ -491,16 +472,16 @@ template <> struct fe_parabolic_driver<iterative> {
         // iterative loop
         while (i < max_iter_ && std::abs((Jnew - Jold) / Jnew) > tol_) {
             // at step 0, f^(k-1,i-1) is zero
-            b_ << Psi_.transpose() * D_ * y(0) + alpha * R0_ * x_old.row(1, 1), lambda_D * u(0);
+            b_ << Psi_.transpose() * D_ * y(0) + alpha * R0_ * x_old(1, 1), lambda_D * u(0);
             x_new(0) = invA_.solve(b_);
             // general step
             for (int t = 1; t < m_ - 1; ++t) {
-                b_ << Psi_.transpose() * D_ * y(t) + alpha * R0_ * x_old.row(1, t + 1),
-                  alpha * R0_ * x_old.row(0, t - 1) + lambda_D * u(t);
+                b_ << Psi_.transpose() * D_ * y(t) + alpha * R0_ * x_old(1, t + 1),
+                  alpha * R0_ * x_old(0, t - 1) + lambda_D * u(t);
                 x_new(t) = invA_.solve(b_);
             }
             // at step m_ - 1, g^(k+1,i-1) is zero
-            b_ << Psi_.transpose() * D_ * y(m_ - 1), alpha * R0_ * x_old.row(0, m_ - 2) + lambda_D * u(m_ - 1);
+            b_ << Psi_.transpose() * D_ * y(m_ - 1), alpha * R0_ * x_old(0, m_ - 2) + lambda_D * u(m_ - 1);
             x_new(m_ - 1) = invA_.solve(b_);
             // prepare for next iteration
             Jold = Jnew;
@@ -512,8 +493,8 @@ template <> struct fe_parabolic_driver<iterative> {
         f_.resize(n_dofs_ * m_, y_.cols());
         g_.resize(n_dofs_ * m_, y_.cols());
         for (int i = 0; i < m_; ++i) {
-            f_.middleRows(i * n_dofs_, n_dofs_) = x_new.row(0, i);
-            g_.middleRows(i * n_dofs_, n_dofs_) = x_new.row(1, i);
+            f_.middleRows(i * n_dofs_, n_dofs_) = x_new(0, i);
+            g_.middleRows(i * n_dofs_, n_dofs_) = x_new(1, i);
         }
         return;
     }
@@ -538,7 +519,7 @@ template <> struct fe_parabolic_driver<iterative> {
     diag_matrix_t D_;       // vector of regions' measures (areal sampling)
     mutable std::optional<sparse_solver_t> invR0_;
     vector_t f_, beta_, g_;
-    sparse_solver_t invA_;   // factorization of (2 * n_dofs) x (2 * n_dofs) nonparametric matrix
+    sparse_solver_t invA_;   // factorization of nonparametric matrix
     vector_t s_;             // initial condition vector
 
     int n_, m_;    // number of spatial and temporal locations
