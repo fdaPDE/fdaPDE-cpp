@@ -14,19 +14,19 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __FE_PARABOLIC_DRIVER_H__
-#define __FE_PARABOLIC_DRIVER_H__
+#ifndef __FE_PARABOLIC_SOLVER_H__
+#define __FE_PARABOLIC_SOLVER_H__
 
 #include "header_check.h"
 
 namespace fdapde {
 namespace internals {
 
-template <typename Strategy> class fe_parabolic_driver;
+template <typename Strategy> class fe_parabolic_solver;
 
 // solves \min_{f, \beta} \| W^{1/2} * (y_i - x_i^\top * \beta - f(p_i, t_j)) \|_2^2 +
 // \int_D \int_T (\frac{\partial f}{\partial t} + L(f) - u)^2
-template <> class fe_parabolic_driver<monolithic> {
+template <> class fe_parabolic_solver<monolithic> {
    private:
     using vector_t        = Eigen::Matrix<double, Dynamic, 1>;
     using matrix_t        = Eigen::Matrix<double, Dynamic, Dynamic>;
@@ -148,10 +148,10 @@ template <> class fe_parabolic_driver<monolithic> {
    public:
     using solution_policy = monolithic;
 
-    fe_parabolic_driver() noexcept = default;
+    fe_parabolic_solver() noexcept = default;
     template <typename GeoFrame, typename Penalty, typename InitialCondition>
         requires(internals::is_pair_v<Penalty>)
-    fe_parabolic_driver(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const InitialCondition& s) :
+    fe_parabolic_solver(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const InitialCondition& s) :
         s_(s) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
         n_obs_ = gf[0].rows();   // number of data locations on physical domain
@@ -159,7 +159,7 @@ template <> class fe_parabolic_driver<monolithic> {
     }
     template <typename GeoFrame, typename Penalty, typename InitialCondition, typename WeightMatrix>
         requires(internals::is_pair_v<Penalty>)
-    fe_parabolic_driver(
+    fe_parabolic_solver(
       const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const InitialCondition& s,
       const WeightMatrix& W) :
         s_(s) {
@@ -267,7 +267,7 @@ template <> class fe_parabolic_driver<monolithic> {
 
 };
 
-template <> struct fe_parabolic_driver<iterative> {
+template <> struct fe_parabolic_solver<iterative> {
    private:
     using vector_t        = Eigen::Matrix<double, Dynamic, 1>;
     using matrix_t        = Eigen::Matrix<double, Dynamic, Dynamic>;
@@ -408,10 +408,10 @@ template <> struct fe_parabolic_driver<iterative> {
    public:
     using solution_policy = iterative;
 
-    fe_parabolic_driver() noexcept = default;
+    fe_parabolic_solver() noexcept = default;
     template <typename GeoFrame, typename Penalty, typename InitialCondition, typename WeightMatrix>
         requires(internals::is_pair_v<Penalty>)
-    fe_parabolic_driver(
+    fe_parabolic_solver(
       const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const InitialCondition& s,
       const WeightMatrix& W, double tol, int max_iter) :
         s_(s), tol_(tol), max_iter_(max_iter) {
@@ -421,14 +421,14 @@ template <> struct fe_parabolic_driver<iterative> {
     }
     template <typename GeoFrame, typename Penalty, typename InitialCondition, typename WeightMatrix>
         requires(internals::is_pair_v<Penalty>)
-    fe_parabolic_driver(
+    fe_parabolic_solver(
       const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const InitialCondition& s,
       const WeightMatrix& W) :
-        fe_parabolic_driver(formula, gf, penalty, s, W, 1e-4, 50) { }
+        fe_parabolic_solver(formula, gf, penalty, s, W, 1e-4, 50) { }
     template <typename GeoFrame, typename Penalty, typename InitialCondition>
         requires(internals::is_pair_v<Penalty>)
-    fe_parabolic_driver(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const InitialCondition& s) :
-        fe_parabolic_driver(
+    fe_parabolic_solver(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const InitialCondition& s) :
+        fe_parabolic_solver(
           formula, gf, penalty, s, Eigen::Matrix<double, Dynamic, 1>::Ones(gf[0].rows()).asDiagonal()) { }
 
     void operator()(double lambda_D, double lambda_T) {
@@ -527,6 +527,9 @@ template <> struct fe_parabolic_driver<iterative> {
 };
 
 }   // namespace internals
+
+
+  
 }   // namespace fdapde
 
-#endif // __FE_PARABOLIC_DRIVER_H__
+#endif // __FE_PARABOLIC_SOLVER_H__

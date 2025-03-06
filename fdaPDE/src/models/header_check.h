@@ -15,16 +15,5 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #ifndef __FDAPDE_REGRESSION_MODULE_H__
-#define __FDAPDE_REGRESSION_MODULE_H__
-
-// clang-format off
-
-// include core
-#include <fdaPDE/core.h>
-
-#include "drivers.h"
-#include "src/models/sr.h"
-
-// clang-format on
-
-#endif   // __FDAPDE_REGRESSION_MODULE_H__
+#    error "Include fdaPDE/regression.h instead of including internal headers directly."
+#endif

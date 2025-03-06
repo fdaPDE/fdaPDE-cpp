@@ -14,17 +14,16 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __FDAPDE_REGRESSION_MODULE_H__
-#define __FDAPDE_REGRESSION_MODULE_H__
+#ifndef __FDAPDE_MODELS_MODULE_H__
+#define __FDAPDE_MODELS_MODULE_H__
 
 // clang-format off
 
 // include core
 #include <fdaPDE/core.h>
 
-#include "drivers.h"
-#include "src/models/sr.h"
+#include "regression.h"
 
 // clang-format on
 
-#endif   // __FDAPDE_REGRESSION_MODULE_H__
+#endif   // __FDAPDE_MODELS_MODULE_H__
