@@ -31,7 +31,7 @@ struct fe_elliptic_solver {
     using diag_matrix_t   = Eigen::DiagonalMatrix<double, Dynamic, Dynamic>;
     using sparse_solver_t = eigen_sparse_solver_movable_wrap<Eigen::SparseLU<sparse_matrix_t>>;
     using dense_solver_t  = Eigen::PartialPivLU<matrix_t>;
-
+  
     template <typename GeoFrame, typename Penalty>
     void init_(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) {
         fdapde_static_assert(internals::is_valid_penalty_pair_v<Penalty>, INVALID_PENALTY_DESCRIPTION);
@@ -99,6 +99,8 @@ struct fe_elliptic_solver {
         return;
     }
    public:
+    static constexpr int n_lambda = 1;
+
     fe_elliptic_solver() noexcept = default;
     // template <typename Penalty> fe_elliptic_solver(Penalty&& penalty) { discretize_(penalty); }
     template <typename GeoFrame, typename Penalty>
@@ -125,7 +127,7 @@ struct fe_elliptic_solver {
         if (!lambda_saved_.has_value() || lambda_saved_.value() != lambda) {
             // assemble and factorize system matrix for nonparameteric part
             SparseBlockMatrix<double, 2, 2> A_(
-              -Psi_.transpose() * D_ * Psi_, lambda * R1_.transpose(), lambda * R1_, lambda * R0_);
+              -Psi_.transpose() * D_ * W_ * Psi_, lambda * R1_.transpose(), lambda * R1_, lambda * R0_);
             invA_.compute(A_);
             // linear system rhs
             b_.block(n_dofs_, 0, n_dofs_, y_.cols()) = lambda * u_.replicate(1, y_.cols());
@@ -143,35 +145,39 @@ struct fe_elliptic_solver {
         g_ = x.bottomRows(n_dofs_);   // PDE misfit
         return std::make_pair(f_, beta_);
     }
-    template <typename WeightMatrix> std::pair<matrix_t, matrix_t> operator()(double lambda, WeightMatrix&& W) {
+    template <typename ResponseMatrix, typename WeightMatrix>
+    std::pair<matrix_t, matrix_t> operator()(double lambda, ResponseMatrix&& y, WeightMatrix&& W) {
+        // assemble and factorize system matrix for nonparameteric part
+        SparseBlockMatrix<double, 2, 2> A_(
+          -Psi_.transpose() * D_ * W * Psi_, lambda * R1_.transpose(), lambda * R1_, lambda * R0_);
+        invA_.compute(A_);
+        // linear system rhs
         if (!lambda_saved_.has_value() || lambda_saved_.value() != lambda) {
-            // assemble and factorize system matrix for nonparameteric part
-            SparseBlockMatrix<double, 2, 2> A_(
-              -Psi_.transpose() * D_ * W * Psi_, lambda * R1_.transpose(), lambda * R1_, lambda * R0_);
-            invA_.compute(A_);
-            // linear system rhs
-            b_.block(n_dofs_, 0, n_dofs_, y_.cols()) = lambda * u_.replicate(1, y_.cols());
+            b_.block(n_dofs_, 0, n_dofs_, y.cols()) = lambda * u_.replicate(1, y.cols());
             lambda_saved_ = lambda;
         }
         vector_t x;
         if (n_covs_ == 0) {
-            b_.block(0, 0, n_dofs_, y_.cols()) = -Psi_.transpose() * D_ * W * y_;
+            b_.block(0, 0, n_dofs_, y.cols()) = -Psi_.transpose() * D_ * W * y;
             x = invA_.solve(b_);
             f_ = x.topRows(n_dofs_);
         } else {
             XtWX_ = X_.transpose() * W * X_;
             invXtWX_ = XtWX_.partialPivLu();
-            b_.block(0, 0, n_dofs_, y_.cols()) = -Psi_.transpose() * D_ * internals::lmbQ(W, X_, invXtWX_, y_);
+            b_.block(0, 0, n_dofs_, y.cols()) = -Psi_.transpose() * D_ * internals::lmbQ(W, X_, invXtWX_, y);
             // woodbury matrices
             U_.block(0, 0, n_dofs_, n_covs_) = Psi_.transpose() * D_ * W * X_;
             V_.block(0, 0, n_covs_, n_dofs_) = X_.transpose() * W * Psi_;
             // solve A * x = (A_ + U_ * (X^\top * W * X) * V_) * x = b
             x = woodbury_system_solve(invA_, U_, XtWX_, V_, b_);
             f_ = x.topRows(n_dofs_);
-            beta_ = invXtWX_.solve(X_.transpose() * W) * (y_ - Psi_ * f_);
+            beta_ = invXtWX_.solve(X_.transpose() * W) * (y - Psi_ * f_);
         }
         g_ = x.bottomRows(n_dofs_);   // PDE misfit
         return std::make_pair(f_, beta_);
+    }
+    template <typename WeightMatrix> std::pair<matrix_t, matrix_t> operator()(double lambda, WeightMatrix&& W) {
+        return operator()(lambda, y_, W);
     }
     // hutchinson approximation for Tr[S]
     double edf(int r = 100, int seed = random_seed) {
@@ -197,6 +203,11 @@ struct fe_elliptic_solver {
         for (int i = 0; i < r; ++i) { trS += Ys_->row(i).dot(x.col(i).head(n_dofs_)); }
         return trS / r;
     }
+    vector_t ftPf() {
+        vector_t ftPf_(y_.cols());
+        for (int i = 0; i < y_.cols(); ++i) { ftPf_[i] = (*lambda_saved_) * g_.col(i).dot(R0_ * g_.col(i)); }
+        return ftPf_;
+    }
 
     // observers
     int n_dofs() const { return n_dofs_; }
@@ -219,7 +230,7 @@ struct fe_elliptic_solver {
     std::optional<double> lambda_saved_;
     sparse_solver_t invA_;
     matrix_t b_;
-
+    // Tr[S] hutchinson stochastic approximation matrices
     std::optional<matrix_t> Ys_;
     std::optional<matrix_t> Bs_;
 

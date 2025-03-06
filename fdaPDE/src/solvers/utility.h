@@ -36,17 +36,6 @@ template <typename Penalty> class is_valid_penalty_pair {
                      typename std::tuple_element_t<1, Penalty_>::discretization_category>;
 };
 template <typename Penalty> constexpr bool is_valid_penalty_pair_v = is_valid_penalty_pair<Penalty>::value;
-
-class rademacher_distribution {
-   public:
-    using result_type = double;
-    rademacher_distribution() noexcept : bernulli_distr_(0.5) { }
-    template <typename RandomNumberGenerator> result_type operator()(RandomNumberGenerator& rng) {
-        return bernulli_distr_(rng) ? 1.0 : -1.0;
-    }
-   private:
-    std::bernoulli_distribution bernulli_distr_;
-};
   
 // efficient left multiplication Q*x, with Q = W * (I - X * (X^\top * W * X)^{-1} * X^\top * W)
 template <typename WeightMatrix, typename DesignMatrix, typename InvDesignMatrix>

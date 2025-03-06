@@ -14,8 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __FDAPDE_DRIVERS_MODULE_H__
-#define __FDAPDE_DRIVERS_MODULE_H__
+#ifndef __FDAPDE_SOLVERS_MODULE_H__
+#define __FDAPDE_SOLVERS_MODULE_H__
 
 // clang-format off
 
@@ -23,7 +23,8 @@
 #include <fdaPDE/core.h>
 
 #include "src/formula.h"
-#include "src/drivers/utility.h"
+#include "src/distributions.h"
+#include "src/solvers/utility.h"
 
 namespace fdapde {
 
@@ -32,10 +33,10 @@ struct iterative  { } Iterative;
   
 }   // namespace fdapde
 
-#include "src/drivers/fe_elliptic.h"
-#include "src/drivers/fe_separable.h"
-#include "src/drivers/fe_parabolic.h"
+#include "src/solvers/fe_elliptic.h"
+#include "src/solvers/fe_separable.h"
+#include "src/solvers/fe_parabolic.h"
 
 // clang-format on
 
-#endif   // __FDAPDE_DRIVERS_MODULE_H__
+#endif   // __FDAPDE_SOLVERS_MODULE_H__

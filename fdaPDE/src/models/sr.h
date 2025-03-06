@@ -23,15 +23,14 @@ namespace fdapde {
 
 template <typename VariationalSolver> class SRPDE {
    private:
-    using solver_t        = std::decay_t<VariationalSolver>;
-    using vector_t        = Eigen::Matrix<double, Dynamic, 1>;
-    using matrix_t        = Eigen::Matrix<double, Dynamic, Dynamic>;
-    using sparse_matrix_t = Eigen::SparseMatrix<double>;
+    using solver_t = std::decay_t<VariationalSolver>;
+    using vector_t = Eigen::Matrix<double, Dynamic, 1>;
+    using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
+    static constexpr int n_lambda = solver_t::n_lambda;
    public:
     SRPDE() noexcept = default;
     template <typename GeoFrame, typename Penalty>
     SRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) noexcept : solver_() {
-        fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
         fdapde_assert(gf.n_layers() == 1);
         if constexpr (requires(Penalty p) { p.get(); }) {
             solver_ = solver_t(formula, gf, penalty.get());
@@ -46,7 +45,11 @@ template <typename VariationalSolver> class SRPDE {
             if (gf.contains(token)) { n_covs_++; }
         }
     }
-    void fit(double lambda) { solver_(lambda); }
+    template <typename... LambdaT>
+        requires(std::is_convertible_v<LambdaT, double> && ...)
+    void fit(LambdaT... lambda) {
+        solver_(lambda...);
+    }
     // observers
     const matrix_t& f() const { return solver_.f(); }
     const matrix_t& beta() const { return solver_.beta(); }
@@ -61,9 +64,9 @@ template <typename VariationalSolver> class SRPDE {
     }
 
     // Generalized Cross Validation index
-    struct gcv_t : public ScalarFieldBase<1, gcv_t> {
+    struct gcv_t : public ScalarFieldBase<n_lambda, gcv_t> {
         using Base = ScalarFieldBase<1, gcv_t>;
-        static constexpr int StaticInputSize = 1;
+        static constexpr int StaticInputSize = n_lambda;
         static constexpr int NestAsRef = 0;
         static constexpr int XprBits = 0;
         using Scalar = double;
@@ -75,10 +78,12 @@ template <typename VariationalSolver> class SRPDE {
         template <typename InputType_>
             requires(internals::is_subscriptable<InputType_, int>)
         constexpr double operator()(const InputType_& lambda) {
-            return operator()(lambda[0]);
+            return internals::apply_index_pack<n_lambda>([&]<int... Ns_>() { return operator()(lambda[Ns_]...); });
         }
-        constexpr double operator()(double lambda) {
-            model_->fit(lambda);
+        template <typename... LambdaT>
+            requires(std::is_convertible_v<LambdaT, double> && ...)
+        constexpr double operator()(LambdaT... lambda) {
+            model_->fit(lambda...);
             int dor = n_ - (q_ + model_->edf());   // residual degrees of freedom
             return (n_ / std::pow(dor, 2)) * (model_->fitted() - model_->response()).squaredNorm();
         }

@@ -22,7 +22,7 @@
 // include core
 #include <fdaPDE/core.h>
 
-#include "drivers.h"
+#include "solvers.h"
 #include "src/models/sr.h"
 
 // clang-format on
