@@ -51,20 +51,20 @@ struct bernoulli_distribution {
         fdapde_assert(alpha >= 0 && alpha <= 1);
         return alpha <= 1 - p_ ? 0 : 1;
     }
-    // random number generation
+    // random sampling
     template <typename RandomNumberGenerator> result_type operator()(RandomNumberGenerator& rng) { return distr_(rng); }
 
-    template <typename VectorType> constexpr const VectorType& mean(const VectorType& data) const { return data; }
-    template <typename VectorType> constexpr std::vector<result_type> variance(const VectorType& data) const {
+    template <typename T> constexpr const T& mean(const T& data) const { return data; }
+    template <typename T> constexpr auto variance(const T& data) const {
         return apply_(data, [](auto v) { return v * (1 - v); });
     }
-    template <typename VectorType> constexpr std::vector<result_type> link(const VectorType& data) const {
+    template <typename T> constexpr auto link(const T& data) const {
         return apply_(data, [](auto v) { return std::log(v / (1 - v)); });
     }
-    template <typename VectorType> constexpr std::vector<result_type> inv_link(const VectorType& data) const {
+    template <typename T> constexpr auto inv_link(const T& data) const {
         return apply_(data, [](auto v) { return 1.0 / (1 + std::exp(-v)); });
     }
-    template <typename VectorType> constexpr std::vector<result_type> der_link(const VectorType& data) const {
+    template <typename T> constexpr auto der_link(const T& data) const {
         return apply_(data, [](auto v) { return 1.0 / (v * (1 - v)); });
     }
     template <typename T>
@@ -103,7 +103,7 @@ struct rademacher_distribution {
     constexpr result_type cdf(double x) const { return x < -1 ? 0 : ((-1 <= x < 1) ? 0.5 : 1.0); }
     constexpr result_type mean() const { return 0.0; }
     constexpr result_type variance() const { return 1.0; }
-    // random number generation
+    // random sampling
     template <typename RandomNumberGenerator> result_type operator()(RandomNumberGenerator& rng) {
         return distr_(rng) ? 1.0 : -1.0;
     }
@@ -151,18 +151,18 @@ struct poisson_distribution {
         }
         return std::floor(x);
     }
-    // random number generation
+    // random sampling
     template <typename RandomNumberGenerator> result_type operator()(RandomNumberGenerator& rng) { return distr_(rng); }
 
-    template <typename VectorType> constexpr const VectorType& mean(const VectorType& data) const { return data; }
-    template <typename VectorType> constexpr const VectorType& variance(const VectorType& data) const { return data; }
-    template <typename VectorType> constexpr std::vector<result_type> link(const VectorType& data) const {
+    template <typename T> constexpr const T& mean(const T& data) const { return data; }
+    template <typename T> constexpr const T& variance(const T& data) const { return data; }
+    template <typename T> constexpr auto link(const T& data) const {
         return apply_(data, [](auto v) { return std::log(v); });
     }
-    template <typename VectorType> constexpr std::vector<result_type> inv_link(const VectorType& data) const {
+    template <typename T> constexpr auto inv_link(const T& data) const {
         return apply_(data, [](auto v) { return std::exp(v); });
     }
-    template <typename VectorType> constexpr std::vector<result_type> der_link(const VectorType& data) const {
+    template <typename T> constexpr auto der_link(const T& data) const {
         return apply_(data, [](auto v) { return 1.0 / v; });
     }
     template <typename T>
@@ -218,22 +218,22 @@ struct exponential_distribution {
     constexpr result_type mean() const { return 1.0 / l_; }
     constexpr result_type variance() const { return 1.0 / (l_ * l_); }
     constexpr result_type quantile(double alpha) const { return -std::log(1 - alpha) / l_; }
-    // random number generation
+    // random sampling
     template <typename RandomNumberGenerator> result_type operator()(RandomNumberGenerator& rng) { return distr_(rng); }
 
-    template <typename VectorType> constexpr const VectorType& mean(const VectorType& data) const {
+    template <typename T> constexpr const T& mean(const T& data) const {
         return apply_(data, [](auto v) { return 1.0 / v; });
     }
-    template <typename VectorType> constexpr const VectorType& variance(const VectorType& data) const {
+    template <typename T> constexpr const T& variance(const T& data) const {
         return apply_(data, [](auto v) { return 1.0 / (v * v); });
     }
-    template <typename VectorType> constexpr std::vector<result_type> link(const VectorType& data) const {
+    template <typename T> constexpr auto link(const T& data) const {
         return apply_(data, [](auto v) { return -1.0 / v; });
     }
-    template <typename VectorType> constexpr std::vector<result_type> inv_link(const VectorType& data) const {
+    template <typename T> constexpr auto inv_link(const T& data) const {
         return apply_(data, [](auto v) { return -1.0 / v; });
     }
-    template <typename VectorType> constexpr std::vector<result_type> der_link(const VectorType& data) const {
+    template <typename T> constexpr auto der_link(const T& data) const {
         return apply_(data, [](auto v) { return 1.0 / (v * v); });
     }
     template <typename T>
@@ -268,22 +268,22 @@ class gamma_distribution {
     }
     constexpr result_type mean() const { return k_ * theta_; }
     constexpr result_type variance() const { return k_ * theta_ * theta_; }
-    // random number generation
+    // random sampling
     template <typename RandomNumberGenerator> result_type operator()(RandomNumberGenerator& rng) { return distr_(rng); }
   
-    template <typename VectorType> constexpr const VectorType& mean(const VectorType& data) const {
+    template <typename T> constexpr const T& mean(const T& data) const {
         return apply_(data, [](auto v) { return v; });
     }
-    template <typename VectorType> constexpr const VectorType& variance(const VectorType& data) const {
+    template <typename T> constexpr const T& variance(const T& data) const {
         return apply_(data, [](auto v) { return v * v; });
     }
-    template <typename VectorType> constexpr std::vector<result_type> link(const VectorType& data) const {
+    template <typename T> constexpr auto link(const T& data) const {
         return apply_(data, [](auto v) { return -1.0 / v; });
     }
-    template <typename VectorType> constexpr std::vector<result_type> inv_link(const VectorType& data) const {
+    template <typename T> constexpr auto inv_link(const T& data) const {
         return apply_(data, [](auto v) { return -1.0 / v; });
     }
-    template <typename VectorType> constexpr std::vector<result_type> der_link(const VectorType& data) const {
+    template <typename T> constexpr auto der_link(const T& data) const {
         return apply_(data, [](auto v) { return 1.0 / (v * v); });
     }
     template <typename T>
