@@ -52,26 +52,27 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
         requires(std::is_convertible_v<LambdaT, double> && ...)
     void fit(LambdaT... lambda) {
         // initialize mean vector
+        const auto& y = solver_.response();
         if constexpr (requires(Distribution d, vector_t v) { d.transform(v); }) {
-            mu_ = distr_.transform(y_);
+            mu_ = distr_.transform(y);
         } else {
-            mu_ = y_;
+            mu_ = y;
         }
-        double Jold = std::numeric_limits<double>::max();, Jnew = 0;
-        k_ = 0;
-        while (k_ < max_iter_ && std::abs(Jnew - Jold) > tol_) {
+        double Jold = std::numeric_limits<double>::max(), Jnew = 0;
+        n_iter_ = 0;
+        while (n_iter_ < max_iter_ && std::abs(Jnew - Jold) > tol_) {
             vector_t G = distr_.der_link(mu_);   // G^(k) = diag(g'(\mu^(k)_1), ..., g'(\mu^(k)_n))
             pW_ = ((G.array().pow(2) * distr_.variance(mu_).array()).inverse()).matrix();
-            py_ = G.asDiagonal() * (y_ - mu_) + distr_.link(mu_);
+            py_ = G.asDiagonal() * (y - mu_) + distr_.link(mu_);
             // \argmin_{\beta, f} [ \norm(W^{1/2} * (y - X * \beta - f_n))^2 + P_{\lambda}(f) ]
-            solver_(lambda..., py_, pW_);
-            mu_ = distr_.inv_link(solver_.fitted());
+            solver_(lambda..., py_, pW_.asDiagonal());
+            mu_ = distr_.inv_link(fitted());
             // prepare for next iteration
             double data_loss =
-              (distr_.variance(mu_).array().sqrt().inverse().matrix().asDiagonal() * (y_ - mu_)).squaredNorm();
+              (distr_.variance(mu_).array().sqrt().inverse().matrix().asDiagonal() * (y - mu_)).squaredNorm();
             Jold = Jnew;
             Jnew = data_loss + solver_.ftPf()[0];
-	    k_++;
+	    n_iter_++;
         }
 	return;
     }
@@ -111,9 +112,9 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
             model_->fit(lambda...);
             int dor = n_ - (q_ + model_->edf());   // residual degrees of freedom
 	    // compute total deviance
-            vector_t mu = distr_.inv_link(model_->fitted());
+            vector_t mu = model_->distr_.inv_link(model_->fitted());
             double total_deviance = 0;
-            for (int i = 0; i < n_; ++i) { total_deviance += distr_.deviance(mu[i], model_->response()[i]); }
+            for (int i = 0; i < n_; ++i) { total_deviance += model_->distr_.deviance(mu[i], model_->response()(i, 0)); }
             return (n_ / std::pow(dor, 2)) * total_deviance;
         }
        private:
@@ -125,9 +126,16 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
     // inference
   
    private:
+    vector_t mu_;          // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : mean vector at step k
+    vector_t py_, pW_;     // \tilde y^k = G^k(y-u^k) + \theta^k
+    vector_t pW_;          // diagonal of W^k = ((G^k)^{-2})*((V^k)^{-1})
+    int max_iter_ = 200;   // fpirls maximum iteration number
+    double tol_ = 1e-6;    // fprils convergence tolerance
+
     Distribution distr_;
     solver_t solver_;
     int n_obs_ = 0, n_covs_ = 0;
+    int n_iter_ = 0;
 };
 
 // deduction guide

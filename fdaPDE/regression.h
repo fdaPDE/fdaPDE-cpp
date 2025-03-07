@@ -24,6 +24,8 @@
 
 #include "solvers.h"
 #include "src/models/sr.h"
+#include "src/models/gsr.h"
+#include "src/models/qsr.h"
 
 // clang-format on
 
