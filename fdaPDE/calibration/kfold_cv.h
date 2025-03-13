@@ -60,6 +60,9 @@ class KCV : public CalibratorBase<KCV> {
                 train_mask.set(j);
             }
         }
+
+        // std::cout << "train size: " << train_mask.count() << std::endl; 
+        // std::cout << "test size: " << test_mask.count() << std::endl; 
         return std::make_pair(train_mask, test_mask);
     }
    public:
@@ -101,7 +104,6 @@ class KCV : public CalibratorBase<KCV> {
             avg_scores_[j] = avg_score;
             std_scores_[j] = std_score;
         }
-
         // store optimal lambda according to given metric F
         Eigen::Index opt_score;
         avg_scores_.minCoeff(&opt_score);

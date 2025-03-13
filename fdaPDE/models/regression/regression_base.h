@@ -178,7 +178,9 @@ class RegressionBase :
                     df_.template get<double>(OBSERVATIONS_BLK)(i, 0) = 0.0;   // zero out NaN
                 }
             }
-            if (has_nan()) model().runtime().set(runtime_status::require_psi_correction);
+            if (has_nan()) {
+                model().runtime().set(runtime_status::require_psi_correction);
+            }
         }
         return;
     }

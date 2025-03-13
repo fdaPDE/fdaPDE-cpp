@@ -45,6 +45,7 @@ class GCV {
         // forwardings
         decltype(auto) compute() { return fdapde::invoke<double, 0>(*this); }
         void set_model(const RegressionView<void>& model) { fdapde::invoke<void, 1>(*this, model); }
+        decltype(auto) S_get() const { return fdapde::invoke<const DMatrix<double>&   , 2>(*this); }  // M 
     };
 
     RegressionView<void> model_;
@@ -53,6 +54,19 @@ class GCV {
     std::vector<double> gcvs_;                 // computed values of GCV index
     // cache pairs (lambda, Tr[S]) for fast access if GCV is queried at an already computed point
     std::map<VectorType, double, fdapde::d_vector_compare<double>> cache_;
+
+    // M: gcv multiplier for trace correction 
+    bool gacv_ = false; 
+    double gcv_correction_factor;  // M   gcv correction
+    double phi_;  // M   gcv correction
+
+    bool gacv_star_ = false; 
+    double star_gcv_correction_factor;  // M   gcv correction versione 2. Default value is 1 (no correction)
+    double star_phi_;  // M   gcv correction versione 2
+
+    std::vector<double> trace_debug;  // M debug
+
+
 
     // analytical expression of gcv at \lambda
     //
@@ -67,6 +81,21 @@ class GCV {
         // compute equivalent degrees of freedom given current lambda (if not already cached)
         if (cache_.find(lambda) == cache_.end()) { cache_[lambda] = trS_.compute(); }
         double trS = cache_[lambda];
+
+        if(gacv_){
+            //std::cout << "GACV score computation..." << std::endl; 
+            trS *= gcv_correction_factor;      // M   gcv correction (Nortier phd 2021)
+            trace_debug.push_back(trS); 
+        }
+        if(gacv_star_){
+            //std::cout << "GACV* score computation..." << std::endl; 
+            trS *= star_gcv_correction_factor;      // M   gcv correction (Nortier phd 2021)
+            trace_debug.push_back(trS); 
+        } 
+        if(!gacv_ && !gacv_star_){
+            //std::cout << "GCV score computation..." << std::endl; 
+        }
+
         double q = model_.q();            // number of covariates
         std::size_t n = model_.n_obs();   // number of observations
         double dor = n - (q + trS);       // residual degrees of freedom
@@ -74,6 +103,7 @@ class GCV {
         // return gcv at point
         double gcv_value = (n / std::pow(dor, 2)) * (model_.norm(model_.fitted(), model_.y()));
         gcvs_.emplace_back(gcv_value);
+
         return gcv_value;
     }
    public:
@@ -108,6 +138,15 @@ class GCV {
     double eval() {
         if (cache_.find(model_.lambda()) == cache_.end()) { cache_[model_.lambda()] = trS_.compute(); }
         double trS = cache_[model_.lambda()];
+
+        if(gacv_){
+            trS *= gcv_correction_factor;      // M   gcv correction (Nortier phd 2021)
+        }
+        if(gacv_star_){
+            trS *= star_gcv_correction_factor;      // M   gcv correction (Nortier phd 2021)
+        } 
+        trace_debug.push_back(trS); 
+
         // GCV(\lambda) = n/((n - (q + Tr[S]))^2)*norm(y - \hat y)^2
         double dor = model_.n_obs() - (model_.q() + trS);   // (n - (q + Tr[S])
         return (model_.n_obs() / std::pow(dor, 2)) * (model_.norm(model_.fitted(), model_.y()));
@@ -125,6 +164,18 @@ class GCV {
         edfs_.clear(); gcvs_.clear(); cache_.clear();
     }
     void set_step(double step) { gcv_.set_step(step); }
+
+    // M 
+    void set_correction(bool gacv, bool gacv_star, double phi) {
+        std::cout << "in correction gcv" << std::endl; 
+        gacv_ = gacv; 
+        gacv_star_ = gacv_star; 
+        phi_ = phi;
+        gcv_correction_factor = (1+2*phi_)/(2*phi_);  
+        star_gcv_correction_factor = (1+2*phi_)/(4*phi_);
+    }
+
+
     void resize(int gcv_dynamic_inner_size) {
         fdapde_assert(gcv_dynamic_inner_size == 1 || gcv_dynamic_inner_size == 2);
         gcv_.resize(gcv_dynamic_inner_size);
@@ -132,6 +183,9 @@ class GCV {
     // getters
     const std::vector<double>& edfs() const { return edfs_; }   // equivalent degrees of freedom q + Tr[S]
     const std::vector<double>& gcvs() const { return gcvs_; }   // computed values of GCV index
+    const DMatrix<double>& S_get_gcv() const { return trS_.S_get(); }  // M 
+    const DMatrix<double>& compute_IC() const { return trS_.S_get(); }  // M 
+    const std::vector<double> get_trace() const { return trace_debug; }  // M
     int inner_size() const { return gcv_.inner_size(); }
 };
 

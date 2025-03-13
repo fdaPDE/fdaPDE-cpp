@@ -42,6 +42,7 @@ class QSRPDE : public RegressionBase<QSRPDE<RegularizationType_>, Regularization
     using Base::W_;         // weight matrix
     using Base::XtWX_;      // q x q matrix X^T*W*X
 
+
     // constructor
     QSRPDE() = default;
     // space-only and space-time parabolic constructor
@@ -63,10 +64,21 @@ class QSRPDE : public RegressionBase<QSRPDE<RegularizationType_>, Regularization
     void set_eps_power(double eps) { eps_ = eps; }
     void set_weights_tolerance(double tol_weights) { tol_weights_ = tol_weights; }
 
-    void init_model() { fpirls_.init(); }
+    void init_model() { 
+        fpirls_.init();
+    }
     void solve() {
+
+        // std::cout << "qsrpde solve: n tot " << y().size() << std::endl;
+        // std::cout << "qsrpde solve: n " << n_obs() << std::endl;
+        // std::cout << "qsrpde solve: n missing " << Base::masked_obs().count() << std::endl;
+
         // execute FPIRLS_ for minimization of functional \norm{V^{-1/2}(y - \mu)}^2 + \lambda \int_D (Lf - u)^2
         fpirls_.compute();
+
+        // Debug -> salva il numero di iterazioni (per il test obs ripetute)
+        n_iter_qsrpde_ = fpirls_.n_iter();
+
         // fpirls_ converged: store solution estimates
         W_ = fpirls_.solver().W();
         f_ = fpirls_.solver().f();
@@ -92,7 +104,7 @@ class QSRPDE : public RegressionBase<QSRPDE<RegularizationType_>, Regularization
           -PsiTD() * Psi() / n_obs(), 2 * lambda_D() * R1().transpose(),   // NB: observe the 2 * here
           lambda_D() * R1(),          lambda_D() * R0()                );
         if constexpr (is_space_time_separable<This>::value) {
-            A.block(0, 0) -= Base::lambda_T() * Kronecker(Base::P1(), Base::pde().mass());
+            A.block(0, 0) -= 2*Base::lambda_T() * Kronecker(Base::P1(), Base::pde().mass());
         }
         fdapde::SparseLU<SpMatrix<double>> invA;
         invA.compute(A);
@@ -111,6 +123,16 @@ class QSRPDE : public RegressionBase<QSRPDE<RegularizationType_>, Regularization
             .select(
               (2 * n_obs() * (abs_res.array() + tol_weights_)).inverse(), (2 * n_obs() * abs_res.array()).inverse());
         py_ = y() - (1 - 2. * alpha_) * abs_res;
+
+
+        // ATT: riaggiunto  
+        for(std::size_t i=0; i<n_locs(); ++i){
+            if(Base::nan_mask()[i]){
+                py_(i)=0.; 
+                pW_(i)=0.; 
+            }
+        }
+
     }
     // updates mean vector \mu after WLS solution
     void fpirls_update_step(const DMatrix<double>& hat_f, [[maybe_unused]] const DMatrix<double>& hat_beta) {
@@ -121,8 +143,15 @@ class QSRPDE : public RegressionBase<QSRPDE<RegularizationType_>, Regularization
     const DVector<double>& py() const { return py_; }
     const DVector<double>& pW() const { return pW_; }
     const fdapde::SparseLU<SpMatrix<double>>& invA() const { return invA_; }
+    //const double& alpha() const { return alpha_; }
+
+    // Debug -> salva il numero di iterazioni (per il test obs ripetute)
+    const std::size_t& n_iter_qsrpde() const {return n_iter_qsrpde_; }
+
+
     // GCV support
     double norm(const DMatrix<double>& op1, const DMatrix<double>& op2) const {
+
         double result = 0;
         for (int i = 0; i < n_locs(); ++i) {
             if (!Base::masked_obs()[i]) result += pinball_loss(op2.coeff(i, 0) - op1.coeff(i, 0), std::pow(10, eps_));
@@ -141,7 +170,10 @@ class QSRPDE : public RegressionBase<QSRPDE<RegularizationType_>, Regularization
     double tol_ = 1e-6;     // fprils convergence tolerance
     double tol_weights_ = 1e-6;
 
-    double eps_ = -1e-1;   // pinball loss smoothing factor
+    // Debug -> salva il numero di iterazioni (per il test obs ripetute)
+    std::size_t n_iter_qsrpde_ = 0;
+
+    double eps_ = -1.0;   // pinball loss smoothing factor
     double pinball_loss(double x, double eps) const {   // quantile check function
         return (alpha_ - 1) * x + eps * fdapde::log1pexp(x / eps);
     };

@@ -1,22 +1,31 @@
 cmake_minimum_required(VERSION 3.14)
-
 project(TEST)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_WARNINGS_FLAGS "-Wall -Wpedantic -Wextra -Werror")
-set(CMAKE_CXX_FLAGS "-g -O2 -march=x86-64 -std=c++20 ${CMAKE_WARNINGS_FLAGS} -I${CMAKE_CURRENT_SOURCE_DIR}/../ -I${CMAKE_CURRENT_SOURCE_DIR}/../fdaPDE/core/")
+#set(CMAKE_WARNINGS_FLAGS "-Wall -Wpedantic -Wextra -Werror")
+#set(CMAKE_CXX_FLAGS "-g -O2 -march=x86-64 -std=c++20 ${CMAKE_WARNINGS_FLAGS} -I${CMAKE_CURRENT_SOURCE_DIR}/../ -I${CMAKE_CURRENT_SOURCE_DIR}/../fdaPDE/core/")
+
+set(CMAKE_CXX_FLAGS "-g -O2 -march=x86-64 -std=c++20 -I${CMAKE_CURRENT_SOURCE_DIR}/../ -I${CMAKE_CURRENT_SOURCE_DIR}/../fdaPDE/core/")
+
+#set(Eigen3_DIR "/u/sw/toolchains/gcc-glibc/11.2.0/pkgs/eigen/3.3.9/share/eigen3/cmake/")
 
 find_package (Eigen3 3.4 REQUIRED NO_MODULE)
 
 include_directories(../src/)
 include_directories(../../fdaPDE/)
-
 # enable testing functionality using gtest
 include(FetchContent)
 FetchContent_Declare(
   googletest
+  # Official 
   # version 1.14.0
-  URL https://github.com/google/googletest/archive/f8d7d77c06936315286eb55f8de22cd23c188571.zip
+  # URL https://github.com/google/googletest/archive/f8d7d77c06936315286eb55f8de22cd23c188571.zip
+  
+  # Noi: 
+  # URL https://github.com/google/googletest/archive/609281088cfefc76f9d0ce82e1ff6c30cc3591e5.zip
+  #SOURCE_DIR "../../../googletest-609281088cfefc76f9d0ce82e1ff6c30cc3591e5"  # vecchio 
+  SOURCE_DIR "../../../googletest-f8d7d77c06936315286eb55f8de22cd23c188571"  # nuovo 
+  
 )
 
 # For Windows: Prevent overriding the parent project's compiler/linker settings

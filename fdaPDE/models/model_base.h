@@ -41,6 +41,7 @@ template <typename Model> class ModelBase {
     void init() {
         if (model().runtime().query(runtime_status::require_penalty_init)) { model().init_regularization(); }
         if (model().runtime().query(runtime_status::require_functional_basis_evaluation)) {
+
             model().init_sampling(true);   // init \Psi matrix, always force recomputation
         }
 	model().analyze_data();    // specific data-dependent initialization requested by Model

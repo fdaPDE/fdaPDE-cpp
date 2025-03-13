@@ -47,6 +47,7 @@ class StochasticEDF {
     // evaluate trace of S exploiting a monte carlo approximation
     double compute() {
         if (!init_) {
+            std::cout << "-----------------------STOCHASTIC GCV running-------------------------------" << std::endl; 
             // compute sample from Rademacher distribution
             std::mt19937 rng(seed_);
             std::bernoulli_distribution Be(0.5);   // bernulli distribution with parameter p = 0.5
@@ -70,7 +71,7 @@ class StochasticEDF {
         if (!model_.has_covariates())   // non-parametric model
             Bs_.topRows(n) = -model_.PsiTD() * model_.W() * Us_;
         else   // semi-parametric model
-            Bs_.topRows(n) = -model_.PsiTD() * model_.lmbQ(Us_);
+            Bs_.topRows(n) = -model_.PsiTD() * model_.lmbQ(Us_);  
 
         DMatrix<double> sol;              // room for problem solution
         if (!model_.has_covariates()) {   // nonparametric case
@@ -88,6 +89,9 @@ class StochasticEDF {
     void set_model(RegressionView<void> model) { model_ = model; }
     void set_seed(int seed) { seed_ = seed; }
     void set_n_mc_samples(int r) { r_ = r; }
+
+    // M 
+    const DMatrix<double>& S_get() const { return Us_; }   // M : fitticious, just to compile, since we need this method in exact_edf
 };
 
 }   // namespace models

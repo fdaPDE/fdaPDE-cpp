@@ -89,6 +89,11 @@ class STRPDE<SpaceTimeSeparable, monolithic> :
     }
     void solve() {
         fdapde_assert(y().rows() != 0);
+
+        // std::cout << "strpde solve: n tot " << y().size() << std::endl;
+        // std::cout << "strpde solve: n " << n_obs() << std::endl;
+        // std::cout << "strpde solve: n missing " << Base::masked_obs().count() << std::endl;
+
         DVector<double> sol;             // room for problem' solution
         if (!Base::has_covariates()) {   // nonparametric case
             // update rhs of STR-PDE linear system

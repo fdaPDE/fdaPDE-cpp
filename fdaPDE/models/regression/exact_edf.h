@@ -30,6 +30,7 @@ class ExactEDF {
     RegressionView<void> model_;
     // computes smoothing matrix S = Q*\Psi*T^{-1}*\Psi^T
     const DMatrix<double>& S() {
+        // std::cout << "-----------------------EXACT GCV running-------------------------------" << std::endl; 
         // factorize matrix T
         invT_ = model_.T().partialPivLu();
         DMatrix<double> E_ = model_.PsiTD();    // need to cast to dense for PartialPivLU::solve()
@@ -42,7 +43,11 @@ class ExactEDF {
 
     ExactEDF() = default;
     double compute() { return S().trace(); }   // computes Tr[S]
-    void set_model(RegressionView<void> model) { model_ = model; }
+    void set_model(const RegressionView<void> model) { model_ = model; }
+
+    // M 
+    const DMatrix<double>& S_get() const { return S_; }   // return S
+    
 };
 
 }   // namespace models

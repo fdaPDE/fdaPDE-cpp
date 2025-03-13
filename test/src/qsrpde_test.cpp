@@ -227,3 +227,205 @@ TEST(qsrpde_test, laplacian_nonparametric_samplingatlocations_separable_monolith
     // test correctness
     EXPECT_TRUE(almost_equal(model.f(), "../data/models/qsrpde/2D_test5/sol.mtx"));
 }
+
+
+
+/////
+
+// CONFRONTO METODI CV
+
+// test cv
+//    domain:       unit square
+//    sampling:     locations != nodes
+//    penalization: laplacian
+//    covariates:   no
+//    BC:           no
+//    order FE:     1
+//    GCV optimization: grid exact
+TEST(sqrpde_test_cv, pde_nonparametric_samplingatlocations_spaceonly_gridexact) {
+
+    std::string test_number = "2";    // "1" "2"
+
+    // path test  
+    std::string R_path = "/mnt/c/Users/marco/OneDrive - Politecnico di Milano/Corsi/PhD/Codice/models/QSRPDE/Tests_cv/Test_" + test_number; 
+
+    // define statistical model
+    std::vector<double> alphas = {0.50, 0.95}; // {0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 0.99};   
+
+    // define grid of lambda values
+    std::vector<std::string> lambda_selection_types = {"gcv_smooth_eps1e-1"}; // {"gcv_smooth_eps1e-3", "gcv_smooth_eps1e-1"};   
+    const int eps_power = -1.0;  
+    
+    // methods 
+    std::vector<std::string> score_types = {"gcv", "k-fold", "10-fold"};   // "gcv" "gacv" "gacv_star" "k-fold" "10-fold"
+    
+    bool compute_rmse = true;
+    bool compute_gcv = false;     // if you want to compute either gcv, gacv or gacv*
+
+    bool force_lambdas_longer = false;
+    bool lambda_long = false; 
+
+    const unsigned int n_sim = 10;
+
+    // define domain
+    std::string domain_str; 
+    if(test_number == "1"){
+        domain_str = "unit_square_15"; 
+    }
+    if(test_number == "2"){
+        domain_str = "unit_square_25"; 
+    }
+    MeshLoader<Triangulation<2, 2>> domain(domain_str);
+
+    // rhs 
+    DMatrix<double> u = DMatrix<double>::Zero(domain.mesh.n_cells() * 3, 1);
+
+    // define regularizing PDE
+    auto L = -laplacian<FEM>();   
+    PDE<Triangulation<2, 2>, decltype(L), DMatrix<double>, FEM, fem_order<1>> problem(domain.mesh, L, u);
+ 
+    double best_lambda; 
+
+    // Read covariates and locations
+    DMatrix<double> loc = read_csv<double>(R_path + "/locs.csv"); 
+
+    // Simulations 
+    for(auto sim = 1; sim <= n_sim; ++sim){
+        std::cout << "--------------------Simulation #" << std::to_string(sim) << "-------------" << std::endl; 
+        
+        // load data from .csv files
+        DMatrix<double> y = read_csv<double>(R_path + "/simulations/sim_" + std::to_string(sim) + "/y.csv");
+        BlockFrame<double, int> df;
+        df.insert(OBSERVATIONS_BLK, y);
+
+        for(auto alpha : alphas){
+
+            unsigned int alpha_int = alpha*100; 
+            std::string alpha_string = std::to_string(alpha_int); 
+
+            std::cout << "------------------alpha=" << alpha_string << "-----------------" << std::endl; 
+
+            std::string solutions_path_rmse = R_path + "/simulations/sim_" + std::to_string(sim) + "/alpha_" + alpha_string + "/RMSE"; 
+
+            if(compute_gcv){
+                for(auto lambda_selection_type : lambda_selection_types){
+                    for(auto score_type : score_types){
+
+                        std::cout << "------------------score=" << score_type << "-----------------" << std::endl;
+
+                        std::string solutions_path_gcv = R_path + "/simulations/sim_" + std::to_string(sim) + "/alpha_" + alpha_string + "/" + lambda_selection_type + "/" + score_type; 
+                            
+                        QSRPDE<SpaceOnly> model(problem, Sampling::pointwise, alpha);
+                        
+                        // Read lambda
+                        double lambda; 
+                        if(lambda_long){
+                            if(score_type == "k-fold"){
+                                std::ifstream fileLambda(solutions_path_gcv + "/lambda_s_opt_long.csv");
+                                if(fileLambda.is_open()){
+                                    fileLambda >> lambda; 
+                                    fileLambda.close();
+                                }
+                            } else{
+                                std::ifstream fileLambda(solutions_path_gcv + "/lambda_s_opt.csv");
+                                if(fileLambda.is_open()){
+                                    fileLambda >> lambda; 
+                                    fileLambda.close();
+                                }
+                            }
+                        } else{
+                            std::ifstream fileLambda(solutions_path_gcv + "/lambda_s_opt.csv");
+                            if(fileLambda.is_open()){
+                                fileLambda >> lambda; 
+                                fileLambda.close();
+                            }
+                        }
+
+
+                        std::cout << "lambda=" << std::setprecision(16) << lambda << std::endl; 
+
+
+                        model.set_spatial_locations(loc);         
+                        model.set_data(df);
+                        model.set_lambda_D(lambda);
+
+                        model.init();
+
+                        // solve smoothing problem
+                        model.init();; 
+                        model.solve();
+
+                        // Save solution
+                        DMatrix<double> computedF = model.f();
+                        const static Eigen::IOFormat CSVFormatf(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+                        std::ofstream filef(solutions_path_gcv + "/f.csv");
+                        if(filef.is_open()){
+                            filef << computedF.format(CSVFormatf);
+                            filef.close();
+                        }
+                        DMatrix<double> computedFn = model.Psi()*model.f();
+                        const static Eigen::IOFormat CSVFormatfn(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+                        std::ofstream filefn(solutions_path_gcv + "/fn.csv");
+                        if(filefn.is_open()){
+                            filefn << computedFn.format(CSVFormatfn);
+                            filefn.close();
+                        }
+
+                    }
+                        
+                }
+            }
+
+            if(compute_rmse){
+                std::cout << "------------------score=RMSE selection-----------------" << std::endl;
+
+                std::string solutions_path_gcv = R_path + "/simulations/sim_" + std::to_string(sim) + "/alpha_" + alpha_string + "/RMSE"; 
+                    
+                QSRPDE<SpaceOnly> model(problem, Sampling::pointwise, alpha);
+                
+                // Read lambda
+                double lambda; 
+                std::ifstream fileLambda(solutions_path_gcv + "/lambda_s_opt.csv");
+                if(fileLambda.is_open()){
+                    fileLambda >> lambda; 
+                    fileLambda.close();
+                }
+            
+
+                std::cout << "lambda=" << std::setprecision(16) << lambda << std::endl; 
+
+
+                model.set_spatial_locations(loc);         
+                model.set_data(df);
+                model.set_lambda_D(lambda);
+
+                model.init();
+
+                // solve smoothing problem
+                model.init();; 
+                model.solve();
+
+                // Save solution
+                DMatrix<double> computedF = model.f();
+                const static Eigen::IOFormat CSVFormatf(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+                std::ofstream filef(solutions_path_gcv + "/f.csv");
+                if(filef.is_open()){
+                    filef << computedF.format(CSVFormatf);
+                    filef.close();
+                }
+                DMatrix<double> computedFn = model.Psi()*model.f();
+                const static Eigen::IOFormat CSVFormatfn(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+                std::ofstream filefn(solutions_path_gcv + "/fn.csv");
+                if(filefn.is_open()){
+                    filefn << computedFn.format(CSVFormatfn);
+                    filefn.close();
+                }
+            }
+
+                    
+
+        }
+
+
+    }
+}

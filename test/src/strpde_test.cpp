@@ -22,12 +22,15 @@ using fdapde::core::advection;
 using fdapde::core::diffusion;
 using fdapde::core::dt;
 using fdapde::core::FEM;
+using fdapde::core::fem_order;
 using fdapde::core::SPLINE;
 using fdapde::core::bilaplacian;
 using fdapde::core::laplacian;
 using fdapde::core::PDE;
 using fdapde::core::Triangulation;
 using fdapde::core::spline_order;
+using fdapde::core::DiscretizedMatrixField; 
+using fdapde::core::DiscretizedVectorField; 
 
 #include "../../fdaPDE/models/regression/strpde.h"
 #include "../../fdaPDE/models/sampling_design.h"
@@ -293,6 +296,16 @@ TEST(strpde_test, laplacian_nonparametric_samplingatlocations_timelocations_sepa
     // solve smoothing problem
     model.init();
     model.solve();
+
+    // Save C++ solution 
+    DMatrix<double> computedF = model.f();
+    const static Eigen::IOFormat CSVFormatf(Eigen::FullPrecision, Eigen::DontAlignCols, ", ", "\n");
+    std::ofstream filef("../data/models/strpde/2D_test6/f_STRPDE.csv");
+    if (filef.is_open()){
+          filef << computedF.format(CSVFormatf);
+          filef.close();
+    }
+
     // test correctness
     EXPECT_TRUE(almost_equal(model.f(), "../data/models/strpde/2D_test6/sol.mtx"));
 }
