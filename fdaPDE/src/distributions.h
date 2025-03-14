@@ -92,9 +92,7 @@ struct bernoulli_distribution : public internals::distribution_base<std::bernoul
     matrix_t inv_link(const matrix_t& x) const { return (1 + ((-x).array().exp())).inverse(); }
     matrix_t der_link(const matrix_t& x) const { return (x.array() * (1 - x.array())).inverse(); }
 
-    template <typename T>
-        requires(internals::is_vector_like_v<T>)
-    constexpr auto transform(const T& data) const {
+    template <typename T> constexpr auto transform(const T& data) const {
         if constexpr (internals::is_eigen_dense_xpr_v<T>) {
             return 0.5 * (data.array() + 0.5);
         } else {
@@ -184,9 +182,7 @@ struct poisson_distribution : public internals::distribution_base<std::poisson_d
     matrix_t inv_link(const matrix_t& x) const { return x.array().exp(); }
     matrix_t der_link(const matrix_t& x) const { return x.array().inverse(); }
 
-    template <typename T>
-        requires(internals::is_vector_like_v<T>)
-    constexpr auto transform(const T& data) const {
+    template <typename T> constexpr auto transform(const T& data) const {
         if constexpr (internals::is_eigen_dense_xpr_v<T>) {
             return matrix_t((data.array() <= 0).select(1.0, data));
         } else {

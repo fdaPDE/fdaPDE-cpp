@@ -23,6 +23,7 @@
 #include <fdaPDE/core.h>
 
 #include "regression.h"
+#include "functional.h"
 
 // clang-format on
 

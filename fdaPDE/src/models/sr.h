@@ -33,9 +33,10 @@ template <typename VariationalSolver> class SRPDE {
     SRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) noexcept : solver_() {
         fdapde_assert(gf.n_layers() == 1);
         if constexpr (requires(Penalty p) { p.get(); }) {
-            solver_ = solver_t(formula, gf, penalty.get());
+	  solver_ = solver_t(formula, gf, penalty.get(), vector_t::Ones(gf[0].rows()).asDiagonal());
         } else {
-            solver_ = solver_t(formula, gf, penalty(gf.template triangulation<0>()).get());
+            solver_ = solver_t(
+              formula, gf, penalty(gf.template triangulation<0>()).get(), vector_t::Ones(gf[0].rows()).asDiagonal());
         }
 
         Formula formula_(formula);
@@ -48,7 +49,7 @@ template <typename VariationalSolver> class SRPDE {
     template <typename... LambdaT>
         requires(std::is_convertible_v<LambdaT, double> && ...)
     void fit(LambdaT... lambda) {
-        solver_(lambda...);
+        solver_.fit(lambda...);
     }
     // observers
     const matrix_t& f() const { return solver_.f(); }

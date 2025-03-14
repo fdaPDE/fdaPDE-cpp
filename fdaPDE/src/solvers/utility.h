@@ -60,13 +60,6 @@ lmbQ(const DesignMatrix& X, const InvDesignMatrix& invXtX, const Eigen::Matrix<d
     return x - X * z;
 }
 
-template <typename FeSpace_>
-Eigen::SparseMatrix<double>
-point_basis_eval(FeSpace_ fe_space, const Eigen::Matrix<double, Dynamic, Dynamic>& coords);
-template <typename FeSpace_>
-std::pair<Eigen::SparseMatrix<double>, Eigen::Matrix<double, Dynamic, 1>>
-areal_basis_eval(FeSpace_ fe_space, const BinaryMatrix<Dynamic, Dynamic>& incidence_mat);
-
 // pointwise basis evaluation for finite element basis system
 template <typename Triangulation_, typename FeType_, typename CoordsMatrix_>
     requires(internals::is_eigen_dense_xpr_v<CoordsMatrix_>)

@@ -33,17 +33,17 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
     GSRPDE(const std::string& formula, const GeoFrame& gf, const Distribution& distr, Penalty&& penalty) noexcept :
         distr_(distr), solver_() {
         fdapde_assert(gf.n_layers() == 1);
+        Formula formula_(formula);
+        n_obs_ = gf[0].rows();
+        n_covs_ = 0;
+        for (const std::string& token : formula_.rhs()) {
+            if (gf.contains(token)) { n_covs_++; }
+        }
+        // discretize
         if constexpr (requires(Penalty p) { p.get(); }) {
             solver_ = solver_t(formula, gf, penalty.get());
         } else {
             solver_ = solver_t(formula, gf, penalty(gf.template triangulation<0>()).get());
-        }
-
-        Formula formula_(formula);
-	n_obs_  = gf[0].rows();
-	n_covs_ = 0;
-        for (const std::string& token : formula_.rhs()) {
-            if (gf.contains(token)) { n_covs_++; }
         }
     }
     
@@ -52,7 +52,7 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
         requires(std::is_convertible_v<LambdaT, double> && ...)
     void fit(LambdaT... lambda) {
         // initialize mean vector
-        const auto& y = solver_.response();
+        matrix_t y = solver_.response();
         if constexpr (requires(Distribution d, vector_t v) { d.transform(v); }) {
             mu_ = distr_.transform(y);
         } else {
@@ -65,8 +65,9 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
             pW_ = ((G.array().pow(2) * distr_.variance(mu_).array()).inverse()).matrix();
             py_ = G.asDiagonal() * (y - mu_) + distr_.link(mu_);
             // \argmin_{\beta, f} [ \norm(W^{1/2} * (y - X * \beta - f_n))^2 + P_{\lambda}(f) ]
-            solver_(lambda..., py_, pW_.asDiagonal());
-            mu_ = distr_.inv_link(fitted());
+	    solver_.update_response_and_weights(py_, pW_.asDiagonal());
+            solver_.fit(lambda...);
+            mu_ = distr_.inv_link(fitted());    
             // prepare for next iteration
             double data_loss =
               (distr_.variance(mu_).array().sqrt().inverse().matrix().asDiagonal() * (y - mu_)).squaredNorm();
@@ -127,7 +128,7 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
   
    private:
     vector_t mu_;          // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : mean vector at step k
-    vector_t py_, pW_;     // \tilde y^k = G^k(y-u^k) + \theta^k
+    vector_t py_;          // \tilde y^k = G^k(y-u^k) + \theta^k
     vector_t pW_;          // diagonal of W^k = ((G^k)^{-2})*((V^k)^{-1})
     int max_iter_ = 200;   // fpirls maximum iteration number
     double tol_ = 1e-6;    // fprils convergence tolerance

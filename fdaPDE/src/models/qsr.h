@@ -21,7 +21,7 @@
 
 namespace fdapde {
 
-template <typename VariationalSolver, typename Distribution> class QSRPDE {
+template <typename VariationalSolver> class QSRPDE {
    private:
     using solver_t = std::decay_t<VariationalSolver>;
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;
@@ -30,8 +30,8 @@ template <typename VariationalSolver, typename Distribution> class QSRPDE {
    public:
     QSRPDE() noexcept = default;
     template <typename GeoFrame, typename Penalty>
-    QSRPDE(const std::string& formula, const GeoFrame& gf, const Distribution& distr, Penalty&& penalty) noexcept :
-        solver_(), nonparametric_solver_() {
+    QSRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) noexcept :
+        solver_() {
         fdapde_assert(gf.n_layers() == 1);
         Formula formula_(formula);
         n_obs_ = gf[0].rows();
@@ -45,21 +45,16 @@ template <typename VariationalSolver, typename Distribution> class QSRPDE {
         } else {
             solver_ = solver_t(formula, gf, penalty(gf.template triangulation<0>()).get());
         }
-	// define nonparametric solver by stealing discretization from solver_
-        if (n_covs_ != 0) { nonparametric_solver_ = solver_t(std::string(formula_.lhs() + " ~ 1"), gf, solver_); }
     }
 
     // Functional penalized iterative reweighted least squares
     template <typename... LambdaT>
         requires(std::is_convertible_v<LambdaT, double> && ...)
     void fit(LambdaT... lambda) {
-        const auto& y = solver_.response();
-        // initialization: non-parametric and semi-parametric cases coincide here, as beta^(0) = 0
-        internals::apply_index_pack<n_lambda>([&]<int... Ns_>() {
-            n_covs_ != 0 ? nonparametric_solver_((2 * lambda[Ns_])...) : solver_((2 * lambda[Ns_])...);
-        });
-        mu_ = solver_.Psi() * solver_.f();
-
+        matrix_t y = solver_.response();
+        // initialization
+        internals::apply_index_pack<n_lambda>([&]<int... Ns_>() { solver_((2 * lambda[Ns_])...); });
+        mu_ = fitted();
         double Jold = std::numeric_limits<double>::max(), Jnew = 0;
         n_iter_ = 0;
         while (n_iter_ < max_iter_ && std::abs(Jnew - Jold) > tol_) {
@@ -69,8 +64,9 @@ template <typename VariationalSolver, typename Distribution> class QSRPDE {
                     .select((2. * (abs_res.array() + tol_weights_)).inverse(), (2. * abs_res.array()).inverse());
             py_ = y - (1. - 2. * alpha_) * abs_res;	  
             // \argmin_{\beta, f} [ 1/n * \norm(W^{1/2} * (y - X * \beta - f_n))^2 + P_{\lambda}(f) ]
-            solver_(lambda..., py_, pW_);
-            mu_ = solver_.fitted();
+	    solver_.update_response_and_weights(py_, pW_.asDiagonal());
+            solver_.fit(lambda...);
+            mu_ = fitted();
             // prepare for next iteration
             double data_loss = (pW_.cwiseSqrt().matrix().asDiagonal() * (py_ - mu_)).squaredNorm();
             Jold = Jnew;
@@ -138,7 +134,7 @@ template <typename VariationalSolver, typename Distribution> class QSRPDE {
     double tol_ = 1e-6;    // fprils convergence tolerance
     double tol_weights_ = 1e-6;
 
-    solver_t solver_, nonparametric_solver_;
+    solver_t solver_;
     int n_obs_ = 0, n_covs_ = 0;
     int n_iter_ = 0;
 
