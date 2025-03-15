@@ -70,7 +70,7 @@ template <typename VariationalSolver> class QSRPDE {
             // prepare for next iteration
             double data_loss = (pW_.cwiseSqrt().matrix().asDiagonal() * (py_ - mu_)).squaredNorm();
             Jold = Jnew;
-            Jnew = data_loss + solver_.ftPf()[0];
+            Jnew = data_loss + solver_.ftPf(lambda...);
 	    n_iter_++;
         }
 	return;

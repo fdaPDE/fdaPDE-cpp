@@ -31,19 +31,17 @@ template <typename VariationalSolver> class SRPDE {
     SRPDE() noexcept = default;
     template <typename GeoFrame, typename Penalty>
     SRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) noexcept : solver_() {
-        fdapde_assert(gf.n_layers() == 1);
-        if constexpr (requires(Penalty p) { p.get(); }) {
-	  solver_ = solver_t(formula, gf, penalty.get(), vector_t::Ones(gf[0].rows()).asDiagonal());
-        } else {
-            solver_ = solver_t(
-              formula, gf, penalty(gf.template triangulation<0>()).get(), vector_t::Ones(gf[0].rows()).asDiagonal());
-        }
-
+        fdapde_assert(gf.n_layers() == 1);	
         Formula formula_(formula);
 	n_obs_  = gf[0].rows();
 	n_covs_ = 0;
         for (const std::string& token : formula_.rhs()) {
             if (gf.contains(token)) { n_covs_++; }
+        }
+        if constexpr (requires(Penalty p) { p.get(); }) {
+            solver_ = solver_t(formula, gf, penalty.get());
+        } else {
+            solver_ = solver_t(formula, gf, penalty(gf.template triangulation<0>()).get());
         }
     }
     template <typename... LambdaT>
@@ -85,12 +83,17 @@ template <typename VariationalSolver> class SRPDE {
             requires(std::is_convertible_v<LambdaT, double> && ...)
         constexpr double operator()(LambdaT... lambda) {
             model_->fit(lambda...);
-            int dor = n_ - (q_ + model_->edf());   // residual degrees of freedom
+            std::array<double, StaticInputSize> lambda_vec {lambda...};
+            if (edf_map_.find(lambda_vec) == edf_map_.end()) {   // cache Tr[S]
+                edf_map_[lambda_vec] = model_->edf();
+            }
+            int dor = n_ - (q_ + edf_map_.at(lambda_vec));   // residual degrees of freedom
             return (n_ / std::pow(dor, 2)) * (model_->fitted() - model_->response()).squaredNorm();
         }
        private:
         SRPDE* model_;
         int n_ = 0, q_ = 0;
+        std::unordered_map<std::array<double, StaticInputSize>, double> edf_map_;
     };
     gcv_t gcv() { return gcv_t(this); }
 

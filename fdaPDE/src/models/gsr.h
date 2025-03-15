@@ -72,7 +72,7 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
             double data_loss =
               (distr_.variance(mu_).array().sqrt().inverse().matrix().asDiagonal() * (y - mu_)).squaredNorm();
             Jold = Jnew;
-            Jnew = data_loss + solver_.ftPf()[0];
+            Jnew = data_loss + solver_.ftPf(lambda...);
 	    n_iter_++;
         }
 	return;

@@ -14,6 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __FDAPDE_REGRESSION_MODULE_H__
-#    error "Include fdaPDE/regression.h instead of including internal headers directly."
+#ifndef __FDAPDE_MODELS_MODULE_H__
+#    error "Include fdaPDE/models.h instead of including internal headers directly."
 #endif
