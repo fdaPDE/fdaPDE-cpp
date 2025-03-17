@@ -80,7 +80,12 @@ struct fe_elliptic_solver {
         switch (gf.category(0)[0]) {
         case ltype::point: {
             const auto& spatial_index = geo_index_cast<0, POINT>(gf[0]);
-            Psi_ = point_eval_(spatial_index.coordinates());
+            if (spatial_index.points_at_dofs()) {
+                Psi_.resize(n_obs_, n_dofs_);
+                Psi_.setIdentity();
+            } else {
+                Psi_ = point_eval_(spatial_index.coordinates());
+            }
             D_ = vector_t::Ones(n_obs_).asDiagonal();
             break;
         }
@@ -162,8 +167,13 @@ struct fe_elliptic_solver {
         // basis system evaluation
         switch (gf.category(0)[0]) {
         case ltype::point: {
-            const auto& spatial_index = geo_index_cast<0, POINT>(gf[0]);
-            Psi_ = point_eval_(spatial_index.coordinates());
+            const auto& spatial_index = geo_index_cast<0, POINT>(gf[0]);	  
+            if (spatial_index.points_at_dofs()) {
+                Psi_.resize(n_obs_, n_dofs_);
+                Psi_.setIdentity();
+            } else {
+                Psi_ = point_eval_(spatial_index.coordinates());
+            }
             D_ = vector_t::Ones(n_obs_).asDiagonal();
             break;
         }
@@ -269,7 +279,13 @@ struct fe_elliptic_solver {
         g_ = x.bottomRows(n_dofs_);
         return std::make_pair(f_, beta_);
     }
-  
+    template <typename LambdaT>
+        requires(internals::is_vector_like_v<LambdaT>)
+    std::pair<matrix_t, matrix_t> fit(LambdaT&& lambda) {
+        fdapde_assert(lambda.size() == n_lambda);
+        return fit(lambda[0]);
+    }
+
     // hutchinson approximation for Tr[S]
     double edf(int r = 100, int seed = random_seed) {
         fdapde_assert(lambda_saved_.has_value());
@@ -295,11 +311,24 @@ struct fe_elliptic_solver {
         return trS / r;
     }
     // penalty matrix: \lambda * R1^\top * (R0)^{-1} * R1
-    matrix_t P() const {
+    matrix_t P(double lambda) const {
         if (!invR0_.has_value()) { invR0_->compute(R0_); }
         return R1_.transpose() * invR0_->solve(R1_);
     }
-    double ftPf(double lambda) { return lambda * g_.dot(R0_ * g_); }
+    template <typename LambdaT>
+        requires(internals::is_vector_like_v<LambdaT>)
+    matrix_t P(const LambdaT& lambda) const {
+        fdapde_assert(lambda.size() == n_lambda);
+        return P(lambda[0]);
+    }
+    matrix_t P() const { return P(1.0); }
+    double ftPf(double lambda) const { return lambda * g_.dot(R0_ * g_); }
+    template <typename LambdaT>
+        requires(internals::is_vector_like_v<LambdaT>)
+    double ftPf(const LambdaT& lambda) const {
+        fdapde_assert(lambda.size() == n_lambda);
+        return ftPf(lambda[0]);
+    }
 
     // observers
     int n_dofs() const { return n_dofs_; }
