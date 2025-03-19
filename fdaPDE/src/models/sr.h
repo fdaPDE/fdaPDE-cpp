@@ -50,14 +50,14 @@ template <typename VariationalSolver> class SRPDE {
         solver_.fit(lambda...);
     }
     // observers
-    const matrix_t& f() const { return solver_.f(); }
-    const matrix_t& beta() const { return solver_.beta(); }
+    const vector_t& f() const { return solver_.f(); }
+    const vector_t& beta() const { return solver_.beta(); }
     int n_covs() const { return n_covs_; }
     int n_obs() const { return n_obs_; }
     double edf() { return solver_.edf(); }
-    const matrix_t& response() const { return solver_.response(); }
-    matrix_t fitted() const {
-        matrix_t fitted_ = solver_.Psi() * f();
+    const vector_t& response() const { return solver_.response(); }
+    vector_t fitted() const {
+        vector_t fitted_ = solver_.Psi() * f();
         if (n_covs_ != 0) { fitted_ += solver_.design_matrix() * beta(); }
         return fitted_;
     }
@@ -93,7 +93,9 @@ template <typename VariationalSolver> class SRPDE {
        private:
         SRPDE* model_;
         int n_ = 0, q_ = 0;
-        std::unordered_map<std::array<double, StaticInputSize>, double> edf_map_;
+        std::unordered_map<
+          std::array<double, StaticInputSize>, double, internals::std_array_hash<double, StaticInputSize>>
+          edf_map_;
     };
     gcv_t gcv() { return gcv_t(this); }
 

@@ -213,10 +213,10 @@ struct fe_elliptic_solver {
         fdapde_assert(n_obs_ > 0 && y.rows() == n_obs_ && y.cols() == 1);
         y_ = y;
         // correct \Psi for missing observations
-        auto nan_pattern = make_na_matrix(y);
-        if (nan_pattern.count()) {
+        auto nan_pattern = na_matrix(y);
+        if (nan_pattern.any()) {
             n_obs_ = n_obs_ - nan_pattern.count();
-            Psi_ = nan_pattern.repeat(1, n_dofs_).select(Psi_);
+            Psi_ = nan_pattern.repeat(1, n_dofs_).select(Psi_, 0);
         }
 	b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * W_ * y / n_obs_;
 	return;
@@ -243,10 +243,10 @@ struct fe_elliptic_solver {
           n_obs_ > 0 && y.rows() == n_obs_ && y.cols() == 1 && W.rows() == W.cols() && W.rows() == n_obs_);
 	y_ = y;
         // correct \Psi for missing observations
-        auto nan_pattern = make_na_matrix(y);
-        if (nan_pattern.count()) {
+        auto nan_pattern = na_matrix(y);
+        if (nan_pattern.any()) {
             n_obs_ = n_obs_ - nan_pattern.count();
-            Psi_ = nan_pattern.repeat(1, n_dofs_).select(Psi_);
+            Psi_ = nan_pattern.repeat(1, n_dofs_).select(Psi_, 0);
         }
 	update_weights(W);
         return;
@@ -310,10 +310,26 @@ struct fe_elliptic_solver {
         for (int i = 0; i < r; ++i) { trS += Ys_->row(i).dot(x.col(i).head(n_dofs_)); }
         return trS / r;
     }
+    template <typename LambdaT>
+        requires(internals::is_vector_like_v<LambdaT> || std::is_floating_point_v<LambdaT>)
+    double edf(const LambdaT& lambda, int r = 100, int seed = random_seed) {
+      double lambda_;
+      if constexpr (internals::is_vector_like_v<LambdaT>) {
+          fdapde_assert(lambda.size() == n_lambda && lambda[0] > 0);
+          lambda_ = lambda[0];
+      } else {
+          fdapde_assert(lambda > 0);
+          lambda_ = lambda;
+      }
+      SparseBlockMatrix<double, 2, 2> A_(
+        -Psi_.transpose() * D_ * W_ * Psi_ / n_obs_, lambda_ * R1_.transpose(), lambda_ * R1_, lambda_ * R0_);
+      invA_.compute(A_);
+      return edf(r, seed);
+    }
     // penalty matrix: \lambda * R1^\top * (R0)^{-1} * R1
     matrix_t P(double lambda) const {
-        if (!invR0_.has_value()) { invR0_->compute(R0_); }
-        return R1_.transpose() * invR0_->solve(R1_);
+        if (!invR0_.has_value()) { invR0_.compute(R0_); }
+        return R1_.transpose() * invR0_.solve(R1_);
     }
     template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
@@ -322,6 +338,7 @@ struct fe_elliptic_solver {
         return P(lambda[0]);
     }
     matrix_t P() const { return P(1.0); }
+    // efficient evaluation of f^\top * P * f = g^\top * R0 * g
     double ftPf(double lambda) const { return lambda * g_.dot(R0_ * g_); }
     template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
@@ -329,7 +346,6 @@ struct fe_elliptic_solver {
         fdapde_assert(lambda.size() == n_lambda);
         return ftPf(lambda[0]);
     }
-
     // observers
     int n_dofs() const { return n_dofs_; }
     const sparse_matrix_t& mass() const { return R0_; }
@@ -355,7 +371,7 @@ struct fe_elliptic_solver {
     sparse_matrix_t Psi_;   // n_obs x n_dofs matrix [Psi]_{ij} = \psi_j(p_i)
     vector_t u_;            // n_dofs x 1 vector u_i = \int_D u * \psi_i
     diag_matrix_t D_;       // vector of regions' measures (areal sampling)
-    mutable std::optional<sparse_solver_t> invR0_;
+    mutable sparse_solver_t invR0_;
     vector_t f_, beta_, g_;
     // basis system evaluation handles
     std::function<sparse_matrix_t(const matrix_t& locs)> point_eval_;
@@ -368,7 +384,6 @@ struct fe_elliptic_solver {
     matrix_t XtWX_;            // n_covs x n_covs matrix X^\top * W * X
     dense_solver_t invXtWX_;   // factorization of n_covs x n_covs matrix X^\top * W * X
     matrix_t invXtWXXtW_;      // n_covs x n_obs matrix (X^\top * X)^{-1} * (X^\top W)
-
     bool Wchanged_;
 };
 
