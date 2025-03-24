@@ -26,7 +26,8 @@ experiments/test_RSVD/performances.csv
 *.png
 
 #help files
-*.csv
+!*.csv
+!*.mtx
 
 #docs files
 *.puml
