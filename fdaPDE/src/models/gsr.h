@@ -45,6 +45,7 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
         } else {
             solver_ = solver_t(formula, gf, penalty(gf.template triangulation<0>()).get());
         }
+	y_ = solver_.response();
     }
     
     // Functional penalized iterative reweighted least squares
@@ -52,7 +53,8 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
         requires(std::is_convertible_v<LambdaT, double> && ...)
     void fit(LambdaT... lambda) {
         // initialize mean vector
-        matrix_t y = solver_.response();
+        vector_t y = y_;
+        solver_.update_response_and_weights(y, vector_t::Ones(n_obs_).asDiagonal());   // restore solver state
         if constexpr (requires(Distribution d, vector_t v) { d.transform(v); }) {
             mu_ = distr_.transform(y);
         } else {
@@ -70,7 +72,7 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
             mu_ = distr_.inv_link(fitted());    
             // prepare for next iteration
             double data_loss =
-              (distr_.variance(mu_).array().sqrt().inverse().matrix().asDiagonal() * (y - mu_)).squaredNorm();
+              (distr_.variance(mu_).array().sqrt().inverse().matrix().asDiagonal() * (y - mu_)).squaredNorm() / n_obs_;
             Jold = Jnew;
             Jnew = data_loss + solver_.ftPf(lambda...);
 	    n_iter_++;
@@ -78,13 +80,13 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
 	return;
     }
     // observers
-    const matrix_t& f() const { return solver_.f(); }
-    const matrix_t& beta() const { return solver_.beta(); }
+    const vector_t& f() const { return solver_.f(); }
+    const vector_t& beta() const { return solver_.beta(); }
     int n_covs() const { return n_covs_; }
     int n_obs() const { return n_obs_; }
-    double edf() { return solver_.edf(); }
-    const matrix_t& response() const { return solver_.response(); }
-    matrix_t fitted() const {
+    double edf(int r = 100, int seed = random_seed) { return solver_.edf(r, seed); }
+    const vector_t& response() const { return solver_.response(); }
+    vector_t fitted() const {
         matrix_t fitted_ = solver_.Psi() * f();
         if (n_covs_ != 0) { fitted_ += solver_.design_matrix() * beta(); }
         return fitted_;
@@ -100,7 +102,9 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
         using InputType = Vector<Scalar, StaticInputSize>;
 
         gcv_t() noexcept = default;
-        gcv_t(GSRPDE* model) : model_(model), n_(model->n_obs()), q_(model->n_covs()) { }
+        gcv_t(GSRPDE* model) : model_(model), n_(model->n_obs()), q_(model->n_covs()), r_(100), seed_(random_seed) { }
+        gcv_t(GSRPDE* model, int r, int seed) :
+            model_(model), n_(model->n_obs()), q_(model->n_covs()), r_(r), seed_(seed) { }
 
         template <typename InputType_>
             requires(internals::is_subscriptable<InputType_, int>)
@@ -110,8 +114,12 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
         template <typename... LambdaT>
             requires(std::is_convertible_v<LambdaT, double> && ...)
         constexpr double operator()(LambdaT... lambda) {
-            model_->fit(lambda...);
-            int dor = n_ - (q_ + model_->edf());   // residual degrees of freedom
+            model_->fit(static_cast<double>(lambda)...);
+            std::array<double, StaticInputSize> lambda_vec {lambda...};
+            if (edf_map_.find(lambda_vec) == edf_map_.end()) {   // cache Tr[S]
+                edf_map_[lambda_vec] = model_->edf(r_, seed_);
+            }
+            double dor = n_ - (q_ + edf_map_.at(lambda_vec));   // residual degrees of freedom
 	    // compute total deviance
             vector_t mu = model_->distr_.inv_link(model_->fitted());
             double total_deviance = 0;
@@ -121,12 +129,19 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
        private:
         GSRPDE* model_;
         int n_ = 0, q_ = 0;
+        std::unordered_map<
+          std::array<double, StaticInputSize>, double, internals::std_array_hash<double, StaticInputSize>>
+          edf_map_;
+        // stochastic edf approximation parameter
+        int r_, seed_;
     };
     gcv_t gcv() { return gcv_t(this); }
+    gcv_t gcv(int r, int seed) { return gcv_t(this, r, seed); }
 
     // inference
   
    private:
+    vector_t y_;
     vector_t mu_;          // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : mean vector at step k
     vector_t py_;          // \tilde y^k = G^k(y-u^k) + \theta^k
     vector_t pW_;          // diagonal of W^k = ((G^k)^{-2})*((V^k)^{-1})

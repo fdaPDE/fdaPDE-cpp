@@ -1,0 +1,144 @@
+// This file is part of fdaPDE, a C++ library for physics-informed
+// spatial and functional data analysis.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+using namespace fdapde;
+using fdapde::test::read_mesh;
+using fdapde::test::almost_equal;
+
+// test 1
+//    mesh:         unit_square_60
+//    sampling:     locations = nodes
+//    penalization: simple laplacian
+//    covariates:   no
+//    BC:           no
+//    order FE:     1
+TEST(srpde, test_01) {
+    // geometry
+    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_60");
+    // data
+    GeoFrame data(D);
+    auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
+    l1.load_csv<double>("../data/sr/01/response.csv");
+    // modeling
+    SRPDE m("y ~ f", data, fe_laplace());
+    m.fit(/* lambda = */ 1.56206e-08);
+
+    EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/01/field.mtx"));
+}
+
+// test 2
+//    mesh:         c_shaped
+//    sampling:     locations != nodes
+//    penalization: simple laplacian
+//    covariates:   yes
+//    BC:           no
+//    order FE:     1
+TEST(srpde, test_02) {
+    // geometry
+    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/c_shaped");
+    // data
+    GeoFrame data(D);
+    auto& l1 = data.insert_scalar_layer<POINT>("l1", "../data/sr/02/locs.csv");
+    l1.load_csv<double>("../data/sr/02/response.csv");
+    l1.load_csv<double>("../data/sr/02/design_matrix.csv");
+    // modeling
+    SRPDE m("y ~ x1 + x2 + f", data, fe_laplace());
+    m.fit(/* lambda = */ 0.001287161988304094);
+
+    EXPECT_TRUE(almost_equal<double>(m.f()   , "../data/sr/02/field.mtx"));
+    EXPECT_TRUE(almost_equal<double>(m.beta(), "../data/sr/02/beta.mtx" ));
+}
+
+// test 3
+//    mesh:         unit_square_60
+//    sampling:     locations = nodes
+//    penalization: anisotropic diffusion
+//    covariates:   no
+//    BC:           no
+//    order FE:     1
+TEST(srpde, test_03) {
+    // geometry
+    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_60");
+    // data
+    GeoFrame data(D);
+    auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
+    l1.load_csv<double>("../data/sr/03/response.csv");
+    // physics: anisotropic diffussion
+    Eigen::Matrix<double, 2, 2> K;
+    K << 1, 0, 0, 4;
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction  v(Vh);
+    auto a = integral(D)(dot(K * grad(f), grad(v)));
+    // modeling
+    SRPDE m("y ~ f", data, fe_elliptic(a));
+    m.fit(/* lambda = */ 0.002777777777777778);
+    
+    EXPECT_TRUE(almost_equal<double>(m.f() , "../data/sr/03/field.mtx"));
+}
+
+// test 4
+//    mesh:         unit_square_21
+//    sampling:     locations = nodes
+//    penalization: simple laplacian
+//    covariates:   no
+//    BC:           no
+//    order FE:     1
+//    GCV optimization: grid stochastic
+TEST(srpde, test_04) {
+    // geometry
+    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_21");
+    // data
+    GeoFrame data(D);
+    auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
+    l1.load_csv<double>("../data/sr/04/response.csv");
+    // modeling
+    SRPDE m("y ~ f", data, fe_laplace());
+    // calibration
+    std::vector<double> lambda_grid(13);
+    for (int i = 0; i < 13; ++i) { lambda_grid[i] = std::pow(10, -6.0 + 0.25 * i) / data[0].rows(); }
+    GridOptimizer<1> optimizer;
+    optimizer.optimize(m.gcv(100, 476813), lambda_grid);
+
+    EXPECT_TRUE(almost_equal<double>(optimizer.values(), "../data/sr/04/gcvs.mtx"));
+}
+
+// test 5
+//    mesh:         c_shaped
+//    sampling:     locations != nodes
+//    penalization: simple laplacian
+//    covariates:   yes
+//    BC:           no
+//    order FE:     1
+//    GCV optimization: grid stochastic
+TEST(srpde, test_05) {
+    // geometry
+    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/c_shaped");
+    // data
+    GeoFrame data(D);
+    auto& l1 = data.insert_scalar_layer<POINT>("l1", "../data/sr/05/locs.csv");
+    l1.load_csv<double>("../data/sr/05/response.csv");
+    l1.load_csv<double>("../data/sr/05/design_matrix.csv");
+    // modeling
+    SRPDE m("y ~ x1 + x2 + f", data, fe_laplace());
+    // calibration
+    std::vector<double> lambda_grid(25);
+    for (int i = 0; i < 25; ++i) { lambda_grid[i] = std::pow(10, -3.0 + 0.25 * i) / data[0].rows(); }
+    GridOptimizer<1> optimizer;
+    optimizer.optimize(m.gcv(100, 66546513), lambda_grid);
+
+    EXPECT_TRUE(almost_equal<double>(optimizer.values(), "../data/sr/05/gcvs.mtx"));
+}

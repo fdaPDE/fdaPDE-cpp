@@ -30,8 +30,8 @@ template <typename VariationalSolver> class QSRPDE {
    public:
     QSRPDE() noexcept = default;
     template <typename GeoFrame, typename Penalty>
-    QSRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) noexcept :
-        solver_() {
+    QSRPDE(const std::string& formula, const GeoFrame& gf, double alpha, Penalty&& penalty) noexcept :
+        solver_(), alpha_(alpha) {
         fdapde_assert(gf.n_layers() == 1);
         Formula formula_(formula);
         n_obs_ = gf[0].rows();
@@ -45,16 +45,18 @@ template <typename VariationalSolver> class QSRPDE {
         } else {
             solver_ = solver_t(formula, gf, penalty(gf.template triangulation<0>()).get());
         }
+	y_ = solver_.response();
     }
 
     // Functional penalized iterative reweighted least squares
     template <typename... LambdaT>
-        requires(std::is_convertible_v<LambdaT, double> && ...)
-    void fit(LambdaT... lambda) {
-        matrix_t y = solver_.response();
+        requires(std::is_convertible_v<LambdaT, double> && ...) && (sizeof...(LambdaT) == n_lambda)
+    void fit(double alpha, LambdaT... lambda) {
+        matrix_t y = y_;
         // initialization
-        internals::apply_index_pack<n_lambda>([&]<int... Ns_>() { solver_((2 * lambda[Ns_])...); });
-        mu_ = fitted();
+        solver_.update_response_and_weights(y, vector_t::Ones(n_obs_).asDiagonal());   // restore solver state
+        solver_.nonparametric_fit((2. * lambda)...);
+        mu_ = solver_.Psi() * solver_.f();	
         double Jold = std::numeric_limits<double>::max(), Jnew = 0;
         n_iter_ = 0;
         while (n_iter_ < max_iter_ && std::abs(Jnew - Jold) > tol_) {
@@ -62,31 +64,38 @@ template <typename VariationalSolver> class QSRPDE {
             // W_i = 0.5 * (abs_res[i] + tol_weights_) if abs_res[i] < tol_weights, W_i = 0.5 * abs_res[i] otherwise
             pW_ = (abs_res.array() < tol_weights_)
                     .select((2. * (abs_res.array() + tol_weights_)).inverse(), (2. * abs_res.array()).inverse());
-            py_ = y - (1. - 2. * alpha_) * abs_res;	  
+            py_ = y - (1 - 2. * alpha) * abs_res;	  
             // \argmin_{\beta, f} [ 1/n * \norm(W^{1/2} * (y - X * \beta - f_n))^2 + P_{\lambda}(f) ]
 	    solver_.update_response_and_weights(py_, pW_.asDiagonal());
             solver_.fit(lambda...);
             mu_ = fitted();
             // prepare for next iteration
-            double data_loss = (pW_.cwiseSqrt().matrix().asDiagonal() * (py_ - mu_)).squaredNorm();
+            double data_loss = (pW_.cwiseSqrt().matrix().asDiagonal() * (py_ - mu_)).squaredNorm() / n_obs_;
             Jold = Jnew;
             Jnew = data_loss + solver_.ftPf(lambda...);
-	    n_iter_++;
+            n_iter_++;
         }
 	return;
     }
+    template <typename... LambdaT>
+        requires(std::is_convertible_v<LambdaT, double> && ...) && (sizeof...(LambdaT) == n_lambda)
+    void fit(LambdaT... lambda) {
+        return fit(alpha_, lambda...);
+    }
     // observers
-    const matrix_t& f() const { return solver_.f(); }
-    const matrix_t& beta() const { return solver_.beta(); }
+    const vector_t& f() const { return solver_.f(); }
+    const vector_t& beta() const { return solver_.beta(); }
     int n_covs() const { return n_covs_; }
     int n_obs() const { return n_obs_; }
-    double edf() { return solver_.edf(); }
-    const matrix_t& response() const { return solver_.response(); }
-    matrix_t fitted() const {
-        matrix_t fitted_ = solver_.Psi() * f();
+    double edf(int r = 100, int seed = random_seed) { return solver_.edf(r, seed); }
+    const vector_t& response() const { return solver_.response(); }
+    vector_t fitted() const {
+        vector_t fitted_ = solver_.Psi() * f();
         if (n_covs_ != 0) { fitted_ += solver_.design_matrix() * beta(); }
         return fitted_;
     }
+    // modifiers
+    void set_pinball_smoothing_factor(double eps) { eps_ = eps; }
 
     // Generalized Cross Validation index
     struct gcv_t : public ScalarFieldBase<n_lambda, gcv_t> {
@@ -98,7 +107,9 @@ template <typename VariationalSolver> class QSRPDE {
         using InputType = Vector<Scalar, StaticInputSize>;
 
         gcv_t() noexcept = default;
-        gcv_t(QSRPDE* model) : model_(model), n_(model->n_obs()), q_(model->n_covs()) { }
+        gcv_t(QSRPDE* model) : model_(model), n_(model->n_obs()), q_(model->n_covs()), r_(100), seed_(random_seed) { }
+        gcv_t(QSRPDE* model, int r, int seed) :
+            model_(model), n_(model->n_obs()), q_(model->n_covs()), r_(r), seed_(seed) { }
 
         template <typename InputType_>
             requires(internals::is_subscriptable<InputType_, int>)
@@ -108,23 +119,35 @@ template <typename VariationalSolver> class QSRPDE {
         template <typename... LambdaT>
             requires(std::is_convertible_v<LambdaT, double> && ...)
         constexpr double operator()(LambdaT... lambda) {
-            model_->fit(lambda...);
-            int dor = n_ - (q_ + model_->edf());   // residual degrees of freedom
+            model_->fit(static_cast<double>(lambda)...);
+            std::array<double, StaticInputSize> lambda_vec {lambda...};
+            if (edf_map_.find(lambda_vec) == edf_map_.end()) {   // cache Tr[S]
+                edf_map_[lambda_vec] = model_->edf(r_, seed_);
+            }
+            double dor = n_ - (q_ + edf_map_.at(lambda_vec));   // residual degrees of freedom
             double pinball = 0;
             for (int i = 0; i < n_; ++i) {
-                pinball += model_->pinball_loss(model_->response()[i] - mu_[i], std::pow(10, eps_));
+                pinball += model_->pinball_loss(model_->y_[i] - model_->mu_[i], std::pow(10, model_->eps_));
             }
-            return std::pow(pinball, 2) / std::pow(dor, 2);
+	    return (std::pow(pinball, 2) / std::pow(dor, 2));
         }
        private:
         QSRPDE* model_;
         int n_ = 0, q_ = 0;
+        std::unordered_map<
+          std::array<double, StaticInputSize>, double, internals::std_array_hash<double, StaticInputSize>>
+          edf_map_;
+        // stochastic edf approximation parameter
+        int r_, seed_;
     };
+    friend gcv_t;
     gcv_t gcv() { return gcv_t(this); }
+    gcv_t gcv(int r, int seed) { return gcv_t(this, r, seed); }
 
     // inference
   
    private:
+    vector_t y_;
     double alpha_ = 0.5;   // quantile order (default to median)
     vector_t py_;          // y - (1 - 2 * alpha) * |y - X * beta - f|
     vector_t pW_;          // diagonal of W^k = 1 / (2 * n * |y - X * beta - f|)
@@ -147,7 +170,8 @@ template <typename VariationalSolver> class QSRPDE {
 
 // deduction guide
 template <typename GeoFrame, typename Penalty>
-QSRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& solver) -> QSRPDE<typename Penalty::solver_t>;
+QSRPDE(const std::string& formula, const GeoFrame& gf, double alpha, Penalty&& solver)
+  -> QSRPDE<typename Penalty::solver_t>;
 
 }   // namespace fdapde
 

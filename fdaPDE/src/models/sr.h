@@ -54,7 +54,7 @@ template <typename VariationalSolver> class SRPDE {
     const vector_t& beta() const { return solver_.beta(); }
     int n_covs() const { return n_covs_; }
     int n_obs() const { return n_obs_; }
-    double edf() { return solver_.edf(); }
+    double edf(int r = 100, int seed = random_seed) { return solver_.edf(r, seed); }
     const vector_t& response() const { return solver_.response(); }
     vector_t fitted() const {
         vector_t fitted_ = solver_.Psi() * f();
@@ -72,7 +72,9 @@ template <typename VariationalSolver> class SRPDE {
         using InputType = Vector<Scalar, StaticInputSize>;
 
         gcv_t() noexcept = default;
-        gcv_t(SRPDE* model) : model_(model), n_(model->n_obs()), q_(model->n_covs()) { }
+        gcv_t(SRPDE* model) : model_(model), n_(model->n_obs()), q_(model->n_covs()), r_(100), seed_(random_seed) { }
+        gcv_t(SRPDE* model, int r, int seed) :
+            model_(model), n_(model->n_obs()), q_(model->n_covs()), r_(r), seed_(seed) { }
 
         template <typename InputType_>
             requires(internals::is_subscriptable<InputType_, int>)
@@ -80,14 +82,14 @@ template <typename VariationalSolver> class SRPDE {
             return internals::apply_index_pack<n_lambda>([&]<int... Ns_>() { return operator()(lambda[Ns_]...); });
         }
         template <typename... LambdaT>
-            requires(std::is_convertible_v<LambdaT, double> && ...)
+            requires(std::is_convertible_v<LambdaT, double> && ...) && (sizeof...(LambdaT) == StaticInputSize)
         constexpr double operator()(LambdaT... lambda) {
-            model_->fit(lambda...);
+            model_->fit(static_cast<double>(lambda)...);
             std::array<double, StaticInputSize> lambda_vec {lambda...};
             if (edf_map_.find(lambda_vec) == edf_map_.end()) {   // cache Tr[S]
-                edf_map_[lambda_vec] = model_->edf();
+                edf_map_[lambda_vec] = model_->edf(r_, seed_);
             }
-            int dor = n_ - (q_ + edf_map_.at(lambda_vec));   // residual degrees of freedom
+            double dor = n_ - (q_ + edf_map_.at(lambda_vec));   // residual degrees of freedom
             return (n_ / std::pow(dor, 2)) * (model_->fitted() - model_->response()).squaredNorm();
         }
        private:
@@ -96,8 +98,11 @@ template <typename VariationalSolver> class SRPDE {
         std::unordered_map<
           std::array<double, StaticInputSize>, double, internals::std_array_hash<double, StaticInputSize>>
           edf_map_;
+        // stochastic edf approximation parameter
+        int r_, seed_;
     };
     gcv_t gcv() { return gcv_t(this); }
+    gcv_t gcv(int r, int seed) { return gcv_t(this, r, seed); }
 
     // inference
   

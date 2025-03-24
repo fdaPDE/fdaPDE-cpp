@@ -214,26 +214,29 @@ struct fe_elliptic_solver {
         y_ = y;
         // correct \Psi for missing observations
         auto nan_pattern = na_matrix(y);
+	int old_n_obs = n_obs_;
         if (nan_pattern.any()) {
             n_obs_ = n_obs_ - nan_pattern.count();
-            Psi_ = nan_pattern.repeat(1, n_dofs_).select(Psi_, 0);
+            Psi_ = nan_pattern.repeat(1, n_dofs_).select(Psi_, 0); // store a true \Psi, then correct for missing
         }
-	b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * W_ * y / n_obs_;
-	return;
+        if (old_n_obs != n_obs_) { W_ *= (double)old_n_obs / n_obs_; }
+        b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * W_ * y;
+        return;
     }
     template <typename WeightMatrix> void update_weights(const WeightMatrix& W) {
         fdapde_assert(n_obs_ > 0 && W.rows() == n_obs_ && W.rows() == W.cols());
         W_ = W;
+	W_ /= n_obs_;
         if (n_covs_ == 0) {
-            b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * W * y_ / n_obs_;
+            b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * W_ * y_;
         } else {
-            XtWX_ = X_.transpose() * W * X_ / n_obs_;
+            XtWX_ = X_.transpose() * W_ * X_;
             invXtWX_ = XtWX_.partialPivLu();
-            invXtWXXtW_ = invXtWX_.solve(X_.transpose() * W / n_obs_);   // (X^\top * W * X)^{-1} * (X^\top * W)
+            invXtWXXtW_ = invXtWX_.solve(X_.transpose() * W_);   // (X^\top * W * X)^{-1} * (X^\top * W)
             // woodbury decomposition matrices
-            U_.block(0, 0, n_dofs_, n_covs_) = Psi_.transpose() * D_ * W * X_ / n_obs_;
-            V_.block(0, 0, n_covs_, n_dofs_) = X_.transpose() * W * Psi_ / n_obs_;
-            b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * internals::lmbQ(W, X_, invXtWX_, y_) / n_obs_;
+            U_.block(0, 0, n_dofs_, n_covs_) = Psi_.transpose() * D_ * W_ * X_;
+            V_.block(0, 0, n_covs_, n_dofs_) = X_.transpose() * W_ * Psi_;
+            b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * internals::lmbQ(W_, X_, invXtWX_, y_);
         }
 	Wchanged_ = true;
 	return;
@@ -244,22 +247,23 @@ struct fe_elliptic_solver {
 	y_ = y;
         // correct \Psi for missing observations
         auto nan_pattern = na_matrix(y);
+	//W_ *= n_obs_;
         if (nan_pattern.any()) {
             n_obs_ = n_obs_ - nan_pattern.count();
             Psi_ = nan_pattern.repeat(1, n_dofs_).select(Psi_, 0);
         }
-	update_weights(W);
+        update_weights(W);
         return;
     }
 
     // main fit entry point
-    std::pair<matrix_t, matrix_t> fit(double lambda) {
+    std::pair<vector_t, vector_t> fit(double lambda) {
         fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
         if (lambda_saved_.value() != lambda || Wchanged_) {
             // assemble and factorize system matrix for nonparameteric part
-            SparseBlockMatrix<double, 2, 2> A_(
-              -Psi_.transpose() * D_ * W_ * Psi_ / n_obs_, lambda * R1_.transpose(), lambda * R1_, lambda * R0_);
-            invA_.compute(A_);
+            SparseBlockMatrix<double, 2, 2> A(
+              -Psi_.transpose() * D_ * W_ * Psi_, lambda * R1_.transpose(), lambda * R1_, lambda * R0_);
+            invA_.compute(A);
 	    Wchanged_ = false;
         }
         if (lambda_saved_.value() != lambda) {
@@ -267,7 +271,7 @@ struct fe_elliptic_solver {
             b_.block(n_dofs_, 0, n_dofs_, 1) = lambda * u_;
         }
         lambda_saved_ = lambda;
-        matrix_t x;
+        vector_t x;
         if (n_covs_ == 0) {
             x = invA_.solve(b_);
             f_ = x.topRows(n_dofs_);
@@ -281,9 +285,34 @@ struct fe_elliptic_solver {
     }
     template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
-    std::pair<matrix_t, matrix_t> fit(LambdaT&& lambda) {
+    std::pair<vector_t, vector_t> fit(LambdaT&& lambda) {
         fdapde_assert(lambda.size() == n_lambda);
         return fit(lambda[0]);
+    }
+    // perform a nonparametric_fit, e.g. discarding possible covariates
+    vector_t nonparametric_fit(double lambda) {
+        fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
+        if (lambda_saved_.value() != lambda) {
+            // assemble and factorize system matrix for nonparameteric part
+            SparseBlockMatrix<double, 2, 2> A(
+              -Psi_.transpose() * D_ * W_ * Psi_, lambda * R1_.transpose(), lambda * R1_, lambda * R0_);
+            invA_.compute(A);
+        }
+        vector_t x;
+        if (n_covs_ == 0) {   // equivalent to calling fit(lambda)
+            if (lambda_saved_.value() != lambda) { b_.block(n_dofs_, 0, n_dofs_, 1) = lambda * u_; }
+            x = invA_.solve(b_);
+        } else {
+            vector_t b(2 * n_dofs_);
+            // assemble nonparametric linear system rhs
+            b.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * W_ * y_;
+            b.block(n_dofs_, 0, n_dofs_, 1) = lambda * u_;   
+            x = invA_.solve(b);
+        }
+        lambda_saved_ = lambda;
+        f_ = x.topRows(n_dofs_);
+        g_ = x.bottomRows(n_dofs_);
+        return f_;
     }
 
     // hutchinson approximation for Tr[S]
@@ -293,17 +322,17 @@ struct fe_elliptic_solver {
             int seed_ = (seed == random_seed) ? std::random_device()() : seed;
             std::mt19937 rng(seed_);
             rademacher_distribution rademacher;
-            matrix_t Us(n_obs_, r);
+            Us_.resize(n_obs_, r);
             for (int i = 0; i < n_obs_; ++i) {
-                for (int j = 0; j < r; ++j) { Us(i, j) = rademacher(rng); }
+                for (int j = 0; j < r; ++j) { Us_(i, j) = rademacher(rng); }
             }
-            Ys_ = Us.transpose() * Psi_;
+            Ys_ = Us_.transpose() * Psi_;
             Bs_ = matrix_t::Zero(2 * n_dofs_, r);   // implicitly enforce homogeneous forcing
-            if (n_covs_ == 0) {
-                Bs_->topRows(n_dofs_) = -Psi_.transpose() * D_ * W_ * Us;
-            } else {
-                Bs_->topRows(n_dofs_) = -Psi_.transpose() * D_ * internals::lmbQ(W_, X_, invXtWX_, Us);
-            }
+        }
+        if (n_covs_ == 0) {
+            Bs_->topRows(n_dofs_) = -Psi_.transpose() * D_ * W_ * Us_;
+        } else {
+            Bs_->topRows(n_dofs_) = -Psi_.transpose() * D_ * internals::lmbQ(W_, X_, invXtWX_, Us_);
         }
         matrix_t x = n_covs_ == 0 ? invA_.solve(*Bs_) : woodbury_system_solve(invA_, U_, XtWX_, V_, *Bs_);
         double trS = 0;   // monte carlo Tr[S] approximation
@@ -313,23 +342,26 @@ struct fe_elliptic_solver {
     template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT> || std::is_floating_point_v<LambdaT>)
     double edf(const LambdaT& lambda, int r = 100, int seed = random_seed) {
-      double lambda_;
-      if constexpr (internals::is_vector_like_v<LambdaT>) {
-          fdapde_assert(lambda.size() == n_lambda && lambda[0] > 0);
-          lambda_ = lambda[0];
-      } else {
-          fdapde_assert(lambda > 0);
-          lambda_ = lambda;
-      }
-      SparseBlockMatrix<double, 2, 2> A_(
-        -Psi_.transpose() * D_ * W_ * Psi_ / n_obs_, lambda_ * R1_.transpose(), lambda_ * R1_, lambda_ * R0_);
-      invA_.compute(A_);
-      return edf(r, seed);
+        double lambda_;
+        if constexpr (internals::is_vector_like_v<LambdaT>) {
+            fdapde_assert(lambda.size() == n_lambda && lambda[0] > 0);
+            lambda_ = lambda[0];
+        } else {
+            fdapde_assert(lambda > 0);
+            lambda_ = lambda;
+        }
+        if (lambda_saved_.value() != lambda_) {
+            SparseBlockMatrix<double, 2, 2> A_(
+              -Psi_.transpose() * D_ * W_ * Psi_ / n_obs_, lambda_ * R1_.transpose(), lambda_ * R1_, lambda_ * R0_);
+            invA_.compute(A_);
+            lambda_saved_ = lambda_;
+        }
+        return edf(r, seed);
     }
     // penalty matrix: \lambda * R1^\top * (R0)^{-1} * R1
     matrix_t P(double lambda) const {
         if (!invR0_.has_value()) { invR0_.compute(R0_); }
-        return R1_.transpose() * invR0_.solve(R1_);
+        return lambda * R1_.transpose() * invR0_.solve(R1_);
     }
     template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
@@ -339,10 +371,13 @@ struct fe_elliptic_solver {
     }
     matrix_t P() const { return P(1.0); }
     // efficient evaluation of f^\top * P * f = g^\top * R0 * g
-    double ftPf(double lambda) const { return lambda * g_.dot(R0_ * g_); }
+    double ftPf(double lambda) {
+        if (lambda_saved_.value() != lambda || Wchanged_) { fit(lambda); }
+        return lambda * g_.dot(R0_ * g_);
+    }
     template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
-    double ftPf(const LambdaT& lambda) const {
+    double ftPf(const LambdaT& lambda) {
         fdapde_assert(lambda.size() == n_lambda);
         return ftPf(lambda[0]);
     }
@@ -379,29 +414,33 @@ struct fe_elliptic_solver {
 
     matrix_t X_;               // n_obs x n_covs design matrix
     vector_t y_;               // n_obs x 1 observation vector
-    diag_matrix_t W_;          // n_obs x n_obs matrix of observation weights
+    sparse_matrix_t W_;        // n_obs x n_obs matrix of observation weights
     matrix_t U_, V_;           // (2 * n_dofs) x n_covs matrices [\Psi^\top * D * W * y, 0] and [X^\top * W * \Psi, 0]
     matrix_t XtWX_;            // n_covs x n_covs matrix X^\top * W * X
     dense_solver_t invXtWX_;   // factorization of n_covs x n_covs matrix X^\top * W * X
     matrix_t invXtWXXtW_;      // n_covs x n_obs matrix (X^\top * X)^{-1} * (X^\top W)
     bool Wchanged_;
+
+    matrix_t Us_;
 };
 
 }   // namespace internals
 
 // general non-parametrized elliptic solver factory method
 template <typename BilinearForm_, typename LinearForm_> struct fe_elliptic_penalty {
-    fdapde_static_assert(
-      std::is_same_v<typename BilinearForm_::discretization_category FDAPDE_COMMA finite_element_tag>&&
-        std::is_same_v<typename LinearForm_::discretization_category FDAPDE_COMMA finite_element_tag>,
-      FE_ELLIPTIC_PENALTY_IS_FOR_FINITE_ELEMENT_DISCRETIZATIONS_ONLY);
     using BilinearForm = std::decay_t<BilinearForm_>;
     using LinearForm = std::decay_t<LinearForm_>;
     using Triangulation = std::tuple<typename BilinearForm::Triangulation>;
     using solver_t = internals::fe_elliptic_solver;
+    fdapde_static_assert(
+      std::is_same_v<typename BilinearForm::discretization_category FDAPDE_COMMA finite_element_tag>&&
+        std::is_same_v<typename LinearForm::discretization_category FDAPDE_COMMA finite_element_tag>,
+      FE_ELLIPTIC_PENALTY_IS_FOR_FINITE_ELEMENT_DISCRETIZATIONS_ONLY);
 
     fe_elliptic_penalty(const BilinearForm_& bilinear_form, const LinearForm_& linear_form) :
-        penalty_(std::make_pair(bilinear_form, linear_form)) { }
+        penalty_(std::make_pair(bilinear_form, linear_form)) {
+
+    }
     const std::tuple<BilinearForm, LinearForm>& get() const { return penalty_; }
    private:
     std::tuple<BilinearForm, LinearForm> penalty_;
@@ -418,7 +457,6 @@ auto fe_elliptic(const BilinearForm& bilinear_form) {   // implicit homogeneous 
     using FeSpace = typename BilinearForm::TrialSpace;
     const FeSpace& Vh = bilinear_form.trial_space();
     static constexpr int embed_dim = FeSpace::embed_dim;
-
     ScalarField<embed_dim, decltype([](const Eigen::Matrix<double, embed_dim, 1>&) { return 0; })> u;
     TestFunction v(Vh);
     auto linear_form = integral(Vh.triangulation())(u * v);

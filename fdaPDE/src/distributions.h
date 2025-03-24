@@ -218,8 +218,10 @@ struct exponential_distribution : public internals::distribution_base<std::expon
     template <typename T> requires(!internals::is_eigen_dense_xpr_v<T>) constexpr const T& mean(const T& data) const {
         return Base::apply_(data, [](auto v) { return 1.0 / v; });
     }
-    template <typename T> requires(!internals::is_eigen_dense_xpr_v<T>) constexpr const T& variance(const T& data) const {
-        return Base::apply_(data, [](auto v) { return 1.0 / (v * v); });
+    template <typename T>
+        requires(!internals::is_eigen_dense_xpr_v<T>)
+    constexpr const T& variance(const T& data) const {
+        return Base::apply_(data, [](auto v) { return v * v; });
     }
     template <typename T> constexpr auto link(const T& data) const {
         return Base::apply_(data, [](auto v) { return -1.0 / v; });
@@ -228,7 +230,7 @@ struct exponential_distribution : public internals::distribution_base<std::expon
         return Base::apply_(data, [](auto v) { return -1.0 / v; });
     }
     template <typename T> constexpr auto der_link(const T& data) const {
-        return Base::apply_(data, [](auto v) { return  v * v; });
+        return Base::apply_(data, [](auto v) { return 1.0 / (v * v); });
     }
     template <typename T>
         requires(std::is_floating_point_v<T>)
@@ -237,10 +239,10 @@ struct exponential_distribution : public internals::distribution_base<std::expon
     }
 #ifdef __FDAPDE_HAS_EIGEN__  // SIMD vectorized
     using matrix_t = Eigen::Matrix<double, Dynamic, 1>;
-    matrix_t variance(const matrix_t& x) const { return x.array().pow(2).inverse(); }
+    matrix_t variance(const matrix_t& x) const { return x.array().pow(2); }
     matrix_t link    (const matrix_t& x) const { return (-x).array().inverse(); }
     matrix_t inv_link(const matrix_t& x) const { return (-x).array().inverse(); }
-    matrix_t der_link(const matrix_t& x) const { return x.array().pow(2); }
+    matrix_t der_link(const matrix_t& x) const { return x.array().pow(2).inverse(); }
 #endif
     void set_param(param_type l) { l_ = l; }
 };
