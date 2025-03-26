@@ -25,7 +25,7 @@ using fdapde::test::almost_equal;
 //    covariates:   no
 //    BC:           no
 //    order FE:     1
-TEST(qsrpde, test_01) {
+TEST(qsr, test_01) {
     // geometry
     Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_21");
     // data
@@ -46,7 +46,7 @@ TEST(qsrpde, test_01) {
 //    covariates:   yes
 //    BC:           no
 //    order FE:     1
-TEST(qsrpde, test_02) {
+TEST(qsr, test_02) {
     // geometry
     Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/c_shaped");
     // data
@@ -69,7 +69,7 @@ TEST(qsrpde, test_02) {
 //    covariates:   no
 //    BC:           no
 //    order FE:     1
-TEST(qsrpde, test_03) {
+TEST(qsr, test_03) {
     // geometry
     Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_21");
     // data
@@ -98,7 +98,7 @@ TEST(qsrpde, test_03) {
 //    BC:           no
 //    order FE:     1
 //    GCV optimization: grid stochastic
-TEST(qsrpde, test_04) {
+TEST(qsr, test_04) {
     // geometry
     Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_21");
     // data

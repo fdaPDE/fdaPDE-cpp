@@ -39,11 +39,13 @@ struct fe_elliptic_solver {
     void eval_basis_at_(const DataLocs& locs) {
         if constexpr (std::is_same_v<DataLocs, matrix_t>) {   // pointwise sampling
             Psi_ = point_eval_(locs);
-            D_ = vector_t::Ones(n_obs_).asDiagonal();
+            D_ = vector_t::Ones(n_locs_).asDiagonal();
+	    fdapde_assert(n_locs_ == Psi_.rows());
         } else {   // areal sampling
             const auto& [psi, measure_vect] = areal_eval_(locs);
             Psi_ = psi;
-            D_ = measure_vect.asDiagonal();	  
+            D_ = measure_vect.asDiagonal();
+	    fdapde_assert(n_locs_ == Psi_.rows());
         }
         return;
     }
@@ -58,7 +60,8 @@ struct fe_elliptic_solver {
         W_(W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
         fdapde_assert(gf.n_layers() == 1);
-        n_obs_ = gf[0].rows();
+        n_obs_  = gf[0].rows();
+	n_locs_ = n_obs_;
 	
         discretize(penalty);
 	analyze_data(formula, gf, W);
@@ -73,20 +76,21 @@ struct fe_elliptic_solver {
     fe_elliptic_solver(const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
         fdapde_assert(gf.n_layers() == 1);
-        n_obs_ = gf[0].rows();
-      
+        n_obs_  = gf[0].rows();
+	n_locs_ = n_obs_;
+	
         discretize(penalty);
         // basis system evaluation
         switch (gf.category(0)[0]) {
         case ltype::point: {
             const auto& spatial_index = geo_index_cast<0, POINT>(gf[0]);
             if (spatial_index.points_at_dofs()) {
-                Psi_.resize(n_obs_, n_dofs_);
+                Psi_.resize(n_locs_, n_dofs_);
                 Psi_.setIdentity();
             } else {
                 Psi_ = point_eval_(spatial_index.coordinates());
             }
-            D_ = vector_t::Ones(n_obs_).asDiagonal();
+            D_ = vector_t::Ones(n_locs_).asDiagonal();
             break;
         }
         case ltype::areal: {
@@ -135,7 +139,8 @@ struct fe_elliptic_solver {
         fdapde_assert(
           locs.rows() > 0 && y.rows() == locs.rows() && y.cols() == 1 && W.rows() == locs.rows() &&
           W.rows() == W.cols());
-        n_obs_ = locs.rows();
+        n_obs_  = locs.rows();
+	n_locs_ = n_obs_;
 	n_covs_ = 0;
         eval_basis_at_(locs);   // update \Psi matrix
         update_response_and_weights(y, W);
@@ -149,7 +154,8 @@ struct fe_elliptic_solver {
         fdapde_assert(
           locs.rows() > 0 && y.rows() == locs.rows() && y.cols() == 1 && X.rows() == locs.rows() &&
           W.rows() == locs.rows() && W.rows() == W.cols());
-        n_obs_ = locs.rows();
+        n_obs_  = locs.rows();
+	n_locs_ = n_obs_;
         bool require_woodbury_realloc = n_covs_ != X.cols();
         n_covs_ = X.cols();
         eval_basis_at_(locs);   // update \Psi matrix
@@ -163,18 +169,19 @@ struct fe_elliptic_solver {
     void analyze_data(const std::string& formula, const GeoFrame& gf, const WeightMatrix& W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
         fdapde_assert(gf.n_layers() == 1);
-        n_obs_ = gf[0].rows();
+        n_obs_  = gf[0].rows();
+	n_locs_ = n_obs_;
         // basis system evaluation
         switch (gf.category(0)[0]) {
         case ltype::point: {
             const auto& spatial_index = geo_index_cast<0, POINT>(gf[0]);	  
             if (spatial_index.points_at_dofs()) {
-                Psi_.resize(n_obs_, n_dofs_);
+                Psi_.resize(n_locs_, n_dofs_);
                 Psi_.setIdentity();
             } else {
                 Psi_ = point_eval_(spatial_index.coordinates());
             }
-            D_ = vector_t::Ones(n_obs_).asDiagonal();
+            D_ = vector_t::Ones(n_locs_).asDiagonal();
             break;
         }
         case ltype::areal: {
@@ -194,14 +201,14 @@ struct fe_elliptic_solver {
 	bool require_woodbury_realloc = n_covs_ != covs.size();
         n_covs_ = covs.size();
         const auto& y_data = gf[0].data().template col<double>(formula_.lhs());
-        y_.resize(n_obs_, y_data.blk_sz());
+        y_.resize(n_locs_, y_data.blk_sz());
         y_data.assign_to(y_);
 
         if (b_.cols() != y_.cols()) { b_.resize(2 * n_dofs_, y_.cols()); }
         if (n_covs_ != 0) {
             if (require_woodbury_realloc) { U_ = matrix_t::Zero(2 * n_dofs_, n_covs_); }
             if (require_woodbury_realloc) { V_ = matrix_t::Zero(n_covs_, 2 * n_dofs_); }
-            X_.resize(n_obs_, n_covs_);   // assemble design matrix
+            X_.resize(n_locs_, n_covs_);   // assemble design matrix
             for (int i = 0; i < n_covs_; ++i) { gf[0].data().template col<double>(covs[i]).assign_to(X_.col(i)); }
         }
         update_response_and_weights(y_, W);   // this updates also design_matrix releated matrices
@@ -210,21 +217,22 @@ struct fe_elliptic_solver {
   
     // modifiers
     void update_response(const vector_t& y) {
-        fdapde_assert(n_obs_ > 0 && y.rows() == n_obs_ && y.cols() == 1);
+        fdapde_assert(Psi_.rows() > 0 && y.rows() == n_locs_ && y.cols() == 1);
         y_ = y;
         // correct \Psi for missing observations
         auto nan_pattern = na_matrix(y);
 	int old_n_obs = n_obs_;
         if (nan_pattern.any()) {
-            n_obs_ = n_obs_ - nan_pattern.count();
-            Psi_ = nan_pattern.repeat(1, n_dofs_).select(Psi_, 0); // store a true \Psi, then correct for missing
+            n_obs_ = n_locs_ - nan_pattern.count();
+            B_ = nan_pattern.repeat(1, n_dofs_).select(Psi_, 0);
+            y_ = nan_pattern.select(y_, 0);
         }
         if (old_n_obs != n_obs_) { W_ *= (double)old_n_obs / n_obs_; }
         b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * W_ * y;
         return;
     }
     template <typename WeightMatrix> void update_weights(const WeightMatrix& W) {
-        fdapde_assert(n_obs_ > 0 && W.rows() == n_obs_ && W.rows() == W.cols());
+        fdapde_assert(Psi_.rows() > 0 && W.rows() == n_locs_ && W.rows() == W.cols());
         W_ = W;
 	W_ /= n_obs_;
         if (n_covs_ == 0) {
@@ -238,19 +246,19 @@ struct fe_elliptic_solver {
             V_.block(0, 0, n_covs_, n_dofs_) = X_.transpose() * W_ * Psi_;
             b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * internals::lmbQ(W_, X_, invXtWX_, y_);
         }
-	Wchanged_ = true;
+	W_changed_ = true;
 	return;
     }
     template <typename WeightMatrix> void update_response_and_weights(const vector_t& y, const WeightMatrix& W) {
         fdapde_assert(
-          n_obs_ > 0 && y.rows() == n_obs_ && y.cols() == 1 && W.rows() == W.cols() && W.rows() == n_obs_);
-	y_ = y;
+          Psi_.rows() > 0 && y.rows() == n_locs_ && y.cols() == 1 && W.rows() == W.cols() && W.rows() == n_locs_);
+        y_ = y;
         // correct \Psi for missing observations
         auto nan_pattern = na_matrix(y);
-	//W_ *= n_obs_;
         if (nan_pattern.any()) {
-            n_obs_ = n_obs_ - nan_pattern.count();
-            Psi_ = nan_pattern.repeat(1, n_dofs_).select(Psi_, 0);
+            n_obs_ = n_locs_ - nan_pattern.count();
+            B_ = nan_pattern.repeat(1, n_dofs_).select(Psi_, 0);
+            y_ = nan_pattern.select(y_, 0);
         }
         update_weights(W);
         return;
@@ -259,12 +267,12 @@ struct fe_elliptic_solver {
     // main fit entry point
     std::pair<vector_t, vector_t> fit(double lambda) {
         fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
-        if (lambda_saved_.value() != lambda || Wchanged_) {
+        if (lambda_saved_.value() != lambda || W_changed_) {
             // assemble and factorize system matrix for nonparameteric part
             SparseBlockMatrix<double, 2, 2> A(
               -Psi_.transpose() * D_ * W_ * Psi_, lambda * R1_.transpose(), lambda * R1_, lambda * R0_);
             invA_.compute(A);
-	    Wchanged_ = false;
+	    W_changed_ = false;
         }
         if (lambda_saved_.value() != lambda) {
             // update linear system rhs
@@ -322,17 +330,17 @@ struct fe_elliptic_solver {
             int seed_ = (seed == random_seed) ? std::random_device()() : seed;
             std::mt19937 rng(seed_);
             rademacher_distribution rademacher;
-            Us_.resize(n_obs_, r);
-            for (int i = 0; i < n_obs_; ++i) {
-                for (int j = 0; j < r; ++j) { Us_(i, j) = rademacher(rng); }
+            Us_->resize(n_locs_, r);
+            for (int i = 0; i < n_locs_; ++i) {
+                for (int j = 0; j < r; ++j) { Us_->operator()(i, j) = rademacher(rng); }
             }
-            Ys_ = Us_.transpose() * Psi_;
+            Ys_ = Us_->transpose() * Psi_;
             Bs_ = matrix_t::Zero(2 * n_dofs_, r);   // implicitly enforce homogeneous forcing
         }
         if (n_covs_ == 0) {
-            Bs_->topRows(n_dofs_) = -Psi_.transpose() * D_ * W_ * Us_;
+            Bs_->topRows(n_dofs_) = -Psi_.transpose() * D_ * W_ * (*Us_);
         } else {
-            Bs_->topRows(n_dofs_) = -Psi_.transpose() * D_ * internals::lmbQ(W_, X_, invXtWX_, Us_);
+            Bs_->topRows(n_dofs_) = -Psi_.transpose() * D_ * internals::lmbQ(W_, X_, invXtWX_, *Us_);
         }
         matrix_t x = n_covs_ == 0 ? invA_.solve(*Bs_) : woodbury_system_solve(invA_, U_, XtWX_, V_, *Bs_);
         double trS = 0;   // monte carlo Tr[S] approximation
@@ -352,7 +360,7 @@ struct fe_elliptic_solver {
         }
         if (lambda_saved_.value() != lambda_) {
             SparseBlockMatrix<double, 2, 2> A_(
-              -Psi_.transpose() * D_ * W_ * Psi_ / n_obs_, lambda_ * R1_.transpose(), lambda_ * R1_, lambda_ * R0_);
+              -Psi_.transpose() * D_ * W_ * Psi_, lambda_ * R1_.transpose(), lambda_ * R1_, lambda_ * R0_);
             invA_.compute(A_);
             lambda_saved_ = lambda_;
         }
@@ -372,7 +380,7 @@ struct fe_elliptic_solver {
     matrix_t P() const { return P(1.0); }
     // efficient evaluation of f^\top * P * f = g^\top * R0 * g
     double ftPf(double lambda) {
-        if (lambda_saved_.value() != lambda || Wchanged_) { fit(lambda); }
+        if (lambda_saved_.value() != lambda || W_changed_) { fit(lambda); }
         return lambda * g_.dot(R0_ * g_);
     }
     template <typename LambdaT>
@@ -381,11 +389,15 @@ struct fe_elliptic_solver {
         fdapde_assert(lambda.size() == n_lambda);
         return ftPf(lambda[0]);
     }
+    // left multiplication by \Psi
+    vector_t lmbPsi(const vector_t& rhs) const { return Psi_ * rhs; }
+
     // observers
     int n_dofs() const { return n_dofs_; }
     const sparse_matrix_t& mass() const { return R0_; }
     const sparse_matrix_t& stiff() const { return R1_; }
     const sparse_matrix_t& Psi() const { return Psi_; }
+    const sparse_matrix_t& PsiNA() const { return B_.has_value() ? *B_ : Psi_; }
     const vector_t& force() const { return u_; }
     const vector_t& f() const { return f_; }
     const vector_t& beta() const { return beta_; }
@@ -399,14 +411,16 @@ struct fe_elliptic_solver {
     // matrices for hutchinson stochastic estimation of Tr[S]
     std::optional<matrix_t> Ys_;
     std::optional<matrix_t> Bs_;
+    std::optional<matrix_t> Us_;
 
-    int n_dofs_ = 0, n_obs_ = 0, n_covs_ = 0;
+    int n_dofs_ = 0, n_locs_ = 0, n_obs_ = 0, n_covs_ = 0;
     sparse_matrix_t R0_;    // n_dofs x n_dofs matrix [R0]_{ij} = \int_D \psi_i * \psi_j
     sparse_matrix_t R1_;    // n_dofs x n_dofs matrix [R1]_{ij} = \int_D a(\psi_i, \psi_j)
     sparse_matrix_t Psi_;   // n_obs x n_dofs matrix [Psi]_{ij} = \psi_j(p_i)
     vector_t u_;            // n_dofs x 1 vector u_i = \int_D u * \psi_i
     diag_matrix_t D_;       // vector of regions' measures (areal sampling)
     mutable sparse_solver_t invR0_;
+    std::optional<sparse_matrix_t> B_;   // \Psi matrix corrected for missing observations
     vector_t f_, beta_, g_;
     // basis system evaluation handles
     std::function<sparse_matrix_t(const matrix_t& locs)> point_eval_;
@@ -419,9 +433,7 @@ struct fe_elliptic_solver {
     matrix_t XtWX_;            // n_covs x n_covs matrix X^\top * W * X
     dense_solver_t invXtWX_;   // factorization of n_covs x n_covs matrix X^\top * W * X
     matrix_t invXtWXXtW_;      // n_covs x n_obs matrix (X^\top * X)^{-1} * (X^\top W)
-    bool Wchanged_;
-
-    matrix_t Us_;
+    bool W_changed_;
 };
 
 }   // namespace internals
@@ -456,8 +468,8 @@ template <typename BilinearForm>
 auto fe_elliptic(const BilinearForm& bilinear_form) {   // implicit homogeneous forcing
     using FeSpace = typename BilinearForm::TrialSpace;
     const FeSpace& Vh = bilinear_form.trial_space();
-    static constexpr int embed_dim = FeSpace::embed_dim;
-    ScalarField<embed_dim, decltype([](const Eigen::Matrix<double, embed_dim, 1>&) { return 0; })> u;
+    static constexpr int local_dim = FeSpace::local_dim;
+    ScalarField<local_dim, decltype([](const Eigen::Matrix<double, local_dim, 1>&) { return 0; })> u;
     TestFunction v(Vh);
     auto linear_form = integral(Vh.triangulation())(u * v);
     return fe_elliptic(bilinear_form, linear_form);

@@ -26,7 +26,7 @@ using fdapde::test::almost_equal;
 //    BC:           no
 //    order FE:     1
 //    distribution: poisson
-TEST(gsrpde, test_01) {
+TEST(gsr, test_01) {
     // geometry
     Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_40");
     // data
@@ -48,7 +48,7 @@ TEST(gsrpde, test_01) {
 //    BC:           no
 //    order FE:     1
 //    distribution: bernulli
-TEST(gsrpde, test_02) {
+TEST(gsr, test_02) {
     // geometry
     Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_40");
     // data
@@ -70,7 +70,7 @@ TEST(gsrpde, test_02) {
 //    BC:           no
 //    order FE:     1
 //    distribution: exponential
-TEST(gsrpde, test_03) {
+TEST(gsr, test_03) {
     // geometry
     Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_40");
     // data
@@ -92,7 +92,7 @@ TEST(gsrpde, test_03) {
 //    BC:           no
 //    order FE:     1
 //    distribution: gamma
-TEST(gsrpde, test_04) {
+TEST(gsr, test_04) {
     // geometry
     Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_40");
     // data
