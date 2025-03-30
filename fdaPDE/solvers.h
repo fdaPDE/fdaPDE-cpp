@@ -28,8 +28,8 @@
 
 namespace fdapde {
 
-struct monolithic { } Monolithic;
-struct iterative  { } Iterative;
+struct direct_tag { } Direct;
+struct iterative_tag  { } Iterative;
   
 }   // namespace fdapde
 

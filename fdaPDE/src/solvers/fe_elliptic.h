@@ -391,6 +391,7 @@ struct fe_elliptic_solver {
     }
     // left multiplication by \Psi
     vector_t lmbPsi(const vector_t& rhs) const { return Psi_ * rhs; }
+    vector_t fn() const { return Psi_ * f_; }
 
     // observers
     int n_dofs() const { return n_dofs_; }
@@ -450,9 +451,7 @@ template <typename BilinearForm_, typename LinearForm_> struct fe_elliptic_penal
       FE_ELLIPTIC_PENALTY_IS_FOR_FINITE_ELEMENT_DISCRETIZATIONS_ONLY);
 
     fe_elliptic_penalty(const BilinearForm_& bilinear_form, const LinearForm_& linear_form) :
-        penalty_(std::make_pair(bilinear_form, linear_form)) {
-
-    }
+        penalty_(std::make_pair(bilinear_form, linear_form)) { }
     const std::tuple<BilinearForm, LinearForm>& get() const { return penalty_; }
    private:
     std::tuple<BilinearForm, LinearForm> penalty_;

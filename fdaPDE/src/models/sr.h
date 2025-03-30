@@ -45,7 +45,8 @@ template <typename VariationalSolver> class SRPDE {
         }
     }
     template <typename... LambdaT>
-        requires(std::is_convertible_v<LambdaT, double> && ...)
+        requires(std::is_convertible_v<LambdaT, double> && ...) ||
+                (sizeof...(LambdaT) == 1 && (internals::is_vector_like_v<LambdaT> && ...))
     void fit(LambdaT... lambda) {
         solver_.fit(lambda...);
     }
@@ -57,8 +58,10 @@ template <typename VariationalSolver> class SRPDE {
     double edf(int r = 100, int seed = random_seed) { return solver_.edf(r, seed); }
     const vector_t& response() const { return solver_.response(); }
     vector_t fitted() const {
-        vector_t fitted_ = solver_.Psi() * f();
-        if (n_covs_ != 0) { fitted_ += solver_.design_matrix() * beta(); }
+        vector_t fitted_ = solver_.fn();
+        if constexpr (requires(solver_t s) { s.design_matrix(); }) {
+            if (n_covs_ != 0) { fitted_ += solver_.design_matrix() * beta(); }
+        }
         return fitted_;
     }
 

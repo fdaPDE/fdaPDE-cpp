@@ -26,7 +26,7 @@ template <typename Strategy> class fe_parabolic_solver;
 
 // solves \min_{f, \beta} \| W^{1/2} * (y_i - x_i^\top * \beta - f(p_i, t_j)) \|_2^2 +
 // \int_D \int_T (\frac{\partial f}{\partial t} + L(f) - u)^2
-template <> class fe_parabolic_solver<monolithic> {
+template <> class fe_parabolic_solver<direct_tag> {
    private:
     using vector_t        = Eigen::Matrix<double, Dynamic, 1>;
     using matrix_t        = Eigen::Matrix<double, Dynamic, Dynamic>;
@@ -146,7 +146,7 @@ template <> class fe_parabolic_solver<monolithic> {
         return;
     }
    public:
-    using solution_policy = monolithic;
+    using solution_policy = direct_tag;
 
     fe_parabolic_solver() noexcept = default;
     template <typename GeoFrame, typename Penalty, typename InitialCondition>
@@ -267,7 +267,7 @@ template <> class fe_parabolic_solver<monolithic> {
 
 };
 
-template <> struct fe_parabolic_solver<iterative> {
+template <> struct fe_parabolic_solver<iterative_tag> {
    private:
     using vector_t        = Eigen::Matrix<double, Dynamic, 1>;
     using matrix_t        = Eigen::Matrix<double, Dynamic, Dynamic>;
@@ -406,7 +406,7 @@ template <> struct fe_parabolic_solver<iterative> {
         return;
     }
    public:
-    using solution_policy = iterative;
+    using solution_policy = iterative_tag;
 
     fe_parabolic_solver() noexcept = default;
     template <typename GeoFrame, typename Penalty, typename InitialCondition, typename WeightMatrix>
