@@ -961,7 +961,7 @@ template <> struct fe_separable_solver<iterative_tag> {
             x_old = x_new;
             i++;
 	}
-        // store result
+        // return result
         vector_t f(n_dofs_ * m_, response.cols());
         vector_t g(n_dofs_ * m_, response.cols());
         for (int i = 0; i < m_; ++i) {

@@ -73,11 +73,16 @@ template <typename VariationalSolver> class SRPDE {
         static constexpr int XprBits = 0;
         using Scalar = double;
         using InputType = Vector<Scalar, StaticInputSize>;
+        using edf_cache_t = std::unordered_map<
+          std::array<double, StaticInputSize>, double, internals::std_array_hash<double, StaticInputSize>>;
 
         gcv_t() noexcept = default;
-        gcv_t(SRPDE* model) : model_(model), n_(model->n_obs()), q_(model->n_covs()), r_(100), seed_(random_seed) { }
-        gcv_t(SRPDE* model, int r, int seed) :
-            model_(model), n_(model->n_obs()), q_(model->n_covs()), r_(r), seed_(seed) { }
+        gcv_t(SRPDE* model, const edf_cache_t& edf_cache) :
+            model_(model), n_(model->n_obs()), q_(model->n_covs()), edf_cache_(edf_cache), r_(100), seed_(random_seed) { }
+        gcv_t(SRPDE* model, const edf_cache_t& edf_cache, int r, int seed) :
+            model_(model), n_(model->n_obs()), q_(model->n_covs()), edf_cache_(edf_cache), r_(r), seed_(seed) { }
+        gcv_t(SRPDE* model) : gcv_t(model, edf_cache_t()) { }
+        gcv_t(SRPDE* model, int r, int seed) : gcv_t(model, edf_cache_t(), r, seed) { }
 
         template <typename InputType_>
             requires(internals::is_subscriptable<InputType_, int>)
@@ -89,23 +94,26 @@ template <typename VariationalSolver> class SRPDE {
         constexpr double operator()(LambdaT... lambda) {
             model_->fit(static_cast<double>(lambda)...);
             std::array<double, StaticInputSize> lambda_vec {lambda...};
-            if (edf_map_.find(lambda_vec) == edf_map_.end()) {   // cache Tr[S]
-                edf_map_[lambda_vec] = model_->edf(r_, seed_);
+            if (edf_cache_.find(lambda_vec) == edf_cache_.end()) {   // cache Tr[S]
+                edf_cache_[lambda_vec] = model_->edf(r_, seed_);
             }
-            double dor = n_ - (q_ + edf_map_.at(lambda_vec));   // residual degrees of freedom
+            double dor = n_ - (q_ + edf_cache_.at(lambda_vec));   // residual degrees of freedom
             return (n_ / std::pow(dor, 2)) * (model_->fitted() - model_->response()).squaredNorm();
         }
+        // observers
+        const edf_cache_t& edf_cache() const { return edf_cache_; }
+        edf_cache_t& edf_cache() { return edf_cache_; }
        private:
         SRPDE* model_;
         int n_ = 0, q_ = 0;
-        std::unordered_map<
-          std::array<double, StaticInputSize>, double, internals::std_array_hash<double, StaticInputSize>>
-          edf_map_;
+        edf_cache_t edf_cache_;
         // stochastic edf approximation parameter
         int r_, seed_;
     };
     gcv_t gcv() { return gcv_t(this); }
+    gcv_t gcv(const typename gcv_t::edf_cache_t& edf_cache) { return gcv_t(this, edf_cache); }
     gcv_t gcv(int r, int seed) { return gcv_t(this, r, seed); }
+    gcv_t gcv(const typename gcv_t::edf_cache_t& edf_cache, int r, int seed) { return gcv_t(this, edf_cache, r, seed); }
 
     // inference
   
