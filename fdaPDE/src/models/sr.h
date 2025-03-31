@@ -78,7 +78,12 @@ template <typename VariationalSolver> class SRPDE {
 
         gcv_t() noexcept = default;
         gcv_t(SRPDE* model, const edf_cache_t& edf_cache) :
-            model_(model), n_(model->n_obs()), q_(model->n_covs()), edf_cache_(edf_cache), r_(100), seed_(random_seed) { }
+            model_(model),
+            n_(model->n_obs()),
+            q_(model->n_covs()),
+            edf_cache_(edf_cache),
+            r_(100),
+            seed_(random_seed) { }
         gcv_t(SRPDE* model, const edf_cache_t& edf_cache, int r, int seed) :
             model_(model), n_(model->n_obs()), q_(model->n_covs()), edf_cache_(edf_cache), r_(r), seed_(seed) { }
         gcv_t(SRPDE* model) : gcv_t(model, edf_cache_t()) { }
@@ -97,7 +102,7 @@ template <typename VariationalSolver> class SRPDE {
             if (edf_cache_.find(lambda_vec) == edf_cache_.end()) {   // cache Tr[S]
                 edf_cache_[lambda_vec] = model_->edf(r_, seed_);
             }
-            double dor = n_ - (q_ + edf_cache_.at(lambda_vec));   // residual degrees of freedom
+            double dor = n_ - (q_ + edf_cache_.at(lambda_vec));   // residual degrees of freedom	    
             return (n_ / std::pow(dor, 2)) * (model_->fitted() - model_->response()).squaredNorm();
         }
         // observers
