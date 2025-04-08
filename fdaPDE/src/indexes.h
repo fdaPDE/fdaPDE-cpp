@@ -14,20 +14,23 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __FDAPDE_REGRESSION_MODULE_H__
-#define __FDAPDE_REGRESSION_MODULE_H__
+#ifndef __INDEXES_H__
+#define __INDEXES_H__
 
-// clang-format off
+namespace fdapde {
 
-// include core
-#include <fdaPDE/core.h>
+// collection of performace indexes
 
-#include "src/indexes.h"
-#include "solvers.h"
-#include "src/models/sr.h"
-#include "src/models/gsr.h"
-#include "src/models/qsr.h"
+template <typename Lhs, typename Rhs>
+    requires(internals::is_vector_like_v<Lhs> && internals::is_vector_like_v<Rhs>)
+double RMSE(const Lhs& lhs, const Rhs& rhs) {
+    fdapde_assert(lhs.size() == rhs.size());
+    int n = lhs.size();
+    double sse = 0;
+    for (int i = 0; i < n; ++i) { sse += std::pow(lhs[i] - rhs[i], 2); }
+    return std::sqrt((1. / n) * sse);
+}
 
-// clang-format on
+}   // namespace fdapde
 
-#endif   // __FDAPDE_REGRESSION_MODULE_H__
+#endif   // __INDEXES_H__

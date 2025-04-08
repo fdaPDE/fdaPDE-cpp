@@ -467,8 +467,8 @@ template <typename BilinearForm>
 auto fe_elliptic(const BilinearForm& bilinear_form) {   // implicit homogeneous forcing
     using FeSpace = typename BilinearForm::TrialSpace;
     const FeSpace& Vh = bilinear_form.trial_space();
-    static constexpr int local_dim = FeSpace::local_dim;
-    ScalarField<local_dim, decltype([](const Eigen::Matrix<double, local_dim, 1>&) { return 0; })> u;
+    static constexpr int embed_dim = FeSpace::embed_dim;
+    ScalarField<embed_dim, decltype([](const Eigen::Matrix<double, embed_dim, 1>&) { return 0; })> u;
     TestFunction v(Vh);
     auto linear_form = integral(Vh.triangulation())(u * v);
     return fe_elliptic(bilinear_form, linear_form);

@@ -208,11 +208,11 @@ template <> class fe_separable_solver<direct_tag> {
             R1__[Index] = std::get<Index>(bilinear_form).assemble();
         };
         assemble_.template operator()<0>();
-        assemble_.template operator()<1>();
+        assemble_.template operator()<1>();	
         // tensorization
         R0_ = kronecker(R0__[1], R0__[0]);   // R0_T \kron R0_D
         R1_ = kronecker(R0__[1], R1__[0]);   // R0_T \kron R1_D
-        K_  = kronecker(R1__[1], R0__[0]);   // R1_T \kron R0_D
+        K_  = kronecker(R1__[1], R0__[0]);   // R1_T \kron R0_D	
         // number of basis functions on physical domain
         n_dofs__[0] = std::get<0>(bilinear_form).trial_space().n_dofs();
         n_dofs__[1] = std::get<1>(bilinear_form).trial_space().n_dofs();

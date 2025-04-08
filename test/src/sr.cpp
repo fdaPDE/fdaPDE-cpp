@@ -160,7 +160,7 @@ TEST(sr, test_06) {
     ScalarField<1, decltype([](const Eigen::Matrix<double, 1, 1>& p) { return 0; })> u;
     auto F = integral(T)(u * v);
 
-    SRPDE m("y ~ f", data, fe_separable(fe_laplace(), std::pair {a, F}));
+    SRPDE m("y ~ f", data, fe_separable(Direct, fe_laplace(), std::pair {a, F}));
     m.fit(/* lambda = */ 2.06143e-06, 2.06143e-06);
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/06/field.mtx"));
@@ -183,7 +183,7 @@ TEST(sr, test_07) {
     ScalarField<1, decltype([](const Eigen::Matrix<double, 1, 1>& p) { return 0; })> u;
     auto F = integral(T)(u * v);
 
-    SRPDE m("y ~ x1 + f", data, fe_separable(fe_laplace(), std::pair {a, F}));
+    SRPDE m("y ~ x1 + f", data, fe_separable(Direct, fe_laplace(), std::pair {a, F}));
     m.fit(/* lambda = */ 1.16959e-05, 1.16959e-05);
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/07/field.mtx"));
@@ -206,7 +206,7 @@ TEST(sr, test_08) {
     ScalarField<1, decltype([](const Eigen::Matrix<double, 1, 1>& p) { return 0; })> u;
     auto F = integral(T)(u * v);
 
-    SRPDE m("y ~ f", data, fe_separable(fe_laplace(), std::pair {a, F}));
+    SRPDE m("y ~ f", data, fe_separable(Direct, fe_laplace(), std::pair {a, F}));
     m.fit(/* lambda = */ 0.01 / data[0].rows(), 0.01 / data[0].rows());
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/08/field.mtx"));
@@ -229,31 +229,31 @@ TEST(sr, test_09) {
     ScalarField<1, decltype([](const Eigen::Matrix<double, 1, 1>& p) { return 0; })> u;
     auto F = integral(T)(u * v);
 
-    SRPDE m("y ~ f", data, fe_separable(fe_laplace(), std::pair {a, F}));
+    SRPDE m("y ~ f", data, fe_separable(Direct, fe_laplace(), std::pair {a, F}));
     m.fit(/* lambda = */ 4.032258064516129e-07, 4.032258064516129e-07);
     
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/09/field.mtx"));
 }
 
-// TEST(sr, test_10) {
-//     // geometry
-//     Triangulation<1, 1> T = Triangulation<1, 1>::Interval(0, 4, 5);
-//     Triangulation<2, 3> D = read_mesh<2, 3>("../data/mesh/surface");
-//     // data
-//     GeoFrame data(D, T);
-//     auto& l1 = data.insert_scalar_layer<POINT, POINT>("l1", std::pair {MESH_NODES, MESH_NODES});
-//     l1.load_csv<double>("../data/sr/10/response.csv");
-//     // modeling
-//     BsSpace Vh(T, 3);
-//     TrialFunction f(Vh);
-//     TestFunction  v(Vh);
-//     auto a = integral(T)(dxx(f) * dxx(v));
-//     ScalarField<1, decltype([](const Eigen::Matrix<double, 1, 1>& p) { return 0; })> u;
-//     auto F = integral(T)(u * v);
+TEST(sr, test_10) {
+    // geometry
+    Triangulation<1, 1> T = Triangulation<1, 1>::Interval(0, 4, 5);
+    Triangulation<2, 3> D = read_mesh<2, 3>("../data/mesh/surface");
+    // data
+    GeoFrame data(D, T);
+    auto& l1 = data.insert_scalar_layer<POINT, POINT>("l1", std::pair {MESH_NODES, MESH_NODES});
+    l1.load_csv<double>("../data/sr/10/response.csv");
+    // modeling
+    BsSpace Vh(T, 3);
+    TrialFunction f(Vh);
+    TestFunction  v(Vh);
+    auto a = integral(T)(dxx(f) * dxx(v));
+    ScalarField<1, decltype([](const Eigen::Matrix<double, 1, 1>& p) { return 0; })> u;
+    auto F = integral(T)(u * v);
 
-//     SRPDE m("y ~ f", data, fe_separable(fe_laplace(), std::pair {a, F}));
-//     m.fit(/* lambda = */ 1e-9 / data[0].rows(), 1e-6 / data[0].rows());
+    SRPDE m("y ~ f", data, fe_separable(Direct, fe_laplace(), std::pair {a, F}));
+    m.fit(/* lambda = */ 5.882352941176471e-08, 5.882352941176471e-08);
     
-//     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/10/field.mtx"));
-// }
+    EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/10/field.mtx"));
+}
 
