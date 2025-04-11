@@ -152,6 +152,8 @@ TEST(sr, test_06) {
     GeoFrame data(D, T);
     auto& l1 = data.insert_scalar_layer<POINT, POINT>("l1", std::pair {MESH_NODES, MESH_NODES});
     l1.load_csv<double>("../data/sr/06/response.csv");
+    std::cout << l1 << std::endl;
+    
     // modeling
     BsSpace Vh(T, 3);
     TrialFunction f(Vh);
@@ -257,3 +259,45 @@ TEST(sr, test_10) {
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/10/field.mtx"));
 }
 
+// areal test
+TEST(sr, test_11) {
+    // geometry
+    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/quasi_circle");
+    // data
+    GeoFrame data(D);
+    auto& l1 = data.insert_scalar_layer<POLYGON>("l1", "../data/sr/11/incidence_mat.csv");
+    l1.load_csv<double>("../data/sr/11/response.csv");    
+    // modeling
+    SRPDE m("y ~ f", data, fe_laplace());
+    m.fit(/* lambda = */ 0.0001428571428571429);
+    
+    EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/11/field.mtx"));
+}
+
+// areal, non constant coefficient PDE, test
+TEST(sr, test_12) {
+    using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
+    using vector_t = Eigen::Matrix<double, Dynamic, 1>;    
+    // geometry
+    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/quasi_circle");
+    // data
+    GeoFrame data(D);
+    auto& l1 = data.insert_scalar_layer<POLYGON>("l1", "../data/sr/12/incidence_mat.csv");
+    l1.load_csv<double>("../data/sr/12/response.csv");    
+    // physics
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction  v(Vh);
+
+    FeCoeff<2, 2, 2, matrix_t> K(read_csv<double>("../data/sr/12/diffusion.csv").as_matrix());
+    FeCoeff<2, 2, 1, matrix_t> b(read_csv<double>("../data/sr/12/transport.csv").as_matrix());
+    auto a = integral(D)(dot(K * grad(f), grad(v)) + dot(b, grad(f)) * v);
+    FeCoeff<2, 1, 1, vector_t> u(read_csv<double>("../data/sr/12/force.csv").as_matrix());
+    auto F = integral(D)(u * v);
+
+    // modeling
+    SRPDE m("y ~ f", data, fe_elliptic(a, F));
+    m.fit(/* lambda = */ 0.0001428571428571429);
+    
+    EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/12/field.mtx"));
+}

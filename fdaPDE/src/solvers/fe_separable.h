@@ -150,21 +150,22 @@ template <> class fe_separable_solver<direct_tag> {
                 } else {
                     Psi__[Ns] = point_eval_[Ns](spatial_index.coordinates());
                 }
+                D_ = vector_t::Ones(n_locs_).asDiagonal();
                 break;
             }
             case ltype::areal: {
                 const auto& spatial_index = geo_index_cast<Ns, POLYGON>(gf[0]);
                 const auto& [psi, measure_vec] = areal_eval_[Ns](spatial_index.incidence_matrix());
                 Psi__[Ns] = psi;
-                // vector_t D(n_obs_);
-                // for (int i = 0; i < m_; ++i) { D.segment(i * measure_vec.rows(), measure_vec.rows()) = measure_vec;
-                // } D_ = D.asDiagonal();
+                vector_t D(n_locs_);
+		int m = n_locs_ / spatial_index.rows();
+                for (int i = 0; i < m; ++i) { D.segment(i * measure_vec.rows(), measure_vec.rows()) = measure_vec; }
+                D_ = D.asDiagonal();
                 break;
             }
             }
         });
         Psi_ = kronecker(Psi__[1], Psi__[0]);
-        D_ = vector_t::Ones(n_locs_).asDiagonal();
     }
     template <typename GeoFrame, typename Penalty>
         requires(internals::is_tuple_v<Penalty>)
@@ -285,27 +286,29 @@ template <> class fe_separable_solver<direct_tag> {
             switch (gf.category(0)[Ns]) {
             case ltype::point: {
                 const auto& spatial_index = geo_index_cast<Ns, POINT>(gf[0]);
+		int n = spatial_index.rows();
                 if (spatial_index.points_at_dofs()) {
-                    Psi__[Ns].resize(n_locs_, n_dofs_);
+                    Psi__[Ns].resize(n, n);
                     Psi__[Ns].setIdentity();
                 } else {
                     Psi__[Ns] = point_eval_[Ns](spatial_index.coordinates());
                 }
+                D_ = vector_t::Ones(n_locs_).asDiagonal();
                 break;
             }
             case ltype::areal: {
                 const auto& spatial_index = geo_index_cast<Ns, POLYGON>(gf[0]);
                 const auto& [psi, measure_vec] = areal_eval_[Ns](spatial_index.incidence_matrix());
                 Psi__[Ns] = psi;
-                // vector_t D(n_obs_);
-                // for (int i = 0; i < m_; ++i) { D.segment(i * measure_vec.rows(), measure_vec.rows()) = measure_vec;
-                // } D_ = D.asDiagonal();
+                vector_t D(n_locs_);
+                int m = n_locs_ / spatial_index.rows();
+                for (int i = 0; i < m; ++i) { D.segment(i * measure_vec.rows(), measure_vec.rows()) = measure_vec; }
+                D_ = D.asDiagonal();
                 break;
             }
             }
         });
         Psi_ = kronecker(Psi__[1], Psi__[0]);
-        D_ = vector_t::Ones(n_locs_).asDiagonal();
         // parse formula, extract response vector and design matrix
         Formula formula_(formula);
         std::vector<std::string> covs;
@@ -870,8 +873,7 @@ template <> struct fe_separable_solver<iterative_tag> {
         y_.resize(n_locs_, y_data.blk_sz());
         y_data.assign_to(y_);
 
-	W_ = vector_t::Ones(n_).asDiagonal();
-        // update_response_and_weights(y_, W);
+        // update_weights(vector_t::Ones(n_).asDiagonal());
     }
 
     // modifiers
@@ -884,14 +886,14 @@ template <> struct fe_separable_solver<iterative_tag> {
     // template <typename WeightMatrix> void update_weights(const WeightMatrix& W) {
     //     fdapde_assert(Psi_.rows() > 0 && W.rows() == n_locs_ && W.rows() == W.cols());
     //     W_ = W;
-    //     W_ /= n_obs_;
+    //     // W_ /= n_obs_; ---------------------- divide by n_obs_ or just by n_ ????
     //     b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * W_ * y_;
     //     W_changed_ = true;
     //     return;
     // }
     // template <typename WeightMatrix> void update_response_and_weights(const vector_t& y, const WeightMatrix& W) {
     //     fdapde_assert(
-    //       Psi_.rows() > 0 && y.rows() == n_locs_ && y.cols() == 1 && W.rows() == W.cols() && W.rows() == n_locs_);
+    //       Psi_.rows() > 0 && y.rows() == n_locs_ && y.cols() == 1 && W.rows() == W.cols() && W.rows() == n_);
     //     y_ = y;
     // 	update_weights(W);
     // 	return;
@@ -1007,6 +1009,25 @@ template <> struct fe_separable_solver<iterative_tag> {
             trS += Us_->col(i).dot(fn);
         }
         return trS / r;
+    }
+    template <typename... LambdaT>
+        requires(
+          (sizeof...(LambdaT) == 1 && (internals::is_vector_like_v<LambdaT> && ...)) ||
+          (sizeof...(LambdaT) == n_lambda && (std::is_floating_point_v<LambdaT> && ...)))
+    double edf(const LambdaT&... lambda, int r = 100, int seed = random_seed) {
+        std::array<double, n_lambda> lambda_;
+        if constexpr (sizeof...(LambdaT) == 1) {
+            internals::for_each_index_and_args<sizeof...(LambdaT)>([&]<int Ns_, typename Ts_>(const Ts_& ts) {
+                fdapde_assert(ts.size() == n_lambda && ts[0] > 0 && ts[1] > 0);
+                lambda_[0] = ts[0];
+                lambda_[1] = ts[1];
+            });
+        } else {
+            std::array<double, n_lambda> lambda__ {static_cast<double>(lambda)...};
+            fdapde_assert(lambda__[0] > 0 && lambda__[1] > 0);
+	    lambda_ = lambda__;
+        }
+        return edf(r, seed);
     }
     vector_t fn() const {
         vector_t fn_(n_ * m_);

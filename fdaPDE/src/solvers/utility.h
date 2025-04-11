@@ -187,7 +187,7 @@ std::pair<Eigen::SparseMatrix<double>, Eigen::Matrix<double, Dynamic, 1>> areal_
     for (int k = 0; k < n_regions; ++k) {
         int head = 0;
         double Di = 0;   // measure of region D_i
-        for (int l = 0; l < n_dofs; ++l) {
+        for (int l = 0, n_cells = incidence_mat.cols(); l < n_cells; ++l) {
             if (incidence_mat(k, l)) {   // element with ID l belongs to k-th region
                 auto cell = dof_handler.cell(l);
                 for (int h = 0; h < n_shape_functions; ++h) {
