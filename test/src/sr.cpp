@@ -152,8 +152,6 @@ TEST(sr, test_06) {
     GeoFrame data(D, T);
     auto& l1 = data.insert_scalar_layer<POINT, POINT>("l1", std::pair {MESH_NODES, MESH_NODES});
     l1.load_csv<double>("../data/sr/06/response.csv");
-    std::cout << l1 << std::endl;
-    
     // modeling
     BsSpace Vh(T, 3);
     TrialFunction f(Vh);
@@ -288,7 +286,6 @@ TEST(sr, test_12) {
     FeSpace Vh(D, P1<1>);
     TrialFunction f(Vh);
     TestFunction  v(Vh);
-
     FeCoeff<2, 2, 2, matrix_t> K(read_csv<double>("../data/sr/12/diffusion.csv").as_matrix());
     FeCoeff<2, 2, 1, matrix_t> b(read_csv<double>("../data/sr/12/transport.csv").as_matrix());
     auto a = integral(D)(dot(K * grad(f), grad(v)) + dot(b, grad(f)) * v);
@@ -301,3 +298,34 @@ TEST(sr, test_12) {
     
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/12/field.mtx"));
 }
+
+// parabolic, areal non-constant coefficient
+TEST(sr, test_13) {
+    using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
+    using vector_t = Eigen::Matrix<double, Dynamic, 1>;    
+    // geometry
+    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/quasi_circle");
+    Triangulation<1, 1> T = Triangulation<1, 1>::Interval(0, 3.6, 10);
+    // data
+    GeoFrame data(D, T);
+    auto& l1 =
+      data.insert_scalar_layer<POLYGON, POINT>("l1", std::make_pair("../data/sr/13/incidence_mat.csv", MESH_NODES));
+    l1.load_csv<double>("../data/sr/13/response.csv");
+    vector_t ic = read_csv<double>("../data/sr/13/ic.csv").as_matrix();
+    // physics
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction  v(Vh);
+    FeCoeff<2, 2, 2, matrix_t> K(read_csv<double>("../data/sr/13/diffusion.csv").as_matrix());
+    FeCoeff<2, 2, 1, matrix_t> b(read_csv<double>("../data/sr/13/transport.csv").as_matrix());
+    auto a = integral(D)(dot(K * grad(f), grad(v)) + dot(b, grad(f)) * v);
+    ScalarField<2, decltype([](const Eigen::Matrix<double, 2, 1>& p) { return 0; })> u;
+    auto F = integral(D)(u * v);
+
+    // modeling
+    SRPDE m("y ~ f", data, fe_parabolic(Direct, std::pair{a, F}, ic));
+    m.fit(1e-6 / data[0].rows(), 1e-6);
+
+    EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/13/field.mtx"));
+}
+
