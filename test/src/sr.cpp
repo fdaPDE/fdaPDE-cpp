@@ -329,3 +329,28 @@ TEST(sr, test_13) {
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/13/field.mtx"));
 }
 
+TEST(sr, test_14) {
+    using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
+    using vector_t = Eigen::Matrix<double, Dynamic, 1>;    
+    // geometry
+    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_21");
+    Triangulation<1, 1> T = Triangulation<1, 1>::Interval(0, 1.8, 10);
+    // data
+    GeoFrame data(D, T);
+    auto& l1 = data.insert_scalar_layer<POINT, POINT>("l1", std::make_pair(MESH_NODES, MESH_NODES));
+    l1.load_csv<double>("../data/sr/14/response.csv");
+    vector_t ic = read_csv<double>("../data/sr/14/ic.csv").as_matrix();
+    // physics
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction  v(Vh);
+    auto a = integral(D)(dot(grad(f), grad(v)));
+    ScalarField<2, decltype([](const Eigen::Matrix<double, 2, 1>& p) { return 0; })> u;
+    auto F = integral(D)(u * v);
+    
+    // modeling
+    SRPDE m("y ~ f", data, fe_parabolic(Iterative, std::pair{a, F}, ic, /* max_iter = */ 50, /* tol = */ 1e-4));
+    m.fit(1.0, 1.0);
+    
+    EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/14/field.mtx"));
+}
