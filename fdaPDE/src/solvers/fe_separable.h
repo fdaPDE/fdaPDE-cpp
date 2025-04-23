@@ -64,14 +64,16 @@ template <> class fe_separable_solver<direct_tag> {
     using diag_matrix_t   = Eigen::DiagonalMatrix<double, Dynamic, Dynamic>;
     using sparse_solver_t = eigen_sparse_solver_movable_wrap<Eigen::SparseLU<sparse_matrix_t>>;
     using dense_solver_t  = Eigen::PartialPivLU<matrix_t>;
+    template <typename DataLocs>
+    static constexpr bool is_valid_data_locs_descriptor_v =
+      std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>;
+    template <typename InfoT> struct is_valid_info_t {
+        static constexpr bool value = requires(InfoT info) { info.penalty; };
+    };
    public:
     using solution_policy = direct_tag;
     static constexpr int n_lambda = 2;
    private:  
-    template <typename DataLocs>
-    static constexpr bool is_valid_data_locs_descriptor_v =
-      std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>;
-
     // evaluation of basis system at spatial locations
     template <typename... DataLocs>
         requires((is_valid_data_locs_descriptor_v<DataLocs> && ...) && (sizeof...(DataLocs) == n_lambda))
@@ -91,54 +93,8 @@ template <> class fe_separable_solver<direct_tag> {
         D_ = vector_t::Ones(n_locs_).asDiagonal();
         return;
     }
-    // unrolls the penalty tuple and injects them into discretize()
-    template <typename GeoFrame, typename Penalty> void discretize_loop_(const GeoFrame& gf, Penalty&& penalty) {
-        using Penalty_ = std::decay_t<Penalty>;
-        internals::apply_index_pack<n_lambda>([&]<int... Ns_>() {
-            discretize([&]() {
-                using T = std::tuple_element_t<Ns_, Penalty_>;
-                if constexpr (requires(T t) { t.get(); }) {
-                    return std::get<Ns_>(penalty).get();
-                } else {
-                    if constexpr (internals::is_pair_v<T>) {
-                        return std::get<Ns_>(penalty);   // user supplied penalty pair
-                    } else {
-                        return std::get<Ns_>(penalty)(gf.template triangulation<Ns_>()).get();
-                    }
-                }
-            }()...);
-        });
-	return;
-    }
-   public:
-    fe_separable_solver() noexcept = default;
-    // construct from formula + geoframe
-    template <typename GeoFrame, typename WeightMatrix, typename Penalty>
-        requires(internals::is_tuple_v<Penalty>)
-    fe_separable_solver(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) {
-        fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
-	fdapde_assert(gf.n_layers() == 1);
-        n_obs_  = gf[0].rows();
-        n_locs_ = n_obs_;
-
-	discretize_loop_(gf, penalty);
-        analyze_data(formula, gf, W);
-    }
-    template <typename GeoFrame, typename Penalty>
-        requires(internals::is_tuple_v<Penalty>)
-    fe_separable_solver(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) :
-        fe_separable_solver(formula, gf, std::forward<Penalty>(penalty), vector_t::Ones(gf[0].rows()).asDiagonal()) { }
-    // construct with no data
-    template <typename GeoFrame, typename Penalty, typename WeightMatrix>
-        requires(internals::is_tuple_v<Penalty>)
-    fe_separable_solver(const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
-        fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
-	fdapde_assert(gf.n_layers() == 1);
-        n_obs_  = gf[0].rows();
-	n_locs_ = n_obs_;
-
-	discretize_loop_(gf, penalty);
-        // basis system evaluation
+      // optimized basis evaluation at geoframe
+    template <typename GeoFrame> void eval_basis_at_(const GeoFrame& gf) {
         std::array<sparse_matrix_t, 2> Psi__;
         internals::for_each_index_in_pack<n_lambda>([&]<int Ns>() {
             switch (gf.category(0)[Ns]) {
@@ -166,11 +122,61 @@ template <> class fe_separable_solver<direct_tag> {
             }
         });
         Psi_ = kronecker(Psi__[1], Psi__[0]);
+        return;
     }
-    template <typename GeoFrame, typename Penalty>
-        requires(internals::is_tuple_v<Penalty>)
-    fe_separable_solver(const GeoFrame& gf, Penalty&& penalty) :
-        fe_separable_solver(gf, std::forward<Penalty>(penalty), vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    // unrolls the penalty tuple and injects them into discretize()
+    template <typename GeoFrame, typename Penalty> void discretize_loop_(const GeoFrame& gf, Penalty&& penalty) {
+        using Penalty_ = std::decay_t<Penalty>;
+        internals::apply_index_pack<n_lambda>([&]<int... Ns_>() {
+            discretize([&]() {
+                using T = std::tuple_element_t<Ns_, Penalty_>;
+                if constexpr (requires(T t) { t.get(); }) {
+                    return std::get<Ns_>(penalty).get();
+                } else {
+                    if constexpr (internals::is_pair_v<T>) {
+                        return std::get<Ns_>(penalty);   // user supplied penalty pair
+                    } else {
+                        return std::get<Ns_>(penalty)(gf.template triangulation<Ns_>()).get();
+                    }
+                }
+            }()...);
+        });
+	return;
+    }
+   public:
+    fe_separable_solver() noexcept = default;
+    // construct from formula + geoframe
+    template <typename GeoFrame, typename WeightMatrix, typename InfoT>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_separable_solver(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) {
+        fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
+	fdapde_assert(gf.n_layers() == 1);
+        n_obs_  = gf[0].rows();
+        n_locs_ = n_obs_;
+
+	discretize_loop_(gf, info.penalty);
+        analyze_data(formula, gf, W);
+    }
+    template <typename GeoFrame, typename InfoT>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_separable_solver(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
+        fe_separable_solver(formula, gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    // construct with no data
+    template <typename GeoFrame, typename InfoT, typename WeightMatrix>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_separable_solver(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : W_(W) {
+        fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
+	fdapde_assert(gf.n_layers() == 1);
+        n_obs_  = gf[0].rows();
+	n_locs_ = n_obs_;
+
+	discretize_loop_(gf, info.penalty);
+	eval_basis_at_(gf);
+    }
+    template <typename GeoFrame, typename InfoT>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_separable_solver(const GeoFrame& gf, InfoT&& info) :
+        fe_separable_solver(gf, info.penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
 
     // numerical discretization
     template <typename Penalty1, typename Penalty2> void discretize(Penalty1&& penalty1, Penalty2&& penalty2) {
@@ -279,36 +285,9 @@ template <> class fe_separable_solver<direct_tag> {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
         fdapde_assert(gf.n_layers() == 1);
         n_obs_  = gf[0].rows();
-	n_locs_ = n_obs_;
-        // basis system evaluation
-        std::array<sparse_matrix_t, 2> Psi__;
-        internals::for_each_index_in_pack<n_lambda>([&]<int Ns>() {
-            switch (gf.category(0)[Ns]) {
-            case ltype::point: {
-                const auto& spatial_index = geo_index_cast<Ns, POINT>(gf[0]);
-		int n = spatial_index.rows();
-                if (spatial_index.points_at_dofs()) {
-                    Psi__[Ns].resize(n, n);
-                    Psi__[Ns].setIdentity();
-                } else {
-                    Psi__[Ns] = point_eval_[Ns](spatial_index.coordinates());
-                }
-                D_ = vector_t::Ones(n_locs_).asDiagonal();
-                break;
-            }
-            case ltype::areal: {
-                const auto& spatial_index = geo_index_cast<Ns, POLYGON>(gf[0]);
-                const auto& [psi, measure_vec] = areal_eval_[Ns](spatial_index.incidence_matrix());
-                Psi__[Ns] = psi;
-                vector_t D(n_locs_);
-                int m = n_locs_ / spatial_index.rows();
-                for (int i = 0; i < m; ++i) { D.segment(i * measure_vec.rows(), measure_vec.rows()) = measure_vec; }
-                D_ = D.asDiagonal();
-                break;
-            }
-            }
-        });
-        Psi_ = kronecker(Psi__[1], Psi__[0]);
+        n_locs_ = n_obs_;
+        eval_basis_at_(gf);   // update \Psi matrix
+
         // parse formula, extract response vector and design matrix
         Formula formula_(formula);
         std::vector<std::string> covs;
@@ -328,7 +307,7 @@ template <> class fe_separable_solver<direct_tag> {
             X_.resize(n_locs_, n_covs_);   // assemble design matrix
             for (int i = 0; i < n_covs_; ++i) { gf[0].data().template col<double>(covs[i]).assign_to(X_.col(i)); }
         }
-        update_response_and_weights(y_, W);   // this updates also design_matrix releated matrices
+        update_response_and_weights(y_, W);   // updates design_matrix releated matrices as well
         return;
     }
 
@@ -512,6 +491,19 @@ template <> class fe_separable_solver<direct_tag> {
         return P(lambda[0], lambda[1]);
     }
     matrix_t P() const { return P(1.0, 1.0); }
+    double ftPf(double lambda_D, double lambda_T) {
+        if (std::array<double, n_lambda> {lambda_D, lambda_T} != lambda_saved_ || W_changed_) {
+            fit(lambda_D, lambda_T);
+        }
+        return f_.dot((lambda_D * (*PD_) + lambda_T * (*PT_)) * f_);
+    }
+    template <typename LambdaT>
+        requires(internals::is_vector_like_v<LambdaT>)
+    double ftPf(const LambdaT& lambda) {
+        fdapde_assert(lambda.size() == n_lambda);
+        return internals::apply_index_pack<n_lambda>([&]<int... Ns>() { return ftPf(lambda[Ns]...); });
+    }
+    vector_t lmbPsi(const vector_t& rhs) const { return Psi_ * rhs; }
     vector_t fn() const { return Psi_ * f_; }
 
     // observers
@@ -575,7 +567,17 @@ template <> struct fe_separable_solver<iterative_tag> {
     using diag_matrix_t   = Eigen::DiagonalMatrix<double, Dynamic, Dynamic>;
     using sparse_solver_t = eigen_sparse_solver_movable_wrap<Eigen::SparseLU<sparse_matrix_t>>;
     using dense_solver_t  = Eigen::PartialPivLU<matrix_t>;
-
+    template <typename DataLocs>
+    static constexpr bool is_valid_data_locs_descriptor_v =
+      std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>;
+    template <typename InfoT> struct is_valid_info_t {
+        static constexpr bool value = requires(InfoT info) {
+            info.penalty;
+	    info.max_iter;
+	    info.tol;
+        };
+    };
+  
     class block_map_t {
         static constexpr int Order = 3;
         using Scalar = double;
@@ -642,7 +644,7 @@ template <> struct fe_separable_solver<iterative_tag> {
     };
 
     template <typename DataLocs>
-        requires(std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>)
+        requires(is_valid_data_locs_descriptor_v<DataLocs>)
     void eval_spatial_basis_at_(const DataLocs& locs) {
         if constexpr (std::is_same_v<DataLocs, matrix_t>) {   // pointwise sampling
             Psi_ = point_eval_(locs);
@@ -655,89 +657,7 @@ template <> struct fe_separable_solver<iterative_tag> {
         fdapde_assert(n_locs_ == Psi_.rows());
         return;
     }
-    // J(f,g) = \sum_{k=1}^m (y^k - \Psi*f^k)^T*(y^k - \Psi*f^k) + \lambda_S*(g^k)^T*(g^k) + \lambda_T*(l^k)^T*(l^k)
-    double J_(const block_map_t& y, const block_map_t& x, double lambda_D, double lambda_T) const {
-        double sse = 0;
-        for (int t = 0; t < m_; ++t) {
-            sse += (y(t) - Psi_ * x(0, t)).squaredNorm() + lambda_D * x(1, t).squaredNorm() +
-                   lambda_T * x(2, t).squaredNorm();
-        }
-        return sse;
-    }
-    template <typename DataLocs>
-    static constexpr bool is_valid_data_locs_descriptor_v =
-      std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>;
-   public:
-    using solution_policy = iterative_tag;
-    static constexpr int n_lambda = 2;
-
-    fe_separable_solver() noexcept = default;
-    template <typename GeoFrame, typename Penalty, typename WeightMatrix>
-        requires(internals::is_tuple_v<Penalty> && std::tuple_size_v<std::decay_t<Penalty>> == 1)
-    fe_separable_solver(
-      const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W, double tol,
-      int max_iter) :
-        tol_(tol), max_iter_(max_iter) {
-        fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
-	fdapde_assert(gf.n_layers() == 1);
-        n_obs_  = gf[0].rows();
-        n_locs_ = n_obs_;
-
-        using T = std::tuple_element_t<0, std::decay_t<Penalty>>;
-        if constexpr (requires(T t) { t.get(); }) {
-            discretize(std::get<0>(penalty).get());
-        } else {
-            if constexpr (internals::is_pair_v<T>) {
-                discretize(std::get<0>(penalty));   // user supplied penalty pair
-            } else {
-                discretize(std::get<0>(penalty)(gf.template triangulation<0>()).get());
-            }
-        }
-        analyze_data(formula, gf, W);
-    }
-    template <typename GeoFrame, typename Penalty, typename WeightMatrix>
-        requires(internals::is_tuple_v<Penalty> && std::tuple_size_v<std::decay_t<Penalty>> == 1)
-    fe_separable_solver(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) :
-        fe_separable_solver(formula, gf, std::forward<Penalty>(penalty), W, 1e-7, 50) { }
-    template <typename GeoFrame, typename Penalty>
-        requires(internals::is_tuple_v<Penalty> && std::tuple_size_v<std::decay_t<Penalty>> == 1)
-    fe_separable_solver(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) :
-        fe_separable_solver(formula, gf, std::forward<Penalty>(penalty), vector_t::Ones(gf[0].rows()).asDiagonal()) { }
-    // construct with no data
-    template <typename GeoFrame, typename Penalty, typename WeightMatrix>
-        requires(internals::is_tuple_v<Penalty> && std::tuple_size_v<std::decay_t<Penalty>> == 1)
-    fe_separable_solver(
-      const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W, double tol = 1e-7, int max_iter = 50) :
-        tol_(tol), max_iter_(max_iter) {
-        fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
-	fdapde_assert(gf.n_layers() == 1);
-	n_obs_  = gf[0].rows();
-	n_locs_ = n_obs_;
-
-	// extract temporal mesh
-        const auto& time_index = geo_index_cast<1, POINT>(gf[0]);
-        const auto& time_coords = time_index.coordinates();
-        m_ = time_coords.rows();
-        fdapde_assert(m_ > 0 && time_coords.cols() == 1);
-        DeltaT_ = time_coords(1, 0) - time_coords(0, 0);
-        for (int i = 1; i < m_ - 1; ++i) {
-            double lag_i = time_coords(i + 1, 0) - time_coords(i, 0);
-            fdapde_assert(DeltaT_ > 0 && lag_i > 0 && almost_equal(DeltaT_ FDAPDE_COMMA lag_i));
-        }
-
-        using T = std::tuple_element_t<0, std::decay_t<Penalty>>;
-        if constexpr (requires(T t) { t.get(); }) {
-            discretize(std::get<0>(penalty).get());
-        } else {
-            if constexpr (internals::is_pair_v<T>) {
-                discretize(std::get<0>(penalty));   // user supplied penalty pair
-            } else {
-                discretize(std::get<0>(penalty)(gf.template triangulation<0>()).get());
-            }
-        }
-        u_.resize(n_dofs_ * m_);
-        for (int i = 0; i < m_; ++i) { u_.segment(i * n_dofs_, n_dofs_) = u_space_; }
-        // basis system evaluation
+    template <typename GeoFrame> void eval_spatial_basis_at_(const GeoFrame& gf) {
         switch (gf.category(0)[0]) {
         case ltype::point: {
             const auto& spatial_index = geo_index_cast<0, POINT>(gf[0]);
@@ -760,16 +680,89 @@ template <> struct fe_separable_solver<iterative_tag> {
             break;
         }
         }
+        return;
     }
-    template <typename GeoFrame, typename Penalty, typename WeightMatrix>
-        requires(internals::is_tuple_v<Penalty> && std::tuple_size_v<std::decay_t<Penalty>> == 1)
-    fe_separable_solver(const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) :
-        fe_separable_solver(gf, std::forward<Penalty>(penalty), W, 1e-7, 50) { }
-    template <typename GeoFrame, typename Penalty>
-        requires(internals::is_tuple_v<Penalty> && std::tuple_size_v<std::decay_t<Penalty>> == 1)
-    fe_separable_solver(const GeoFrame& gf, Penalty&& penalty) :
-        fe_separable_solver(gf, std::forward<Penalty>(penalty), vector_t::Ones(gf[0].rows()).asDiagonal()) { }
-  
+    // J(f,g) = \sum_{k=1}^m (y^k - \Psi*f^k)^T*(y^k - \Psi*f^k) + \lambda_S*(g^k)^T*(g^k) + \lambda_T*(l^k)^T*(l^k)
+    double J_(const block_map_t& y, const block_map_t& x, double lambda_D, double lambda_T) const {
+        double sse = 0;
+        for (int t = 0; t < m_; ++t) {
+            sse += (y(t) - Psi_ * x(0, t)).squaredNorm() + lambda_D * x(1, t).squaredNorm() +
+                   lambda_T * x(2, t).squaredNorm();
+        }
+        return sse;
+    }
+   public:
+    using solution_policy = iterative_tag;
+    static constexpr int n_lambda = 2;
+
+    fe_separable_solver() noexcept = default;
+    template <typename GeoFrame, typename InfoT, typename WeightMatrix>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_separable_solver(
+      const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
+        tol_(info.tol), max_iter_(info.max_iter) {
+        fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
+	fdapde_assert(gf.n_layers() == 1);
+        n_obs_  = gf[0].rows();
+        n_locs_ = n_obs_;
+
+        using T = std::tuple_element_t<0, std::decay_t<decltype(info.penalty)>>;
+        if constexpr (requires(T t) { t.get(); }) {
+            discretize(std::get<0>(info.penalty).get());
+        } else {
+            if constexpr (internals::is_pair_v<T>) {
+                discretize(std::get<0>(info.penalty));   // user supplied penalty pair
+            } else {
+                discretize(std::get<0>(info.penalty)(gf.template triangulation<0>()).get());
+            }
+        }
+        analyze_data(formula, gf, W);
+    }
+    template <typename GeoFrame, typename InfoT>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_separable_solver(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
+        fe_separable_solver(formula, gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    // construct with no data
+    template <typename GeoFrame, typename InfoT, typename WeightMatrix>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_separable_solver(
+      const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
+        tol_(info.tol), max_iter_(info.max_iter) {
+        fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
+	fdapde_assert(gf.n_layers() == 1);
+	n_obs_  = gf[0].rows();
+	n_locs_ = n_obs_;
+
+	// extract temporal mesh
+        const auto& time_index = geo_index_cast<1, POINT>(gf[0]);
+        const auto& time_coords = time_index.coordinates();
+        m_ = time_coords.rows();
+        fdapde_assert(m_ > 0 && time_coords.cols() == 1);
+        DeltaT_ = time_coords(1, 0) - time_coords(0, 0);
+        for (int i = 1; i < m_ - 1; ++i) {
+            double lag_i = time_coords(i + 1, 0) - time_coords(i, 0);
+            fdapde_assert(DeltaT_ > 0 && lag_i > 0 && almost_equal(DeltaT_ FDAPDE_COMMA lag_i));
+        }
+
+        using T = std::tuple_element_t<0, std::decay_t<decltype(info.penalty)>>;
+        if constexpr (requires(T t) { t.get(); }) {
+            discretize(std::get<0>(info.penalty).get());
+        } else {
+            if constexpr (internals::is_pair_v<T>) {
+                discretize(std::get<0>(info.penalty));   // user supplied penalty pair
+            } else {
+                discretize(std::get<0>(info.penalty)(gf.template triangulation<0>()).get());
+            }
+        }
+        u_.resize(n_dofs_ * m_);
+        for (int i = 0; i < m_; ++i) { u_.segment(i * n_dofs_, n_dofs_) = u_space_; }
+        eval_spatial_basis_at_(gf);
+    }
+    template <typename GeoFrame, typename InfoT>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_separable_solver(const GeoFrame& gf, InfoT&& info) :
+        fe_separable_solver(gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+
     template <typename Penalty> void discretize(Penalty&& penalty) {
         // fdapde_static_assert(internals::is_valid_penalty_pair_v<Penalty>, INVALID_PENALTY_DESCRIPTION);
         using BilinearForm = std::tuple_element_t<0, std::decay_t<Penalty>>;
@@ -848,26 +841,8 @@ template <> struct fe_separable_solver<iterative_tag> {
             u_.resize(n_dofs_ * m_);
             for (int i = 0; i < m_; ++i) { u_.segment(i * n_dofs_, n_dofs_) = u_space_; }
         }
-        // basis system evaluation
-        switch (gf.category(0)[0]) {
-        case ltype::point: {
-            const auto& spatial_index = geo_index_cast<0, POINT>(gf[0]);
-	    n_ = spatial_index.rows();
-            // evaluate basis at locations
-            Psi_ = point_eval_(spatial_index.coordinates());
-            D_ = vector_t::Ones(n_).asDiagonal();
-            break;
-        }
-        case ltype::areal: {
-            const auto& spatial_index = geo_index_cast<0, POLYGON>(gf[0]);
-            n_ = spatial_index.rows();
-            const auto& [psi, measure_vec] = areal_eval_(spatial_index.incidence_matrix());
-            Psi_ = psi;
-	    D_ = measure_vec.asDiagonal();
-            break;
-        }
-        }
-	// parse formula, extract response vector
+        eval_spatial_basis_at_(gf);   // update \Psi matrix
+        // parse formula, extract response vector
         Formula formula_(formula);
         const auto& y_data = gf[0].data().template col<double>(formula_.lhs());
         y_.resize(n_locs_, y_data.blk_sz());
@@ -1069,33 +1044,56 @@ template <> struct fe_separable_solver<iterative_tag> {
     vector_t y_;          // n_obs x 1 observation vector
     sparse_matrix_t W_;   // n_obs x n_obs matrix of observation weights
     bool W_changed_;
-  
-    int max_iter_ = 50;   // maximum number of iterations
-    double tol_ = 1e-7;   // convergence tolerance
-    double DeltaT_ = 0;
+
+    int max_iter_;   // maximum number of iterations
+    double tol_;     // convergence tolerance
+    double DeltaT_;
 };
 
 }   // namespace internals
 
 // separable solver proxy
-template <typename Strategy, typename... Penalty_>
-    requires(sizeof...(Penalty_) > 0)
+template <typename Strategy, typename Penalty_>
 struct fe_separable_penalty {
     using solver_t = std::conditional_t<
       std::is_same_v<Strategy, direct_tag>, internals::fe_separable_solver<direct_tag>,
       internals::fe_separable_solver<iterative_tag>>;
-    static constexpr int Order = sizeof...(Penalty_);
-
-    fe_separable_penalty([[maybe_unused]] Strategy s, const Penalty_&... penalty) :
-        penalty_(std::make_tuple(penalty...)) { }
-    const std::tuple<std::decay_t<Penalty_>...>& get() const { return penalty_; }
    private:
-    std::tuple<std::decay_t<Penalty_>...> penalty_;
+    struct direct_info_t { };
+    struct iterative_info_t {
+        int max_iter = 50;
+        double tol = 1e-4;
+
+        iterative_info_t() noexcept = default;
+        iterative_info_t(int max_iter_, double tol_) : max_iter(max_iter_), tol(tol_) { }
+    };
+    struct info_t : std::conditional_t<std::is_same_v<Strategy, direct_tag>, direct_info_t, iterative_info_t> {
+        Penalty_ penalty;
+
+        template <typename... Args>
+        info_t(const Penalty_& penalty_, Args&&... args) :
+            std::conditional_t<std::is_same_v<Strategy, direct_tag>, direct_info_t, iterative_info_t>(
+              std::forward<Args>(args)...),
+            penalty(penalty_) { }
+    };
+   public:
+    template <typename... Args>
+    fe_separable_penalty([[maybe_unused]] Strategy s, const Penalty_& penalty, Args&&... args) :
+        info_(penalty, std::forward<Args>(args)...) { }
+    const info_t& get() const { return info_; }
+   private:
+    info_t info_;
 };
-template <typename Strategy, typename... Penalty_>
-    requires(sizeof...(Penalty_) > 0)
-fe_separable_penalty<Strategy, std::decay_t<Penalty_>...> fe_separable(Strategy s, const Penalty_&... penalty) {
-    return fe_separable_penalty(s, penalty...);
+template <typename... Penalty>
+    requires(sizeof...(Penalty) > 0)
+fe_separable_penalty<direct_tag, std::tuple<Penalty...>> fe_separable(direct_tag s, const Penalty&... penalty) {
+    return fe_separable_penalty(s, std::make_tuple(penalty...));
+}
+template <typename Penalty>
+    requires(internals::is_valid_penalty_pair_v<Penalty>)
+fe_separable_penalty<iterative_tag, Penalty>
+fe_separable(iterative_tag s, const Penalty& penalty, int max_iter = 50, double tol = 1e-4) {
+    return fe_separable_penalty(s, penalty);
 }
 
 }   // namespace fdapde

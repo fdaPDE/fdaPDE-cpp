@@ -350,7 +350,7 @@ TEST(sr, test_14) {
     
     // modeling
     SRPDE m("y ~ f", data, fe_parabolic(Iterative, std::pair{a, F}, ic, /* max_iter = */ 50, /* tol = */ 1e-4));
-    m.fit(1.0, 1.0);
+    m.fit(0.0002267573696145125, 1.0);
     
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/14/field.mtx"));
 }

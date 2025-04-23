@@ -35,10 +35,19 @@ template <> class fe_parabolic_solver<direct_tag> {
     using diag_matrix_t   = Eigen::DiagonalMatrix<double, Dynamic, Dynamic>;
     using sparse_solver_t = eigen_sparse_solver_movable_wrap<Eigen::SparseLU<sparse_matrix_t>>;
     using dense_solver_t  = Eigen::PartialPivLU<matrix_t>;
+    template <typename DataLocs>
+    static constexpr bool is_valid_data_locs_descriptor_v =
+      std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>;
+    template <typename InfoT> struct is_valid_info_t {
+        static constexpr bool value = requires(InfoT info) {
+            info.ic;
+            info.penalty;
+        };
+    };
 
     // basis evaluation at locations
     template <typename DataLocs>
-        requires(std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>)
+        requires(is_valid_data_locs_descriptor_v<DataLocs>)
     void eval_basis_at_(const DataLocs& locs) {
         if constexpr (std::is_same_v<DataLocs, matrix_t>) {   // pointwise sampling
             Psi_ = point_eval_(locs);
@@ -52,7 +61,7 @@ template <> class fe_parabolic_solver<direct_tag> {
         }
         return;
     }
-    // optimized basis evaluation from geoframe instance
+    // optimized basis evaluation at geoframe
     template <typename GeoFrame> void eval_basis_at_(const GeoFrame& gf) {
         switch (gf.category(0)[0]) {
         case ltype::point: {
@@ -108,15 +117,6 @@ template <> class fe_parabolic_solver<direct_tag> {
         Psi_ = kronecker(Im, Psi__);
         return;
     }
-    template <typename DataLocs>
-    static constexpr bool is_valid_data_locs_descriptor_v =
-      std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>;
-    template <typename InfoT> struct is_valid_info_t {
-        static constexpr bool value = requires(InfoT info) {
-            info.ic;
-            info.penalty;
-        };
-    };
    public:
     using solution_policy = direct_tag;
     static constexpr int n_lambda = 2;
@@ -160,7 +160,7 @@ template <> class fe_parabolic_solver<direct_tag> {
         }
         discretize(info.penalty);
         // basis system evaluation
-	eval_basis_at(gf);
+	eval_basis_at_(gf);
 	tensorize_(m_);
     }
 
@@ -540,7 +540,18 @@ template <> struct fe_parabolic_solver<iterative_tag> {
     using diag_matrix_t   = Eigen::DiagonalMatrix<double, Dynamic, Dynamic>;
     using sparse_solver_t = eigen_sparse_solver_movable_wrap<Eigen::SparseLU<sparse_matrix_t>>;
     using dense_solver_t  = Eigen::PartialPivLU<matrix_t>;
-
+    template <typename DataLocs>
+    static constexpr bool is_valid_data_locs_descriptor_v =
+      std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>;
+    template <typename InfoT> struct is_valid_info_t {
+        static constexpr bool value = requires(InfoT info) {
+            info.ic;
+            info.penalty;
+	    info.max_iter;
+	    info.tol;
+        };
+    };
+    // auxiliary time-mapping data structure
     class block_map_t {
         static constexpr int Order = 3;
         using Scalar = double;
@@ -601,7 +612,7 @@ template <> struct fe_parabolic_solver<iterative_tag> {
     };
 
     template <typename DataLocs>
-        requires(std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>)
+        requires(is_valid_data_locs_descriptor_v<DataLocs>)
     void eval_spatial_basis_at_(const DataLocs& locs) {
         if constexpr (std::is_same_v<DataLocs, matrix_t>) {   // pointwise sampling
             Psi_ = point_eval_(locs);
@@ -643,21 +654,10 @@ template <> struct fe_parabolic_solver<iterative_tag> {
     double J_(const block_map_t& y, const block_map_t& x, double lambda) const {
         double sse = 0;
         for (int t = 0; t < m_; ++t) {
-            sse += ((y(t) - Psi_ * x(0, t)).squaredNorm() + lambda * x(1, t).squaredNorm());
+            sse += ((y(t) - Psi_ * x(0, t)).squaredNorm() / n_obs_ + lambda * x(1, t).squaredNorm());
         }
         return sse;
     }
-    template <typename DataLocs>
-    static constexpr bool is_valid_data_locs_descriptor_v =
-      std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>;
-    template <typename InfoT> struct is_valid_info_t {
-        static constexpr bool value = requires(InfoT info) {
-            info.ic;
-            info.penalty;
-	    info.max_iter;
-	    info.tol;
-        };
-    };  
    public:
     using solution_policy = iterative_tag;
     static constexpr int n_lambda = 2;
@@ -755,8 +755,7 @@ template <> struct fe_parabolic_solver<iterative_tag> {
         }
         // update forcing
 	u0_ = u_ + (1.0 / DeltaT_) * (R0_ * s_);
-
-	// update_response_and_weights(y, W);
+	update_response_and_weights(y, W);
         return;
     }
     // fit from formula
@@ -785,9 +784,46 @@ template <> struct fe_parabolic_solver<iterative_tag> {
         const auto& y_data = gf[0].data().template col<double>(formula_.lhs());
         y_.resize(n_locs_, y_data.blk_sz());
         y_data.assign_to(y_);
-
-	// update_weights(vector_t::Ones(n_).asDiagonal());
+	
+	update_response_and_weights(y_, W);
 	return;
+    }
+
+    // modifiers
+    void update_response(const vector_t& y) {
+        fdapde_assert(Psi_.rows() > 0 && y.rows() == n_locs_ && y.cols() == 1);
+        y_ = y;
+	// correct \Psi for missing observations
+        auto nan_pattern = na_matrix(y);
+        int old_n_obs = n_obs_;
+        if (nan_pattern.any()) {
+            n_obs_ = n_locs_ - nan_pattern.count();
+            B_.resize(m_);
+            for (int i = 0; i < m_; ++i) {
+                B_[i] = (~nan_pattern.middleRows(i * n_, n_)).repeat(1, n_dofs_).select(Psi_, 0);
+            }
+            y_ = (~nan_pattern).select(y_, 0);
+        }	
+    }
+    template <typename WeightMatrix> void update_weights(const WeightMatrix& W) {
+        fdapde_assert(Psi_.rows() > 0 && W.rows() == n_locs_ && W.rows() == W.cols());
+        W_ = W;
+        // check if W_ is time-wise block-constant
+        W_const_ = true;
+        for (int i = 1; i < m_; ++i) {
+            if (sparse_matrix_t(W_.block(i * n_, i * n_, n_, n_) - W_.block(0, 0, n_, n_)).sum() != 0) {
+                W_const_ = false;
+                break;
+            }
+        }
+        W_ /= n_obs_;
+        W_changed_ = true;
+        return;
+    }
+    template <typename WeightMatrix> void update_response_and_weights(const vector_t& y, const WeightMatrix& W) {
+        update_response(y);
+        update_weights (W);
+        return;
     }
    private:
     // iterative scheme implementation
@@ -795,29 +831,38 @@ template <> struct fe_parabolic_solver<iterative_tag> {
         std::array<double, n_lambda> lambda {lambda_D, lambda_T};
         // define auxiliary structures
         block_map_t y(response, n_);
-        // block_map_t u(u_, n_dofs_);
         matrix_t x_old_buff(2 * n_dofs_ * m_, response.cols()), x_new_buff(2 * n_dofs_ * m_, response.cols());
         block_map_t x_old(x_old_buff, 2 * n_dofs_, n_dofs_, response.cols());
         block_map_t x_new(x_new_buff, 2 * n_dofs_, n_dofs_, response.cols());
         double alpha = lambda_D * lambda_T / DeltaT_;
+        int n_fact = (B_.size() != 0 || !W_const_) ? m_ : 1;   // != 1 if missing or heteroschedastic observations
+        auto PsiNA = [&](int t) -> const sparse_matrix_t& { return B_.size() != 0 ? B_[t] : Psi_; };
+        auto invAs = [&](int t) -> sparse_solver_t& { return n_fact != 1 ? invAs_[t] : invAs_[0]; };
+        auto invA  = [&](int t) -> sparse_solver_t& { return n_fact != 1 ? invA_ [t] : invA_ [0]; };
+        auto W = [&](int i) { return W_.block(i * n_, i * n_, n_, n_); };
         {   // compute starting point (f^(k,0), g^(k,0)) k = 1 ... m
-            if (lambda_saved_.value() != lambda) {
-                SparseBlockMatrix<double, 2, 2> A_(
-                  Psi_.transpose() * D_ * Psi_, lambda_D * R1_.transpose(), lambda_D * R1_, -lambda_D * R0_);
-                invAs_.compute(A_);
+            if (lambda_saved_.value() != lambda || W_changed_) {
+                invAs_.resize(n_fact);
+                for (int t = 0; t < n_fact; ++t) {
+                    SparseBlockMatrix<double, 2, 2> A_(
+                      PsiNA(t).transpose() * D_ * W(t) * PsiNA(t), lambda_D * R1_.transpose(), lambda_D * R1_,
+                      -lambda_D * R0_);
+                    invAs(t).compute(A_);
+                }
                 sparse_matrix_t G0 = alpha * R0_.transpose() + lambda_D * R1_.transpose();
                 invG0_.compute(G0);
             }
             vector_t b_(2 * n_dofs_);
             for (int t = 0; t < m_; ++t) {
-                b_ << Psi_.transpose() * D_ * y(t), lambda_D * lambda_T * (t == 0 ? u0_ : u_);
-                x_old(0, t) = invAs_.solve(b_).head(n_dofs_);
+                b_ << PsiNA(t).transpose() * D_ * W(t) * y(t), lambda_D * lambda_T * (t == 0 ? u0_ : u_);
+                x_old(0, t) = invAs(t).solve(b_).head(n_dofs_);
             }
-            b_ = Psi_.transpose() * D_ * (y(m_ - 1) - Psi_ * x_old(0, m_ - 1));
+            b_ = PsiNA(m_ - 1).transpose() * D_ * W(m_ - 1) * (y(m_ - 1) - PsiNA(m_ - 1) * x_old(0, m_ - 1));
             x_old(1, m_ - 1) = invG0_.solve(b_);
             // general step
             for (int t = m_ - 2; t >= 0; --t) {
-                b_ = Psi_.transpose() * D_ * (y(t) - Psi_ * x_old(0, t)) + alpha * R0_ * x_old(1, t + 1);
+                b_ << PsiNA(t).transpose() * D_ * W(t) * (y(t) - PsiNA(t) * x_old(0, t)) +
+                        alpha * R0_ * x_old(1, t + 1);
                 x_old(1, t) = invG0_.solve(b_);
             }
         }
@@ -825,27 +870,31 @@ template <> struct fe_parabolic_solver<iterative_tag> {
         double Jold = std::numeric_limits<double>::max();
         double Jnew = J_(y, x_old, lambda_D);
         int i = 1;
-        if (lambda_saved_.value() != lambda) {
-            SparseBlockMatrix<double, 2, 2> A_(
-              Psi_.transpose() * D_ * Psi_, lambda_D * R1_.transpose() + alpha * R0_.transpose(),
-              lambda_D * R1_ + alpha * R0_, -lambda_D * R0_);
-            invA_.compute(A_);
+        if (lambda_saved_.value() != lambda || W_changed_) {
+            invA_.resize(n_fact);
+            for (int t = 0; t < n_fact; ++t) {
+                SparseBlockMatrix<double, 2, 2> A_(
+                  PsiNA(t).transpose() * D_ * W(t) * PsiNA(t), lambda_D * R1_.transpose() + alpha * R0_.transpose(),
+                  lambda_D * R1_ + alpha * R0_, -lambda_D * R0_);
+                invA(t).compute(A_);
+            }
         }
         vector_t b_(2 * n_dofs_);
         // iterative loop
         while (i < max_iter_ && std::abs((Jnew - Jold) / Jnew) > tol_) {
             // at step 0, f^(k-1,i-1) is zero
-            b_ << Psi_.transpose() * D_ * y(0) + alpha * R0_ * x_old(1, 1), lambda_D * u0_;
-            x_new(0) = invA_.solve(b_);
+            b_ << PsiNA(0).transpose() * D_ * W(0) * y(0) + alpha * R0_ * x_old(1, 1), lambda_D * u0_;
+            x_new(0) = invA(0).solve(b_);
             // general step
             for (int t = 1; t < m_ - 1; ++t) {
-                b_ << Psi_.transpose() * D_ * y(t) + alpha * R0_ * x_old(1, t + 1),
+                b_ << PsiNA(t).transpose() * D_ * W(t) * y(t) + alpha * R0_ * x_old(1, t + 1),
                   alpha * R0_ * x_old(0, t - 1) + lambda_D * u_;
-                x_new(t) = invA_.solve(b_);
+                x_new(t) = invA(t).solve(b_);
             }
             // at step m_ - 1, g^(k+1,i-1) is zero
-            b_ << Psi_.transpose() * D_ * y(m_ - 1), alpha * R0_ * x_old(0, m_ - 2) + lambda_D * u_;
-            x_new(m_ - 1) = invA_.solve(b_);
+            b_ << PsiNA(m_ - 1).transpose() * D_ * W(m_ - 1) * y(m_ - 1),
+              alpha * R0_ * x_old(0, m_ - 2) + lambda_D * u_;
+            x_new(m_ - 1) = invA(m_ - 1).solve(b_);
             // prepare for next iteration
             Jold = Jnew;
             x_old = x_new;
@@ -890,7 +939,7 @@ template <> struct fe_parabolic_solver<iterative_tag> {
     const vector_t& initial_condition() const { return s_; }
    protected:
     std::optional<std::array<double, n_lambda>> lambda_saved_ = std::array<double, n_lambda> {-1, -1};
-    sparse_solver_t invA_, invAs_;
+    std::vector<sparse_solver_t> invA_, invAs_;
     sparse_solver_t invG0_;
     // matrices for hutchinson stochastic estimation of Tr[S]
     std::optional<matrix_t> Us_;
@@ -898,11 +947,12 @@ template <> struct fe_parabolic_solver<iterative_tag> {
     int n_dofs_ = 0, n_obs_ = 0, n_covs_ = 0;
     int n_locs_ = 0, n_ = 0, m_ = 0;   // n_: number of spatial locations, m_: number of time instants
 
-    sparse_matrix_t R0_;    // n_dofs x n_dofs matrix [R0]_{ij} = \int_D \psi_i * \psi_j
-    sparse_matrix_t R1_;    // n_dofs x n_dofs matrix [R1]_{ij} = \int_D a(\psi_i, \psi_j)
-    sparse_matrix_t Psi_;   // n_obs x n_dofs matrix [Psi]_{ij} = \psi_j(p_i)
-    vector_t u_, u0_;       // n_dofs x 1 vector [u]_i = \int_D u * \psi_i, u0_ = u_ + (R0 * s) / DeltaT
-    diag_matrix_t D_;       // vector of regions' measures (areal sampling)
+    sparse_matrix_t R0_;               // n_dofs x n_dofs matrix [R0]_{ij} = \int_D \psi_i * \psi_j
+    sparse_matrix_t R1_;               // n_dofs x n_dofs matrix [R1]_{ij} = \int_D a(\psi_i, \psi_j)
+    sparse_matrix_t Psi_;              // n_obs x n_dofs matrix [Psi]_{ij} = \psi_j(p_i)
+    std::vector<sparse_matrix_t> B_;   // m x (n_obs x n_obs) vector of na-corrected \Psi matrices
+    vector_t u_, u0_;                  // n_dofs x 1 vector [u]_i = \int_D u * \psi_i, u0_ = u_ + (R0 * s) / DeltaT
+    diag_matrix_t D_;                  // vector of regions' measures (areal sampling)
     mutable std::optional<sparse_solver_t> invR0_;
     vector_t f_, beta_, g_;
     vector_t s_;   // initial condition vector
@@ -912,7 +962,7 @@ template <> struct fe_parabolic_solver<iterative_tag> {
 
     vector_t y_;          // n_obs x 1 observation vector
     sparse_matrix_t W_;   // n_obs x n_obs matrix of observation weights
-    bool W_changed_;
+    bool W_changed_, W_const_;   // W_const_ == true \iff W_ is time-wise constant
 
     int max_iter_;    // maximum number of iterations
     double tol_;      // convergence tolerance

@@ -32,22 +32,48 @@ struct fe_elliptic_solver {
     using diag_matrix_t   = Eigen::DiagonalMatrix<double, Dynamic, Dynamic>;
     using sparse_solver_t = eigen_sparse_solver_movable_wrap<Eigen::SparseLU<sparse_matrix_t>>;
     using dense_solver_t  = Eigen::PartialPivLU<matrix_t>;
+    template <typename DataLocs>
+    static constexpr bool is_valid_data_locs_descriptor_v =
+      std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>;
 
     // evaluation of basis system at spatial locations
     template <typename DataLocs>
-        requires(std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>)
+        requires(is_valid_data_locs_descriptor_v<DataLocs>)
     void eval_basis_at_(const DataLocs& locs) {
+        fdapde_assert(n_locs_ == locs.rows());
         if constexpr (std::is_same_v<DataLocs, matrix_t>) {   // pointwise sampling
             Psi_ = point_eval_(locs);
             D_ = vector_t::Ones(n_locs_).asDiagonal();
-	    fdapde_assert(n_locs_ == Psi_.rows());
         } else {   // areal sampling
             const auto& [psi, measure_vect] = areal_eval_(locs);
             Psi_ = psi;
             D_ = measure_vect.asDiagonal();
-	    fdapde_assert(n_locs_ == Psi_.rows());
         }
         return;
+    }
+    // optimized basis evaluation at geoframe
+    template <typename GeoFrame> void eval_basis_at_(const GeoFrame& gf) {
+        switch (gf.category(0)[0]) {
+        case ltype::point: {
+            const auto& spatial_index = geo_index_cast<0, POINT>(gf[0]);
+            if (spatial_index.points_at_dofs()) {
+                Psi_.resize(n_locs_, n_dofs_);
+                Psi_.setIdentity();
+            } else {
+                Psi_ = point_eval_(spatial_index.coordinates());
+            }
+            D_ = vector_t::Ones(n_locs_).asDiagonal();
+            break;
+        }
+        case ltype::areal: {
+            const auto& spatial_index = geo_index_cast<0, POLYGON>(gf[0]);
+            const auto& [psi, measure_vect] = areal_eval_(spatial_index.incidence_matrix());
+            Psi_ = psi;
+            D_ = measure_vect.asDiagonal();
+            break;
+        }
+        }
+	return;
     }
    public:
     static constexpr int n_lambda = 1;
@@ -80,27 +106,7 @@ struct fe_elliptic_solver {
 	n_locs_ = n_obs_;
 	
         discretize(penalty);
-        // basis system evaluation
-        switch (gf.category(0)[0]) {
-        case ltype::point: {
-            const auto& spatial_index = geo_index_cast<0, POINT>(gf[0]);
-            if (spatial_index.points_at_dofs()) {
-                Psi_.resize(n_locs_, n_dofs_);
-                Psi_.setIdentity();
-            } else {
-                Psi_ = point_eval_(spatial_index.coordinates());
-            }
-            D_ = vector_t::Ones(n_locs_).asDiagonal();
-            break;
-        }
-        case ltype::areal: {
-            const auto& spatial_index = geo_index_cast<0, POLYGON>(gf[0]);
-            const auto& [psi, measure_vect] = areal_eval_(spatial_index.incidence_matrix());
-            Psi_ = psi;
-            D_ = measure_vect.asDiagonal();
-            break;
-        }
-        }
+        eval_basis_at_(gf);
     }
     template <typename GeoFrame, typename Penalty>
         requires(internals::is_pair_v<Penalty>)
@@ -171,27 +177,8 @@ struct fe_elliptic_solver {
         fdapde_assert(gf.n_layers() == 1);
         n_obs_  = gf[0].rows();
 	n_locs_ = n_obs_;
-        // basis system evaluation
-        switch (gf.category(0)[0]) {
-        case ltype::point: {
-            const auto& spatial_index = geo_index_cast<0, POINT>(gf[0]);	  
-            if (spatial_index.points_at_dofs()) {
-                Psi_.resize(n_locs_, n_dofs_);
-                Psi_.setIdentity();
-            } else {
-                Psi_ = point_eval_(spatial_index.coordinates());
-            }
-            D_ = vector_t::Ones(n_locs_).asDiagonal();
-            break;
-        }
-        case ltype::areal: {
-            const auto& spatial_index = geo_index_cast<0, POLYGON>(gf[0]);
-            const auto& [psi, measure_vect] = areal_eval_(spatial_index.incidence_matrix());
-            Psi_ = psi;
-            D_ = measure_vect.asDiagonal();
-            break;
-        }
-        }
+        eval_basis_at_(gf);   // update \Psi matrix
+
         // parse formula, extract response vector and design matrix
         Formula formula_(formula);
         std::vector<std::string> covs;
@@ -228,7 +215,7 @@ struct fe_elliptic_solver {
             y_ = nan_pattern.select(y_, 0);
         }
         if (old_n_obs != n_obs_) { W_ *= (double)old_n_obs / n_obs_; }
-        b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * W_ * y;
+        b_.block(0, 0, n_dofs_, 1) = -PsiNA().transpose() * D_ * W_ * y;
         return;
     }
     template <typename WeightMatrix> void update_weights(const WeightMatrix& W) {
@@ -236,15 +223,15 @@ struct fe_elliptic_solver {
         W_ = W;
 	W_ /= n_obs_;
         if (n_covs_ == 0) {
-            b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * W_ * y_;
+            b_.block(0, 0, n_dofs_, 1) = -PsiNA().transpose() * D_ * W_ * y_;
         } else {
             XtWX_ = X_.transpose() * W_ * X_;
             invXtWX_ = XtWX_.partialPivLu();
             invXtWXXtW_ = invXtWX_.solve(X_.transpose() * W_);   // (X^\top * W * X)^{-1} * (X^\top * W)
             // woodbury decomposition matrices
-            U_.block(0, 0, n_dofs_, n_covs_) = Psi_.transpose() * D_ * W_ * X_;
-            V_.block(0, 0, n_covs_, n_dofs_) = X_.transpose() * W_ * Psi_;
-            b_.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * internals::lmbQ(W_, X_, invXtWX_, y_);
+            U_.block(0, 0, n_dofs_, n_covs_) = PsiNA().transpose() * D_ * W_ * X_;
+            V_.block(0, 0, n_covs_, n_dofs_) = X_.transpose() * W_ * PsiNA();
+            b_.block(0, 0, n_dofs_, 1) = -PsiNA().transpose() * D_ * internals::lmbQ(W_, X_, invXtWX_, y_);
         }
 	W_changed_ = true;
 	return;
@@ -270,7 +257,7 @@ struct fe_elliptic_solver {
         if (lambda_saved_.value() != lambda || W_changed_) {
             // assemble and factorize system matrix for nonparameteric part
             SparseBlockMatrix<double, 2, 2> A(
-              -Psi_.transpose() * D_ * W_ * Psi_, lambda * R1_.transpose(), lambda * R1_, lambda * R0_);
+              -PsiNA().transpose() * D_ * W_ * PsiNA(), lambda * R1_.transpose(), lambda * R1_, lambda * R0_);
             invA_.compute(A);
 	    W_changed_ = false;
         }
@@ -303,7 +290,7 @@ struct fe_elliptic_solver {
         if (lambda_saved_.value() != lambda) {
             // assemble and factorize system matrix for nonparameteric part
             SparseBlockMatrix<double, 2, 2> A(
-              -Psi_.transpose() * D_ * W_ * Psi_, lambda * R1_.transpose(), lambda * R1_, lambda * R0_);
+              -PsiNA().transpose() * D_ * W_ * PsiNA(), lambda * R1_.transpose(), lambda * R1_, lambda * R0_);
             invA_.compute(A);
         }
         vector_t x;
@@ -313,7 +300,7 @@ struct fe_elliptic_solver {
         } else {
             vector_t b(2 * n_dofs_);
             // assemble nonparametric linear system rhs
-            b.block(0, 0, n_dofs_, 1) = -Psi_.transpose() * D_ * W_ * y_;
+            b.block(0, 0, n_dofs_, 1) = -PsiNA().transpose() * D_ * W_ * y_;
             b.block(n_dofs_, 0, n_dofs_, 1) = lambda * u_;   
             x = invA_.solve(b);
         }
@@ -338,9 +325,9 @@ struct fe_elliptic_solver {
             Bs_ = matrix_t::Zero(2 * n_dofs_, r);   // implicitly enforce homogeneous forcing
         }
         if (n_covs_ == 0) {
-            Bs_->topRows(n_dofs_) = -Psi_.transpose() * D_ * W_ * (*Us_);
+            Bs_->topRows(n_dofs_) = -PsiNA().transpose() * D_ * W_ * (*Us_);
         } else {
-            Bs_->topRows(n_dofs_) = -Psi_.transpose() * D_ * internals::lmbQ(W_, X_, invXtWX_, *Us_);
+            Bs_->topRows(n_dofs_) = -PsiNA().transpose() * D_ * internals::lmbQ(W_, X_, invXtWX_, *Us_);
         }
         matrix_t x = n_covs_ == 0 ? invA_.solve(*Bs_) : woodbury_system_solve(invA_, U_, XtWX_, V_, *Bs_);
         double trS = 0;   // monte carlo Tr[S] approximation
@@ -360,7 +347,7 @@ struct fe_elliptic_solver {
         }
         if (lambda_saved_.value() != lambda_) {
             SparseBlockMatrix<double, 2, 2> A_(
-              -Psi_.transpose() * D_ * W_ * Psi_, lambda_ * R1_.transpose(), lambda_ * R1_, lambda_ * R0_);
+              -PsiNA().transpose() * D_ * W_ * PsiNA(), lambda_ * R1_.transpose(), lambda_ * R1_, lambda_ * R0_);
             invA_.compute(A_);
             lambda_saved_ = lambda_;
         }
@@ -482,17 +469,7 @@ template <typename Functor> struct fe_elliptic_factory {
   private:
     Functor f_;
 };
-// the laplace equation: -\Delta f = 0
-auto fe_laplace() {
-    return fe_elliptic_factory([]<typename Triangulation>(const Triangulation& D) {
-        auto Vh = std::make_shared<FeSpace<Triangulation, FeP<1, 1>>>(D, P1<1>);
-        TrialFunction f(Vh);
-        TestFunction  v(Vh);
-        auto a = integral(D)(dot(grad(f), grad(v)));
-        return fe_elliptic(a);
-    });
-}
-// the poisson equation: -\Delta f = u
+// poisson equation: -\Delta f = u
 template <typename Force> auto fe_poisson(Force&& u) {
     return fe_elliptic_factory([u]<typename Triangulation>(const Triangulation& D) {
         auto Vh = std::make_shared<FeSpace<Triangulation, FeP<1, 1>>>(D, P1<1>);
@@ -503,18 +480,15 @@ template <typename Force> auto fe_poisson(Force&& u) {
         return fe_elliptic(a, F);
     });
 }
-// the general homogeneous diffusion-transport-reaction equation: -div[K + grad(f)] + b \cdot grad(f) + c * f = 0
-template <typename Diffusion, typename Transport, typename Reaction>
-auto fe_diffusion_transport_reaction(Diffusion&& K, Transport&& b, Reaction&& c) {
-    return fe_elliptic_factory([K, b, c]<typename Triangulation>(const Triangulation& D) {
-        auto Vh = std::make_shared<FeSpace<Triangulation, FeP<1, 1>>>(D, P1<1>);
-        TrialFunction f(Vh);
-        TestFunction  v(Vh);
-        auto a = integral(D)(dot(K * grad(f), grad(v)) + dot(b, grad(f)) * v + c * f * v);
-        return fe_elliptic(a);
+// laplace equation: -\Delta f = 0
+auto fe_laplace() {
+    return fe_elliptic_factory([]<typename Triangulation>(const Triangulation& D) {
+        static constexpr int embed_dim = Triangulation::embed_dim;
+        return fe_poisson(
+          ScalarField<embed_dim, decltype([](const Eigen::Matrix<double, embed_dim, 1>&) { return 0; })> {})(D);
     });
 }
-// the general non-homogeneous diffusion-transport-reaction equation: -div[K + grad(f)] + b \cdot grad(f) + c * f = u
+// diffusion-transport-reaction equation: -div[K + grad(f)] + b \cdot grad(f) + c * f = u
 template <typename Diffusion, typename Transport, typename Reaction, typename Force>
 auto fe_diffusion_transport_reaction(Diffusion&& K, Transport&& b, Reaction&& c, Force&& u) {
   return fe_elliptic_factory([K, b, c, u]<typename Triangulation>(const Triangulation& D) {
@@ -524,6 +498,16 @@ auto fe_diffusion_transport_reaction(Diffusion&& K, Transport&& b, Reaction&& c,
         auto a = integral(D)(dot(K * grad(f), grad(v)) + dot(b, grad(f)) * v + c * f * v);
         auto F = integral(D)(u * v);
         return fe_elliptic(a, F);
+    });
+}
+template <typename Diffusion, typename Transport, typename Reaction>
+auto fe_diffusion_transport_reaction(Diffusion&& K, Transport&& b, Reaction&& c) {
+    return fe_elliptic_factory([K, b, c]<typename Triangulation>(const Triangulation& D) {
+        static constexpr int embed_dim = Triangulation::embed_dim;
+        return fe_diffusion_transport_reaction(
+          K, b, c, ScalarField<embed_dim, decltype([](const Eigen::Matrix<double, Triangulation::embed_dim, 1>&) {
+                                   return 0;
+                               })> {})(D);
     });
 }
 
