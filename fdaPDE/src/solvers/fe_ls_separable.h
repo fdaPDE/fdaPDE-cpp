@@ -14,19 +14,19 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __FE_SEPARABLE_SOLVER_H__
-#define __FE_SEPARABLE_SOLVER_H__
+#ifndef __FE_LS_SEPARABLE_SOLVER_H__
+#define __FE_LS_SEPARABLE_SOLVER_H__
 
 #include "header_check.h"
 
 namespace fdapde {
 namespace internals {
   
-template <typename Strategy> class fe_separable_solver;
+template <typename Strategy> class fe_ls_separable;
   
 // solves \min_{f, \beta} \| W^{1/2} * (y_i - x_i^\top * \beta - f(p_i, t_j)) \|_2^2 + \int_D \int_T (L_D(f) - u_D)^2 +
 // \int_T \int_D (L_T(f) - u_T)^2
-template <> class fe_separable_solver<direct_tag> {
+template <> class fe_ls_separable<direct_tag> {
    private:
     template <typename Tuple> struct function_space_tuple {
         using type = decltype([]<size_t... Is_>(std::index_sequence<Is_...>) {
@@ -144,11 +144,11 @@ template <> class fe_separable_solver<direct_tag> {
 	return;
     }
    public:
-    fe_separable_solver() noexcept = default;
+    fe_ls_separable() noexcept = default;
     // construct from formula + geoframe
     template <typename GeoFrame, typename WeightMatrix, typename InfoT>
         requires(is_valid_info_t<InfoT>::value)
-    fe_separable_solver(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) {
+    fe_ls_separable(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
 	fdapde_assert(gf.n_layers() == 1);
         n_obs_  = gf[0].rows();
@@ -159,12 +159,12 @@ template <> class fe_separable_solver<direct_tag> {
     }
     template <typename GeoFrame, typename InfoT>
         requires(is_valid_info_t<InfoT>::value)
-    fe_separable_solver(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
-        fe_separable_solver(formula, gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    fe_ls_separable(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
+        fe_ls_separable(formula, gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
     // construct with no data
     template <typename GeoFrame, typename InfoT, typename WeightMatrix>
         requires(is_valid_info_t<InfoT>::value)
-    fe_separable_solver(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : W_(W) {
+    fe_ls_separable(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
 	fdapde_assert(gf.n_layers() == 1);
         n_obs_  = gf[0].rows();
@@ -175,8 +175,8 @@ template <> class fe_separable_solver<direct_tag> {
     }
     template <typename GeoFrame, typename InfoT>
         requires(is_valid_info_t<InfoT>::value)
-    fe_separable_solver(const GeoFrame& gf, InfoT&& info) :
-        fe_separable_solver(gf, info.penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    fe_ls_separable(const GeoFrame& gf, InfoT&& info) :
+        fe_ls_separable(gf, info.penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
 
     // numerical discretization
     template <typename Penalty1, typename Penalty2> void discretize(Penalty1&& penalty1, Penalty2&& penalty2) {
@@ -558,7 +558,7 @@ template <> class fe_separable_solver<direct_tag> {
     bool W_changed_;
 };
 
-template <> struct fe_separable_solver<iterative_tag> {
+template <> struct fe_ls_separable<iterative_tag> {
    private:
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
@@ -695,10 +695,10 @@ template <> struct fe_separable_solver<iterative_tag> {
     using solution_policy = iterative_tag;
     static constexpr int n_lambda = 2;
 
-    fe_separable_solver() noexcept = default;
+    fe_ls_separable() noexcept = default;
     template <typename GeoFrame, typename InfoT, typename WeightMatrix>
         requires(is_valid_info_t<InfoT>::value)
-    fe_separable_solver(
+    fe_ls_separable(
       const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
         tol_(info.tol), max_iter_(info.max_iter) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
@@ -720,12 +720,12 @@ template <> struct fe_separable_solver<iterative_tag> {
     }
     template <typename GeoFrame, typename InfoT>
         requires(is_valid_info_t<InfoT>::value)
-    fe_separable_solver(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
-        fe_separable_solver(formula, gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    fe_ls_separable(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
+        fe_ls_separable(formula, gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
     // construct with no data
     template <typename GeoFrame, typename InfoT, typename WeightMatrix>
         requires(is_valid_info_t<InfoT>::value)
-    fe_separable_solver(
+    fe_ls_separable(
       const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
         tol_(info.tol), max_iter_(info.max_iter) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
@@ -760,8 +760,8 @@ template <> struct fe_separable_solver<iterative_tag> {
     }
     template <typename GeoFrame, typename InfoT>
         requires(is_valid_info_t<InfoT>::value)
-    fe_separable_solver(const GeoFrame& gf, InfoT&& info) :
-        fe_separable_solver(gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    fe_ls_separable(const GeoFrame& gf, InfoT&& info) :
+        fe_ls_separable(gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
 
     template <typename Penalty> void discretize(Penalty&& penalty) {
         // fdapde_static_assert(internals::is_valid_penalty_pair_v<Penalty>, INVALID_PENALTY_DESCRIPTION);
@@ -1056,8 +1056,8 @@ template <> struct fe_separable_solver<iterative_tag> {
 template <typename Strategy, typename Penalty_>
 struct fe_separable_penalty {
     using solver_t = std::conditional_t<
-      std::is_same_v<Strategy, direct_tag>, internals::fe_separable_solver<direct_tag>,
-      internals::fe_separable_solver<iterative_tag>>;
+      std::is_same_v<Strategy, direct_tag>, internals::fe_ls_separable<direct_tag>,
+      internals::fe_ls_separable<iterative_tag>>;
    private:
     struct direct_info_t { };
     struct iterative_info_t {
@@ -1098,4 +1098,4 @@ fe_separable(iterative_tag s, const Penalty& penalty, int max_iter = 50, double 
 
 }   // namespace fdapde
 
-#endif // __FE_SEPARABLE_SOLVER_H__
+#endif // __FE_LS_SEPARABLE_SOLVER_H__

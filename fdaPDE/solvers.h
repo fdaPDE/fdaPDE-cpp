@@ -33,9 +33,12 @@ struct iterative_tag  { } Iterative;
   
 }   // namespace fdapde
 
-#include "src/solvers/fe_elliptic.h"
-#include "src/solvers/fe_separable.h"
-#include "src/solvers/fe_parabolic.h"
+#include "src/solvers/fe_ls_elliptic.h"
+#include "src/solvers/fe_ls_separable.h"
+#include "src/solvers/fe_ls_parabolic.h"
+
+#include "src/solvers/fe_de_elliptic.h"
+
 
 // clang-format on
 

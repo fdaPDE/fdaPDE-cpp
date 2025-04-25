@@ -14,8 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __FE_ELLIPTIC_SOLVER_H__
-#define __FE_ELLIPTIC_SOLVER_H__
+#ifndef __FE_LS_ELLIPTIC_SOLVER_H__
+#define __FE_LS_ELLIPTIC_SOLVER_H__
 
 #include "header_check.h"
 
@@ -23,7 +23,7 @@ namespace fdapde {
 namespace internals {
 
 // solves \min_{f, \beta} \| W^{1/2} * (y_i - x_i^\top * \beta - f(p_i)) \|_2^2 + \int_D (Lf - u)^2, L elliptic operator
-struct fe_elliptic_solver {
+struct fe_ls_elliptic {
    private:
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
@@ -78,11 +78,11 @@ struct fe_elliptic_solver {
    public:
     static constexpr int n_lambda = 1;
 
-    fe_elliptic_solver() noexcept = default;
+    fe_ls_elliptic() noexcept = default;
     // construct from formula + geoframe
     template <typename GeoFrame, typename Penalty, typename WeightMatrix>
         requires(internals::is_pair_v<Penalty>)
-    fe_elliptic_solver(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) :
+    fe_ls_elliptic(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) :
         W_(W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
         fdapde_assert(gf.n_layers() == 1);
@@ -94,12 +94,12 @@ struct fe_elliptic_solver {
     }
     template <typename GeoFrame, typename Penalty>
         requires(internals::is_pair_v<Penalty>)
-    fe_elliptic_solver(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) :
-        fe_elliptic_solver(formula, gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    fe_ls_elliptic(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) :
+        fe_ls_elliptic(formula, gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
     // construct with no data
     template <typename GeoFrame, typename Penalty, typename WeightMatrix>
         requires(internals::is_pair_v<Penalty>)
-    fe_elliptic_solver(const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
+    fe_ls_elliptic(const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
         fdapde_assert(gf.n_layers() == 1);
         n_obs_  = gf[0].rows();
@@ -110,8 +110,8 @@ struct fe_elliptic_solver {
     }
     template <typename GeoFrame, typename Penalty>
         requires(internals::is_pair_v<Penalty>)
-    fe_elliptic_solver(const GeoFrame& gf, Penalty&& penalty) :
-        fe_elliptic_solver(gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    fe_ls_elliptic(const GeoFrame& gf, Penalty&& penalty) :
+        fe_ls_elliptic(gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
 
     // perform finite element based numerical discretization
     template <typename Penalty> void discretize(Penalty&& penalty) {
@@ -431,7 +431,7 @@ template <typename BilinearForm_, typename LinearForm_> struct fe_elliptic_penal
     using BilinearForm = std::decay_t<BilinearForm_>;
     using LinearForm = std::decay_t<LinearForm_>;
     using Triangulation = std::tuple<typename BilinearForm::Triangulation>;
-    using solver_t = internals::fe_elliptic_solver;
+    using solver_t = internals::fe_ls_elliptic;
     fdapde_static_assert(
       std::is_same_v<typename BilinearForm::discretization_category FDAPDE_COMMA finite_element_tag>&&
         std::is_same_v<typename LinearForm::discretization_category FDAPDE_COMMA finite_element_tag>,
@@ -463,7 +463,7 @@ auto fe_elliptic(const BilinearForm& bilinear_form) {   // implicit homogeneous 
 
 // catalogue of standard elliptic penalizations
 template <typename Functor> struct fe_elliptic_factory {
-    using solver_t = internals::fe_elliptic_solver;
+    using solver_t = internals::fe_ls_elliptic;
     fe_elliptic_factory(const Functor& f) : f_(f) { }
     template <typename Triangulation> auto operator()(const Triangulation& D) const { return f_(D); }
   private:
@@ -513,4 +513,4 @@ auto fe_diffusion_transport_reaction(Diffusion&& K, Transport&& b, Reaction&& c)
 
 }   // namespace fdapde
 
-#endif // __FE_ELLIPTIC_SOLVER_H__
+#endif // __FE_LS_ELLIPTIC_SOLVER_H__

@@ -14,19 +14,19 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __FE_PARABOLIC_SOLVER_H__
-#define __FE_PARABOLIC_SOLVER_H__
+#ifndef __FE_LS_PARABOLIC_SOLVER_H__
+#define __FE_LS_PARABOLIC_SOLVER_H__
 
 #include "header_check.h"
 
 namespace fdapde {
 namespace internals {
 
-template <typename Strategy> class fe_parabolic_solver;
+template <typename Strategy> class fe_ls_parabolic;
 
 // solves \min_{f, \beta} \| W^{1/2} * (y_i - x_i^\top * \beta - f(p_i, t_j)) \|_2^2 +
 // \int_D \int_T (\frac{\partial f}{\partial t} + L(f) - u)^2
-template <> class fe_parabolic_solver<direct_tag> {
+template <> class fe_ls_parabolic<direct_tag> {
    private:
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
@@ -121,11 +121,11 @@ template <> class fe_parabolic_solver<direct_tag> {
     using solution_policy = direct_tag;
     static constexpr int n_lambda = 2;
 
-    fe_parabolic_solver() noexcept = default;
+    fe_ls_parabolic() noexcept = default;
     // construct from formula + geoframe
     template <typename GeoFrame, typename WeightMatrix, typename InfoT>
         requires(is_valid_info_t<InfoT>::value)
-    fe_parabolic_solver(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
+    fe_ls_parabolic(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
         s_(info.ic) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
 	fdapde_assert(gf.n_layers() == 1);
@@ -137,12 +137,12 @@ template <> class fe_parabolic_solver<direct_tag> {
     }
     template <typename GeoFrame, typename InfoT>
         requires(is_valid_info_t<InfoT>::value)
-    fe_parabolic_solver(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
-        fe_parabolic_solver(formula, gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    fe_ls_parabolic(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
+        fe_ls_parabolic(formula, gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
     // construct with no data
     template <typename GeoFrame, typename WeightMatrix, typename InfoT>
         requires(is_valid_info_t<InfoT>::value)
-    fe_parabolic_solver(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : s_(info.ic) {
+    fe_ls_parabolic(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : s_(info.ic) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
 	fdapde_assert(gf.n_layers() == 1);
         n_obs_ = gf[0].rows();
@@ -166,8 +166,8 @@ template <> class fe_parabolic_solver<direct_tag> {
 
     template <typename GeoFrame, typename InfoT>
         requires(is_valid_info_t<InfoT>::value)
-    fe_parabolic_solver(const GeoFrame& gf, InfoT&& info) :
-        fe_parabolic_solver(gf, info, vector_t::Ones(n_locs_).asDiagonal()) { }
+    fe_ls_parabolic(const GeoFrame& gf, InfoT&& info) :
+        fe_ls_parabolic(gf, info, vector_t::Ones(n_locs_).asDiagonal()) { }
 
     template <typename Penalty> void discretize(Penalty&& penalty) {
         fdapde_static_assert(internals::is_valid_penalty_pair_v<Penalty>, INVALID_PENALTY_DESCRIPTION);
@@ -531,7 +531,7 @@ template <> class fe_parabolic_solver<direct_tag> {
     bool W_changed_;
 };
 
-template <> struct fe_parabolic_solver<iterative_tag> {
+template <> struct fe_ls_parabolic<iterative_tag> {
    private:
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
@@ -662,10 +662,10 @@ template <> struct fe_parabolic_solver<iterative_tag> {
     using solution_policy = iterative_tag;
     static constexpr int n_lambda = 2;
 
-    fe_parabolic_solver() noexcept = default;
+    fe_ls_parabolic() noexcept = default;
     template <typename GeoFrame, typename InfoT, typename WeightMatrix>
         requires(is_valid_info_t<InfoT>::value)
-    fe_parabolic_solver(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
+    fe_ls_parabolic(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
         s_(info.ic), tol_(info.tol), max_iter_(info.max_iter) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
 	fdapde_assert(gf.n_layers() == 1);
@@ -677,12 +677,12 @@ template <> struct fe_parabolic_solver<iterative_tag> {
     }
     template <typename GeoFrame, typename InfoT>
         requires(is_valid_info_t<InfoT>::value)
-    fe_parabolic_solver(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
-        fe_parabolic_solver(formula, gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    fe_ls_parabolic(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
+        fe_ls_parabolic(formula, gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
     // construct with no data
     template <typename GeoFrame, typename InfoT, typename WeightMatrix>
         requires(is_valid_info_t<InfoT>::value)
-    fe_parabolic_solver(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
+    fe_ls_parabolic(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
         s_(info.ic), tol_(info.tol), max_iter_(info.max_iter) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
 	fdapde_assert(gf.n_layers() == 1);
@@ -704,8 +704,8 @@ template <> struct fe_parabolic_solver<iterative_tag> {
     }
     template <typename GeoFrame, typename InfoT>
         requires(is_valid_info_t<InfoT>::value)
-    fe_parabolic_solver(const GeoFrame& gf, InfoT&& info) :
-        fe_parabolic_solver(gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    fe_ls_parabolic(const GeoFrame& gf, InfoT&& info) :
+        fe_ls_parabolic(gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
 
     // finite element discretization of spatial dimension
     template <typename Penalty> void discretize(Penalty&& penalty) {
@@ -980,8 +980,8 @@ struct fe_parabolic_penalty {
     using InitialCondition = std::decay_t<InitialCondition_>;
     using Triangulation = std::tuple<typename BilinearForm::Triangulation>;
     using solver_t = std::conditional_t<
-      std::is_same_v<Strategy, direct_tag>, internals::fe_parabolic_solver<direct_tag>,
-      internals::fe_parabolic_solver<iterative_tag>>;
+      std::is_same_v<Strategy, direct_tag>, internals::fe_ls_parabolic<direct_tag>,
+      internals::fe_ls_parabolic<iterative_tag>>;
     fdapde_static_assert(
       std::is_same_v<typename BilinearForm::discretization_category FDAPDE_COMMA finite_element_tag>&&
         std::is_same_v<typename LinearForm::discretization_category FDAPDE_COMMA finite_element_tag>,
@@ -1032,4 +1032,4 @@ fe_parabolic(Strategy s, const Penalty& penalty, const InitialCondition& ic, int
 
 }   // namespace fdapde
 
-#endif // __FE_PARABOLIC_SOLVER_H__
+#endif // __FE_LS_PARABOLIC_SOLVER_H__
