@@ -40,7 +40,7 @@ TEST(de, test_01) {
     auto F = integral(D)(u * v);
     // modeling
     internals::fe_de_elliptic m(data, std::pair{a, F});
-    m.set_tol(1e-15);
+    m.set_llik_tolerance(1e-15);
 
     Eigen::Matrix<double, Dynamic, 1> g_init = read_csv<double>("../data/de/01/f_init.csv").as_matrix().array().log();
     double lambda = 0.1;

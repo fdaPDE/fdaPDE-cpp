@@ -68,23 +68,10 @@ template <typename Scalar> bool almost_equal(const std::vector<Scalar>& op1, std
 }   // namespace test
 }   // namespace fdapde
 
-// #include "src/sr.cpp"
+#include "src/sr.cpp"
 // #include "src/gsr.cpp"
 // #include "src/qsr.cpp"
 #include "src/de.cpp"
-
-
-// #include "src/strpde_test.cpp"
-// #include "src/gsrpde_test.cpp"
-// #include "src/qsrpde_test.cpp"
-// #include "src/gcv_srpde_test.cpp"
-// #include "src/gcv_qsrpde_test.cpp"
-// #include "src/gcv_srpde_newton_test.cpp"
-// #include "src/density_estimation_test.cpp"
-// #include "src/kcv_srpde_test.cpp"
-// #include "src/fpca_test.cpp"
-// #include "src/fpls_test.cpp"
-// #include "src/centering_test.cpp"
 
 int main(int argc, char **argv){
   // start testing

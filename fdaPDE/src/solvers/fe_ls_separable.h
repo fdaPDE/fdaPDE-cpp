@@ -28,35 +28,6 @@ template <typename Strategy> class fe_ls_separable;
 // \int_T \int_D (L_T(f) - u_T)^2
 template <> class fe_ls_separable<direct_tag> {
    private:
-    template <typename Tuple> struct function_space_tuple {
-        using type = decltype([]<size_t... Is_>(std::index_sequence<Is_...>) {
-            return std::make_tuple(typename std::tuple_element_t<Is_, Tuple>::TrialSpace {}...);
-        }(std::make_index_sequence<std::tuple_size_v<Tuple>>()));
-    };
-    // select one between arg1 and arg2 based on condition f
-    template <typename F, typename Arg1, typename Arg2>
-    const auto& select_arg_(F&& f, const Arg1& arg1, const Arg2& arg2) const {
-        if constexpr (f(arg1, arg2)) {
-            return arg1;
-        } else {
-            return arg2;
-        }
-    }
-    template <typename FuncSpace>
-    static constexpr bool is_fe_space_v =
-      std::is_same_v<typename FuncSpace::discretization_category, finite_element_tag>;
-    template <typename Penalty1, typename Penalty2>
-    const auto& fe_penalty_(const Penalty1& penalty1, const Penalty2& penalty2) const {
-        return select_arg_([]<typename Pen1_, typename Pen2_>(const Pen1_&, const Pen2_&) {
-            return  is_fe_space_v<typename std::tuple_element_t<0, Pen1_>::TrialSpace>;
-	  }, penalty1, penalty2);
-    }
-    template <typename Penalty1, typename Penalty2>
-    const auto& bs_penalty_(const Penalty1& penalty1, const Penalty2& penalty2) const {
-        return select_arg_([]<typename Pen1_, typename Pen2_>(const Pen1_&, const Pen2_&) {
-            return !is_fe_space_v<typename std::tuple_element_t<0, Pen1_>::TrialSpace>;
-	  }, penalty1, penalty2);
-    }
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
     using binary_t = BinaryMatrix<Dynamic, Dynamic>;
@@ -70,6 +41,22 @@ template <> class fe_ls_separable<direct_tag> {
     template <typename InfoT> struct is_valid_info_t {
         static constexpr bool value = requires(InfoT info) { info.penalty; };
     };
+
+    template <typename Tuple> struct function_space_tuple {
+        using type = decltype([]<size_t... Is_>(std::index_sequence<Is_...>) {
+            return std::make_tuple(typename std::tuple_element_t<Is_, Tuple>::TrialSpace {}...);
+        }(std::make_index_sequence<std::tuple_size_v<Tuple>>()));
+    };
+    template <typename Penalty1, typename Penalty2>
+    const auto& fe_penalty_(const Penalty1& penalty1, const Penalty2& penalty2) const {
+        return select_one_between(
+          penalty1, penalty2, []() { return  is_fe_space_v<typename std::tuple_element_t<0, Penalty1>::TrialSpace>; });
+    }
+    template <typename Penalty1, typename Penalty2>
+    const auto& bs_penalty_(const Penalty1& penalty1, const Penalty2& penalty2) const {
+        return select_one_between(
+          penalty1, penalty2, []() { return !is_fe_space_v<typename std::tuple_element_t<0, Penalty1>::TrialSpace>; });
+    }
    public:
     using solution_policy = direct_tag;
     static constexpr int n_lambda = 2;
@@ -93,7 +80,7 @@ template <> class fe_ls_separable<direct_tag> {
         D_ = vector_t::Ones(n_locs_).asDiagonal();
         return;
     }
-      // optimized basis evaluation at geoframe
+    // optimized basis evaluation at geoframe
     template <typename GeoFrame> void eval_basis_at_(const GeoFrame& gf) {
         std::array<sparse_matrix_t, 2> Psi__;
         internals::for_each_index_in_pack<n_lambda>([&]<int Ns>() {
@@ -200,7 +187,7 @@ template <> class fe_ls_separable<direct_tag> {
         const auto& bs_penalty = bs_penalty_(penalty1, penalty2);
         // get references to bilinear and linear forms
         auto bilinear_form = std::tie(std::get<0>(fe_penalty), std::get<0>(bs_penalty));
-        auto linear_form = std::tie(std::get<1>(fe_penalty), std::get<1>(bs_penalty));
+        auto linear_form   = std::tie(std::get<1>(fe_penalty), std::get<1>(bs_penalty));
         {
             const BsSpace& bs_space = std::get<bs_space_index>(bilinear_form).trial_space();
             fdapde_assert(bs_space.sobolev_regularity() > 1);
@@ -210,7 +197,7 @@ template <> class fe_ls_separable<direct_tag> {
             auto& space = std::get<Index>(bilinear_form).trial_space();
             // assemble mass matrix
             TrialFunction u(space);
-            TestFunction v(space);
+            TestFunction  v(space);
             R0__[Index] = integral(space.triangulation())(u * v).assemble();
             R1__[Index] = std::get<Index>(bilinear_form).assemble();
         };

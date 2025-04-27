@@ -36,6 +36,8 @@ struct fe_de_elliptic {
         using type = std::conditional_t<EmbedDim == 1, QS1DP7_, std::conditional_t<EmbedDim == 2, QS2DP4_, QS2DP5_>>;
     };
     template <int EmbedDim> using de_quadrature_t = de_quadrature<EmbedDim>::type;
+   public:
+    static constexpr int n_lambda = 1;
     // penalized negative log-likelihood objective functor
     struct llik_t {
         llik_t(fe_de_elliptic& m, double lambda) : m_(std::addressof(m)), lambda_(lambda) { }
@@ -67,8 +69,6 @@ struct fe_de_elliptic {
         double lambda_;
         double tol_ = 1e-5;
     };
-   public:
-    static constexpr int n_lambda = 1;
 
     fe_de_elliptic() noexcept = default;
     template <typename GeoFrame, typename Penalty>
@@ -166,7 +166,7 @@ struct fe_de_elliptic {
         return fit(lambda[0]);
     }
     // modifiers
-    void set_tol(double tol) { tol_ = tol; }
+    void set_llik_tolerance(double tol) { tol_ = tol; }
 
     // observers
     const sparse_matrix_t& mass() const { return R0_; }
