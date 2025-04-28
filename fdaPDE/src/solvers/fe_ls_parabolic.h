@@ -473,6 +473,20 @@ template <> class fe_ls_parabolic<direct_tag> {
         return P(lambda[0], lambda[1]);
     }
     matrix_t P() const { return P(1.0, 1.0); }
+    double ftPf(double lambda_D, double lambda_T) {
+        if (std::array<double, n_lambda> {lambda_D, lambda_T} != lambda_saved_ || W_changed_) {
+            fit(lambda_D, lambda_T);
+        }
+        if (!PT_.has_value()) { PT_ = kronecker(L__, R0__); }
+        return lambda_D * g_.dot(R0_ * g_) + lambda_T * f_.dot((*PT_) * f_);
+    }
+    template <typename LambdaT>
+        requires(internals::is_vector_like_v<LambdaT>)
+    double ftPf(const LambdaT& lambda) {
+        fdapde_assert(lambda.size() == n_lambda);
+        return internals::apply_index_pack<n_lambda>([&]<int... Ns>() { return ftPf(lambda[Ns]...); });
+    }
+    vector_t lmbPsi(const vector_t& rhs) const { return Psi_ * rhs; }
     vector_t fn() const { return Psi_ * f_; }
   
     // observers

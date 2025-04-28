@@ -482,7 +482,7 @@ template <> class fe_ls_separable<direct_tag> {
         if (std::array<double, n_lambda> {lambda_D, lambda_T} != lambda_saved_ || W_changed_) {
             fit(lambda_D, lambda_T);
         }
-        return f_.dot((lambda_D * (*PD_) + lambda_T * (*PT_)) * f_);
+        return f_.dot(P(lambda_D, lambda_T) * f_);
     }
     template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
