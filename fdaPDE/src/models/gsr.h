@@ -123,7 +123,7 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
 	    // compute total deviance
             vector_t mu = model_->distr_.inv_link(model_->fitted());
             double total_deviance = 0;
-            for (int i = 0; i < n_; ++i) { total_deviance += model_->distr_.deviance(mu[i], model_->response()(i, 0)); }
+            for (int i = 0; i < n_; ++i) { total_deviance += model_->distr_.deviance(mu[i], model_->y_(i, 0)); }
             return (n_ / std::pow(dor, 2)) * total_deviance;
         }
        private:

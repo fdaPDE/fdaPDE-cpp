@@ -354,3 +354,88 @@ TEST(sr, test_14) {
     
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/14/field.mtx"));
 }
+
+// test on network (test_4-SR-PDE_no_cov_network.R)
+TEST(sr, test_15) {
+    // geometry
+    Triangulation<1, 2> D = read_mesh<1, 2>("../data/mesh/network");
+    // data
+    GeoFrame data(D);
+    auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
+    l1.load_csv<double>("../data/sr/15/response.csv");
+    // modeling
+    SRPDE m("y ~ f", data, fe_laplace());
+    m.fit(/* lambda = */ 1e-4 / data[0].rows());
+
+    EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/15/field.mtx"));
+}
+
+// test_5-SR-PDE_with_cov_network.R
+TEST(sr, test_16) {
+    // geometry
+    Triangulation<1, 2> D = read_mesh<1, 2>("../data/mesh/network");
+    // data
+    GeoFrame data(D);
+    auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
+    l1.load_csv<double>("../data/sr/16/response.csv");
+    l1.load_csv<double>("../data/sr/16/design_matrix.csv");
+    
+    // modeling
+    SRPDE m("y ~ x1 + f", data, fe_laplace());
+    m.fit(/* lambda = */ 1e-4 / data[0].rows());
+
+    EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/16/field.mtx"));
+    EXPECT_TRUE(almost_equal<double>(m.beta(), "../data/sr/16/beta.mtx"));    
+}
+
+// test_10-SR-PDE_no_cov_3d.R
+TEST(sr, test_17) {
+    Triangulation<3, 3> D = read_mesh<3, 3>("../data/mesh/unit_sphere");
+
+    GeoFrame data(D);
+    auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
+    l1.load_csv<double>("../data/sr/17/response.csv");
+    // modeling
+    SRPDE m("y ~ f", data, fe_laplace());
+    m.fit(1e-4 / data[0].rows());
+
+    EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/17/field.mtx"));
+}
+
+// test_11-SR-PDE_no_cov_manifold
+TEST(sr, test_18) {
+    Triangulation<2, 3> D = read_mesh<2, 3>("../data/mesh/surface_horseshoe");
+    // data
+    GeoFrame data(D);
+    auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
+    l1.load_csv<double>("../data/sr/18/response.csv");
+    // modeling
+    SRPDE m("y ~ f", data, fe_laplace());
+    m.fit(1e-2 / data[0].rows());
+
+    EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/18/field.mtx"));
+}
+
+// test_12-tSR-PDE_network.R
+TEST(sr, test_19) {
+    Triangulation<1, 2> D = read_mesh<1, 2>("../data/mesh/network");
+    Triangulation<1, 1> T = Triangulation<1, 1>::UnitInterval(6);
+    // data
+    GeoFrame data(D, T);
+    auto& l1 = data.insert_scalar_layer<POINT, POINT>("l1", std::tuple {MESH_NODES, MESH_NODES});
+    l1.load_csv<double>("../data/sr/19/response.csv");
+    l1.load_csv<double>("../data/sr/19/design_matrix.csv");
+    // modeling
+    BsSpace Vh(T, 3);
+    TrialFunction f(Vh);
+    TestFunction  v(Vh);
+    auto a = integral(T)(dxx(f) * dxx(v));
+    ScalarField<1, decltype([](const Eigen::Matrix<double, 1, 1>& p) { return 0; })> u;
+    auto F = integral(T)(u * v);
+
+    SRPDE m("y ~ x1 + x2 + f", data, fe_separable(Direct, fe_laplace(), std::pair {a, F}));
+    m.fit(1e-4 / data[0].rows(), 1e-4 / data[0].rows());
+
+    EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/19/field.mtx"));
+    EXPECT_TRUE(almost_equal<double>(m.beta(), "../data/sr/19/beta.mtx"));
+}
