@@ -365,6 +365,9 @@ struct fe_ls_elliptic {
         return P(lambda[0]);
     }
     matrix_t P() const { return P(1.0); }
+    template <typename MassFactorization> matrix_t P(double lambda, const MassFactorization& invR0) const {
+        return lambda * R1_.transpose() * invR0.solve(R1_);
+    }
     // efficient evaluation of f^\top * P * f = g^\top * R0 * g
     double ftPf(double lambda) {
         if (lambda_saved_.value() != lambda || W_changed_) { fit(lambda); }
@@ -379,6 +382,7 @@ struct fe_ls_elliptic {
     // left multiplication by \Psi
     vector_t lmbPsi(const vector_t& rhs) const { return Psi_ * rhs; }
     vector_t fn() const { return Psi_ * f_; }
+    matrix_t Q() const { return internals::lmbQ(W_, X_, invXtWX_, matrix_t::Identity(n_locs_, n_locs_)); }
 
     // observers
     int n_dofs() const { return n_dofs_; }
@@ -392,6 +396,11 @@ struct fe_ls_elliptic {
     const vector_t& misfit() const { return g_; }
     const matrix_t& design_matrix() const { return X_; }
     const vector_t& response() const { return y_; }
+    const sparse_matrix_t& weights() const { return W_; }
+    double lambda() const { return *lambda_saved_; }
+  
+    const matrix_t& U() const { return U_; }
+    const matrix_t& V() const { return V_; }
    protected:
     std::optional<double> lambda_saved_ = -1;
     sparse_solver_t invA_;

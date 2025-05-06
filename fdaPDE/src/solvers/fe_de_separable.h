@@ -50,18 +50,17 @@ struct fe_de_separable {
   
     // high-order quadrature for integration of constraint \int_D (e^g)
     template <int EmbedDim> struct de_fe_quadrature {
-        using type = std::conditional_t<EmbedDim == 1, QS1DP7_, std::conditional_t<EmbedDim == 2, QS2DP4_, QS2DP5_>>;
+        using type = std::conditional_t<EmbedDim == 1, QS1DP7_, std::conditional_t<EmbedDim == 2, QS2DP4_, QS3DP5_>>;
     };
     template <int EmbedDim> using de_fe_quadrature_t = de_fe_quadrature<EmbedDim>::type;
     using de_bs_quadrature_t = QGL1DP7_;
     template <typename InfoT> struct is_valid_info_t {
         static constexpr bool value = requires(InfoT info) { info.penalty; };
     };
-    // injects penalty tuple into discretize()
-    template <typename GeoFrame, typename Penalty> void discretize_loop_(const GeoFrame& gf, Penalty&& penalty) {
+    template <typename GeoFrame, typename Penalty> auto tuplify_penalty_(const GeoFrame& gf, Penalty&& penalty) {
         using Penalty_ = std::decay_t<Penalty>;
-        internals::apply_index_pack<n_lambda>([&]<int... Ns_>() {
-            discretize([&]() {
+        return internals::apply_index_pack<n_lambda>([&]<int... Ns_>() {
+            return std::make_tuple([&]() {
                 using T = std::tuple_element_t<Ns_, Penalty_>;
                 if constexpr (requires(T t) { t.get(); }) {
                     return std::get<Ns_>(penalty).get();
@@ -74,20 +73,29 @@ struct fe_de_separable {
                 }
             }()...);
         });
-	return;
     }
-    // evaluates reference basis system at quadrature nodes
+    // injects penalty tuple into discretize()
+    template <typename GeoFrame, typename Penalty> void discretize_loop_(const GeoFrame& gf, Penalty&& penalty) {
+        using Penalty_ = std::decay_t<Penalty>;
+        auto pen_tuple = tuplify_penalty_(gf, penalty);
+        internals::apply_index_pack<n_lambda>([&]<int... Ns_>() { discretize(std::get<Ns_>(pen_tuple)...); });
+        return;
+    }
+    // evaluates reference basis system at quadrature nodes (only active dofs considered)
     template <typename FuncSpace, typename Quadrature>
     matrix_t eval_shape_values_at_quadrature_(const FuncSpace& func_space, const Quadrature& quad) const {
         int n_quad_nodes = quad.order;
-	int n_shape_functions = func_space.n_shape_functions();
-	matrix_t m(n_quad_nodes, n_shape_functions);
+        int n_shape_functions = func_space.n_shape_functions();
+        int n_active_dofs = func_space.dof_handler().n_dofs_per_cell();
+        matrix_t m(n_quad_nodes, n_active_dofs);
         for (int i = 0; i < n_quad_nodes; ++i) {
+            int h = 0;
             for (int j = 0; j < n_shape_functions; ++j) {
-                m(i, j) = func_space.eval_shape_value(j, quad.nodes.row(i));
+                double v = func_space.eval_shape_value(j, quad.nodes.row(i));
+                if (v != 0) { m(i, h++) = v; }
             }
         }
-	return m;
+        return m;
     }
    public:
     static constexpr int n_lambda = 2;
@@ -105,7 +113,8 @@ struct fe_de_separable {
         // gradient functor
         std::function<vector_t(const vector_t&)> derive() {
             return [this, dllik = vector_t(-m_->Psi_.transpose() * vector_t::Ones(m_->n_obs_))](const vector_t& g) {
-                return vector_t(dllik + m_->n_obs_ * m_->grad_int_exp_(g) + 2 * lambda_ * (m_->PD_ + m_->PT_) * g);
+                return vector_t(
+                  dllik + m_->n_obs_ * m_->grad_int_exp_(g) + 2 * (lambda_[0] * m_->PD_ + lambda_[1] * m_->PT_) * g);
             };
         }
         // injected optimization stopping criterion
@@ -147,8 +156,14 @@ struct fe_de_separable {
         constexpr int bs_space_index = is_fe_space_v<FS1> ? 1 : 0;
         using BsSpace = std::tuple_element_t<bs_space_index, FunctionSpaces>;
         // enforce a space-time (or SpaceMajor) expansion: index 0 refer to the spatial finite element discretization
-        const auto& fe_penalty = fe_penalty_(penalty1, penalty2);
-        const auto& bs_penalty = bs_penalty_(penalty1, penalty2);
+        const auto& fe_penalty =
+          internals::apply_index_pack<n_lambda>([&, penalty = tuplify_penalty_(gf, info.penalty)]<int... Ns_>() {
+              return fe_penalty_(std::get<Ns_>(penalty)...);
+          });
+        const auto& bs_penalty =
+          internals::apply_index_pack<n_lambda>([&, penalty = tuplify_penalty_(gf, info.penalty)]<int... Ns_>() {
+              return bs_penalty_(std::get<Ns_>(penalty)...);
+          });
         auto bilinear_form = std::tie(std::get<0>(fe_penalty), std::get<0>(bs_penalty));
         auto linear_form   = std::tie(std::get<1>(fe_penalty), std::get<1>(bs_penalty));
 	// function spaces
@@ -166,7 +181,7 @@ struct fe_de_separable {
           geo_index_cast<1 FDAPDE_COMMA POINT>(gf[0]).coordinates().cols() == 1);
         n_obs_ = gf[0].rows();
 
-        discretize_loop_(info.penalty);
+        discretize_loop_(gf, info.penalty);
         // eval reference basis at quadrature nodes, store de_quadrature weights
         de_fe_quadrature_t<fe_embed_dim> fe_quad_rule;
         de_bs_quadrature_t bs_quad_rule;
@@ -184,8 +199,8 @@ struct fe_de_separable {
             n_locs__[Ns] = spatial_index.rows();
             int n_dofs = std::get<Ns>(bilinear_form).n_dofs();
             if (spatial_index.points_at_dofs()) {
-                Psi__[Ns].resize(n_locs, n_dofs);
-                Psi__[NS].setIdentity();
+                Psi__[Ns].resize(n_locs__[Ns], n_dofs);
+                Psi__[Ns].setIdentity();
             } else {
                 Psi__[Ns] = point_eval_[Ns](spatial_index.coordinates());
             }
@@ -204,28 +219,25 @@ struct fe_de_separable {
         }
         Psi_.setFromTriplets(triplet_list.begin(), triplet_list.end());
         Psi_.makeCompressed();
-	// build tensorized dof handler
-	TpSpace Vh(fe_space, bs_space);
-	const auto& dof_handler = Vh.dof_handler();
         // store handle for approximation of \int_T \int_D (e^g)
-        int_exp_ = [&](const vector_t& g) {
+        int_exp_ = [&, Vh = TpSpace(fe_space, bs_space)](const vector_t& g) {
             double result = 0;
             for (auto it = D.cells_begin(); it != D.cells_end(); ++it) {
-                for (auto jt = T.cells_begin(); jt != T.cells_end(); ++jt) {
+	        for (auto jt = T.cells_begin(); jt != T.cells_end(); ++jt) {
                     result +=
-                      w_.dot((PsiQuad_ * g(dof_handler.active_dofs(it->id(), jt->id()))).array().exp().matrix()) *
+                      w_.dot((PsiQuad_ * g(Vh.dof_handler().active_dofs(it->id(), jt->id()))).array().exp().matrix()) *
                       it->measure() * (0.5 * jt->measure());
                 }
             }
             return result;
         };
         // store handle for computation of \nabla_g(\int_T \int_D (e^g))
-        grad_int_exp_ = [&](const vector_t& g) {
+        grad_int_exp_ = [&, Vh = TpSpace(fe_space, bs_space)](const vector_t& g) {
             vector_t grad = vector_t::Zero(g.rows());
 	    std::vector<int> dofs;
             for (auto it = D.cells_begin(); it != D.cells_end(); ++it) {
                 for (auto jt = T.cells_begin(); jt != T.cells_end(); ++jt) {
-                    dofs = dof_handler.active_dofs(it->id(), jt->id());
+                    dofs = Vh.dof_handler().active_dofs(it->id(), jt->id());
                     grad(dofs) += PsiQuad_.transpose() *
                                   ((PsiQuad_ * g(dofs)).array().exp()).cwiseProduct(w_.array()).matrix() *
                                   it->measure() * (0.5 * jt->measure());
@@ -297,15 +309,16 @@ struct fe_de_separable {
     }
   
     // main fit entry point
-    template <typename Optimizer> const vector_t& fit(double lambda, const vector_t& g_init, Optimizer&& opt) {
-        g_ = opt.optimize(llik_t(*this, lambda, tol_), g_init);
+    template <typename Optimizer>
+    const vector_t& fit(double lambda_D, double lambda_T, const vector_t& g_init, Optimizer&& opt) {
+        g_ = opt.optimize(llik_t(*this, std::array {lambda_D, lambda_T}, tol_), g_init);
         return g_;
     }
     template <typename Optimizer, typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
     const vector_t& fit(LambdaT&& lambda, const vector_t& g_init, Optimizer&& opt) {
         fdapde_assert(lambda.size() == n_lambda);
-        return fit(lambda[0]);
+        return fit(lambda[0], lambda[1]);
     }
     // modifiers
     void set_tol(double tol) { tol_ = tol; }
@@ -339,7 +352,7 @@ struct fe_de_separable {
     matrix_t PT_;
     vector_t g_;
     // basis system evaluation handle
-    std::function<sparse_matrix_t(const matrix_t& locs)> point_eval_;
+    std::array<std::function<sparse_matrix_t(const matrix_t& locs)>, 2> point_eval_;
 
     std::function<double(const vector_t&)> int_exp_;          // \int exp(g)
     std::function<vector_t(const vector_t&)> grad_int_exp_;   // \nabla_g \int exp(g)

@@ -121,7 +121,122 @@ template <typename VariationalSolver> class SRPDE {
     gcv_t gcv(const typename gcv_t::edf_cache_t& edf_cache, int r, int seed) { return gcv_t(this, edf_cache, r, seed); }
 
     // inference
-  
+    class wald_t {
+        using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
+        using vector_t = Eigen::Matrix<double, Dynamic, 1>;
+
+        template <typename Distribution>
+        std::pair<vector_t, vector_t> confint_beta_(double alpha, const matrix_t& C, Distribution&& distr) const {
+            fdapde_assert(C.cols() == q_);
+            int p = C.rows();
+            double q = distr.quantile(alpha);
+            vector_t a = C * m_->beta();
+            vector_t b(p);
+            for (int i = 0; i < p; ++i) { b[i] = std::sqrt(q * (C.row(i) * (*V_) * C.row(i).transpose()).value()); }
+            // build confidence interval
+            return std::make_pair(a - b, a + b);
+        }
+       public:
+        wald_t() noexcept = default;
+        wald_t(const SRPDE* m, bool approx) : m_(m), q_(m->n_covs()) {
+            // compute model's variance-covariance matrix
+            const auto& s = m_->solver_;
+            const matrix_t& X = s.design_matrix();
+            const Eigen::SparseMatrix<double>& W = s.weights();
+
+            matrix_t XtWX = X.transpose() * W * X;
+            matrix_t invT;
+            if (approx) {
+                Eigen::SparseMatrix<double> E = s.PsiNA().transpose() * W * s.PsiNA() + s.P(s.lambda(), FSPAI(s.mass()));
+                FSPAI invE(E);   // compute approximate inverse
+                int n_dofs = s.n_dofs();
+
+                invT = woodbury_system_solve(
+                  invE, s.U().topRows(n_dofs), -XtWX, s.V().leftCols(n_dofs), matrix_t::Identity(n_dofs, n_dofs));
+            } else {
+                matrix_t E = s.PsiNA().transpose() * W * s.PsiNA() + s.P(s.lambda());
+                Eigen::PartialPivLU<matrix_t> invE(E);
+                int n_dofs = s.n_dofs();
+
+                invT = woodbury_system_solve(
+                  invE, s.U().topRows(n_dofs), -XtWX, s.V().leftCols(n_dofs), matrix_t::Identity(n_dofs, n_dofs));
+            }
+            // request matrix Q = W(I - H)
+            matrix_t Q = s.Q();
+            matrix_t S = s.PsiNA() * invT * s.PsiNA().transpose() * Q;
+
+            // compute variance estimator \sigma^2
+            vector_t eps = s.response() - m_->fitted();
+            matrix_t invSigma = XtWX.inverse();
+            matrix_t H = X * invSigma * X.transpose() * W;
+
+            double sigma_squared = (eps.transpose() * W * eps).value() / (m_->n_obs() - q_ - S.trace());
+            matrix_t e = (invSigma * X.transpose() * W * S).transpose();
+            Eigen::SparseLU<Eigen::SparseMatrix<double>> invW(W);
+            V_ = sigma_squared * (invSigma + e.transpose() * invW.solve(e));
+        }
+
+        // parametric confidence intervals
+        std::pair<vector_t, vector_t> confint_sim_beta(double alpha, const matrix_t& C) const {
+            return confint_beta_(1 - alpha, C, chi_squared_distribution(C.rows()));
+        }
+        auto confint_sim_beta(double alpha) const { return confint_sim_beta(alpha, matrix_t::Identity(q_, q_)); }
+        std::pair<vector_t, vector_t> confint_bon_beta(double alpha, const matrix_t& C) const {
+            return confint_beta_(1 - alpha, C, normal_distribution(1 - alpha / (2 * C.rows())));
+        }
+        auto confint_bon_beta(double alpha) const { return confint_bon_beta(alpha, matrix_t::Identity(q_, q_)); }
+        std::pair<vector_t, vector_t> confint_oat_beta(double alpha, const matrix_t& C) const {
+            return confint_beta_(1 - alpha, C, normal_distribution(1 - alpha / 2));
+        }
+        auto confint_oat_beta(double alpha) const { return confint_oat_beta(alpha, matrix_t::Identity(q_, q_)); }
+        // parametric testing
+        template <typename BetaT>
+            requires(internals::is_vector_like_v<BetaT>)
+        double test_sim_beta(const BetaT& beta0, const matrix_t& C) const {
+            fdapde_assert(beta0.size() == q_);
+            vector_t beta0_(q_);
+            for (int i = 0; i < q_; ++i) { beta0_[i] = beta0[i]; }
+            matrix_t Sigma = C * (*V_) * C.transpose();
+            Eigen::PartialPivLU<matrix_t> invSigma(Sigma);
+            double stat = ((C * m_->beta() - beta0_).transpose() * invSigma.solve(C * m_->beta() - beta0_)).value();
+            return 1.0 - chi_squared_distribution(q_).cdf(stat);   // return p-value
+        }
+        template <typename BetaT> double test_sim_beta(const BetaT& beta0) const {
+            return test_sim_beta(beta0, matrix_t::Identity(q_, q_));
+        }
+        double test_sim_beta(const std::initializer_list<double>& beta0, const matrix_t& C) const {
+            return test_sim_beta(std::vector<double> {beta0.begin(), beta0.end()}, C);
+        }
+        double test_sim_beta(const std::initializer_list<double>& beta0) const {
+            return test_sim_beta(std::vector<double> {beta0.begin(), beta0.end()}, matrix_t::Identity(q_, q_));
+        }
+        template <typename BetaT>
+            requires(internals::is_vector_like_v<BetaT>)
+        vector_t test_oat_beta(const BetaT& beta0, const matrix_t& C) const {
+            fdapde_assert(beta0.size() == q_);
+            vector_t pvalue(q_);
+            for (int i = 0; i < q_; ++i) {
+                double sigma = (C.row(i) * (*V_) * C.col(i)).value();
+                double stat = (C.row(i).dot(m_->beta()) - beta0[i]) / std::sqrt(sigma);
+                pvalue[i] = 2 * normal_distribution(0, 1).cdf(-std::abs(stat));   // compute p-value
+            }
+            return pvalue;
+        }
+        template <typename BetaT> vector_t test_oat_beta(const BetaT& beta0) const {
+            return test_oat_beta(beta0, matrix_t::Identity(q_, q_));
+        }
+        vector_t test_oat_beta(const std::initializer_list<double>& beta0, const matrix_t& C) const {
+            return test_oat_beta(std::vector<double> {beta0.begin(), beta0.end()}, C);
+        }
+        vector_t test_oat_beta(const std::initializer_list<double>& beta0) const {
+            return test_oat_beta(std::vector<double> {beta0.begin(), beta0.end()}, matrix_t::Identity(q_, q_));
+        }
+       private:
+        mutable std::optional<matrix_t> V_;
+        const SRPDE* m_;
+        int q_;
+    };
+    wald_t wald(bool approx = true) const { return wald_t(this, approx); }
    private:
     solver_t solver_;
     int n_obs_ = 0, n_covs_ = 0;

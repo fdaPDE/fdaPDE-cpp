@@ -33,7 +33,7 @@ struct fe_de_elliptic {
     static constexpr bool is_valid_data_locs_descriptor_v = std::is_same_v<DataLocs, matrix_t>;
     // high-order quadrature for integration of constraint \int_D (e^g)
     template <int EmbedDim> struct de_quadrature {
-        using type = std::conditional_t<EmbedDim == 1, QS1DP7_, std::conditional_t<EmbedDim == 2, QS2DP4_, QS2DP5_>>;
+        using type = std::conditional_t<EmbedDim == 1, QS1DP7_, std::conditional_t<EmbedDim == 2, QS2DP4_, QS3DP5_>>;
     };
     template <int EmbedDim> using de_quadrature_t = de_quadrature<EmbedDim>::type;
    public:

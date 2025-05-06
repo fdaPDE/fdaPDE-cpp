@@ -33,12 +33,14 @@ struct iterative_tag  { } Iterative;
   
 }   // namespace fdapde
 
+// least square solvers
 #include "src/solvers/fe_ls_elliptic.h"
 #include "src/solvers/fe_ls_separable.h"
 #include "src/solvers/fe_ls_parabolic.h"
 
+// density estimation solvers
 #include "src/solvers/fe_de_elliptic.h"
-
+#include "src/solvers/fe_de_separable.h"
 
 // clang-format on
 
