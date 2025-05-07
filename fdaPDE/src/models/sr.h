@@ -26,6 +26,7 @@ template <typename VariationalSolver> class SRPDE {
     using solver_t = std::decay_t<VariationalSolver>;
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
+    using sparse_matrix_t = Eigen::SparseMatrix<double>;
     static constexpr int n_lambda = solver_t::n_lambda;
    public:
     SRPDE() noexcept = default;
@@ -57,6 +58,8 @@ template <typename VariationalSolver> class SRPDE {
     int n_obs() const { return n_obs_; }
     double edf(int r = 100, int seed = random_seed) { return solver_.edf(r, seed); }
     const vector_t& response() const { return solver_.response(); }
+    const matrix_t& design_matrix() const { return solver_.design_matrix(); }
+    const sparse_matrix_t& weights() const { return solver_.weights(); }
     vector_t fitted() const {
         vector_t fitted_ = solver_.fn();
         if constexpr (requires(solver_t s) { s.design_matrix(); }) {
@@ -124,79 +127,110 @@ template <typename VariationalSolver> class SRPDE {
     class wald_t {
         using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
         using vector_t = Eigen::Matrix<double, Dynamic, 1>;
+        using sparse_matrix_t = Eigen::SparseMatrix<double>;
 
+        // compute model's variance-covariance matrix for the parametric component
+        void compute_Vbeta_() const {
+            const matrix_t& X = m_->design_matrix();
+            const sparse_matrix_t& W = m_->weights();
+
+            matrix_t invSigma = XtWX_.inverse();
+            matrix_t H = X * invSigma * X.transpose() * W;
+
+            matrix_t e = (invSigma * X.transpose() * W * S_).transpose();
+            Eigen::SparseLU<sparse_matrix_t> invW(W);
+            Vbeta_ = sigma_squared_ * (invSigma + e.transpose() * invW.solve(e));
+	    return;
+        }
         template <typename Distribution>
         std::pair<vector_t, vector_t> confint_beta_(double alpha, const matrix_t& C, Distribution&& distr) const {
             fdapde_assert(C.cols() == q_);
+            if (!Vbeta_.has_value()) { compute_Vbeta_(); }
             int p = C.rows();
             double q = distr.quantile(alpha);
             vector_t a = C * m_->beta();
             vector_t b(p);
-            for (int i = 0; i < p; ++i) { b[i] = std::sqrt(q * (C.row(i) * (*V_) * C.row(i).transpose()).value()); }
+            for (int i = 0; i < p; ++i) { b[i] = std::sqrt(q * (C.row(i) * (*Vbeta_) * C.row(i).transpose()).value()); }
             // build confidence interval
             return std::make_pair(a - b, a + b);
+        }
+        // compute model's variance-covariance matrix for the non-parametric component      
+        void compute_Vf_() const {
+            const auto& s = m_->solver_;
+            matrix_t e = invT_ * s.PsiNA().transpose();
+            Vf_ = sigma_squared_ * e * Q_ * e.transpose();
+	    return;
+        }
+        template <typename Distribution>
+        std::pair<vector_t, vector_t> confint_f_(double alpha, const sparse_matrix_t& Psi, Distribution&& distr) const {
+            const auto& s = m_->solver_;
+            fdapde_assert(Psi.rows() > 0 && Psi.cols() == s.n_dofs());
+            if (!Vf_.has_value()) { compute_Vf_(); }
+	    sparse_matrix_t Vf__ = Psi * (*Vf_) * Psi.transpose();
+	    double q = distr.quantile(alpha);
+	    vector_t a = Psi * s.f();
+	    vector_t b = quantile * (Vf__.diagonal().array()).sqrt();
+            // build confidence interval
+            return std::make_pair(a - b, a + b);    
         }
        public:
         wald_t() noexcept = default;
         wald_t(const SRPDE* m, bool approx) : m_(m), q_(m->n_covs()) {
-            // compute model's variance-covariance matrix
             const auto& s = m_->solver_;
-            const matrix_t& X = s.design_matrix();
-            const Eigen::SparseMatrix<double>& W = s.weights();
+            const matrix_t& X = m_->design_matrix();
+            const sparse_matrix_t& W = m_->weights();
+            XtWX_ = X.transpose() * W * X;
 
-            matrix_t XtWX = X.transpose() * W * X;
-            matrix_t invT;
             if (approx) {
-                Eigen::SparseMatrix<double> E = s.PsiNA().transpose() * W * s.PsiNA() + s.P(s.lambda(), FSPAI(s.mass()));
+                sparse_matrix_t E =
+                  s.PsiNA().transpose() * W * s.PsiNA() + s.P(s.lambda(), FSPAI(s.mass()));
                 FSPAI invE(E);   // compute approximate inverse
                 int n_dofs = s.n_dofs();
 
-                invT = woodbury_system_solve(
-                  invE, s.U().topRows(n_dofs), -XtWX, s.V().leftCols(n_dofs), matrix_t::Identity(n_dofs, n_dofs));
+                invT_ = woodbury_system_solve(
+                  invE, s.U().topRows(n_dofs), -XtWX_, s.V().leftCols(n_dofs), matrix_t::Identity(n_dofs, n_dofs));
             } else {
                 matrix_t E = s.PsiNA().transpose() * W * s.PsiNA() + s.P(s.lambda());
                 Eigen::PartialPivLU<matrix_t> invE(E);
                 int n_dofs = s.n_dofs();
 
-                invT = woodbury_system_solve(
-                  invE, s.U().topRows(n_dofs), -XtWX, s.V().leftCols(n_dofs), matrix_t::Identity(n_dofs, n_dofs));
+                invT_ = woodbury_system_solve(
+                  invE, s.U().topRows(n_dofs), -XtWX_, s.V().leftCols(n_dofs), matrix_t::Identity(n_dofs, n_dofs));
             }
-            // request matrix Q = W(I - H)
-            matrix_t Q = s.Q();
-            matrix_t S = s.PsiNA() * invT * s.PsiNA().transpose() * Q;
+            Q_ = s.Q();   // request matrix Q = W(I - H)
+            S_ = s.PsiNA() * invT_ * s.PsiNA().transpose() * Q_;
 
             // compute variance estimator \sigma^2
             vector_t eps = s.response() - m_->fitted();
-            matrix_t invSigma = XtWX.inverse();
-            matrix_t H = X * invSigma * X.transpose() * W;
-
-            double sigma_squared = (eps.transpose() * W * eps).value() / (m_->n_obs() - q_ - S.trace());
-            matrix_t e = (invSigma * X.transpose() * W * S).transpose();
-            Eigen::SparseLU<Eigen::SparseMatrix<double>> invW(W);
-            V_ = sigma_squared * (invSigma + e.transpose() * invW.solve(e));
+            sigma_squared_ = (eps.transpose() * W * eps).value() / (m_->n_obs() - q_ - S_.trace());
         }
 
         // parametric confidence intervals
+        // simultaneous
         std::pair<vector_t, vector_t> confint_sim_beta(double alpha, const matrix_t& C) const {
             return confint_beta_(1 - alpha, C, chi_squared_distribution(C.rows()));
         }
         auto confint_sim_beta(double alpha) const { return confint_sim_beta(alpha, matrix_t::Identity(q_, q_)); }
+        // bonferroni corrected
         std::pair<vector_t, vector_t> confint_bon_beta(double alpha, const matrix_t& C) const {
             return confint_beta_(1 - alpha, C, normal_distribution(1 - alpha / (2 * C.rows())));
         }
         auto confint_bon_beta(double alpha) const { return confint_bon_beta(alpha, matrix_t::Identity(q_, q_)); }
+        // one-at-a-time
         std::pair<vector_t, vector_t> confint_oat_beta(double alpha, const matrix_t& C) const {
             return confint_beta_(1 - alpha, C, normal_distribution(1 - alpha / 2));
         }
         auto confint_oat_beta(double alpha) const { return confint_oat_beta(alpha, matrix_t::Identity(q_, q_)); }
         // parametric testing
+        // simultaneous
         template <typename BetaT>
             requires(internals::is_vector_like_v<BetaT>)
         double test_sim_beta(const BetaT& beta0, const matrix_t& C) const {
             fdapde_assert(beta0.size() == q_);
+            if (!Vbeta_.has_value()) { compute_Vbeta_(); }
             vector_t beta0_(q_);
             for (int i = 0; i < q_; ++i) { beta0_[i] = beta0[i]; }
-            matrix_t Sigma = C * (*V_) * C.transpose();
+            matrix_t Sigma = C * (*Vbeta_) * C.transpose();
             Eigen::PartialPivLU<matrix_t> invSigma(Sigma);
             double stat = ((C * m_->beta() - beta0_).transpose() * invSigma.solve(C * m_->beta() - beta0_)).value();
             return 1.0 - chi_squared_distribution(q_).cdf(stat);   // return p-value
@@ -205,18 +239,20 @@ template <typename VariationalSolver> class SRPDE {
             return test_sim_beta(beta0, matrix_t::Identity(q_, q_));
         }
         double test_sim_beta(const std::initializer_list<double>& beta0, const matrix_t& C) const {
-            return test_sim_beta(std::vector<double> {beta0.begin(), beta0.end()}, C);
+	  return test_sim_beta(std::vector<double> {beta0.begin(), beta0.end()}, C);
         }
         double test_sim_beta(const std::initializer_list<double>& beta0) const {
             return test_sim_beta(std::vector<double> {beta0.begin(), beta0.end()}, matrix_t::Identity(q_, q_));
         }
+        // one-at-a-time
         template <typename BetaT>
             requires(internals::is_vector_like_v<BetaT>)
         vector_t test_oat_beta(const BetaT& beta0, const matrix_t& C) const {
             fdapde_assert(beta0.size() == q_);
+            if (!Vbeta_.has_value()) { compute_Vbeta_(); }
             vector_t pvalue(q_);
             for (int i = 0; i < q_; ++i) {
-                double sigma = (C.row(i) * (*V_) * C.col(i)).value();
+                double sigma = (C.row(i) * (*Vbeta_) * C.col(i)).value();
                 double stat = (C.row(i).dot(m_->beta()) - beta0[i]) / std::sqrt(sigma);
                 pvalue[i] = 2 * normal_distribution(0, 1).cdf(-std::abs(stat));   // compute p-value
             }
@@ -231,12 +267,59 @@ template <typename VariationalSolver> class SRPDE {
         vector_t test_oat_beta(const std::initializer_list<double>& beta0) const {
             return test_oat_beta(std::vector<double> {beta0.begin(), beta0.end()}, matrix_t::Identity(q_, q_));
         }
+
+        // here we should check how to pass a new set of data locations, since request the user to provide a Psi
+        // is not so user-friendly (provide a matrix of locations)
+
+        // non-parametric confidence interval
+        std::pair<vector_t, vector_t> confint_oat_f(double alpha, const sparse_matrix_t& Psi) const {
+            return confint_f_(1 - alpha, Psi, normal_distribution(1 - alpha / 2));
+        }
+        auto confint_oat_f(double alpha) const { return confint_f_(alpha, m_->solver.PsiNA()); }
+
+        // non-parametric testing
+        double test_oat_f(const vector_t& f0, const sparse_matrix_t& Psi, double tol = 1e-4) const {
+            fdapde_assert(f0.rows() == Psi.rows() && Psi.cols() == s.n_dofs());
+            // compute pseudoinverse of matrix Vf_
+            if (!Vf_.has_value()) { compute_Vf_(); }
+            if (!invVf_.has_value()) {   // compute Vf pseudoinverse
+                Eigen::SelfAdjointEigenSolver<matrix_t> eigenVf(Vf_);
+                // discard eigenvalues smaller than tol (search first eigenvalues greater than tol)
+                vector_t eigval = eigenVf.eigenvalues();
+                int i = 0, n = eigval.size();
+                for (; i < n && eigval[i] > tol; ++i);
+                // build (rank r) pseudoinverse as V_r * D_r^{-1} * V_r^\top (V_r: eigenvectors, D_r: eigenvalues)
+                int r = n - i + 1;
+                vector_t inv_eigval = eigval.tail(r).array().inverse();
+                auto eigvec = eigenVf.eigenvectors().rightCols(r);
+                invVf_ = eigvec * inv_eigval.asDiagonal() * eigvec.transpose();
+            }
+            vector_t fn = Psi * s.f();
+            double stat = (fn - f0).transpose() * (*invVf_) * (fn - f0);
+            return 1.0 - chi_squared_distribution(rank).cdf(stat);
+        }
+        double test_oat_f(const vector_t& f0, double tol = 1e-4) const {
+            return test_oat_f(f0, m_->solver_.PsiNA(), tol);
+        }
        private:
-        mutable std::optional<matrix_t> V_;
+        matrix_t invT_;   // n_dofs x n_dofs matrix (\Psi^\top * Q * \Psi + P_{\lambda})^{-1}
+        mutable std::optional<matrix_t> Vbeta_;
+        // non-parametric testing
+        mutable std::optional<matrix_t> Vf_;
+        mutable std::optional<matrix_t> invVf_;
+
         const SRPDE* m_;
         int q_;
+        matrix_t XtWX_;   // q x q matrix X^\top * W * X
+        double sigma_squared_;
+        matrix_t Q_;
+        matrix_t S_;
+
+        // if we estimate the trace of S stochastically, and use lmbQ, we never need to assemble and store S_ nor Q_
     };
     wald_t wald(bool approx = true) const { return wald_t(this, approx); }
+
+    class speckman_t { };
    private:
     solver_t solver_;
     int n_obs_ = 0, n_covs_ = 0;
