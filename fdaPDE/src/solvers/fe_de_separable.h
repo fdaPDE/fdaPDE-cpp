@@ -53,7 +53,7 @@ struct fe_de_separable {
         using type = std::conditional_t<EmbedDim == 1, QS1DP7_, std::conditional_t<EmbedDim == 2, QS2DP4_, QS3DP5_>>;
     };
     template <int EmbedDim> using de_fe_quadrature_t = de_fe_quadrature<EmbedDim>::type;
-    using de_bs_quadrature_t = QGL1DP7_;
+    using de_bs_quadrature_t = QGL1DP9_;
     template <typename InfoT> struct is_valid_info_t {
         static constexpr bool value = requires(InfoT info) { info.penalty; };
     };
@@ -83,16 +83,27 @@ struct fe_de_separable {
     }
     // evaluates reference basis system at quadrature nodes (only active dofs considered)
     template <typename FuncSpace, typename Quadrature>
-    matrix_t eval_shape_values_at_quadrature_(const FuncSpace& func_space, const Quadrature& quad) const {
+    matrix_t eval_fe_shape_values_at_quadrature_(const FuncSpace& func_space, const Quadrature& quad) const {
         int n_quad_nodes = quad.order;
         int n_shape_functions = func_space.n_shape_functions();
-        int n_active_dofs = func_space.dof_handler().n_dofs_per_cell();
-        matrix_t m(n_quad_nodes, n_active_dofs);
+        matrix_t m(n_quad_nodes, n_shape_functions);
         for (int i = 0; i < n_quad_nodes; ++i) {
-            int h = 0;
-            for (int j = 0; j < n_shape_functions; ++j) {
-                double v = func_space.eval_shape_value(j, quad.nodes.row(i));
-                if (v != 0) { m(i, h++) = v; }
+            for (int j = 0; j < n_shape_functions; ++j) { m(i, j) = func_space.eval_shape_value(j, quad.nodes.row(i)); }
+        }
+        return m;
+    }
+    template <typename FuncSpace, typename Quadrature, typename CellIterator>
+    matrix_t
+    eval_bs_shape_values_at_quadrature_(const FuncSpace& func_space, const Quadrature& quad, CellIterator it) const {
+        int n_quad_nodes = quad.order;
+	const auto& dof_handler = func_space.dof_handler();
+	std::vector<int> active_dofs = dof_handler.active_dofs(it->id());
+        matrix_t m(n_quad_nodes, active_dofs.size());
+        double a = it->nodes()[0], b = it->nodes()[1];   // cell range
+        for (int i = 0; i < n_quad_nodes; ++i) {
+            for (int j = 0; j < active_dofs.size(); ++j) {
+                m(i, j) =
+                  func_space.eval_cell_value(active_dofs[j], it->id(), (b - a) / 2 * quad.nodes[i] + (b + a) / 2);
             }
         }
         return m;
@@ -186,12 +197,16 @@ struct fe_de_separable {
         de_fe_quadrature_t<fe_embed_dim> fe_quad_rule;
         de_bs_quadrature_t bs_quad_rule;
         {
-            matrix_t PsiQuad = eval_shape_values_at_quadrature_(fe_space, fe_quad_rule);
-            matrix_t PhiQuad = eval_shape_values_at_quadrature_(bs_space, bs_quad_rule);
-            // tensorize
-            PsiQuad_ = kronecker(PhiQuad, PsiQuad);
+            PsiQuad_.resize(T.n_cells());
+            matrix_t PsiQuad = eval_fe_shape_values_at_quadrature_(fe_space, fe_quad_rule);
+	    // integration in time
+            for (auto it = T.cells_begin(); it != T.cells_end(); ++it) {
+                matrix_t PhiQuad = eval_bs_shape_values_at_quadrature_(bs_space, bs_quad_rule, it);
+                PsiQuad_[it->id()] = kronecker(PhiQuad, PsiQuad);   // tensorize
+            }
             w_ = kronecker(bs_quad_rule.weights, fe_quad_rule.weights).as_eigen_matrix();
         }
+	
         std::array<sparse_matrix_t, 2> Psi__;
         internals::for_each_index_in_pack<n_lambda>([&]<int Ns>() {
             // eval physical basis at spatial locations
@@ -219,28 +234,28 @@ struct fe_de_separable {
         }
         Psi_.setFromTriplets(triplet_list.begin(), triplet_list.end());
         Psi_.makeCompressed();
+	
         // store handle for approximation of \int_T \int_D (e^g)
         int_exp_ = [&, Vh = TpSpace(fe_space, bs_space)](const vector_t& g) {
             double result = 0;
-            for (auto it = D.cells_begin(); it != D.cells_end(); ++it) {
-	        for (auto jt = T.cells_begin(); jt != T.cells_end(); ++jt) {
-                    result +=
-                      w_.dot((PsiQuad_ * g(Vh.dof_handler().active_dofs(it->id(), jt->id()))).array().exp().matrix()) *
-                      it->measure() * (0.5 * jt->measure());
-                }
+            for (auto jt = T.cells_begin(); jt != T.cells_end(); ++jt) {
+                for (auto it = D.cells_begin(); it != D.cells_end(); ++it) {
+                    result += w_.dot((PsiQuad_[jt->id()] * g(Vh.dof_handler().active_dofs(it->id(), jt->id())))
+                                       .array().exp().matrix()) *
+                              it->measure() * (0.5 * jt->measure());
+                }	
             }
             return result;
         };
         // store handle for computation of \nabla_g(\int_T \int_D (e^g))
         grad_int_exp_ = [&, Vh = TpSpace(fe_space, bs_space)](const vector_t& g) {
             vector_t grad = vector_t::Zero(g.rows());
-	    std::vector<int> dofs;
-            for (auto it = D.cells_begin(); it != D.cells_end(); ++it) {
-                for (auto jt = T.cells_begin(); jt != T.cells_end(); ++jt) {
-                    dofs = Vh.dof_handler().active_dofs(it->id(), jt->id());
-                    grad(dofs) += PsiQuad_.transpose() *
-                                  ((PsiQuad_ * g(dofs)).array().exp()).cwiseProduct(w_.array()).matrix() *
-                                  it->measure() * (0.5 * jt->measure());
+            for (auto jt = T.cells_begin(); jt != T.cells_end(); ++jt) {
+                for (auto it = D.cells_begin(); it != D.cells_end(); ++it) {
+                    std::vector<int> dofs = Vh.dof_handler().active_dofs(it->id(), jt->id());
+                    grad(dofs) += PsiQuad_[jt->id()].transpose() *
+                                  ((PsiQuad_[jt->id()] * g(dofs)).array().exp()).cwiseProduct(w_.array()).matrix() *
+                                  it->measure() * (0.5 * jt->measure());   
                 }
             }
             return grad;
@@ -274,20 +289,20 @@ struct fe_de_separable {
         }
         // discretization
         auto assemble_ = [&, this]<int Index>() {
-            auto& space = std::get<Index>(bilinear_form).trial_space();
+            auto& func_space = std::get<Index>(bilinear_form).trial_space();
             // assemble mass matrix
-            TrialFunction u(space);
-            TestFunction  v(space);
-            R0__[Index] = integral(space.triangulation())(u * v).assemble();
+            TrialFunction u(func_space);
+            TestFunction  v(func_space);
+            R0__[Index] = integral(func_space.triangulation())(u * v).assemble();
             R1__[Index] = std::get<Index>(bilinear_form).assemble();
         };
         assemble_.template operator()<0>();
         assemble_.template operator()<1>();
 	// penalty matrix
-	PT_ = kronecker(R1__[1], R0__[0]);
+        PT_ = kronecker(R1__[1], R0__[0]);
 	sparse_solver_t invR0;
 	invR0.compute(R0__[0]);
-	PD_ = kronecker(R0__[1], R1__[0].transpose() * invR0.solve(R1__[0]));
+        PD_ = kronecker(R0__[1], R1__[0].transpose() * invR0.solve(R1__[0]));	
         // number of basis functions on physical domain
         n_dofs__[0] = std::get<0>(bilinear_form).trial_space().n_dofs();
         n_dofs__[1] = std::get<1>(bilinear_form).trial_space().n_dofs();
@@ -356,8 +371,8 @@ struct fe_de_separable {
 
     std::function<double(const vector_t&)> int_exp_;          // \int exp(g)
     std::function<vector_t(const vector_t&)> grad_int_exp_;   // \nabla_g \int exp(g)
-  
-    Eigen::Matrix<double, Dynamic, Dynamic> PsiQuad_;         // \psi_i(q_j)
+
+    std::vector<Eigen::Matrix<double, Dynamic, Dynamic>> PsiQuad_;   // \psi_i(q_j)
     Eigen::Matrix<double, Dynamic, 1> w_;                     // de_quadrature weights
     double tol_ = 1e-5;
 };
