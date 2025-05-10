@@ -71,3 +71,46 @@ TEST(de, test_02) {
 
     EXPECT_TRUE(almost_equal<double>(m.log_density(), "../data/de/02/log_density.mtx"));
 }
+
+TEST(de, test_03) {
+    using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
+
+    // geometry
+    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_21");
+    Triangulation<1, 1> T = Triangulation<1, 1>::UnitInterval(7);
+
+    matrix_t locs_d = read_csv<double>("../data/de/03/data_space.csv").as_matrix();
+    matrix_t locs_t = read_csv<double>("../data/de/03/data_time.csv" ).as_matrix();
+
+    matrix_t locs(locs_d.rows(), 3);
+    locs.leftCols(2)  = locs_d;
+    locs.rightCols(1) = locs_t;
+    
+    // data
+    GeoFrame data(D, T);
+    auto& l1 = data.insert_scalar_layer<POINT, POINT>("l1", locs);
+    
+    // physics
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction  v(Vh);
+    auto a1 = integral(D)(dot(grad(f), grad(v)));
+    ScalarField<2, decltype([](const Eigen::Matrix<double, 2, 1>&) { return 0; })> u1;
+    auto F1 = integral(D)(u1 * v);
+
+    BsSpace Qh(T, 3);
+    TrialFunction g(Qh);
+    TestFunction  h(Qh);
+    auto a2 = integral(T)(dxx(g) * dxx(h));
+    ScalarField<1, decltype([](const Eigen::Matrix<double, 1, 1>& p) { return 0; })> u2;
+    auto F2 = integral(T)(u2 * h);
+
+    // modeling
+    internals::fe_de_separable m(data, fe_separable(Direct, std::pair {a1, F1}, std::pair {a2, F2}).get());
+    Eigen::Matrix<double, Dynamic, 1> g_init = read_csv<double>("../data/de/03/f_init.csv").as_matrix().array().log();
+    double lambda_D = 0.00025, lambda_T = 0.01;
+    m.set_tol(1e-15);
+    m.fit(lambda_D, lambda_T, g_init, BFGS<Dynamic> {100, 1e-5, 1e-2});
+
+    EXPECT_TRUE(almost_equal<double>(m.log_density(), "../data/de/03/log_density.mtx"));
+}

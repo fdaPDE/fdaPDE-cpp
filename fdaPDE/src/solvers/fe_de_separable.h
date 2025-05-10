@@ -353,28 +353,27 @@ struct fe_de_separable {
    private:
     int n_dofs_ = 0, n_obs_ = 0;
     // not tensorized quantites
-    std::array<int, 2> n_dofs__;
-    std::array<int, 2> n_locs__;
-    std::array<sparse_matrix_t, 2> R0__;
-    std::array<sparse_matrix_t, 2> R1__;
-  
-    sparse_matrix_t R0_;    // n_dofs x n_dofs matrix [R0]_{ij} = \int_D \psi_i * \psi_j
-    sparse_matrix_t R1_;    // n_dofs x n_dofs matrix [R1]_{ij} = \int_D a(\psi_i, \psi_j)
-    sparse_matrix_t Psi_;   // n_obs x n_dofs matrix [Psi]_{ij} = \psi_j(p_i)
-    vector_t u_;            // n_dofs x 1 vector u_i = \int_D u * \psi_i
-  
-    matrix_t PD_;           // n_dofs x n_dofs penalty matrix P_ = R1^\top * (R0)^{-1} * R1
-    matrix_t PT_;
+    std::array<int, 2> n_dofs__;           // number of spatial and temporal degrees of freedom {n_dofs_D, n_dofs_T}
+    std::array<int, 2> n_locs__;           // number of spatial and temporal data locations {n_locs_D, n_locs_T}
+    std::array<sparse_matrix_t, 2> R0__;   // {R0_D, R0_T} = { \int_D \psi_i * \psi_j, \int_T \phi_i * \phi_j }
+    std::array<sparse_matrix_t, 2> R1__;   // {R1_D, R1_T} = { \int_D a_D(\psi_i, \psi_j), \int_T a_T(\phi_T, \phi_D) }
+
+    sparse_matrix_t R0_;    // n_dofs x n_dofs matrix R0 = R0_T \kron R0_D
+    sparse_matrix_t R1_;    // n_dofs x n_dofs matrix R1 = R0_T \kron R1_D
+    sparse_matrix_t Psi_;   // n_obs x n_dofs matrix Psi = Psi_T \kron Psi_D
+    vector_t u_;            // (n_dofs_D * n_dofs_T) x 1 vector u = [u_1 \ldots u_n, \ldots, u_1 \ldots u_n]
+
+    matrix_t PD_;                                             // matrix PD = R0_T \kron (R1_D^\top * R0_D^{-1} * R1_D)
+    matrix_t PT_;                                             // matrix PT = R1_T \kron R0_D
+    std::function<double(const vector_t&)> int_exp_;          // functor computing \int exp(g)
+    std::function<vector_t(const vector_t&)> grad_int_exp_;   // functor computing \nabla_g \int exp(g)
     vector_t g_;
     // basis system evaluation handle
     std::array<std::function<sparse_matrix_t(const matrix_t& locs)>, 2> point_eval_;
-
-    std::function<double(const vector_t&)> int_exp_;          // \int exp(g)
-    std::function<vector_t(const vector_t&)> grad_int_exp_;   // \nabla_g \int exp(g)
-
-    std::vector<Eigen::Matrix<double, Dynamic, Dynamic>> PsiQuad_;   // \psi_i(q_j)
-    Eigen::Matrix<double, Dynamic, 1> w_;                     // de_quadrature weights
-    double tol_ = 1e-5;
+    // high-order quadrature rule for integration of \int exp(g)
+    std::vector<Eigen::Matrix<double, Dynamic, Dynamic>> PsiQuad_;   // \psi_i(q_p) \kron \phi_j(q_t), t = 1, ..., m
+    Eigen::Matrix<double, Dynamic, 1> w_;                            // quadrature weights
+    double tol_ = 1e-5;                                              // tolerance for custom stopping criterion
 };
 
 }   // namespace internals
