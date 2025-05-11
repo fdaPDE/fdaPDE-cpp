@@ -10,7 +10,6 @@ find_package (Eigen3 3.4 REQUIRED NO_MODULE)
 
 include_directories(../src/)
 include_directories(../../fdaPDE/)
-
 # enable testing functionality using gtest
 include(FetchContent)
 FetchContent_Declare(
