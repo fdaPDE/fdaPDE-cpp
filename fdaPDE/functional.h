@@ -17,5 +17,14 @@
 #ifndef __FDAPDE_FUNCTIONAL_H__
 #define __FDAPDE_FUNCTIONAL_H__
 
+// clang-format off
+
+// include core
+#include <fdaPDE/core.h>
+
+#include "solvers.h"
+#include "src/models/fpca.h"
+
+// clang-format on
 
 #endif // __FDAPDE_FUNCTIONAL_H__
