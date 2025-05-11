@@ -31,6 +31,9 @@ struct fe_de_elliptic {
     using sparse_solver_t = eigen_sparse_solver_movable_wrap<Eigen::SparseLU<sparse_matrix_t>>;
     template <typename DataLocs>
     static constexpr bool is_valid_data_locs_descriptor_v = std::is_same_v<DataLocs, matrix_t>;
+    template <typename InfoT> struct is_valid_info_t {
+        static constexpr bool value = requires(InfoT info) { info.penalty; };
+    };
     // high-order quadrature for integration of constraint \int_D (e^g)
     template <int EmbedDim> struct de_quadrature {
         using type = std::conditional_t<EmbedDim == 1, QS1DP7_, std::conditional_t<EmbedDim == 2, QS2DP4_, QS3DP5_>>;
@@ -38,6 +41,8 @@ struct fe_de_elliptic {
     template <int EmbedDim> using de_quadrature_t = de_quadrature<EmbedDim>::type;
    public:
     static constexpr int n_lambda = 1;
+    using solver_category = de_solver;
+
     // penalized negative log-likelihood objective functor
     struct llik_t {
         llik_t(fe_de_elliptic& m, double lambda) : m_(std::addressof(m)), lambda_(lambda) { }
@@ -71,11 +76,11 @@ struct fe_de_elliptic {
     };
 
     fe_de_elliptic() noexcept = default;
-    template <typename GeoFrame, typename Penalty>
-        requires(internals::is_pair_v<Penalty>)
-    fe_de_elliptic(const GeoFrame& gf, Penalty&& penalty) {
+    template <typename GeoFrame, typename InfoT>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_de_elliptic(const GeoFrame& gf, InfoT&& info) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
-        using BilinearForm = std::tuple_element_t<0, std::decay_t<Penalty>>;
+        using BilinearForm = std::tuple_element_t<0, std::decay_t<decltype(info.penalty)>>;
         using FeSpace = typename BilinearForm::TrialSpace;
 	using DofHandler = typename FeSpace::DofHandlerType;
 	using Triangulation = typename FeSpace::Triangulation;
@@ -83,21 +88,21 @@ struct fe_de_elliptic {
         fdapde_assert(gf.n_layers() == 1 && gf[0].category()[0] == ltype::point);
         n_obs_ = gf[0].rows();
 	const Triangulation& triangulation = gf.template triangulation<0>();
-	const FeSpace& fe_space = std::get<0>(penalty).trial_space();
+	const FeSpace& fe_space = std::get<0>(info.penalty).trial_space();
 	const DofHandler& dof_handler = fe_space.dof_handler();
 
-        discretize(penalty);
+        discretize(info.penalty);
 	// eval reference basis at quadrature nodes, store de_quadrature weights
         de_quadrature_t<embed_dim> quad_rule;
         int n_quad_nodes = quad_rule.order;
         int n_shape_functions = fe_space.n_shape_functions();
-        PsiQuad_.resize(n_quad_nodes, n_shape_functions);
-	w_.resize(n_quad_nodes);
+        matrix_t PsiQuad(n_quad_nodes, n_shape_functions);
+	vector_t w(n_quad_nodes);
         for (int i = 0; i < n_quad_nodes; ++i) {
             for (int j = 0; j < n_shape_functions; ++j) {
-                PsiQuad_(i, j) = fe_space.eval_shape_value(j, quad_rule.nodes.row(i));
+                PsiQuad(i, j) = fe_space.eval_shape_value(j, quad_rule.nodes.row(i));
             }
-            w_[i] = quad_rule.weights[i];
+            w[i] = quad_rule.weights[i];
         }
         // eval physical basis at spatial locations
         const auto& spatial_index = geo_index_cast<0, POINT>(gf[0]);
@@ -109,20 +114,20 @@ struct fe_de_elliptic {
         }
 
         // store handle for approximation of \int_D (e^g)
-        int_exp_ = [&](const vector_t& g) {
+        int_exp_ = [&, PsiQuad, w](const vector_t& g) {
             double val_ = 0;
             for (auto it = triangulation.cells_begin(); it != triangulation.cells_end(); ++it) {
-                val_ += w_.dot((PsiQuad_ * g(dof_handler.dofs().row(it->id()))).array().exp().matrix()) * it->measure();
+                val_ += w.dot((PsiQuad * g(dof_handler.dofs().row(it->id()))).array().exp().matrix()) * it->measure();
             }
 	    return val_;
         };
         // store handle for approximation of \nabla_g(\int_D (e^g))
-        grad_int_exp_ = [&](const vector_t& g) {
+        grad_int_exp_ = [&, PsiQuad, w](const vector_t& g) {
             vector_t grad = vector_t::Zero(g.rows());
             for (auto it = triangulation.cells_begin(); it != triangulation.cells_end(); ++it) {
                 grad(dof_handler.dofs().row(it->id())) +=
-                  PsiQuad_.transpose() *
-                  (PsiQuad_ * g(dof_handler.dofs().row(it->id()))).array().exp().cwiseProduct(w_.array()).matrix() *
+                  PsiQuad.transpose() *
+                  (PsiQuad * g(dof_handler.dofs().row(it->id()))).array().exp().cwiseProduct(w.array()).matrix() *
                   it->measure();
             }
             return grad;
@@ -182,25 +187,37 @@ struct fe_de_elliptic {
     vector_t fn() const { return Psi_ * g_.array().exp().matrix(); }
    private:
     int n_dofs_ = 0, n_obs_ = 0;
-
     sparse_matrix_t R0_;    // n_dofs x n_dofs matrix [R0]_{ij} = \int_D \psi_i * \psi_j
     sparse_matrix_t R1_;    // n_dofs x n_dofs matrix [R1]_{ij} = \int_D a(\psi_i, \psi_j)
     sparse_matrix_t Psi_;   // n_obs x n_dofs matrix [Psi]_{ij} = \psi_j(p_i)
     vector_t u_;            // n_dofs x 1 vector u_i = \int_D u * \psi_i
-    matrix_t P_;            // n_dofs x n_dofs penalty matrix P_ = R1^\top * (R0)^{-1} * R1
+
+    matrix_t P_;   // n_dofs x n_dofs penalty matrix P_ = R1^\top * (R0)^{-1} * R1
+    std::function<double(const vector_t&)> int_exp_;          // \int exp(g)
+    std::function<vector_t(const vector_t&)> grad_int_exp_;   // \nabla_g \int exp(g)
     vector_t g_;
     // basis system evaluation handle
     std::function<sparse_matrix_t(const matrix_t& locs)> point_eval_;
-
-    std::function<double(const vector_t&)> int_exp_;          // \int exp(g)
-    std::function<vector_t(const vector_t&)> grad_int_exp_;   // \nabla_g \int exp(g)
-  
-    Eigen::Matrix<double, Dynamic, Dynamic> PsiQuad_;         // \psi_i(q_j)
-    Eigen::Matrix<double, Dynamic, 1> w_;                     // de_quadrature weights
     double tol_ = 1e-5;
 };
 
 }   // namespace internals
+
+// elliptic solver factory
+template <typename BilinearForm, typename LinearForm> struct fe_de_elliptic {
+    using solver_t = internals::fe_de_elliptic;
+   private:
+    struct info_t {
+        std::tuple<BilinearForm, LinearForm> penalty;
+    };
+   public:
+    fe_de_elliptic(const BilinearForm& bilinear_form, const LinearForm& linear_form) :
+        info_(std::make_tuple(bilinear_form, linear_form)) { }
+    const info_t& get() const { return info_; }
+   private:
+    info_t info_;
+};  
+  
 }   // namespace fdapde
 
 #endif   // __FE_DE_ELLIPTIC_SOLVER_H__

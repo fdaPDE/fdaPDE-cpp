@@ -35,6 +35,9 @@ struct fe_ls_elliptic {
     template <typename DataLocs>
     static constexpr bool is_valid_data_locs_descriptor_v =
       std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>;
+    template <typename InfoT> struct is_valid_info_t {
+        static constexpr bool value = requires(InfoT info) { info.penalty; };
+    };
 
     // evaluation of basis system at spatial locations
     template <typename DataLocs>
@@ -77,41 +80,41 @@ struct fe_ls_elliptic {
     }
    public:
     static constexpr int n_lambda = 1;
+    using solver_category = ls_solver;
 
     fe_ls_elliptic() noexcept = default;
     // construct from formula + geoframe
-    template <typename GeoFrame, typename Penalty, typename WeightMatrix>
-        requires(internals::is_pair_v<Penalty>)
-    fe_ls_elliptic(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) :
-        W_(W) {
+    template <typename GeoFrame, typename InfoT, typename WeightMatrix>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_ls_elliptic(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
         fdapde_assert(gf.n_layers() == 1);
         n_obs_  = gf[0].rows();
 	n_locs_ = n_obs_;
 	
-        discretize(penalty);
+        discretize(info.penalty);
 	analyze_data(formula, gf, W);
     }
-    template <typename GeoFrame, typename Penalty>
-        requires(internals::is_pair_v<Penalty>)
-    fe_ls_elliptic(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) :
-        fe_ls_elliptic(formula, gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    template <typename GeoFrame, typename InfoT>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_ls_elliptic(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
+        fe_ls_elliptic(formula, gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
     // construct with no data
-    template <typename GeoFrame, typename Penalty, typename WeightMatrix>
-        requires(internals::is_pair_v<Penalty>)
-    fe_ls_elliptic(const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
+    template <typename GeoFrame, typename InfoT, typename WeightMatrix>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_ls_elliptic(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
         fdapde_assert(gf.n_layers() == 1);
         n_obs_  = gf[0].rows();
 	n_locs_ = n_obs_;
 	
-        discretize(penalty);
+        discretize(info.penalty);
         eval_basis_at_(gf);
     }
-    template <typename GeoFrame, typename Penalty>
-        requires(internals::is_pair_v<Penalty>)
-    fe_ls_elliptic(const GeoFrame& gf, Penalty&& penalty) :
-        fe_ls_elliptic(gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    template <typename GeoFrame, typename InfoT>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_ls_elliptic(const GeoFrame& gf, InfoT&& info) :
+        fe_ls_elliptic(gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
 
     // perform finite element based numerical discretization
     template <typename Penalty> void discretize(Penalty&& penalty) {
@@ -435,90 +438,20 @@ struct fe_ls_elliptic {
 
 }   // namespace internals
 
-// general non-parametrized elliptic solver factory method
-template <typename BilinearForm_, typename LinearForm_> struct fe_elliptic_penalty {
-    using BilinearForm = std::decay_t<BilinearForm_>;
-    using LinearForm = std::decay_t<LinearForm_>;
-    using Triangulation = std::tuple<typename BilinearForm::Triangulation>;
+// elliptic solver factory
+template <typename BilinearForm, typename LinearForm> struct fe_ls_elliptic {
     using solver_t = internals::fe_ls_elliptic;
-    fdapde_static_assert(
-      std::is_same_v<typename BilinearForm::discretization_category FDAPDE_COMMA finite_element_tag>&&
-        std::is_same_v<typename LinearForm::discretization_category FDAPDE_COMMA finite_element_tag>,
-      FE_ELLIPTIC_PENALTY_IS_FOR_FINITE_ELEMENT_DISCRETIZATIONS_ONLY);
-
-    fe_elliptic_penalty(const BilinearForm_& bilinear_form, const LinearForm_& linear_form) :
-        penalty_(std::make_pair(bilinear_form, linear_form)) { }
-    const std::tuple<BilinearForm, LinearForm>& get() const { return penalty_; }
    private:
-    std::tuple<BilinearForm, LinearForm> penalty_;
+    struct info_t {
+        std::tuple<BilinearForm, LinearForm> penalty;
+    };
+   public:
+    fe_ls_elliptic(const BilinearForm& bilinear_form, const LinearForm& linear_form) :
+        info_(std::make_tuple(bilinear_form, linear_form)) { }
+    const info_t& get() const { return info_; }
+   private:
+    info_t info_;
 };
-template <typename BilinearForm, typename LinearForm>
-    requires(internals::is_bilinear_form_v<BilinearForm> && internals::is_linear_form_v<LinearForm>)
-fe_elliptic_penalty<BilinearForm, LinearForm>
-fe_elliptic(const BilinearForm& bilinear_form, const LinearForm& linear_form) {
-    return fe_elliptic_penalty(bilinear_form, linear_form);
-}
-template <typename BilinearForm>
-    requires(internals::is_bilinear_form_v<BilinearForm>)
-auto fe_elliptic(const BilinearForm& bilinear_form) {   // implicit homogeneous forcing
-    using FeSpace = typename BilinearForm::TrialSpace;
-    const FeSpace& Vh = bilinear_form.trial_space();
-    static constexpr int embed_dim = FeSpace::embed_dim;
-    ScalarField<embed_dim, decltype([](const Eigen::Matrix<double, embed_dim, 1>&) { return 0; })> u;
-    TestFunction v(Vh);
-    auto linear_form = integral(Vh.triangulation())(u * v);
-    return fe_elliptic(bilinear_form, linear_form);
-}
-
-// catalogue of standard elliptic penalizations
-template <typename Functor> struct fe_elliptic_factory {
-    using solver_t = internals::fe_ls_elliptic;
-    fe_elliptic_factory(const Functor& f) : f_(f) { }
-    template <typename Triangulation> auto operator()(const Triangulation& D) const { return f_(D); }
-  private:
-    Functor f_;
-};
-// poisson equation: -\Delta f = u
-template <typename Force> auto fe_poisson(Force&& u) {
-    return fe_elliptic_factory([u]<typename Triangulation>(const Triangulation& D) {
-        auto Vh = std::make_shared<FeSpace<Triangulation, FeP<1, 1>>>(D, P1<1>);
-        TrialFunction f(Vh);
-        TestFunction  v(Vh);
-        auto a = integral(D)(dot(grad(f), grad(v)));
-	auto F = integral(D)(u * v);
-        return fe_elliptic(a, F);
-    });
-}
-// laplace equation: -\Delta f = 0
-auto fe_laplace() {
-    return fe_elliptic_factory([]<typename Triangulation>(const Triangulation& D) {
-        static constexpr int embed_dim = Triangulation::embed_dim;
-        return fe_poisson(
-          ScalarField<embed_dim, decltype([](const Eigen::Matrix<double, embed_dim, 1>&) { return 0; })> {})(D);
-    });
-}
-// diffusion-transport-reaction equation: -div[K + grad(f)] + b \cdot grad(f) + c * f = u
-template <typename Diffusion, typename Transport, typename Reaction, typename Force>
-auto fe_diffusion_transport_reaction(Diffusion&& K, Transport&& b, Reaction&& c, Force&& u) {
-  return fe_elliptic_factory([K, b, c, u]<typename Triangulation>(const Triangulation& D) {
-        auto Vh = std::make_shared<FeSpace<Triangulation, FeP<1, 1>>>(D, P1<1>);
-        TrialFunction f(Vh);
-        TestFunction  v(Vh);
-        auto a = integral(D)(dot(K * grad(f), grad(v)) + dot(b, grad(f)) * v + c * f * v);
-        auto F = integral(D)(u * v);
-        return fe_elliptic(a, F);
-    });
-}
-template <typename Diffusion, typename Transport, typename Reaction>
-auto fe_diffusion_transport_reaction(Diffusion&& K, Transport&& b, Reaction&& c) {
-    return fe_elliptic_factory([K, b, c]<typename Triangulation>(const Triangulation& D) {
-        static constexpr int embed_dim = Triangulation::embed_dim;
-        return fe_diffusion_transport_reaction(
-          K, b, c, ScalarField<embed_dim, decltype([](const Eigen::Matrix<double, Triangulation::embed_dim, 1>&) {
-                                   return 0;
-                               })> {})(D);
-    });
-}
 
 }   // namespace fdapde
 

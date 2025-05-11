@@ -21,7 +21,9 @@
 
 namespace fdapde {
 
-template <typename VariationalSolver> class SRPDE {
+template <typename VariationalSolver>
+    requires(std::is_same_v<typename VariationalSolver::solver_category, ls_solver>)
+class SRPDE {
    private:
     using solver_t = std::decay_t<VariationalSolver>;
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;
@@ -31,7 +33,8 @@ template <typename VariationalSolver> class SRPDE {
    public:
     SRPDE() noexcept = default;
     template <typename GeoFrame, typename Penalty>
-    SRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) noexcept : solver_() {
+    SRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) noexcept :
+        solver_(), geo_category_(gf[0].category().begin(), gf[0].category().end()) {
         fdapde_assert(gf.n_layers() == 1);	
         Formula formula_(formula);
 	n_obs_  = gf[0].rows();
@@ -39,11 +42,7 @@ template <typename VariationalSolver> class SRPDE {
         for (const std::string& token : formula_.rhs()) {
             if (gf.contains(token)) { n_covs_++; }
         }
-        if constexpr (requires(Penalty p) { p.get(); }) {
-            solver_ = solver_t(formula, gf, penalty.get());
-        } else {
-            solver_ = solver_t(formula, gf, penalty(gf.template triangulation<0>()).get());
-        }
+        solver_ = solver_t(formula, gf, penalty.get());
     }
     template <typename... LambdaT>
         requires(std::is_convertible_v<LambdaT, double> && ...) ||
@@ -169,7 +168,7 @@ template <typename VariationalSolver> class SRPDE {
 	    sparse_matrix_t Vf__ = Psi * (*Vf_) * Psi.transpose();
 	    double q = distr.quantile(alpha);
 	    vector_t a = Psi * s.f();
-	    vector_t b = quantile * (Vf__.diagonal().array()).sqrt();
+	    vector_t b = q * (Vf__.diagonal().array()).sqrt();
             // build confidence interval
             return std::make_pair(a - b, a + b);    
         }
@@ -268,17 +267,29 @@ template <typename VariationalSolver> class SRPDE {
             return test_oat_beta(std::vector<double> {beta0.begin(), beta0.end()}, matrix_t::Identity(q_, q_));
         }
 
-        // here we should check how to pass a new set of data locations, since request the user to provide a Psi
-        // is not so user-friendly (provide a matrix of locations)
-
         // non-parametric confidence interval
-        std::pair<vector_t, vector_t> confint_oat_f(double alpha, const sparse_matrix_t& Psi) const {
-            return confint_f_(1 - alpha, Psi, normal_distribution(1 - alpha / 2));
+        template <typename... DataLocs>
+        std::pair<vector_t, vector_t> confint_oat_f(double alpha, const DataLocs&... locs) const {
+            fdapde_assert(
+		std::all_of(m_->geo_category_.begin() FDAPDE_COMMA m_->geo_category_.end() FDAPDE_COMMA
+		    [&](auto t) { return t == ltype::point; })
+	    );
+
+	    // eval_basis_at must be made public
+	    // what if more than one layer and just one matrix of joint space-time points?
+	    // what in case of parabolic penalty?
+	    
+            sparse_matrix_t Psi_p = m_->solver_.eval_basis_at(locs...);
+
+	    
+	    
+	    return confint_f_(1 - alpha, Psi_p, normal_distribution(1 - alpha / 2));
         }
-        auto confint_oat_f(double alpha) const { return confint_f_(alpha, m_->solver.PsiNA()); }
+        auto confint_oat_f(double alpha) const { return confint_f_(alpha, m_->solver_.PsiNA()); }
 
         // non-parametric testing
-        double test_oat_f(const vector_t& f0, const sparse_matrix_t& Psi, double tol = 1e-4) const {
+        double test_sim_f(const vector_t& f0, const sparse_matrix_t& Psi, double tol = 1e-4) const {
+            const auto& s = m_->solver_;
             fdapde_assert(f0.rows() == Psi.rows() && Psi.cols() == s.n_dofs());
             // compute pseudoinverse of matrix Vf_
             if (!Vf_.has_value()) { compute_Vf_(); }
@@ -289,16 +300,16 @@ template <typename VariationalSolver> class SRPDE {
                 int i = 0, n = eigval.size();
                 for (; i < n && eigval[i] > tol; ++i);
                 // build (rank r) pseudoinverse as V_r * D_r^{-1} * V_r^\top (V_r: eigenvectors, D_r: eigenvalues)
-                int r = n - i + 1;
-                vector_t inv_eigval = eigval.tail(r).array().inverse();
-                auto eigvec = eigenVf.eigenvectors().rightCols(r);
+                r_ = n - i + 1;
+                vector_t inv_eigval = eigval.tail(r_).array().inverse();
+                auto eigvec = eigenVf.eigenvectors().rightCols(r_);
                 invVf_ = eigvec * inv_eigval.asDiagonal() * eigvec.transpose();
             }
             vector_t fn = Psi * s.f();
             double stat = (fn - f0).transpose() * (*invVf_) * (fn - f0);
-            return 1.0 - chi_squared_distribution(rank).cdf(stat);
+            return 1.0 - chi_squared_distribution(r_).cdf(stat);
         }
-        double test_oat_f(const vector_t& f0, double tol = 1e-4) const {
+        double test_sim_f(const vector_t& f0, double tol = 1e-4) const {
             return test_oat_f(f0, m_->solver_.PsiNA(), tol);
         }
        private:
@@ -307,9 +318,12 @@ template <typename VariationalSolver> class SRPDE {
         // non-parametric testing
         mutable std::optional<matrix_t> Vf_;
         mutable std::optional<matrix_t> invVf_;
+        mutable int r_;   // rank of pseudoinverse
 
         const SRPDE* m_;
         int q_;
+
+      
         matrix_t XtWX_;   // q x q matrix X^\top * W * X
         double sigma_squared_;
         matrix_t Q_;
@@ -323,6 +337,7 @@ template <typename VariationalSolver> class SRPDE {
    private:
     solver_t solver_;
     int n_obs_ = 0, n_covs_ = 0;
+    std::vector<ltype> geo_category_;
 };
 
 // deduction guide

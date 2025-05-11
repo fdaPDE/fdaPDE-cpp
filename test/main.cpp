@@ -25,9 +25,13 @@ namespace test {
 template <int LocalDim, int EmbedDim>
 Triangulation<LocalDim, EmbedDim> read_mesh(const std::string& path, int flags = 0) {
     Eigen::Matrix<double, Dynamic, Dynamic> nodes = read_csv<double>(path + "/points.csv").as_matrix();
-    Eigen::Matrix<int, Dynamic, Dynamic> boundary = read_csv<int>(path + "/boundary.csv").as_matrix();
-    Eigen::Matrix<int, Dynamic, Dynamic> cells    = read_csv<int>(path + "/elements.csv").as_matrix().array() - 1;
-    return Triangulation<LocalDim, EmbedDim>(nodes, cells, boundary, flags);
+    if constexpr (LocalDim == 1 && EmbedDim == 1) {
+        return Triangulation<LocalDim, EmbedDim>(nodes, flags);
+    } else {
+        Eigen::Matrix<int, Dynamic, Dynamic> boundary = read_csv<int>(path + "/boundary.csv").as_matrix();
+        Eigen::Matrix<int, Dynamic, Dynamic> cells    = read_csv<int>(path + "/elements.csv").as_matrix().array() - 1;
+        return Triangulation<LocalDim, EmbedDim>(nodes, cells, boundary, flags);
+    }
 }
 
 [[maybe_unused]] constexpr double testing_double_tolerance = 1e-7;
@@ -68,7 +72,7 @@ template <typename Scalar> bool almost_equal(const std::vector<Scalar>& op1, std
 }   // namespace test
 }   // namespace fdapde
 
-#include "src/sr.cpp"
+// #include "src/sr.cpp"
 // #include "src/gsr.cpp"
 // #include "src/qsr.cpp"
 #include "src/de.cpp"

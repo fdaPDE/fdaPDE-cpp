@@ -32,9 +32,16 @@ TEST(sr, test_01) {
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
     l1.load_csv<double>("../data/sr/01/response.csv");
+    // physics
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction  v(Vh);
+    auto a = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u;
+    auto F = integral(D)(u * v);
     // modeling
-    SRPDE m("y ~ f", data, fe_laplace());
-    m.fit(/* lambda = */ 1.56206e-08);
+    SRPDE m("y ~ f", data, fe_ls_elliptic(a, F));
+    m.fit(1.56206e-08);
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/01/field.mtx"));
 }
@@ -54,9 +61,16 @@ TEST(sr, test_02) {
     auto& l1 = data.insert_scalar_layer<POINT>("l1", "../data/sr/02/locs.csv");
     l1.load_csv<double>("../data/sr/02/response.csv");
     l1.load_csv<double>("../data/sr/02/design_matrix.csv");
+    // physics
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction  v(Vh);
+    auto a = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u;
+    auto F = integral(D)(u * v);
     // modeling
-    SRPDE m("y ~ x1 + x2 + f", data, fe_laplace());
-    m.fit(/* lambda = */ 0.001287161988304094);
+    SRPDE m("y ~ x1 + x2 + f", data, fe_ls_elliptic(a, F));
+    m.fit(0.001287161988304094);
 
     EXPECT_TRUE(almost_equal<double>(m.f()   , "../data/sr/02/field.mtx"));
     EXPECT_TRUE(almost_equal<double>(m.beta(), "../data/sr/02/beta.mtx" ));
@@ -83,9 +97,11 @@ TEST(sr, test_03) {
     TrialFunction f(Vh);
     TestFunction  v(Vh);
     auto a = integral(D)(dot(K * grad(f), grad(v)));
+    ZeroField<2> u;
+    auto F = integral(D)(u * v);
     // modeling
-    SRPDE m("y ~ f", data, fe_elliptic(a));
-    m.fit(/* lambda = */ 0.002777777777777778);
+    SRPDE m("y ~ f", data, fe_ls_elliptic(a, F));
+    m.fit(0.002777777777777778);
     
     EXPECT_TRUE(almost_equal<double>(m.f() , "../data/sr/03/field.mtx"));
 }
@@ -105,8 +121,15 @@ TEST(sr, test_04) {
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
     l1.load_csv<double>("../data/sr/04/response.csv");
+    // physics
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction  v(Vh);
+    auto a = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u;
+    auto F = integral(D)(u * v);
     // modeling
-    SRPDE m("y ~ f", data, fe_laplace());
+    SRPDE m("y ~ f", data, fe_ls_elliptic(a, F));
     // calibration
     std::vector<double> lambda_grid(13);
     for (int i = 0; i < 13; ++i) { lambda_grid[i] = std::pow(10, -6.0 + 0.25 * i) / data[0].rows(); }
@@ -132,8 +155,15 @@ TEST(sr, test_05) {
     auto& l1 = data.insert_scalar_layer<POINT>("l1", "../data/sr/05/locs.csv");
     l1.load_csv<double>("../data/sr/05/response.csv");
     l1.load_csv<double>("../data/sr/05/design_matrix.csv");
+    // physics
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction  v(Vh);
+    auto a = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u;
+    auto F = integral(D)(u * v);    
     // modeling
-    SRPDE m("y ~ x1 + x2 + f", data, fe_laplace());
+    SRPDE m("y ~ x1 + x2 + f", data, fe_ls_elliptic(a, F));
     // calibration
     std::vector<double> lambda_grid(25);
     for (int i = 0; i < 25; ++i) { lambda_grid[i] = std::pow(10, -3.0 + 0.25 * i) / data[0].rows(); }
@@ -152,16 +182,23 @@ TEST(sr, test_06) {
     GeoFrame data(D, T);
     auto& l1 = data.insert_scalar_layer<POINT, POINT>("l1", std::pair {MESH_NODES, MESH_NODES});
     l1.load_csv<double>("../data/sr/06/response.csv");
-    // modeling
-    BsSpace Vh(T, 3);
+    // physics
+    FeSpace Vh(D, P1<1>);   // linear finite element in space
     TrialFunction f(Vh);
     TestFunction  v(Vh);
-    auto a = integral(T)(dxx(f) * dxx(v));
-    ScalarField<1, decltype([](const Eigen::Matrix<double, 1, 1>& p) { return 0; })> u;
-    auto F = integral(T)(u * v);
+    auto a_D = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u_D;
+    auto F_D = integral(D)(u_D * v);
 
-    SRPDE m("y ~ f", data, fe_separable(Direct, fe_laplace(), std::pair {a, F}));
-    m.fit(/* lambda = */ 2.06143e-06, 2.06143e-06);
+    BsSpace Bh(T, 3);   // cubic B-splines in time
+    TrialFunction g(Bh);
+    TestFunction  w(Bh);
+    auto a_T = integral(T)(dxx(g) * dxx(w));
+    ZeroField<1> u_T;
+    auto F_T = integral(T)(u_T * w);
+
+    SRPDE m("y ~ f", data, fe_ls_separable_mono(std::pair {a_D, F_D}, std::pair {a_T, F_T}));
+    m.fit(2.06143e-06, 2.06143e-06);
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/06/field.mtx"));
 }
@@ -175,16 +212,23 @@ TEST(sr, test_07) {
     auto& l1 = data.insert_scalar_layer<POINT, POINT>("l1", std::pair {"../data/sr/07/locs.csv", MESH_NODES});
     l1.load_csv<double>("../data/sr/07/response.csv");
     l1.load_csv<double>("../data/sr/07/design_matrix.csv");
-    // modeling
-    BsSpace Vh(T, 3);
+    // physics
+    FeSpace Vh(D, P1<1>);   // linear finite element in space
     TrialFunction f(Vh);
     TestFunction  v(Vh);
-    auto a = integral(T)(dxx(f) * dxx(v));
-    ScalarField<1, decltype([](const Eigen::Matrix<double, 1, 1>& p) { return 0; })> u;
-    auto F = integral(T)(u * v);
+    auto a_D = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u_D;
+    auto F_D = integral(D)(u_D * v);
 
-    SRPDE m("y ~ x1 + f", data, fe_separable(Direct, fe_laplace(), std::pair {a, F}));
-    m.fit(/* lambda = */ 1.16959e-05, 1.16959e-05);
+    BsSpace Bh(T, 3);   // cubic B-splines in time
+    TrialFunction g(Bh);
+    TestFunction  w(Bh);
+    auto a_T = integral(T)(dxx(g) * dxx(w));
+    ZeroField<1> u_T;
+    auto F_T = integral(T)(u_T * w);
+    // modeling
+    SRPDE m("y ~ x1 + f", data, fe_ls_separable_mono(std::pair {a_D, F_D}, std::pair {a_T, F_T}));
+    m.fit(1.16959e-05, 1.16959e-05);
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/07/field.mtx"));
     EXPECT_TRUE(almost_equal<double>(m.beta(), "../data/sr/07/beta.mtx"));
@@ -198,16 +242,23 @@ TEST(sr, test_08) {
     GeoFrame data(D, T);
     auto& l1 = data.insert_scalar_layer<POINT, POINT>("l1", std::pair {MESH_NODES, "../data/sr/08/locs.csv"});
     l1.load_csv<double>("../data/sr/08/response.csv");
-    // modeling
-    BsSpace Vh(T, 3);
+    // physics
+    FeSpace Vh(D, P1<1>);   // linear finite element in space
     TrialFunction f(Vh);
     TestFunction  v(Vh);
-    auto a = integral(T)(dxx(f) * dxx(v));
-    ScalarField<1, decltype([](const Eigen::Matrix<double, 1, 1>& p) { return 0; })> u;
-    auto F = integral(T)(u * v);
+    auto a_D = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u_D;
+    auto F_D = integral(D)(u_D * v);
 
-    SRPDE m("y ~ f", data, fe_separable(Direct, fe_laplace(), std::pair {a, F}));
-    m.fit(/* lambda = */ 0.01 / data[0].rows(), 0.01 / data[0].rows());
+    BsSpace Bh(T, 3);   // cubic B-splines in time
+    TrialFunction g(Bh);
+    TestFunction  w(Bh);
+    auto a_T = integral(T)(dxx(g) * dxx(w));
+    ZeroField<1> u_T;
+    auto F_T = integral(T)(u_T * w);    
+    // modeling
+    SRPDE m("y ~ f", data, fe_ls_separable_mono(std::pair {a_D, F_D}, std::pair {a_T, F_T}));
+    m.fit(0.01 / data[0].rows(), 0.01 / data[0].rows());
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/08/field.mtx"));
 }
@@ -221,16 +272,23 @@ TEST(sr, test_09) {
     auto& l1 = data.insert_scalar_layer<POINT, POINT>(
       "l1", std::pair {"../data/sr/09/space_locs.csv", "../data/sr/09/time_locs.csv"});
     l1.load_csv<double>("../data/sr/09/response.csv");
-    // modeling
-    BsSpace Vh(T, 3);
+    // physics
+    FeSpace Vh(D, P1<1>);   // linear finite element in space
     TrialFunction f(Vh);
     TestFunction  v(Vh);
-    auto a = integral(T)(dxx(f) * dxx(v));
-    ScalarField<1, decltype([](const Eigen::Matrix<double, 1, 1>& p) { return 0; })> u;
-    auto F = integral(T)(u * v);
+    auto a_D = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u_D;
+    auto F_D = integral(D)(u_D * v);
 
-    SRPDE m("y ~ f", data, fe_separable(Direct, fe_laplace(), std::pair {a, F}));
-    m.fit(/* lambda = */ 4.032258064516129e-07, 4.032258064516129e-07);
+    BsSpace Bh(T, 3);   // cubic B-splines in time
+    TrialFunction g(Bh);
+    TestFunction  w(Bh);
+    auto a_T = integral(T)(dxx(g) * dxx(w));
+    ZeroField<1> u_T;
+    auto F_T = integral(T)(u_T * w);    
+    // modeling
+    SRPDE m("y ~ f", data, fe_ls_separable_mono(std::pair{a_D, F_D}, std::pair {a_T, F_T}));
+    m.fit(4.032258064516129e-07, 4.032258064516129e-07);
     
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/09/field.mtx"));
 }
@@ -243,16 +301,23 @@ TEST(sr, test_10) {
     GeoFrame data(D, T);
     auto& l1 = data.insert_scalar_layer<POINT, POINT>("l1", std::pair {MESH_NODES, MESH_NODES});
     l1.load_csv<double>("../data/sr/10/response.csv");
-    // modeling
-    BsSpace Vh(T, 3);
+    // physics
+    FeSpace Vh(D, P1<1>);   // linear finite element in space
     TrialFunction f(Vh);
     TestFunction  v(Vh);
-    auto a = integral(T)(dxx(f) * dxx(v));
-    ScalarField<1, decltype([](const Eigen::Matrix<double, 1, 1>& p) { return 0; })> u;
-    auto F = integral(T)(u * v);
+    auto a_D = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<3> u_D;
+    auto F_D = integral(D)(u_D * v);
 
-    SRPDE m("y ~ f", data, fe_separable(Direct, fe_laplace(), std::pair {a, F}));
-    m.fit(/* lambda = */ 5.882352941176471e-08, 5.882352941176471e-08);
+    BsSpace Bh(T, 3);   // cubic B-splines in time
+    TrialFunction g(Bh);
+    TestFunction  w(Bh);
+    auto a_T = integral(T)(dxx(g) * dxx(w));
+    ZeroField<1> u_T;
+    auto F_T = integral(T)(u_T * w);    
+    // modeling
+    SRPDE m("y ~ f", data, fe_ls_separable_mono(std::pair {a_D, F_D}, std::pair {a_T, F_T}));
+    m.fit(5.882352941176471e-08, 5.882352941176471e-08);
     
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/10/field.mtx"));
 }
@@ -264,10 +329,17 @@ TEST(sr, test_11) {
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POLYGON>("l1", "../data/sr/11/incidence_mat.csv");
-    l1.load_csv<double>("../data/sr/11/response.csv");    
+    l1.load_csv<double>("../data/sr/11/response.csv");
+    // physics
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction  v(Vh);
+    auto a = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u;
+    auto F = integral(D)(u * v);
     // modeling
-    SRPDE m("y ~ f", data, fe_laplace());
-    m.fit(/* lambda = */ 0.0001428571428571429);
+    SRPDE m("y ~ f", data, fe_ls_elliptic(a, F));
+    m.fit(0.0001428571428571429);
     
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/11/field.mtx"));
 }
@@ -291,15 +363,14 @@ TEST(sr, test_12) {
     auto a = integral(D)(dot(K * grad(f), grad(v)) + dot(b, grad(f)) * v);
     FeCoeff<2, 1, 1, vector_t> u(read_csv<double>("../data/sr/12/force.csv").as_matrix());
     auto F = integral(D)(u * v);
-
     // modeling
-    SRPDE m("y ~ f", data, fe_elliptic(a, F));
-    m.fit(/* lambda = */ 0.0001428571428571429);
+    SRPDE m("y ~ f", data, fe_ls_elliptic(a, F));
+    m.fit(0.0001428571428571429);
     
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/12/field.mtx"));
 }
 
-// parabolic, areal non-constant coefficient
+// // parabolic, areal non-constant coefficient
 TEST(sr, test_13) {
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;    
@@ -319,11 +390,10 @@ TEST(sr, test_13) {
     FeCoeff<2, 2, 2, matrix_t> K(read_csv<double>("../data/sr/13/diffusion.csv").as_matrix());
     FeCoeff<2, 2, 1, matrix_t> b(read_csv<double>("../data/sr/13/transport.csv").as_matrix());
     auto a = integral(D)(dot(K * grad(f), grad(v)) + dot(b, grad(f)) * v);
-    ScalarField<2, decltype([](const Eigen::Matrix<double, 2, 1>& p) { return 0; })> u;
+    ZeroField<2> u;
     auto F = integral(D)(u * v);
-
     // modeling
-    SRPDE m("y ~ f", data, fe_parabolic(Direct, std::pair{a, F}, ic));
+    SRPDE m("y ~ f", data, fe_ls_parabolic_mono(std::pair{a, F}, ic));
     m.fit(1e-6 / data[0].rows(), 1e-6);
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/13/field.mtx"));
@@ -345,11 +415,10 @@ TEST(sr, test_14) {
     TrialFunction f(Vh);
     TestFunction  v(Vh);
     auto a = integral(D)(dot(grad(f), grad(v)));
-    ScalarField<2, decltype([](const Eigen::Matrix<double, 2, 1>& p) { return 0; })> u;
+    ZeroField<2> u;
     auto F = integral(D)(u * v);
-    
     // modeling
-    SRPDE m("y ~ f", data, fe_parabolic(Iterative, std::pair{a, F}, ic, /* max_iter = */ 50, /* tol = */ 1e-4));
+    SRPDE m("y ~ f", data, fe_ls_parabolic_ieul(std::pair{a, F}, ic, /* max_iter = */ 50, /* tol = */ 1e-4));
     m.fit(0.0002267573696145125, 1.0);
     
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/14/field.mtx"));
@@ -363,9 +432,16 @@ TEST(sr, test_15) {
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
     l1.load_csv<double>("../data/sr/15/response.csv");
+    // physics
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction  v(Vh);
+    auto a = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u;
+    auto F = integral(D)(u * v);
     // modeling
-    SRPDE m("y ~ f", data, fe_laplace());
-    m.fit(/* lambda = */ 1e-4 / data[0].rows());
+    SRPDE m("y ~ f", data, fe_ls_elliptic(a, F));
+    m.fit(1e-4 / data[0].rows());
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/15/field.mtx"));
 }
@@ -379,24 +455,38 @@ TEST(sr, test_16) {
     auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
     l1.load_csv<double>("../data/sr/16/response.csv");
     l1.load_csv<double>("../data/sr/16/design_matrix.csv");
-    
+    // physics
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction  v(Vh);
+    auto a = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u;
+    auto F = integral(D)(u * v);    
     // modeling
-    SRPDE m("y ~ x1 + f", data, fe_laplace());
-    m.fit(/* lambda = */ 1e-4 / data[0].rows());
+    SRPDE m("y ~ x1 + f", data, fe_ls_elliptic(a, F));
+    m.fit(1e-4 / data[0].rows());
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/16/field.mtx"));
     EXPECT_TRUE(almost_equal<double>(m.beta(), "../data/sr/16/beta.mtx"));    
 }
 
-// test_10-SR-PDE_no_cov_3d.R
+// // test_10-SR-PDE_no_cov_3d.R
 TEST(sr, test_17) {
+    // geometry
     Triangulation<3, 3> D = read_mesh<3, 3>("../data/mesh/unit_sphere");
-
+    // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
     l1.load_csv<double>("../data/sr/17/response.csv");
+    // physics
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction  v(Vh);
+    auto a = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<3> u;
+    auto F = integral(D)(u * v);
     // modeling
-    SRPDE m("y ~ f", data, fe_laplace());
+    SRPDE m("y ~ f", data, fe_ls_elliptic(a, F));
     m.fit(1e-4 / data[0].rows());
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/17/field.mtx"));
@@ -409,8 +499,15 @@ TEST(sr, test_18) {
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
     l1.load_csv<double>("../data/sr/18/response.csv");
+    // physics
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction  v(Vh);
+    auto a = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<3> u;
+    auto F = integral(D)(u * v);    
     // modeling
-    SRPDE m("y ~ f", data, fe_laplace());
+    SRPDE m("y ~ f", data, fe_ls_elliptic(a, F));
     m.fit(1e-2 / data[0].rows());
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/18/field.mtx"));
@@ -425,15 +522,22 @@ TEST(sr, test_19) {
     auto& l1 = data.insert_scalar_layer<POINT, POINT>("l1", std::tuple {MESH_NODES, MESH_NODES});
     l1.load_csv<double>("../data/sr/19/response.csv");
     l1.load_csv<double>("../data/sr/19/design_matrix.csv");
-    // modeling
-    BsSpace Vh(T, 3);
+    // physics
+    FeSpace Vh(D, P1<1>);   // linear finite element in space
     TrialFunction f(Vh);
     TestFunction  v(Vh);
-    auto a = integral(T)(dxx(f) * dxx(v));
-    ScalarField<1, decltype([](const Eigen::Matrix<double, 1, 1>& p) { return 0; })> u;
-    auto F = integral(T)(u * v);
+    auto a_D = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u_D;
+    auto F_D = integral(D)(u_D * v);
 
-    SRPDE m("y ~ x1 + x2 + f", data, fe_separable(Direct, fe_laplace(), std::pair {a, F}));
+    BsSpace Bh(T, 3);   // cubic B-splines in time
+    TrialFunction g(Bh);
+    TestFunction  w(Bh);
+    auto a_T = integral(T)(dxx(g) * dxx(w));
+    ZeroField<1> u_T;
+    auto F_T = integral(T)(u_T * w);    
+    // modeling
+    SRPDE m("y ~ x1 + x2 + f", data, fe_ls_separable_mono(std::pair {a_D, F_D}, std::pair {a_T, F_T}));
     m.fit(1e-4 / data[0].rows(), 1e-4 / data[0].rows());
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/19/field.mtx"));

@@ -110,6 +110,8 @@ struct fe_de_separable {
     }
    public:
     static constexpr int n_lambda = 2;
+    using solver_category = de_solver;
+
     // penalized negative log-likelihood objective functor
     struct llik_t {
         llik_t(fe_de_separable& m, const std::array<double, n_lambda>& lambda) :
@@ -196,15 +198,17 @@ struct fe_de_separable {
         // eval reference basis at quadrature nodes, store de_quadrature weights
         de_fe_quadrature_t<fe_embed_dim> fe_quad_rule;
         de_bs_quadrature_t bs_quad_rule;
+        std::vector<Eigen::Matrix<double, Dynamic, Dynamic>> PsiQuad;   // \psi_i(q_p) \kron \phi_j(q_t), t = 1, ..., m
+        Eigen::Matrix<double, Dynamic, 1> w;                            // quadrature weights
         {
-            PsiQuad_.resize(T.n_cells());
-            matrix_t PsiQuad = eval_fe_shape_values_at_quadrature_(fe_space, fe_quad_rule);
+            PsiQuad.resize(T.n_cells());
+            matrix_t PsiQuad_ = eval_fe_shape_values_at_quadrature_(fe_space, fe_quad_rule);
 	    // integration in time
             for (auto it = T.cells_begin(); it != T.cells_end(); ++it) {
                 matrix_t PhiQuad = eval_bs_shape_values_at_quadrature_(bs_space, bs_quad_rule, it);
-                PsiQuad_[it->id()] = kronecker(PhiQuad, PsiQuad);   // tensorize
+                PsiQuad[it->id()] = kronecker(PhiQuad, PsiQuad_);   // tensorize
             }
-            w_ = kronecker(bs_quad_rule.weights, fe_quad_rule.weights).as_eigen_matrix();
+            w = kronecker(bs_quad_rule.weights, fe_quad_rule.weights).as_eigen_matrix();
         }
 	
         std::array<sparse_matrix_t, 2> Psi__;
@@ -236,26 +240,26 @@ struct fe_de_separable {
         Psi_.makeCompressed();
 	
         // store handle for approximation of \int_T \int_D (e^g)
-        int_exp_ = [&, Vh = TpSpace(fe_space, bs_space)](const vector_t& g) {
+        int_exp_ = [&, PsiQuad, w, Vh = TpSpace(fe_space, bs_space)](const vector_t& g) {
             double result = 0;
             for (auto jt = T.cells_begin(); jt != T.cells_end(); ++jt) {
                 for (auto it = D.cells_begin(); it != D.cells_end(); ++it) {
-                    result += w_.dot((PsiQuad_[jt->id()] * g(Vh.dof_handler().active_dofs(it->id(), jt->id())))
-                                       .array().exp().matrix()) *
+                    result += w.dot((PsiQuad[jt->id()] * g(Vh.dof_handler().active_dofs(it->id(), jt->id())))
+                                      .array().exp().matrix()) *
                               it->measure() * (0.5 * jt->measure());
                 }	
             }
             return result;
         };
         // store handle for computation of \nabla_g(\int_T \int_D (e^g))
-        grad_int_exp_ = [&, Vh = TpSpace(fe_space, bs_space)](const vector_t& g) {
+        grad_int_exp_ = [&, PsiQuad, w, Vh = TpSpace(fe_space, bs_space)](const vector_t& g) {
             vector_t grad = vector_t::Zero(g.rows());
             for (auto jt = T.cells_begin(); jt != T.cells_end(); ++jt) {
                 for (auto it = D.cells_begin(); it != D.cells_end(); ++it) {
                     std::vector<int> dofs = Vh.dof_handler().active_dofs(it->id(), jt->id());
-                    grad(dofs) += PsiQuad_[jt->id()].transpose() *
-                                  ((PsiQuad_[jt->id()] * g(dofs)).array().exp()).cwiseProduct(w_.array()).matrix() *
-                                  it->measure() * (0.5 * jt->measure());   
+                    grad(dofs) += PsiQuad[jt->id()].transpose() *
+                                  ((PsiQuad[jt->id()] * g(dofs)).array().exp()).cwiseProduct(w.array()).matrix() *
+                                  it->measure() * (0.5 * jt->measure());
                 }
             }
             return grad;
@@ -336,7 +340,7 @@ struct fe_de_separable {
         return fit(lambda[0], lambda[1]);
     }
     // modifiers
-    void set_tol(double tol) { tol_ = tol; }
+    void set_llik_tolerance(double tol) { tol_ = tol; }
 
     // observers
     const sparse_matrix_t& mass() const { return R0_; }
@@ -370,13 +374,27 @@ struct fe_de_separable {
     vector_t g_;
     // basis system evaluation handle
     std::array<std::function<sparse_matrix_t(const matrix_t& locs)>, 2> point_eval_;
-    // high-order quadrature rule for integration of \int exp(g)
-    std::vector<Eigen::Matrix<double, Dynamic, Dynamic>> PsiQuad_;   // \psi_i(q_p) \kron \phi_j(q_t), t = 1, ..., m
-    Eigen::Matrix<double, Dynamic, 1> w_;                            // quadrature weights
     double tol_ = 1e-5;                                              // tolerance for custom stopping criterion
 };
 
 }   // namespace internals
+
+// separable solver factory
+template <typename... Penalty>
+    requires(sizeof...(Penalty) == 2 && (internals::is_valid_penalty_pair_v<Penalty> && ...))
+struct fe_de_separable {
+    using solver_t = internals::fe_de_separable;
+   private:
+    struct info_t {
+        std::tuple<Penalty...> penalty;
+    };
+   public:
+    fe_de_separable(const Penalty&... penalty) : info_(std::make_tuple(penalty...)) { }
+    const info_t& get() const { return info_; }
+   private:
+    info_t info_;
+};
+  
 }   // namespace fdapde
 
 #endif   // __FE_DE_SEPARABLE_SOLVER_H__

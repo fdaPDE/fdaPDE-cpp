@@ -14,18 +14,18 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __FDAPDE_MODELS_MODULE_H__
-#define __FDAPDE_MODELS_MODULE_H__
+#ifndef __FDAPDE_DENSITY_ESTIMATION_MODULE_H__
+#define __FDAPDE_DENSITY_ESTIMATION_MODULE_H__
 
 // clang-format off
 
 // include core
 #include <fdaPDE/core.h>
 
-#include "regression.h"
-#include "functional.h"
-#include "density_estimation.h"
+#include "src/indexes.h"
+#include "solvers.h"
+#include "src/models/de.h"
 
 // clang-format on
 
-#endif   // __FDAPDE_MODELS_MODULE_H__
+#endif   // __FDAPDE_DENSITY_ESTIMATION_MODULE_H__

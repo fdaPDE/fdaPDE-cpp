@@ -28,8 +28,8 @@
 
 namespace fdapde {
 
-struct direct_tag { } Direct;
-struct iterative_tag  { } Iterative;
+struct ls_solver { };
+struct de_solver { };
   
 }   // namespace fdapde
 
