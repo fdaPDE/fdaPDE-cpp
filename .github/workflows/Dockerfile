@@ -1,5 +1,5 @@
 # define base OS environment
-FROM alpine:latest
+FROM alpine:edge
 
 # install base dependencies for compiling and testing fdaPDE
 

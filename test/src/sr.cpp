@@ -15,7 +15,6 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 using namespace fdapde;
-using fdapde::test::read_mesh;
 using fdapde::test::almost_equal;
 
 // test 1
@@ -27,7 +26,8 @@ using fdapde::test::almost_equal;
 //    order FE:     1
 TEST(sr, test_01) {
     // geometry
-    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_60");
+    std::string mesh_path = "../data/mesh/unit_square_60/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
@@ -35,7 +35,7 @@ TEST(sr, test_01) {
     // physics
     FeSpace Vh(D, P1<1>);
     TrialFunction f(Vh);
-    TestFunction  v(Vh);
+    TestFunction v(Vh);
     auto a = integral(D)(dot(grad(f), grad(v)));
     ZeroField<2> u;
     auto F = integral(D)(u * v);
@@ -55,7 +55,8 @@ TEST(sr, test_01) {
 //    order FE:     1
 TEST(sr, test_02) {
     // geometry
-    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/c_shaped");
+    std::string mesh_path = "../data/mesh/c_shaped/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", "../data/sr/02/locs.csv");
@@ -85,7 +86,8 @@ TEST(sr, test_02) {
 //    order FE:     1
 TEST(sr, test_03) {
     // geometry
-    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_60");
+    std::string mesh_path = "../data/mesh/unit_square_60/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
@@ -116,7 +118,8 @@ TEST(sr, test_03) {
 //    GCV optimization: grid stochastic
 TEST(sr, test_04) {
     // geometry
-    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_21");
+    std::string mesh_path = "../data/mesh/unit_square_21/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
@@ -149,7 +152,8 @@ TEST(sr, test_04) {
 //    GCV optimization: grid stochastic
 TEST(sr, test_05) {
     // geometry
-    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/c_shaped");
+    std::string mesh_path = "../data/mesh/c_shaped/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", "../data/sr/05/locs.csv");
@@ -177,7 +181,8 @@ TEST(sr, test_05) {
 TEST(sr, test_06) {
     // geometry
     Triangulation<1, 1> T = Triangulation<1, 1>::Interval(0, 2, 11);
-    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_21");
+    std::string mesh_path = "../data/mesh/unit_square_21/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
     // data
     GeoFrame data(D, T);
     auto& l1 = data.insert_scalar_layer<POINT, POINT>("l1", std::pair {MESH_NODES, MESH_NODES});
@@ -206,7 +211,8 @@ TEST(sr, test_06) {
 TEST(sr, test_07) {
     // geometry
     Triangulation<1, 1> T = Triangulation<1, 1>::Interval(0, std::numbers::pi, 5);
-    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/c_shaped");
+    std::string mesh_path = "../data/mesh/c_shaped/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
     // data
     GeoFrame data(D, T);
     auto& l1 = data.insert_scalar_layer<POINT, POINT>("l1", std::pair {"../data/sr/07/locs.csv", MESH_NODES});
@@ -237,7 +243,8 @@ TEST(sr, test_07) {
 TEST(sr, test_08) {
     // geometry
     Triangulation<1, 1> T = Triangulation<1, 1>::Interval(0, 2, 11);
-    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_21");
+    std::string mesh_path = "../data/mesh/unit_square_21/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
     // data
     GeoFrame data(D, T);
     auto& l1 = data.insert_scalar_layer<POINT, POINT>("l1", std::pair {MESH_NODES, "../data/sr/08/locs.csv"});
@@ -266,7 +273,8 @@ TEST(sr, test_08) {
 TEST(sr, test_09) {
     // geometry
     Triangulation<1, 1> T = Triangulation<1, 1>::Interval(0, 1, 21);
-    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/c_shaped");
+        std::string mesh_path = "../data/mesh/c_shaped/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
     // data
     GeoFrame data(D, T);
     auto& l1 = data.insert_scalar_layer<POINT, POINT>(
@@ -296,7 +304,8 @@ TEST(sr, test_09) {
 TEST(sr, test_10) {
     // geometry
     Triangulation<1, 1> T = Triangulation<1, 1>::Interval(0, 4, 5);
-    Triangulation<2, 3> D = read_mesh<2, 3>("../data/mesh/surface");
+    std::string mesh_path = "../data/mesh/surface/";
+    Triangulation<2, 3> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
     // data
     GeoFrame data(D, T);
     auto& l1 = data.insert_scalar_layer<POINT, POINT>("l1", std::pair {MESH_NODES, MESH_NODES});
@@ -325,7 +334,8 @@ TEST(sr, test_10) {
 // areal test
 TEST(sr, test_11) {
     // geometry
-    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/quasi_circle");
+    std::string mesh_path = "../data/mesh/quasi_circle/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POLYGON>("l1", "../data/sr/11/incidence_mat.csv");
@@ -349,7 +359,8 @@ TEST(sr, test_12) {
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;    
     // geometry
-    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/quasi_circle");
+    std::string mesh_path = "../data/mesh/quasi_circle/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POLYGON>("l1", "../data/sr/12/incidence_mat.csv");
@@ -375,7 +386,8 @@ TEST(sr, test_13) {
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;    
     // geometry
-    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/quasi_circle");
+    std::string mesh_path = "../data/mesh/quasi_circle/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
     Triangulation<1, 1> T = Triangulation<1, 1>::Interval(0, 3.6, 10);
     // data
     GeoFrame data(D, T);
@@ -403,7 +415,8 @@ TEST(sr, test_14) {
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;    
     // geometry
-    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_21");
+    std::string mesh_path = "../data/mesh/unit_square_21/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
     Triangulation<1, 1> T = Triangulation<1, 1>::Interval(0, 1.8, 10);
     // data
     GeoFrame data(D, T);
@@ -427,7 +440,8 @@ TEST(sr, test_14) {
 // test on network (test_4-SR-PDE_no_cov_network.R)
 TEST(sr, test_15) {
     // geometry
-    Triangulation<1, 2> D = read_mesh<1, 2>("../data/mesh/network");
+    std::string mesh_path = "../data/mesh/network/";
+    Triangulation<1, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
@@ -449,7 +463,8 @@ TEST(sr, test_15) {
 // test_5-SR-PDE_with_cov_network.R
 TEST(sr, test_16) {
     // geometry
-    Triangulation<1, 2> D = read_mesh<1, 2>("../data/mesh/network");
+    std::string mesh_path = "../data/mesh/network/";
+    Triangulation<1, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
@@ -473,7 +488,8 @@ TEST(sr, test_16) {
 // // test_10-SR-PDE_no_cov_3d.R
 TEST(sr, test_17) {
     // geometry
-    Triangulation<3, 3> D = read_mesh<3, 3>("../data/mesh/unit_sphere");
+    std::string mesh_path = "../data/mesh/unit_sphere/";
+    Triangulation<3, 3> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
@@ -494,7 +510,8 @@ TEST(sr, test_17) {
 
 // test_11-SR-PDE_no_cov_manifold
 TEST(sr, test_18) {
-    Triangulation<2, 3> D = read_mesh<2, 3>("../data/mesh/surface_horseshoe");
+    std::string mesh_path = "../data/mesh/surface_horseshoe/";
+    Triangulation<2, 3> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
@@ -515,7 +532,8 @@ TEST(sr, test_18) {
 
 // test_12-tSR-PDE_network.R
 TEST(sr, test_19) {
-    Triangulation<1, 2> D = read_mesh<1, 2>("../data/mesh/network");
+    std::string mesh_path = "../data/mesh/network/";
+    Triangulation<1, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
     Triangulation<1, 1> T = Triangulation<1, 1>::UnitInterval(6);
     // data
     GeoFrame data(D, T);
