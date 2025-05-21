@@ -258,6 +258,15 @@ template <typename VariationalSolver> class fpca_subspace_iteration_impl {
         }
         return std::make_pair(F, S);
     }
+    template <typename LambdaT>
+        requires(internals::is_subscriptable<LambdaT, int>)
+    // TO DO: test the subspace calibration strategy (possibly against the monolithic, they should have the same results)
+    double gcv_(const matrix_t& X, int rank, const LambdaT lambda, const matrix_t F0) {
+        const auto& [F, S] = solve_(X, rank, lambda, F0);
+        // evaluate GCV index at convergence
+        int dor = n_locs_ - smoother_->edf(lambda);
+        return (n_locs_ / std::pow(dor, 2)) * (X.transpose() * S - (smoother_->Psi() * F)).squaredNorm();
+    }
     int n_locs_ = 0, n_units_ = 0, n_dofs_ = 0;
     smoother_t* smoother_;         // smoothing variational solver
     matrix_t f_;                   // PCs expansion coefficient vector
