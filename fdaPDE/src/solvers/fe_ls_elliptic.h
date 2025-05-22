@@ -78,6 +78,20 @@ struct fe_ls_elliptic {
         }
 	return;
     }
+    void enforce_lhs_dirichlet_bc_(SparseBlockMatrix<double, 2, 2>& A) {
+        if (dirichlet_dofs_.size() == 0) { return; }
+        for (int i = 0; i < dirichlet_dofs_.size(); ++i) {
+	  // zero out row and column in correspondance of Dirichlet-type dofs
+	  A.row(dirichlet_dofs_[i]) *= 0;
+	  A.col(dirichlet_dofs_[i]) *= 0;
+	  A.row(n_dofs_ + dirichlet_dofs_[i]) *= 0;
+	  A.col(n_dofs_ + dirichlet_dofs_[i]) *= 0;
+	  // set diagonal elements to 1
+	  A.coeffRef(dirichlet_dofs_[i], dirichlet_dofs_[i]) = 1;
+	  A.coeffRef(n_dofs_ + dirichlet_dofs_[i], n_dofs_ + dirichlet_dofs_[i]) = 1;  
+        }
+	return;
+    }
    public:
     static constexpr int n_lambda = 1;
     using solver_category = ls_solver;
@@ -138,6 +152,10 @@ struct fe_ls_elliptic {
             return internals::areal_basis_eval(fe_space, locs);
         };
 	b_.resize(2 * n_dofs_, 1);
+	// store Dirichlet boundary condition
+	auto& dof_handler = bilinear_form.trial_space().dof_handler();
+	dirichlet_dofs_ = dof_handler.dirichlet_dofs();
+	dirichlet_vals_ = dof_handler.dirichlet_values();
         return;
     }
     // non-parametric fit
@@ -219,6 +237,8 @@ struct fe_ls_elliptic {
         }
         if (old_n_obs != n_obs_) { W_ *= (double)old_n_obs / n_obs_; }
         b_.block(0, 0, n_dofs_, 1) = -PsiNA().transpose() * D_ * W_ * y;
+	// enforce dirichlet bc, if any
+        for (int i = 0; i < dirichlet_dofs_.size(); ++i) { b_.row(dirichlet_dofs_[i]).setConstant(dirichlet_vals_[i]); }
         return;
     }
     template <typename WeightMatrix> void update_weights(const WeightMatrix& W) {
@@ -236,8 +256,10 @@ struct fe_ls_elliptic {
             V_.block(0, 0, n_covs_, n_dofs_) = X_.transpose() * W_ * PsiNA();
             b_.block(0, 0, n_dofs_, 1) = -PsiNA().transpose() * D_ * internals::lmbQ(W_, X_, invXtWX_, y_);
         }
-	W_changed_ = true;
-	return;
+        // enforce dirichlet bc, if any
+        for (int i = 0; i < dirichlet_dofs_.size(); ++i) { b_.row(dirichlet_dofs_[i]).setConstant(dirichlet_vals_[i]); }
+        W_changed_ = true;
+        return;
     }
     template <typename WeightMatrix> void update_response_and_weights(const vector_t& y, const WeightMatrix& W) {
         fdapde_assert(
@@ -261,12 +283,14 @@ struct fe_ls_elliptic {
             // assemble and factorize system matrix for nonparameteric part
             SparseBlockMatrix<double, 2, 2> A(
               -PsiNA().transpose() * D_ * W_ * PsiNA(), lambda * R1_.transpose(), lambda * R1_, lambda * R0_);
+	    enforce_lhs_dirichlet_bc_(A);
             invA_.compute(A);
 	    W_changed_ = false;
         }
         if (lambda_saved_.value() != lambda) {
             // update linear system rhs
             b_.block(n_dofs_, 0, n_dofs_, 1) = lambda * u_;
+            for (int i = 0; i < dirichlet_dofs_.size(); ++i) { b_.row(n_dofs_ + dirichlet_dofs_[i]).setZero(); }
         }
         lambda_saved_ = lambda;
         vector_t x;
@@ -294,17 +318,26 @@ struct fe_ls_elliptic {
             // assemble and factorize system matrix for nonparameteric part
             SparseBlockMatrix<double, 2, 2> A(
               -PsiNA().transpose() * D_ * W_ * PsiNA(), lambda * R1_.transpose(), lambda * R1_, lambda * R0_);
+	    enforce_lhs_dirichlet_bc_(A);
             invA_.compute(A);
         }
         vector_t x;
         if (n_covs_ == 0) {   // equivalent to calling fit(lambda)
-            if (lambda_saved_.value() != lambda) { b_.block(n_dofs_, 0, n_dofs_, 1) = lambda * u_; }
+            if (lambda_saved_.value() != lambda) {
+                b_.block(n_dofs_, 0, n_dofs_, 1) = lambda * u_;
+                for (int i = 0; i < dirichlet_dofs_.size(); ++i) { b_.row(n_dofs_ + dirichlet_dofs_[i]).setZero(); }
+            }
             x = invA_.solve(b_);
         } else {
             vector_t b(2 * n_dofs_);
             // assemble nonparametric linear system rhs
             b.block(0, 0, n_dofs_, 1) = -PsiNA().transpose() * D_ * W_ * y_;
-            b.block(n_dofs_, 0, n_dofs_, 1) = lambda * u_;   
+            b.block(n_dofs_, 0, n_dofs_, 1) = lambda * u_;
+	    // enforce Dirichlet BCs, if any
+            for (int i = 0; i < dirichlet_dofs_.size(); ++i) {
+                b_.row(dirichlet_dofs_[i]).setConstant(dirichlet_vals_[i]);
+                b_.row(n_dofs_ + dirichlet_dofs_[i]).setZero();
+            }
             x = invA_.solve(b);
         }
         lambda_saved_ = lambda;
@@ -332,6 +365,10 @@ struct fe_ls_elliptic {
         } else {
             Bs_->topRows(n_dofs_) = -PsiNA().transpose() * D_ * internals::lmbQ(W_, X_, invXtWX_, *Us_);
         }
+	// enforce Dirichlet BCs, if any
+        for (int i = 0; i < dirichlet_dofs_.size(); ++i) {
+            Bs_->row(dirichlet_dofs_[i]).setConstant(dirichlet_vals_[i]);
+        }
         matrix_t x = n_covs_ == 0 ? invA_.solve(*Bs_) : woodbury_system_solve(invA_, U_, XtWX_, V_, *Bs_);
         double trS = 0;   // monte carlo Tr[S] approximation
         for (int i = 0; i < r; ++i) { trS += Ys_->row(i).dot(x.col(i).head(n_dofs_)); }
@@ -349,9 +386,10 @@ struct fe_ls_elliptic {
             lambda_ = lambda;
         }
         if (lambda_saved_.value() != lambda_) {
-            SparseBlockMatrix<double, 2, 2> A_(
+            SparseBlockMatrix<double, 2, 2> A(
               -PsiNA().transpose() * D_ * W_ * PsiNA(), lambda_ * R1_.transpose(), lambda_ * R1_, lambda_ * R0_);
-            invA_.compute(A_);
+	    enforce_lhs_dirichlet_bc_(A);	    
+            invA_.compute(A);
             lambda_saved_ = lambda_;
         }
         return edf(r, seed);
@@ -408,11 +446,9 @@ struct fe_ls_elliptic {
     std::optional<double> lambda_saved_ = -1;
     sparse_solver_t invA_;
     matrix_t b_;
-    // matrices for hutchinson stochastic estimation of Tr[S]
-    std::optional<matrix_t> Ys_;
-    std::optional<matrix_t> Bs_;
-    std::optional<matrix_t> Us_;
-
+    // matrices for Hutchinson stochastic estimation of Tr[S]
+    std::optional<matrix_t> Ys_, Bs_, Us_;
+  
     int n_dofs_ = 0, n_locs_ = 0, n_obs_ = 0, n_covs_ = 0;
     sparse_matrix_t R0_;    // n_dofs x n_dofs matrix [R0]_{ij} = \int_D \psi_i * \psi_j
     sparse_matrix_t R1_;    // n_dofs x n_dofs matrix [R1]_{ij} = \int_D a(\psi_i, \psi_j)
@@ -425,6 +461,8 @@ struct fe_ls_elliptic {
     // basis system evaluation handles
     std::function<sparse_matrix_t(const matrix_t& locs)> point_eval_;
     std::function<std::pair<sparse_matrix_t, vector_t>(const binary_t& locs)> areal_eval_;
+    std::vector<int> dirichlet_dofs_;      // dofs where Dirichlet boundary conditions are imposed
+    std::vector<double> dirichlet_vals_;   // values imposed at Dirichlet dofs
 
     matrix_t X_;               // n_obs x n_covs design matrix
     vector_t y_;               // n_obs x 1 observation vector
