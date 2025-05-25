@@ -232,11 +232,11 @@ struct fe_ls_elliptic {
 	int old_n_obs = n_obs_;
         if (nan_pattern.any()) {
             n_obs_ = n_locs_ - nan_pattern.count();
-            B_ = nan_pattern.repeat(1, n_dofs_).select(Psi_, 0);
-            y_ = nan_pattern.select(y_, 0);
+            B_ = (~nan_pattern).repeat(1, n_dofs_).select(Psi_, 0);
+            y_ = (~nan_pattern).select(y_, 0);
         }
         if (old_n_obs != n_obs_) { W_ *= (double)old_n_obs / n_obs_; }
-        b_.block(0, 0, n_dofs_, 1) = -PsiNA().transpose() * D_ * W_ * y;
+        b_.block(0, 0, n_dofs_, 1) = -PsiNA().transpose() * D_ * W_ * y_;
 	// enforce dirichlet bc, if any
         for (int i = 0; i < dirichlet_dofs_.size(); ++i) { b_.row(dirichlet_dofs_[i]).setConstant(dirichlet_vals_[i]); }
         return;
@@ -267,10 +267,10 @@ struct fe_ls_elliptic {
         y_ = y;
         // correct \Psi for missing observations
         auto nan_pattern = na_matrix(y);
-        if (nan_pattern.any()) {
+        if (nan_pattern.any()) {	  
             n_obs_ = n_locs_ - nan_pattern.count();
-            B_ = nan_pattern.repeat(1, n_dofs_).select(Psi_, 0);
-            y_ = nan_pattern.select(y_, 0);
+            B_ = (~nan_pattern).repeat(1, n_dofs_).select(Psi_, 0);
+            y_ = (~nan_pattern).select(y_, 0);
         }
         update_weights(W);
         return;
