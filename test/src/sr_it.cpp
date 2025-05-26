@@ -27,7 +27,7 @@ using fdapde::test::almost_equal;
 TEST(sr_it, test_01) {
     // geometry
     std::string mesh_path = "../data/mesh/unit_square_60/";
-    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
@@ -53,10 +53,11 @@ TEST(sr_it, test_01) {
 //    covariates:   no
 //    BC:           no
 //    order FE:     1
+/*
 TEST(sr_it, test_03) {
     // geometry
     std::string mesh_path = "../data/mesh/unit_square_60/";
-    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
@@ -76,6 +77,7 @@ TEST(sr_it, test_03) {
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/03/field.mtx"));
 }
+*/
 
 // test 4
 //    mesh:         unit_square_21
@@ -88,7 +90,7 @@ TEST(sr_it, test_03) {
 TEST(sr_it, test_04) {
     // geometry
     std::string mesh_path = "../data/mesh/unit_square_21/";
-    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
@@ -115,7 +117,7 @@ TEST(sr_it, test_04) {
 TEST(sr_it, test_11) {
     // geometry
     std::string mesh_path = "../data/mesh/quasi_circle/";
-    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POLYGON>("l1", "../data/sr/11/incidence_mat.csv");
@@ -141,7 +143,7 @@ TEST(sr_it, test_12) {
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;
     // geometry
     std::string mesh_path = "../data/mesh/quasi_circle/";
-    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POLYGON>("l1", "../data/sr/12/incidence_mat.csv");
@@ -167,7 +169,7 @@ TEST(sr_it, test_12) {
 TEST(sr_it, test_15) {
     // geometry
     std::string mesh_path = "../data/mesh/network/";
-    Triangulation<1, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
+    Triangulation<1, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);

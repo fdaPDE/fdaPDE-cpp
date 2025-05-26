@@ -101,12 +101,11 @@ struct fe_ls_elliptic_it {
         template <typename Optimizer> bool stop_if(Optimizer& opt) {
             double loss_old = operator()(opt.x_old);
             double loss_new = operator()(opt.x_new);
-            return std::abs((loss_new - loss_old) / loss_old) < tol_;
+            return std::abs((loss_new - loss_old) / loss_old) < m_->tol_;
         }
        private:
         fe_ls_elliptic_it* m_;
         double lambda_;
-        double tol_ = 1e-15;
     };
 
     // default constructor
@@ -273,8 +272,11 @@ struct fe_ls_elliptic_it {
 
     // main fit entry point
     // template <typename Optimizer>
-    auto fit(double lambda) {   // , const vector_t& f_init , Optimizer&& opt
+    auto fit(double lambda, double tol = 1e-15) {   // , const vector_t& f_init , Optimizer&& opt
         fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
+        // update tolerance
+        tol_ = tol;
+        // optimize
         BFGS<Dynamic, BacktrackingLineSearch> opt {50000, tol_, 10};
         // GradientDescent<Dynamic, BacktrackingLineSearch> opt {50000, 1e-3, 1e-2};
         f_ = opt.optimize(
@@ -287,12 +289,12 @@ struct fe_ls_elliptic_it {
     }
     template <typename LambdaT>   // typename Optimizer,
         requires(internals::is_vector_like_v<LambdaT>)
-    auto fit(LambdaT&& lambda) {   //, Optimizer&& opt
+    auto fit(LambdaT&& lambda, double tol = 1e-15) {   //, Optimizer&& opt
         fdapde_assert(lambda.size() == n_lambda);
-        return fit(lambda[0]);
+        return fit(lambda[0], tol);
     }
     // perform a nonparametric_fit, e.g. discarding possible covariates
-    vector_t nonparametric_fit(double lambda) {
+    vector_t nonparametric_fit(double lambda, double tol = 1e-15) {
         fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
         // ...
         return f_;
