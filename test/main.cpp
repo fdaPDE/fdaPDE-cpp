@@ -31,7 +31,7 @@ bool almost_equal(
   double epsilon) {
     return (op1 - op2).template lpNorm<Eigen::Infinity>() < epsilon ||
            (op1 - op2).template lpNorm<Eigen::Infinity>() <
-      (std::max(op1.template lpNorm<Eigen::Infinity>(), op2.template lpNorm<Eigen::Infinity>()) * epsilon);
+             (std::max(op1.template lpNorm<Eigen::Infinity>(), op2.template lpNorm<Eigen::Infinity>()) * epsilon);
 }
 template <typename Scalar>
 bool almost_equal(
@@ -60,13 +60,13 @@ template <typename Scalar> bool almost_equal(const std::vector<Scalar>& op1, std
 }   // namespace test
 }   // namespace fdapde
 
-// #include "src/sr.cpp"
+#include "src/sr.cpp"
 // #include "src/gsr.cpp"
 // #include "src/qsr.cpp"
 // #include "src/de.cpp"
 
-int main(int argc, char **argv){
-  // start testing
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+int main(int argc, char** argv) {
+    // start testing
+    testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
 }
