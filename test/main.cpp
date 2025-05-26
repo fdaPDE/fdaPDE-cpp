@@ -29,10 +29,10 @@ template <typename Scalar>
 bool almost_equal(
   const Eigen::Matrix<Scalar, Dynamic, Dynamic>& op1, const Eigen::Matrix<Scalar, Dynamic, Dynamic>& op2,
   double epsilon) {
+    std::cout << (op1 - op2).template lpNorm<Eigen::Infinity>() << std::endl;
     return (op1 - op2).template lpNorm<Eigen::Infinity>() < epsilon ||
            (op1 - op2).template lpNorm<Eigen::Infinity>() <
              (std::max(op1.template lpNorm<Eigen::Infinity>(), op2.template lpNorm<Eigen::Infinity>()) * epsilon);
-    (std::max(op1.template lpNorm<Eigen::Infinity>(), op2.template lpNorm<Eigen::Infinity>()) * epsilon);
 }
 template <typename Scalar>
 bool almost_equal(
@@ -61,7 +61,8 @@ template <typename Scalar> bool almost_equal(const std::vector<Scalar>& op1, std
 }   // namespace test
 }   // namespace fdapde
 
-#include "src/sr.cpp"
+// #include "src/sr.cpp"
+#include "src/sr_dirichlet.cpp"
 #include "src/sr_it.cpp"
 // #include "src/gsr.cpp"
 // #include "src/qsr.cpp"
