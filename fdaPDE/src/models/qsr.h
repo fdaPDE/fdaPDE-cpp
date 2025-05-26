@@ -49,13 +49,33 @@ template <typename VariationalSolver> class QSRPDE {
     }
 
     // Functional penalized iterative reweighted least squares
-    template <typename... LambdaT>
-        requires(std::is_convertible_v<LambdaT, double> && ...) && (sizeof...(LambdaT) == n_lambda)
-    void fit(double alpha, LambdaT... lambda) {
+    template <typename... Args>
+        requires(sizeof...(Args) > 0)
+    auto fit(double alpha, Args&&... args) {
+        vector_t lambda(n_lambda);
+        internals::for_each_index_and_args<sizeof...(Args)>(
+          [&]<int Ns_, typename Ts_>(const Ts_& ts) {
+              if (Ns_ < n_lambda) {
+                  fdapde_static_assert(
+                    std::is_convertible_v<Ts_ FDAPDE_COMMA double>, INVALID_SMOOTHING_PARAMETER_TYPE);
+                  lambda[Ns_] = ts;
+              }
+          },
+          args...);
         matrix_t y = y_;
         // initialization
         solver_.update_response_and_weights(y, vector_t::Ones(n_obs_).asDiagonal());   // restore solver state
-        solver_.nonparametric_fit((2. * lambda)...);
+        internals::apply_index_pack_and_args<sizeof...(Args)>(
+          [&]<typename... Ts_>(Ts_... ts) {
+              solver_.nonparametric_fit([&]() {
+                  if constexpr (Ts_::index < n_lambda) {
+                      return 2. * ts.value;   // scale smoothing parameter
+                  } else {
+                      return ts.value;
+                  }
+              }()...);
+          },
+          args...);
         mu_ = solver_.Psi() * solver_.f();	
         double Jold = std::numeric_limits<double>::max(), Jnew = 0;
         n_iter_ = 0;
@@ -67,24 +87,21 @@ template <typename VariationalSolver> class QSRPDE {
             py_ = y - (1 - 2. * alpha) * abs_res;	  
             // \argmin_{\beta, f} [ 1/n * \norm(W^{1/2} * (y - X * \beta - f_n))^2 + P_{\lambda}(f) ]
 	    solver_.update_response_and_weights(py_, pW_.asDiagonal());
-            solver_.fit(lambda...);
+            solver_.fit(std::forward<Args>(args)...);
             mu_ = fitted();
             // prepare for next iteration
             double data_loss = (pW_.cwiseSqrt().matrix().asDiagonal() * (py_ - mu_)).squaredNorm() / n_obs_;
             Jold = Jnew;
-            Jnew = data_loss + solver_.ftPf(lambda...);
+            Jnew = data_loss + solver_.ftPf(lambda);
             n_iter_++;
         }
-	return;
+	return std::make_pair(solver_.f(), solver_.beta());
     }
-    template <typename... LambdaT>
-        requires(std::is_convertible_v<LambdaT, double> && ...) && (sizeof...(LambdaT) == n_lambda)
-    void fit(LambdaT... lambda) {
-        return fit(alpha_, lambda...);
-    }
+    template <typename... Args> auto fit(Args&&... args) { return fit(alpha_, std::forward<Args>(args)...); }
     // observers
     const vector_t& f() const { return solver_.f(); }
     const vector_t& beta() const { return solver_.beta(); }
+    const vector_t& misfit() const { return solver_.misfit(); }
     int n_covs() const { return n_covs_; }
     int n_obs() const { return n_obs_; }
     double edf(int r = 100, int seed = random_seed) { return solver_.edf(r, seed); }

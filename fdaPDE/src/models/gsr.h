@@ -49,9 +49,14 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
     }
     
     // Functional penalized iterative reweighted least squares
-    template <typename... LambdaT>
-        requires(std::is_convertible_v<LambdaT, double> && ...)
-    void fit(LambdaT... lambda) {
+    template <typename... Args> auto fit(Args&&... args) {
+        vector_t lambda(n_lambda);
+        internals::for_each_index_and_args<sizeof...(Args)>([&]<int Ns_, typename Ts_>(const Ts_& ts) {
+            if (Ns_ < n_lambda) {
+                fdapde_static_assert(std::is_convertible_v<Ts_ FDAPDE_COMMA double>, INVALID_SMOOTHING_PARAMETER_TYPE);
+                lambda[Ns_] = ts;
+            }
+        });
         // initialize mean vector
         vector_t y = y_;
         solver_.update_response_and_weights(y, vector_t::Ones(n_obs_).asDiagonal());   // restore solver state
@@ -68,20 +73,21 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
             py_ = G.asDiagonal() * (y - mu_) + distr_.link(mu_);
             // \argmin_{\beta, f} [ \norm(W^{1/2} * (y - X * \beta - f_n))^2 + P_{\lambda}(f) ]
 	    solver_.update_response_and_weights(py_, pW_.asDiagonal());
-            solver_.fit(lambda...);
+            solver_.fit(std::forward<Args>(args)...);
             mu_ = distr_.inv_link(fitted());    
             // prepare for next iteration
             double data_loss =
               (distr_.variance(mu_).array().sqrt().inverse().matrix().asDiagonal() * (y - mu_)).squaredNorm() / n_obs_;
             Jold = Jnew;
-            Jnew = data_loss + solver_.ftPf(lambda...);
+            Jnew = data_loss + solver_.ftPf(lambda);
 	    n_iter_++;
         }
-	return;
+        return std::make_pair(solver_.f(), solver_.beta());
     }
     // observers
     const vector_t& f() const { return solver_.f(); }
     const vector_t& beta() const { return solver_.beta(); }
+    const vector_t& misfit() const { return solver_.misfit(); }
     int n_covs() const { return n_covs_; }
     int n_obs() const { return n_obs_; }
     double edf(int r = 100, int seed = random_seed) { return solver_.edf(r, seed); }
