@@ -61,7 +61,7 @@ template <typename Scalar> bool almost_equal(const std::vector<Scalar>& op1, std
 }   // namespace test
 }   // namespace fdapde
 
-// #include "src/sr.cpp"
+#include "src/sr.cpp"
 #include "src/sr_dirichlet.cpp"
 #include "src/sr_it.cpp"
 // #include "src/gsr.cpp"
@@ -72,8 +72,4 @@ int main(int argc, char** argv) {
     // start testing
     testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
-    int main(int argc, char** argv) {
-        // start testing
-        testing::InitGoogleTest(&argc, argv);
-        return RUN_ALL_TESTS();
-    }
+}
