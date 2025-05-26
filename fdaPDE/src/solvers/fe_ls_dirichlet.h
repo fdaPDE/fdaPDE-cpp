@@ -14,8 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __FE_LS_ELLIPTIC_ENERGY_SOLVER_H__
-#define __FE_LS_ELLIPTIC_ENERGY_SOLVER_H__
+#ifndef __FE_LS_DIRICHLET_SOLVER_H__
+#define __FE_LS_DIRICHLET_SOLVER_H__
 
 #include "header_check.h"
 
@@ -23,7 +23,7 @@ namespace fdapde {
 namespace internals {
 
 // solves \min_{f, \beta} \| W^{1/2} * (y_i - x_i^\top * \beta - f(p_i)) \|_2^2 + \int_D (grad(f) \cdot grad(f))
-struct fe_ls_elliptic_energy {
+struct fe_ls_dirichlet {
    private:
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
@@ -93,11 +93,11 @@ struct fe_ls_elliptic_energy {
     static constexpr int n_lambda = 1;
     using solver_category = ls_solver;
 
-    fe_ls_elliptic_energy() noexcept = default;
+    fe_ls_dirichlet() noexcept = default;
     // construct from formula + geoframe
     template <typename GeoFrame, typename InfoT, typename WeightMatrix>
         requires(is_valid_info_t<InfoT>::value)
-    fe_ls_elliptic_energy(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : W_(W) {
+    fe_ls_dirichlet(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
         fdapde_assert(gf.n_layers() == 1);
         n_obs_ = gf[0].rows();
@@ -108,12 +108,12 @@ struct fe_ls_elliptic_energy {
     }
     template <typename GeoFrame, typename InfoT>
         requires(is_valid_info_t<InfoT>::value)
-    fe_ls_elliptic_energy(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
-        fe_ls_elliptic_energy(formula, gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    fe_ls_dirichlet(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
+        fe_ls_dirichlet(formula, gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
     // construct with no data
     template <typename GeoFrame, typename InfoT, typename WeightMatrix>
         requires(is_valid_info_t<InfoT>::value)
-    fe_ls_elliptic_energy(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : W_(W) {
+    fe_ls_dirichlet(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
         fdapde_assert(gf.n_layers() == 1);
         n_obs_ = gf[0].rows();
@@ -124,8 +124,8 @@ struct fe_ls_elliptic_energy {
     }
     template <typename GeoFrame, typename InfoT>
         requires(is_valid_info_t<InfoT>::value)
-    fe_ls_elliptic_energy(const GeoFrame& gf, InfoT&& info) :
-        fe_ls_elliptic_energy(gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    fe_ls_dirichlet(const GeoFrame& gf, InfoT&& info) :
+        fe_ls_dirichlet(gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
 
     // perform finite element based numerical discretization
     template <typename Penalty> void discretize(Penalty&& penalty) {
@@ -452,14 +452,14 @@ struct fe_ls_elliptic_energy {
 }   // namespace internals
 
 // elliptic energy solver factory
-template <typename BilinearForm, typename LinearForm> struct fe_ls_elliptic_energy {
-    using solver_t = internals::fe_ls_elliptic_energy;
+template <typename BilinearForm, typename LinearForm> struct fe_ls_dirichlet {
+    using solver_t = internals::fe_ls_dirichlet;
    private:
     struct info_t {
         std::tuple<BilinearForm, LinearForm> penalty;
     };
    public:
-    fe_ls_elliptic_energy(const BilinearForm& bilinear_form, const LinearForm& linear_form) :
+    fe_ls_dirichlet(const BilinearForm& bilinear_form, const LinearForm& linear_form) :
         info_(std::make_tuple(bilinear_form, linear_form)) { }
     const info_t& get() const { return info_; }
    private:
@@ -467,4 +467,4 @@ template <typename BilinearForm, typename LinearForm> struct fe_ls_elliptic_ener
 };
 
 }   // namespace fdapde
-#endif   // __FE_LS_ELLIPTIC_ENERGY_SOLVER_H__
+#endif   // __FE_LS_DIRICHLET_SOLVER_H__

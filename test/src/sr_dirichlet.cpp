@@ -40,8 +40,8 @@ TEST(sr_energy, test_01) {
     ZeroField<2> u;
     auto F = integral(D)(u * v);
     // modeling
-    SRPDE m("y ~ f", data, fe_ls_elliptic_energy(a, F));
+    SRPDE m("y ~ f", data, fe_ls_dirichlet(a, F));
     m.fit(1.56206e-08);
 
-    EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/01/field_energy.mtx"));
+    EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/01/field_dirichlet.mtx"));
 }
