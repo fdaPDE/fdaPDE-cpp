@@ -44,15 +44,11 @@ class SRPDE {
         }
         solver_ = solver_t(formula, gf, penalty.get());
     }
-    template <typename... LambdaT>
-        requires(std::is_convertible_v<LambdaT, double> && ...) ||
-                (sizeof...(LambdaT) == 1 && (internals::is_vector_like_v<LambdaT> && ...))
-    void fit(LambdaT... lambda) {
-        solver_.fit(lambda...);
-    }
+    template <typename... Args> auto fit(Args&&... args) { return solver_.fit(std::forward<Args>(args)...); }
     // observers
     const vector_t& f() const { return solver_.f(); }
     const vector_t& beta() const { return solver_.beta(); }
+    const vector_t& misfit() const { return solver_.misfit(); }
     int n_covs() const { return n_covs_; }
     int n_obs() const { return n_obs_; }
     double edf(int r = 100, int seed = random_seed) { return solver_.edf(r, seed); }

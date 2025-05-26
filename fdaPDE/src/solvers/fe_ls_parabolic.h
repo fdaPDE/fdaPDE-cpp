@@ -304,7 +304,7 @@ class fe_ls_parabolic_mono {
         if (nan_pattern.any()) {
             n_obs_ = n_locs_ - nan_pattern.count();
             B_ = (~nan_pattern).repeat(1, m_ * n_dofs_).select(Psi_, 0);
-	    y_ = (~nan_pattern).select(y_, 0);
+            y_ = (~nan_pattern).select(y_, 0);
         }
         if (old_n_obs != n_obs_) { W_ *= (double)old_n_obs / n_obs_; } // re-normalize
         b_.block(0, 0, m_ * n_dofs_, 1) = -PsiNA().transpose() * D_ * W_ * y;
