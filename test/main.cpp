@@ -32,6 +32,7 @@ bool almost_equal(
     return (op1 - op2).template lpNorm<Eigen::Infinity>() < epsilon ||
            (op1 - op2).template lpNorm<Eigen::Infinity>() <
              (std::max(op1.template lpNorm<Eigen::Infinity>(), op2.template lpNorm<Eigen::Infinity>()) * epsilon);
+    (std::max(op1.template lpNorm<Eigen::Infinity>(), op2.template lpNorm<Eigen::Infinity>()) * epsilon);
 }
 template <typename Scalar>
 bool almost_equal(
@@ -70,4 +71,8 @@ int main(int argc, char** argv) {
     // start testing
     testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
-}
+    int main(int argc, char** argv) {
+        // start testing
+        testing::InitGoogleTest(&argc, argv);
+        return RUN_ALL_TESTS();
+    }
