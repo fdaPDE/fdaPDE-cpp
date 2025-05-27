@@ -29,7 +29,6 @@ template <typename Scalar>
 bool almost_equal(
   const Eigen::Matrix<Scalar, Dynamic, Dynamic>& op1, const Eigen::Matrix<Scalar, Dynamic, Dynamic>& op2,
   double epsilon) {
-    std::cout << (op1 - op2).template lpNorm<Eigen::Infinity>() << std::endl;
     return (op1 - op2).template lpNorm<Eigen::Infinity>() < epsilon ||
            (op1 - op2).template lpNorm<Eigen::Infinity>() <
              (std::max(op1.template lpNorm<Eigen::Infinity>(), op2.template lpNorm<Eigen::Infinity>()) * epsilon);

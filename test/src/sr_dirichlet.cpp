@@ -20,11 +20,11 @@ using fdapde::test::almost_equal;
 // test 1
 //    mesh:         unit_square_60
 //    sampling:     locations = nodes
-//    penalization: simple laplacian
+//    penalization: dirichlet energy
 //    covariates:   no
 //    BC:           no
 //    order FE:     1
-TEST(sr_energy, test_01) {
+TEST(sr_dirichlet, test_01) {
     // geometry
     std::string mesh_path = "../data/mesh/unit_square_60/";
     Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
@@ -42,6 +42,28 @@ TEST(sr_energy, test_01) {
     // modeling
     SRPDE m("y ~ f", data, fe_ls_dirichlet(a, F));
     m.fit(1.56206e-08);
+
+    EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/01/field_dirichlet.mtx"));
+}
+
+TEST(sr_dirichlet_it, test_01) {
+    // geometry
+    std::string mesh_path = "../data/mesh/unit_square_60/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
+    // data
+    GeoFrame data(D);
+    auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
+    l1.load_csv<double>("../data/sr/01/response.csv");
+    // physics
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction v(Vh);
+    auto a = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u;
+    auto F = integral(D)(u * v);
+    // modeling
+    SRPDE m("y ~ f", data, fe_it_ls_dirichlet(a, F));
+    m.fit(1.56206e-08, 1e-9);
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/01/field_dirichlet.mtx"));
 }

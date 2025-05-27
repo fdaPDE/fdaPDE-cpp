@@ -33,14 +33,14 @@ struct de_solver { };
   
 }   // namespace fdapde
 
+// generic iterative optimization solver
+#include "src/solvers/fe_iterative_optimizer.h"
+
 // least square solvers
 #include "src/solvers/fe_ls_elliptic.h"
 #include "src/solvers/fe_ls_dirichlet.h"
 #include "src/solvers/fe_ls_separable.h"
 #include "src/solvers/fe_ls_parabolic.h"
-
-// least square solvers (iterative)
-#include "src/solvers/fe_ls_elliptic_it.h"
 
 // density estimation solvers
 #include "src/solvers/fe_de_elliptic.h"

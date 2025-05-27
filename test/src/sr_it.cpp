@@ -24,7 +24,7 @@ using fdapde::test::almost_equal;
 //    covariates:   no
 //    BC:           no
 //    order FE:     1
-TEST(sr_it, test_01) {
+TEST(sr_elliptic_it, test_01) {
     // geometry
     std::string mesh_path = "../data/mesh/unit_square_60/";
     Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
@@ -40,8 +40,8 @@ TEST(sr_it, test_01) {
     ZeroField<2> u;
     auto F = integral(D)(u * v);
     // modeling
-    SRPDE m("y ~ f", data, fe_ls_elliptic_it(a, F));
-    m.fit(1.56206e-08);
+    SRPDE m("y ~ f", data, fe_it_ls_elliptic(a, F));
+    m.fit(1.56206e-08, 1e-15);
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/01/field.mtx"));
 }
@@ -54,7 +54,7 @@ TEST(sr_it, test_01) {
 //    BC:           no
 //    order FE:     1
 /*
-TEST(sr_it, test_03) {
+TEST(sr_elliptic_it, test_03) {
     // geometry
     std::string mesh_path = "../data/mesh/unit_square_60/";
     Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
@@ -72,7 +72,7 @@ TEST(sr_it, test_03) {
     ZeroField<2> u;
     auto F = integral(D)(u * v);
     // modeling
-    SRPDE m("y ~ f", data, fe_ls_elliptic_it(a, F));
+    SRPDE m("y ~ f", data, fe_it_ls_elliptic(a, F));
     m.fit(0.002777777777777778);
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/03/field.mtx"));
@@ -87,7 +87,7 @@ TEST(sr_it, test_03) {
 //    BC:           no
 //    order FE:     1
 //    GCV optimization: grid stochastic
-TEST(sr_it, test_04) {
+TEST(sr_elliptic_it, test_04) {
     // geometry
     std::string mesh_path = "../data/mesh/unit_square_21/";
     Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
@@ -103,7 +103,7 @@ TEST(sr_it, test_04) {
     ZeroField<2> u;
     auto F = integral(D)(u * v);
     // modeling
-    SRPDE m("y ~ f", data, fe_ls_elliptic_it(a, F));
+    SRPDE m("y ~ f", data, fe_it_ls_elliptic(a, F));
     // calibration
     std::vector<double> lambda_grid(13);
     for (int i = 0; i < 13; ++i) { lambda_grid[i] = std::pow(10, -6.0 + 0.25 * i) / data[0].rows(); }
@@ -114,7 +114,7 @@ TEST(sr_it, test_04) {
 }
 
 // areal test
-TEST(sr_it, test_11) {
+TEST(sr_elliptic_it, test_11) {
     // geometry
     std::string mesh_path = "../data/mesh/quasi_circle/";
     Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
@@ -130,15 +130,15 @@ TEST(sr_it, test_11) {
     ZeroField<2> u;
     auto F = integral(D)(u * v);
     // modeling
-    SRPDE m("y ~ f", data, fe_ls_elliptic_it(a, F));
+    SRPDE m("y ~ f", data, fe_it_ls_elliptic(a, F));
     m.fit(0.0001428571428571429 * data[0].rows());
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/11/field.mtx"));
 }
 
-/*
 // areal, non constant coefficient PDE, test
-TEST(sr_it, test_12) {
+/*
+TEST(sr_elliptic_it, test_12) {
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;
     // geometry
@@ -158,15 +158,15 @@ TEST(sr_it, test_12) {
     FeCoeff<2, 1, 1, vector_t> u(read_csv<double>("../data/sr/12/force.csv").as_matrix());
     auto F = integral(D)(u * v);
     // modeling
-    SRPDE m("y ~ f", data, fe_ls_elliptic_it(a, F));
-    m.fit(0.0001428571428571429);
+    SRPDE m("y ~ f", data, fe_it_ls_elliptic(a, F));
+    m.fit(0.0001428571428571429 * data[0].rows());
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/12/field.mtx"));
 }
 */
 
 // test on network (test_4-SR-PDE_no_cov_network.R)
-TEST(sr_it, test_15) {
+TEST(sr_elliptic_it, test_15) {
     // geometry
     std::string mesh_path = "../data/mesh/network/";
     Triangulation<1, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
@@ -182,7 +182,7 @@ TEST(sr_it, test_15) {
     ZeroField<2> u;
     auto F = integral(D)(u * v);
     // modeling
-    SRPDE m("y ~ f", data, fe_ls_elliptic_it(a, F));
+    SRPDE m("y ~ f", data, fe_it_ls_elliptic(a, F));
     m.fit(1e-4 / data[0].rows());
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/15/field.mtx"));

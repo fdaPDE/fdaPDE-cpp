@@ -22,9 +22,9 @@
 namespace fdapde {
 namespace internals {
 
-// solves \min_{f} \| W^{1/2} * (y_i - f(p_i)) \|_2^2 + \int_D (Lf - u)^2, L elliptic operator
-struct fe_ls_elliptic_it {
-   private:
+// solves \min_{f} L(f | y, W) + \lambda * P(f)
+template <typename Derived> struct fe_iterative_optimizer {
+   protected:
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
     using binary_t = BinaryMatrix<Dynamic, Dynamic>;
@@ -38,6 +38,10 @@ struct fe_ls_elliptic_it {
     template <typename InfoT> struct is_valid_info_t {
         static constexpr bool value = requires(InfoT info) { info.penalty; };
     };
+
+    // access to derived class
+    Derived& derived() { return static_cast<Derived&>(*this); }
+    const Derived& derived() const { return static_cast<const Derived&>(*this); }
 
     // evaluation of basis system at spatial locations
     template <typename DataLocs>
@@ -82,38 +86,13 @@ struct fe_ls_elliptic_it {
     static constexpr int n_lambda = 1;
     using solver_category = ls_solver;
 
-    // penalized least-squares objective functor
-    struct ls_t {
-        ls_t(fe_ls_elliptic_it& m, double lambda) : m_(std::addressof(m)), lambda_(lambda) { }
-        // penalized negative log-likelihood at point
-        double operator()(const vector_t& f) {
-            vector_t res = (m_->y_ - m_->Psi_ * f).array();
-            return res.dot(m_->D_ * m_->W_ * res) + lambda_ * f.dot(m_->P_ * f);
-        }
-        // gradient functor
-        std::function<vector_t(const vector_t&)> derive() {
-            return [this](const vector_t& f) {
-                vector_t res = (m_->y_ - m_->Psi_ * f).array();
-                return vector_t(-2 * m_->Psi_.transpose() * m_->D_ * m_->W_ * res + 2 * lambda_ * m_->P_ * f);
-            };
-        }
-        // injected optimization stopping criterion
-        template <typename Optimizer> bool stop_if(Optimizer& opt) {
-            double loss_old = operator()(opt.x_old);
-            double loss_new = operator()(opt.x_new);
-            return std::abs((loss_new - loss_old) / loss_old) < m_->tol_;
-        }
-       private:
-        fe_ls_elliptic_it* m_;
-        double lambda_;
-    };
-
     // default constructor
-    fe_ls_elliptic_it() noexcept = default;
+    fe_iterative_optimizer() noexcept = default;
     // construct from formula + geoframe
     template <typename GeoFrame, typename InfoT, typename WeightMatrix>
         requires(is_valid_info_t<InfoT>::value)
-    fe_ls_elliptic_it(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : W_(W) {
+    fe_iterative_optimizer(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
+        W_(W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
         using BilinearForm = std::tuple_element_t<0, std::decay_t<decltype(info.penalty)>>;
         using FeSpace = typename BilinearForm::TrialSpace;
@@ -133,12 +112,12 @@ struct fe_ls_elliptic_it {
     }
     template <typename GeoFrame, typename InfoT>
         requires(is_valid_info_t<InfoT>::value)
-    fe_ls_elliptic_it(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
-        fe_ls_elliptic_it(formula, gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    fe_iterative_optimizer(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
+        fe_iterative_optimizer(formula, gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
     // construct with no data
     template <typename GeoFrame, typename InfoT, typename WeightMatrix>
         requires(is_valid_info_t<InfoT>::value)
-    fe_ls_elliptic_it(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : W_(W) {
+    fe_iterative_optimizer(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
         using BilinearForm = std::tuple_element_t<0, std::decay_t<decltype(info.penalty)>>;
         using FeSpace = typename BilinearForm::TrialSpace;
@@ -158,8 +137,8 @@ struct fe_ls_elliptic_it {
     }
     template <typename GeoFrame, typename InfoT>
         requires(is_valid_info_t<InfoT>::value)
-    fe_ls_elliptic_it(const GeoFrame& gf, InfoT&& info) :
-        fe_ls_elliptic_it(gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    fe_iterative_optimizer(const GeoFrame& gf, InfoT&& info) :
+        fe_iterative_optimizer(gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
 
     // perform finite element based numerical discretization
     template <typename Penalty> void discretize(Penalty&& penalty) {
@@ -175,13 +154,6 @@ struct fe_ls_elliptic_it {
         R0_ = mass_assembler.assemble();
         R1_ = bilinear_form.assemble();
         u_ = linear_form.assemble();
-        // penalty matrix
-        // sparse_matrix_t invR0 = lump(R0_);
-        // for (int k = 0; k < invR0.outerSize(); ++k)
-        //    for (sparse_matrix_t::InnerIterator it(invR0, k); it; ++it) { it.valueRef() = 1. / it.value(); }
-        sparse_solver_t invR0;
-        invR0.compute(R0_);
-        P_ = R1_.transpose() * invR0.solve(R1_);   // invR0 * R1_;
         // store handles for basis system evaluation at locations
         point_eval_ = [fe_space = bilinear_form.trial_space()](const matrix_t& locs) -> decltype(auto) {
             return internals::point_basis_eval(fe_space, locs);
@@ -192,8 +164,7 @@ struct fe_ls_elliptic_it {
         return;
     }
 
-    // non-parametric fit
-    // \sum_i w_i * (y_i - f(p_i))^2 + \int_D (Lf - u)^2
+    // analyze_data
     template <typename DataLocs, typename WeightMatrix>
         requires(std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>)
     void analyze_data(const DataLocs& locs, const matrix_t& y, const WeightMatrix& W) {
@@ -207,7 +178,6 @@ struct fe_ls_elliptic_it {
         update_response_and_weights(y, W);
         return;
     }
-    // analyze_data from formula
     template <typename GeoFrame, typename WeightMatrix>
     void analyze_data(const std::string& formula, const GeoFrame& gf, const WeightMatrix& W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
@@ -250,7 +220,6 @@ struct fe_ls_elliptic_it {
     template <typename WeightMatrix> void update_weights(const WeightMatrix& W) {
         fdapde_assert(Psi_.rows() > 0 && W.rows() == n_locs_ && W.rows() == W.cols());
         W_ = W;
-        // W_ /= n_obs_;
         W_changed_ = true;
         return;
     }
@@ -268,36 +237,30 @@ struct fe_ls_elliptic_it {
         update_weights(W);
         return;
     }
-    void set_opt_tolerance(double tol) { tol_ = tol; }
 
     // main fit entry point
-    // template <typename Optimizer>
-    auto fit(double lambda, double tol = 1e-15) {   // , const vector_t& f_init , Optimizer&& opt
+    auto fit(double lambda, double tol = 1e-15) {
         fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
+        // check if P has already been built
+        if (!P_built_) derived().build_P();
         // update tolerance
         tol_ = tol;
         // optimize
-        BFGS<Dynamic, BacktrackingLineSearch> opt {50000, tol_, 10};
-        // GradientDescent<Dynamic, BacktrackingLineSearch> opt {50000, 1e-3, 1e-2};
+        BFGS<Dynamic, BacktrackingLineSearch> opt {50000, tol_, 1e-2};
+        // GradientDescent<Dynamic, BacktrackingLineSearch> opt {50000, tol_, 1e-2};
         f_ = opt.optimize(
-          ls_t(*this, lambda), vector_t::Random(n_dofs_)
+          typename Derived::loss_functor_t(derived(), lambda), vector_t::Random(n_dofs_)
           // , [](auto value) { std::cout << "obj value: " << value << std ::endl;  }
         );
+
         lambda_saved_ = lambda;
-        // std::cout << "n_iter:" << opt.n_iter() << std::endl;
         return std::make_pair(f_, beta_);
     }
-    template <typename LambdaT>   // typename Optimizer,
+    template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
-    auto fit(LambdaT&& lambda, double tol = 1e-15) {   //, Optimizer&& opt
+    auto fit(LambdaT&& lambda, double tol = 1e-15) {
         fdapde_assert(lambda.size() == n_lambda);
         return fit(lambda[0], tol);
-    }
-    // perform a nonparametric_fit, e.g. discarding possible covariates
-    vector_t nonparametric_fit(double lambda, double tol = 1e-15) {
-        fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
-        // ...
-        return f_;
     }
    private:
     template <typename ResponseT> auto fit_(ResponseT&& response, double lambda) {
@@ -357,7 +320,6 @@ struct fe_ls_elliptic_it {
    protected:
     // matrices for hutchinson stochastic estimation of Tr[S]
     std::optional<matrix_t> Us_;
-   private:
     std::optional<double> lambda_saved_ = -1;
     int n_dofs_ = 0, n_locs_ = 0, n_obs_ = 0, n_covs_ = 0;
     sparse_matrix_t R0_;    // n_dofs x n_dofs matrix [R0]_{ij} = \int_D \psi_i * \psi_j
@@ -368,7 +330,7 @@ struct fe_ls_elliptic_it {
     mutable sparse_solver_t invR0_;
     std::optional<sparse_matrix_t> B_;   // \Psi matrix corrected for missing observations
 
-    matrix_t P_;   // n_dofs x n_dofs penalty matrix P_ = R1^\top * (R0)^{-1} * R1
+    matrix_t P_, R0invP_;   // n_dofs x n_dofs penalty matrix P_ = R1^\top * (R0)^{-1} * R1
     vector_t f_, beta_;
     // basis system evaluation handle
     std::function<sparse_matrix_t(const matrix_t& locs)> point_eval_;
@@ -378,21 +340,150 @@ struct fe_ls_elliptic_it {
     vector_t y_;          // n_obs x 1 observation vector
     sparse_matrix_t W_;   // n_obs x n_obs matrix of observation weights
     bool W_changed_;
+    bool P_built_ = false;
 
     double tol_ = 1e-15;
 };
 
+// Derived classes
+
+struct fe_it_ls_elliptic : fe_iterative_optimizer<fe_it_ls_elliptic> {
+    struct loss_functor_t {
+        // constructor
+        loss_functor_t(fe_it_ls_elliptic& m, double lambda) : m_(std::addressof(m)), lambda_(lambda) { }
+
+        // penalized negative log-likelihood at point
+        double operator()(const vector_t& f) {
+            vector_t res = (m_->y_ - m_->Psi_ * f).array();
+            return res.dot(m_->D_ * m_->W_ * res) + lambda_ * f.dot(m_->P_ * f);
+        }
+        // gradient functor
+        std::function<vector_t(const vector_t&)> derive() {
+            return [this](const vector_t& f) {
+                vector_t res = (m_->y_ - m_->Psi_ * f).array();
+                return vector_t(-2 * m_->Psi_.transpose() * m_->D_ * m_->W_ * res + 2 * lambda_ * m_->P_ * f);
+            };
+        }
+        // injected optimization stopping criterion
+        template <typename Optimizer> bool stop_if(Optimizer& opt) {
+            double loss_old = operator()(opt.x_old);
+            double loss_new = operator()(opt.x_new);
+            return std::abs((loss_new - loss_old) / loss_old) < m_->tol_;
+        }
+       private:
+        fe_it_ls_elliptic* m_;
+        double lambda_;
+    };
+
+    // penalty matrix builder
+    void build_P() {
+        // sparse_matrix_t invR0 = lump(R0_);
+        // for (int k = 0; k < invR0.outerSize(); ++k)
+        //     for (sparse_matrix_t::InnerIterator it(invR0, k); it; ++it) { it.valueRef() = 1. / it.value(); }
+        sparse_solver_t invR0;
+        invR0.compute(R0_);
+        P_ = R1_.transpose() * invR0.solve(R1_);
+        P_built_ = true;
+    }
+
+    fe_it_ls_elliptic() noexcept = default;
+    // construct from formula + geoframe
+    template <typename GeoFrame, typename InfoT, typename WeightMatrix>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_it_ls_elliptic(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
+        fe_iterative_optimizer(formula, gf, info, W) { }
+    template <typename GeoFrame, typename InfoT>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_it_ls_elliptic(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
+        fe_iterative_optimizer(formula, gf, info) { }
+    // construct with no data
+    template <typename GeoFrame, typename InfoT, typename WeightMatrix>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_it_ls_elliptic(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : fe_iterative_optimizer(gf, info, W) { }
+    template <typename GeoFrame, typename InfoT>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_it_ls_elliptic(const GeoFrame& gf, InfoT&& info) : fe_iterative_optimizer(gf, info) { }
+};
+
+struct fe_it_ls_dirichlet : fe_iterative_optimizer<fe_it_ls_dirichlet> {
+    struct loss_functor_t {
+        // constructor
+        loss_functor_t(fe_it_ls_dirichlet& m, double lambda) : m_(std::addressof(m)), lambda_(lambda) { }
+
+        // penalized negative log-likelihood at point
+        double operator()(const vector_t& f) {
+            vector_t res = (m_->y_ - m_->Psi_ * f).array();
+            return res.dot(m_->D_ * m_->W_ * res) + lambda_ * f.dot(m_->P_ * f);
+        }
+        // gradient functor
+        std::function<vector_t(const vector_t&)> derive() {
+            return [this](const vector_t& f) {
+                vector_t res = (m_->y_ - m_->Psi_ * f).array();
+                return vector_t(-2 * m_->Psi_.transpose() * m_->D_ * m_->W_ * res + 2 * lambda_ * m_->P_ * f);
+            };
+        }
+        // injected optimization stopping criterion
+        template <typename Optimizer> bool stop_if(Optimizer& opt) {
+            double loss_old = operator()(opt.x_old);
+            double loss_new = operator()(opt.x_new);
+            return std::abs((loss_new - loss_old) / loss_old) < m_->tol_;
+        }
+       private:
+        fe_it_ls_dirichlet* m_;
+        double lambda_;
+    };
+
+    // penalty matrix builder
+    void build_P() {
+        P_ = R1_;
+        P_built_ = true;
+    }
+
+    fe_it_ls_dirichlet() noexcept = default;
+    // construct from formula + geoframe
+    template <typename GeoFrame, typename InfoT, typename WeightMatrix>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_it_ls_dirichlet(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
+        fe_iterative_optimizer(formula, gf, info, W) { }
+    template <typename GeoFrame, typename InfoT>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_it_ls_dirichlet(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
+        fe_iterative_optimizer(formula, gf, info) { }
+    // construct with no data
+    template <typename GeoFrame, typename InfoT, typename WeightMatrix>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_it_ls_dirichlet(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
+        fe_iterative_optimizer(gf, info, W) { }
+    template <typename GeoFrame, typename InfoT>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_it_ls_dirichlet(const GeoFrame& gf, InfoT&& info) : fe_iterative_optimizer(gf, info) { }
+};
+
 }   // namespace internals
 
-// elliptic solver factory
-template <typename BilinearForm, typename LinearForm> struct fe_ls_elliptic_it {
-    using solver_t = internals::fe_ls_elliptic_it;
+// solver factory
+template <typename BilinearForm, typename LinearForm> struct fe_it_ls_elliptic {
+    using solver_t = internals::fe_it_ls_elliptic;
    private:
     struct info_t {
         std::tuple<BilinearForm, LinearForm> penalty;
     };
    public:
-    fe_ls_elliptic_it(const BilinearForm& bilinear_form, const LinearForm& linear_form) :
+    fe_it_ls_elliptic(const BilinearForm& bilinear_form, const LinearForm& linear_form) :
+        info_(std::make_tuple(bilinear_form, linear_form)) { }
+    const info_t& get() const { return info_; }
+   private:
+    info_t info_;
+};
+
+template <typename BilinearForm, typename LinearForm> struct fe_it_ls_dirichlet {
+    using solver_t = internals::fe_it_ls_dirichlet;
+   private:
+    struct info_t {
+        std::tuple<BilinearForm, LinearForm> penalty;
+    };
+   public:
+    fe_it_ls_dirichlet(const BilinearForm& bilinear_form, const LinearForm& linear_form) :
         info_(std::make_tuple(bilinear_form, linear_form)) { }
     const info_t& get() const { return info_; }
    private:
