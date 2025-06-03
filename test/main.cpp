@@ -65,6 +65,7 @@ template <typename Scalar> bool almost_equal(const std::vector<Scalar>& op1, std
 #include "src/sr_it.cpp"
 // #include "src/gsr.cpp"
 // #include "src/qsr.cpp"
+#include "src/center.cpp"
 // #include "src/de.cpp"
 
 int main(int argc, char** argv) {

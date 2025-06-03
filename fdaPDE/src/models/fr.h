@@ -14,8 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __VECTOR_SPATIAL_REGRESSION_H__
-#define __VECTOR_SPATIAL_REGRESSION_H__
+#ifndef __FUNCTIONAL_REGRESSION_H__
+#define __FUNCTIONAL_REGRESSION_H__
 
 #include "header_check.h"
 
@@ -23,7 +23,7 @@ namespace fdapde {
 
 template <typename VariationalSolver>
     requires(std::is_same_v<typename VariationalSolver::solver_category, ls_solver>)
-class VSRPDE {
+class FRPDE {
    private:
     using solver_t = std::decay_t<VariationalSolver>;
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;
@@ -32,51 +32,53 @@ class VSRPDE {
     using binary_t = BinaryMatrix<Dynamic, Dynamic>;
     static constexpr int n_lambda = solver_t::n_lambda;
    public:
-    VSRPDE() noexcept = default;
+    FRPDE() noexcept = default;
     template <typename GeoFrame, typename Penalty>
-    VSRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) noexcept :
+    FRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) noexcept :
         solver_(), geo_category_(gf[0].category().begin(), gf[0].category().end()) {
         fdapde_assert(gf.n_layers() == 1);
         Formula formula_(formula);
         n_obs_ = gf[0].rows();
-        n_comp_ = gf[0].cols();
+        n_stat_units_ = gf[0].template col<double>("Y").as_matrix().cols();
         n_covs_ = 0;
         for (const std::string& token : formula_.rhs()) {
             if (gf.contains(token)) { n_covs_++; }
         }
         if (n_covs_) { std::cerr << "COVRIATES ARE NOT ALLOWED WITH THIS SCHEME!" << std::endl; }
-        // room for results
-        F_.resize(std::get<0>(penalty.get().penalty).n_dofs(), n_comp_);
         // copy data
-        Y_.resize(n_obs_, n_comp_);
-        for (int i = 0; i < n_comp_; ++i) gf[0].template col<double>(i).assign_to(Y_.col(i));
-        nan_pattern_ = na_matrix(Y_);   // compute missingness pattern
+        Y_.resize(n_stat_units_, n_obs_);
+        for (int i = 0; i < n_stat_units_; ++i)
+            Y_.row(i) = gf[0].template col<double>("Y").as_matrix().col(i);   // trasposing
+        nan_pattern_ = na_matrix(Y_);
         // create local geoframe
         GeoFrame gf_ = gf;
-        gf_[0].data().append_blk("yi", vector_t::Zero(n_obs_));
+        gf_[0].data().append_blk("z", vector_t::Zero(n_obs_));
         // initialize solver
-        solver_ = solver_t("yi ~ fi", gf_, penalty.get());
+        solver_ = solver_t("z ~ f", gf_, penalty.get());
     }
     template <typename... Args> auto fit(Args&&... args) {
-        for (int i = 0; i < n_comp_; ++i) {
-            solver_.update_response(Y_.col(i));
-            F_.col(i) = solver_.fit(std::forward<Args>(args)...).first;
+        vector_t z;
+        vector_t w {vector_t::Ones(n_stat_units_)};
+        z = (~nan_pattern_).select(Y_, 0).transpose() * w;
+        for (std::size_t i = 0; i < z.size(); ++i) {
+            z(i, 0) /= (~nan_pattern_).col(i).select(w, 0).sum();
+            // da capire bene cosa ci va, prima c'era squaredSum, perchè?
         }
-        return F_;
+        solver_.update_response(z);
+        solver_.fit(std::forward<Args>(args)...);
+        return solver_.f();
     }
     // observers
-    const matrix_t& F() const { return F_; }
+    const matrix_t& F() const { return solver_.f(); }
     int n_covs() const { return n_covs_; }
     int n_obs() const { return n_obs_; }
-    int n_comp() const { return n_comp_; }
+    int n_stat_units() const { return n_stat_units_; }
     double edf(int r = 100, int seed = random_seed) { return solver_.edf(r, seed); }
     const matrix_t& response() const { return Y_; }
     const matrix_t& design_matrix() const { return solver_.design_matrix(); }
     const sparse_matrix_t& weights() const { return solver_.weights(); }
-    matrix_t fitted() const {
-        matrix_t fitted_ = solver_.Psi() * F_;
-        return fitted_;
-    }
+    matrix_t fitted() const { return solver_.Psi() * solver_.f(); }
+    matrix_t residuals() const { return Y_ - fitted().replicate(1, Y_.rows()).transpose(); }
 
     // Generalized Cross Validation index
     struct gcv_t : public ScalarFieldBase<n_lambda, gcv_t> {
@@ -90,17 +92,17 @@ class VSRPDE {
           std::array<double, StaticInputSize>, double, internals::std_array_hash<double, StaticInputSize>>;
 
         gcv_t() noexcept = default;
-        gcv_t(VSRPDE* model, const edf_cache_t& edf_cache) :
+        gcv_t(FRPDE* model, const edf_cache_t& edf_cache) :
             model_(model),
             n_(model->n_obs()),
-            k_(model->n_comp()),
+            k_(model->n_stat_units()),
             edf_cache_(edf_cache),
             r_(100),
             seed_(random_seed) { }
-        gcv_t(VSRPDE* model, const edf_cache_t& edf_cache, int r, int seed) :
-            model_(model), n_(model->n_obs()), k_(model->n_comp()), edf_cache_(edf_cache), r_(r), seed_(seed) { }
-        gcv_t(VSRPDE* model) : gcv_t(model, edf_cache_t()) { }
-        gcv_t(VSRPDE* model, int r, int seed) : gcv_t(model, edf_cache_t(), r, seed) { }
+        gcv_t(FRPDE* model, const edf_cache_t& edf_cache, int r, int seed) :
+            model_(model), n_(model->n_obs()), k_(model->n_stat_units()), edf_cache_(edf_cache), r_(r), seed_(seed) { }
+        gcv_t(FRPDE* model) : gcv_t(model, edf_cache_t()) { }
+        gcv_t(FRPDE* model, int r, int seed) : gcv_t(model, edf_cache_t(), r, seed) { }
 
         template <typename InputType_>
             requires(internals::is_subscriptable<InputType_, int>)
@@ -115,17 +117,17 @@ class VSRPDE {
             if (edf_cache_.find(lambda_vec) == edf_cache_.end()) {   // cache Tr[S]
                 edf_cache_[lambda_vec] = model_->edf(r_, seed_);
             }
-            double dor = n_ - edf_cache_.at(lambda_vec);   // residual degrees of freedom
-            matrix_t residuals = (~model_->nan_pattern_).select(model_->fitted() - model_->response(), 0);
-            double gcv = ((n_ * k_) / std::pow(dor, 2)) * (residuals * residuals.transpose()).trace();
-            // al posto di (n_ * k_) forse ci vuole il numero di non nan in nan_pattern_?
+            double dor = n_ * k_ - edf_cache_.at(lambda_vec);   // residual degrees of freedom
+            matrix_t residuals = (~model_->nan_pattern_).select(model_->residuals(), 0);
+            double gcv = ((n_ * k_) / std::pow(dor, 2)) * residuals.squaredNorm();
+            // al posto di (n_) forse ci vuole il numero di non nan in nan_pattern_?
             return gcv;
         }
         // observers
         const edf_cache_t& edf_cache() const { return edf_cache_; }
         edf_cache_t& edf_cache() { return edf_cache_; }
        private:
-        VSRPDE* model_;
+        FRPDE* model_;
         int n_ = 0, k_ = 0;
         edf_cache_t edf_cache_;
         // stochastic edf approximation parameter
@@ -137,16 +139,16 @@ class VSRPDE {
     gcv_t gcv(const typename gcv_t::edf_cache_t& edf_cache, int r, int seed) { return gcv_t(this, edf_cache, r, seed); }
    private:
     solver_t solver_;
-    int n_obs_ = 0, n_covs_ = 0, n_comp_ = 0;
+    int n_obs_ = 0, n_covs_ = 0, n_stat_units_ = 0;
     std::vector<ltype> geo_category_;
-    matrix_t F_;
+    vector_t f_;
     matrix_t Y_;
     binary_t nan_pattern_;
 };
 
 // deduction guide
 template <typename GeoFrame, typename Penalty>
-VSRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& solver) -> VSRPDE<typename Penalty::solver_t>;
+FRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& solver) -> FRPDE<typename Penalty::solver_t>;
 
 }   // namespace fdapde
 

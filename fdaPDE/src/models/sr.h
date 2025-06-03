@@ -103,7 +103,7 @@ class SRPDE {
                 edf_cache_[lambda_vec] = model_->edf(r_, seed_);
             }
             double dor = n_ - (q_ + edf_cache_.at(lambda_vec));   // residual degrees of freedom
-            vector_t residuals = (~model_->nan_pattern_).select(model_->fitted() - model_->response(), 0);
+            vector_t residuals = (~model_->nan_pattern()).select(model_->fitted() - model_->response(), 0);
             double gcv = (n_ / std::pow(dor, 2)) * residuals.squaredNorm();
             // forse al osto di n_ ci vuole il numero di non nulli in nan_pattern?
             return gcv;

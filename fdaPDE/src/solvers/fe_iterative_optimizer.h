@@ -207,12 +207,12 @@ template <typename Derived> struct fe_iterative_optimizer {
         fdapde_assert(Psi_.rows() > 0 && y.rows() == n_locs_ && y.cols() == 1);
         y_ = y;
         // correct \Psi for missing observations
-        auto nan_pattern = na_matrix(y);
+        nan_pattern_ = na_matrix(y);
         int old_n_obs = n_obs_;
-        if (nan_pattern.any()) {
-            n_obs_ = n_locs_ - nan_pattern.count();
-            B_ = nan_pattern.repeat(1, n_dofs_).select(Psi_, 0);
-            y_ = nan_pattern.select(y_, 0);
+        if (nan_pattern_.any()) {
+            n_obs_ = n_locs_ - nan_pattern_.count();
+            B_ = nan_pattern_.repeat(1, n_dofs_).select(Psi_, 0);
+            y_ = nan_pattern_.select(y_, 0);
         }
         if (old_n_obs != n_obs_) { W_ *= (double)old_n_obs / n_obs_; }
         return;
@@ -228,11 +228,11 @@ template <typename Derived> struct fe_iterative_optimizer {
           Psi_.rows() > 0 && y.rows() == n_locs_ && y.cols() == 1 && W.rows() == W.cols() && W.rows() == n_locs_);
         y_ = y;
         // correct \Psi for missing observations
-        auto nan_pattern = na_matrix(y);
-        if (nan_pattern.any()) {
-            n_obs_ = n_locs_ - nan_pattern.count();
-            B_ = nan_pattern.repeat(1, n_dofs_).select(Psi_, 0);
-            y_ = nan_pattern.select(y_, 0);
+        nan_pattern_ = na_matrix(y);
+        if (nan_pattern_.any()) {
+            n_obs_ = n_locs_ - nan_pattern_.count();
+            B_ = nan_pattern_.repeat(1, n_dofs_).select(Psi_, 0);
+            y_ = nan_pattern_.select(y_, 0);
         }
         update_weights(W);
         return;
@@ -249,7 +249,7 @@ template <typename Derived> struct fe_iterative_optimizer {
         BFGS<Dynamic, BacktrackingLineSearch> opt {50000, tol_, 1e-2};
         // GradientDescent<Dynamic, BacktrackingLineSearch> opt {50000, tol_, 1e-2};
         f_ = opt.optimize(
-          typename Derived::loss_functor_t(derived(), lambda), vector_t::Random(n_dofs_)
+          typename Derived::ls_t(derived(), lambda), vector_t::Random(n_dofs_)
           // , [](auto value) { std::cout << "obj value: " << value << std ::endl;  }
         );
 
@@ -315,6 +315,7 @@ template <typename Derived> struct fe_iterative_optimizer {
     const vector_t& beta() const { return beta_; }
     const matrix_t& design_matrix() const { return X_; }
     const vector_t& response() const { return y_; }
+    const binary_t& nan_pattern() const { return nan_pattern_; }
     const sparse_matrix_t& weights() const { return W_; }
     double lambda() const { return *lambda_saved_; }
    protected:
@@ -336,8 +337,9 @@ template <typename Derived> struct fe_iterative_optimizer {
     std::function<sparse_matrix_t(const matrix_t& locs)> point_eval_;
     std::function<std::pair<sparse_matrix_t, vector_t>(const binary_t& locs)> areal_eval_;
 
-    matrix_t X_;          // n_obs x n_covs design matrix
-    vector_t y_;          // n_obs x 1 observation vector
+    matrix_t X_;   // n_obs x n_covs design matrix
+    vector_t y_;   // n_obs x 1 observation vector
+    binary_t nan_pattern_;
     sparse_matrix_t W_;   // n_obs x n_obs matrix of observation weights
     bool W_changed_;
     bool P_built_ = false;
@@ -348,9 +350,9 @@ template <typename Derived> struct fe_iterative_optimizer {
 // Derived classes
 
 struct fe_it_ls_elliptic : fe_iterative_optimizer<fe_it_ls_elliptic> {
-    struct loss_functor_t {
+    struct ls_t {
         // constructor
-        loss_functor_t(fe_it_ls_elliptic& m, double lambda) : m_(std::addressof(m)), lambda_(lambda) { }
+        ls_t(fe_it_ls_elliptic& m, double lambda) : m_(std::addressof(m)), lambda_(lambda) { }
 
         // penalized negative log-likelihood at point
         double operator()(const vector_t& f) {
@@ -406,9 +408,9 @@ struct fe_it_ls_elliptic : fe_iterative_optimizer<fe_it_ls_elliptic> {
 };
 
 struct fe_it_ls_dirichlet : fe_iterative_optimizer<fe_it_ls_dirichlet> {
-    struct loss_functor_t {
+    struct ls_t {
         // constructor
-        loss_functor_t(fe_it_ls_dirichlet& m, double lambda) : m_(std::addressof(m)), lambda_(lambda) { }
+        ls_t(fe_it_ls_dirichlet& m, double lambda) : m_(std::addressof(m)), lambda_(lambda) { }
 
         // penalized negative log-likelihood at point
         double operator()(const vector_t& f) {

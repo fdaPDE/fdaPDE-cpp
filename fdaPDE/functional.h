@@ -23,8 +23,9 @@
 #include <fdaPDE/core.h>
 
 #include "solvers.h"
+#include "src/models/fr.h"
 #include "src/models/fpca.h"
 
 // clang-format on
 
-#endif // __FDAPDE_FUNCTIONAL_H__
+#endif   // __FDAPDE_FUNCTIONAL_H__

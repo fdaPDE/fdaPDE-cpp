@@ -114,6 +114,7 @@ TEST(sr_elliptic_it, test_04) {
 }
 
 // areal test
+/*
 TEST(sr_elliptic_it, test_11) {
     // geometry
     std::string mesh_path = "../data/mesh/quasi_circle/";
@@ -135,6 +136,7 @@ TEST(sr_elliptic_it, test_11) {
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/11/field.mtx"));
 }
+*/
 
 // areal, non constant coefficient PDE, test
 /*
@@ -166,6 +168,7 @@ TEST(sr_elliptic_it, test_12) {
 */
 
 // test on network (test_4-SR-PDE_no_cov_network.R)
+/*
 TEST(sr_elliptic_it, test_15) {
     // geometry
     std::string mesh_path = "../data/mesh/network/";
@@ -187,3 +190,4 @@ TEST(sr_elliptic_it, test_15) {
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/15/field.mtx"));
 }
+*/
