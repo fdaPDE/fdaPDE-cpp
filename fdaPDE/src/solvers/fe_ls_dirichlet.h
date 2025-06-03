@@ -224,12 +224,12 @@ struct fe_ls_dirichlet {
         fdapde_assert(Psi_.rows() > 0 && y.rows() == n_locs_ && y.cols() == 1);
         y_ = y;
         // correct \Psi for missing observations
-        auto nan_pattern = na_matrix(y);
+        nan_pattern_ = na_matrix(y);
         int old_n_obs = n_obs_;
-        if (nan_pattern.any()) {
-            n_obs_ = n_locs_ - nan_pattern.count();
-            B_ = (~nan_pattern).repeat(1, n_dofs_).select(Psi_, 0);
-            y_ = (~nan_pattern).select(y_, 0);
+        if (nan_pattern_.any()) {
+            n_obs_ = n_locs_ - nan_pattern_.count();
+            B_ = (~nan_pattern_).repeat(1, n_dofs_).select(Psi_, 0);
+            y_ = (~nan_pattern_).select(y_, 0);
         }
         if (old_n_obs != n_obs_) { W_ *= (double)old_n_obs / n_obs_; }
         b_ = PsiNA().transpose() * D_ * W_ * y_;
@@ -263,11 +263,11 @@ struct fe_ls_dirichlet {
           Psi_.rows() > 0 && y.rows() == n_locs_ && y.cols() == 1 && W.rows() == W.cols() && W.rows() == n_locs_);
         y_ = y;
         // correct \Psi for missing observations
-        auto nan_pattern = na_matrix(y);
-        if (nan_pattern.any()) {
-            n_obs_ = n_locs_ - nan_pattern.count();
-            B_ = (~nan_pattern).repeat(1, n_dofs_).select(Psi_, 0);
-            y_ = (~nan_pattern).select(y_, 0);
+        nan_pattern_ = na_matrix(y);
+        if (nan_pattern_.any()) {
+            n_obs_ = n_locs_ - nan_pattern_.count();
+            B_ = (~nan_pattern_).repeat(1, n_dofs_).select(Psi_, 0);
+            y_ = (~nan_pattern_).select(y_, 0);
         }
         update_weights(W);
         return;
@@ -412,6 +412,7 @@ struct fe_ls_dirichlet {
     const vector_t& beta() const { return beta_; }
     const matrix_t& design_matrix() const { return X_; }
     const vector_t& response() const { return y_; }
+    const binary_t& nan_pattern() const { return nan_pattern_; }
     const sparse_matrix_t& weights() const { return W_; }
     double lambda() const { return *lambda_saved_; }
 
@@ -439,8 +440,9 @@ struct fe_ls_dirichlet {
     std::vector<int> dirichlet_dofs_;      // dofs where Dirichlet boundary conditions are imposed
     std::vector<double> dirichlet_vals_;   // values imposed at Dirichlet dofs
 
-    matrix_t X_;               // n_obs x n_covs design matrix
-    vector_t y_;               // n_obs x 1 observation vector
+    matrix_t X_;   // n_obs x n_covs design matrix
+    vector_t y_;   // n_obs x 1 observation vector
+    binary_t nan_pattern_;
     sparse_matrix_t W_;        // n_obs x n_obs matrix of observation weights
     matrix_t U_, V_;           // (2 * n_dofs) x n_covs matrices [\Psi^\top * D * W * y, 0] and [X^\top * W * \Psi, 0]
     matrix_t XtWX_;            // n_covs x n_covs matrix X^\top * W * X

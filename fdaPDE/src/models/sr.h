@@ -28,6 +28,7 @@ class SRPDE {
     using solver_t = std::decay_t<VariationalSolver>;
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
+    using binary_t = BinaryMatrix<Dynamic, Dynamic>;
     using sparse_matrix_t = Eigen::SparseMatrix<double>;
     static constexpr int n_lambda = solver_t::n_lambda;
    public:
@@ -35,10 +36,10 @@ class SRPDE {
     template <typename GeoFrame, typename Penalty>
     SRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) noexcept :
         solver_(), geo_category_(gf[0].category().begin(), gf[0].category().end()) {
-        fdapde_assert(gf.n_layers() == 1);	
+        fdapde_assert(gf.n_layers() == 1);
         Formula formula_(formula);
-	n_obs_  = gf[0].rows();
-	n_covs_ = 0;
+        n_obs_ = gf[0].rows();
+        n_covs_ = 0;
         for (const std::string& token : formula_.rhs()) {
             if (gf.contains(token)) { n_covs_++; }
         }
@@ -53,6 +54,7 @@ class SRPDE {
     int n_obs() const { return n_obs_; }
     double edf(int r = 100, int seed = random_seed) { return solver_.edf(r, seed); }
     const vector_t& response() const { return solver_.response(); }
+    const binary_t& nan_pattern() const { return solver_.nan_pattern(); }
     const matrix_t& design_matrix() const { return solver_.design_matrix(); }
     const sparse_matrix_t& weights() const { return solver_.weights(); }
     vector_t fitted() const {
@@ -100,8 +102,11 @@ class SRPDE {
             if (edf_cache_.find(lambda_vec) == edf_cache_.end()) {   // cache Tr[S]
                 edf_cache_[lambda_vec] = model_->edf(r_, seed_);
             }
-            double dor = n_ - (q_ + edf_cache_.at(lambda_vec));   // residual degrees of freedom	    
-            return (n_ / std::pow(dor, 2)) * (model_->fitted() - model_->response()).squaredNorm();
+            double dor = n_ - (q_ + edf_cache_.at(lambda_vec));   // residual degrees of freedom
+            vector_t residuals = (~model_->nan_pattern_).select(model_->fitted() - model_->response(), 0);
+            double gcv = (n_ / std::pow(dor, 2)) * residuals.squaredNorm();
+            // forse al osto di n_ ci vuole il numero di non nulli in nan_pattern?
+            return gcv;
         }
         // observers
         const edf_cache_t& edf_cache() const { return edf_cache_; }
@@ -135,7 +140,7 @@ class SRPDE {
             matrix_t e = (invSigma * X.transpose() * W * S_).transpose();
             Eigen::SparseLU<sparse_matrix_t> invW(W);
             Vbeta_ = sigma_squared_ * (invSigma + e.transpose() * invW.solve(e));
-	    return;
+            return;
         }
         template <typename Distribution>
         std::pair<vector_t, vector_t> confint_beta_(double alpha, const matrix_t& C, Distribution&& distr) const {
@@ -149,24 +154,24 @@ class SRPDE {
             // build confidence interval
             return std::make_pair(a - b, a + b);
         }
-        // compute model's variance-covariance matrix for the non-parametric component      
+        // compute model's variance-covariance matrix for the non-parametric component
         void compute_Vf_() const {
             const auto& s = m_->solver_;
             matrix_t e = invT_ * s.PsiNA().transpose();
             Vf_ = sigma_squared_ * e * Q_ * e.transpose();
-	    return;
+            return;
         }
         template <typename Distribution>
         std::pair<vector_t, vector_t> confint_f_(double alpha, const sparse_matrix_t& Psi, Distribution&& distr) const {
             const auto& s = m_->solver_;
             fdapde_assert(Psi.rows() > 0 && Psi.cols() == s.n_dofs());
             if (!Vf_.has_value()) { compute_Vf_(); }
-	    sparse_matrix_t Vf__ = Psi * (*Vf_) * Psi.transpose();
-	    double q = distr.quantile(alpha);
-	    vector_t a = Psi * s.f();
-	    vector_t b = q * (Vf__.diagonal().array()).sqrt();
+            sparse_matrix_t Vf__ = Psi * (*Vf_) * Psi.transpose();
+            double q = distr.quantile(alpha);
+            vector_t a = Psi * s.f();
+            vector_t b = q * (Vf__.diagonal().array()).sqrt();
             // build confidence interval
-            return std::make_pair(a - b, a + b);    
+            return std::make_pair(a - b, a + b);
         }
        public:
         wald_t() noexcept = default;
@@ -177,8 +182,7 @@ class SRPDE {
             XtWX_ = X.transpose() * W * X;
 
             if (approx) {
-                sparse_matrix_t E =
-                  s.PsiNA().transpose() * W * s.PsiNA() + s.P(s.lambda(), FSPAI(s.mass()));
+                sparse_matrix_t E = s.PsiNA().transpose() * W * s.PsiNA() + s.P(s.lambda(), FSPAI(s.mass()));
                 FSPAI invE(E);   // compute approximate inverse
                 int n_dofs = s.n_dofs();
 
@@ -234,7 +238,7 @@ class SRPDE {
             return test_sim_beta(beta0, matrix_t::Identity(q_, q_));
         }
         double test_sim_beta(const std::initializer_list<double>& beta0, const matrix_t& C) const {
-	  return test_sim_beta(std::vector<double> {beta0.begin(), beta0.end()}, C);
+            return test_sim_beta(std::vector<double> {beta0.begin(), beta0.end()}, C);
         }
         double test_sim_beta(const std::initializer_list<double>& beta0) const {
             return test_sim_beta(std::vector<double> {beta0.begin(), beta0.end()}, matrix_t::Identity(q_, q_));
@@ -267,19 +271,16 @@ class SRPDE {
         template <typename... DataLocs>
         std::pair<vector_t, vector_t> confint_oat_f(double alpha, const DataLocs&... locs) const {
             fdapde_assert(
-		std::all_of(m_->geo_category_.begin() FDAPDE_COMMA m_->geo_category_.end() FDAPDE_COMMA
-		    [&](auto t) { return t == ltype::point; })
-	    );
+              std::all_of(m_->geo_category_.begin() FDAPDE_COMMA m_->geo_category_.end()
+                            FDAPDE_COMMA[&](auto t) { return t == ltype::point; }));
 
-	    // eval_basis_at must be made public
-	    // what if more than one layer and just one matrix of joint space-time points?
-	    // what in case of parabolic penalty?
-	    
+            // eval_basis_at must be made public
+            // what if more than one layer and just one matrix of joint space-time points?
+            // what in case of parabolic penalty?
+
             sparse_matrix_t Psi_p = m_->solver_.eval_basis_at(locs...);
 
-	    
-	    
-	    return confint_f_(1 - alpha, Psi_p, normal_distribution(1 - alpha / 2));
+            return confint_f_(1 - alpha, Psi_p, normal_distribution(1 - alpha / 2));
         }
         auto confint_oat_f(double alpha) const { return confint_f_(alpha, m_->solver_.PsiNA()); }
 
@@ -319,7 +320,6 @@ class SRPDE {
         const SRPDE* m_;
         int q_;
 
-      
         matrix_t XtWX_;   // q x q matrix X^\top * W * X
         double sigma_squared_;
         matrix_t Q_;
@@ -342,4 +342,4 @@ SRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& solver) -> SRPDE
 
 }   // namespace fdapde
 
-#endif //  __SPATIAL_REGRESSION_H__
+#endif   //  __SPATIAL_REGRESSION_H__
