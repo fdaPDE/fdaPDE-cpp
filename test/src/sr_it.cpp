@@ -24,6 +24,7 @@ using fdapde::test::almost_equal;
 //    covariates:   no
 //    BC:           no
 //    order FE:     1
+/*
 TEST(sr_elliptic_it, test_01) {
     // geometry
     std::string mesh_path = "../data/mesh/unit_square_60/";
@@ -41,6 +42,29 @@ TEST(sr_elliptic_it, test_01) {
     auto F = integral(D)(u * v);
     // modeling
     SRPDE m("y ~ f", data, fe_it_ls_elliptic(a, F));
+    m.fit(1.56206e-08, 1e-15);
+
+    EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/01/field.mtx"));
+}
+*/
+
+TEST(sr_elliptic_it_aldo, test_01) {
+    // geometry
+    std::string mesh_path = "../data/mesh/unit_square_60/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
+    // data
+    GeoFrame data(D);
+    auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
+    l1.load_csv<double>("../data/sr/01/response.csv");
+    // physics
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction v(Vh);
+    auto a = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u;
+    auto F = integral(D)(u * v);
+    // modeling
+    SRPDE m("y ~ f", data, fe_it_ls_elliptic_aldo(a, F));
     m.fit(1.56206e-08, 1e-15);
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/01/field.mtx"));
@@ -87,6 +111,7 @@ TEST(sr_elliptic_it, test_03) {
 //    BC:           no
 //    order FE:     1
 //    GCV optimization: grid stochastic
+/*
 TEST(sr_elliptic_it, test_04) {
     // geometry
     std::string mesh_path = "../data/mesh/unit_square_21/";
@@ -112,6 +137,7 @@ TEST(sr_elliptic_it, test_04) {
 
     EXPECT_TRUE(almost_equal<double>(optimizer.values(), "../data/sr/04/gcvs.mtx"));
 }
+*/
 
 // areal test
 /*

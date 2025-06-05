@@ -18,6 +18,7 @@
 #define __FE_LS_ELLIPTIC_SOLVER_IT_H__
 
 #include "header_check.h"
+#include "unsupported/Eigen/SparseExtra"
 
 namespace fdapde {
 namespace internals {
@@ -242,14 +243,14 @@ template <typename Derived> struct fe_iterative_optimizer {
     auto fit(double lambda, double tol = 1e-15) {
         fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
         // check if P has already been built
-        if (!P_built_) derived().build_P();
+        if (!built_) derived().build();
         // update tolerance
         tol_ = tol;
         // optimize
         BFGS<Dynamic, BacktrackingLineSearch> opt {50000, tol_, 1e-2};
         // GradientDescent<Dynamic, BacktrackingLineSearch> opt {50000, tol_, 1e-2};
         f_ = opt.optimize(
-          typename Derived::ls_t(derived(), lambda), vector_t::Random(n_dofs_)
+          typename Derived::ls_t(derived(), lambda), vector_t::Ones(n_dofs_)   // Random
           // , [](auto value) { std::cout << "obj value: " << value << std ::endl;  }
         );
 
@@ -342,7 +343,7 @@ template <typename Derived> struct fe_iterative_optimizer {
     binary_t nan_pattern_;
     sparse_matrix_t W_;   // n_obs x n_obs matrix of observation weights
     bool W_changed_;
-    bool P_built_ = false;
+    bool built_ = false;
 
     double tol_ = 1e-15;
 };
@@ -378,14 +379,14 @@ struct fe_it_ls_elliptic : fe_iterative_optimizer<fe_it_ls_elliptic> {
     };
 
     // penalty matrix builder
-    void build_P() {
+    void build() {
         // sparse_matrix_t invR0 = lump(R0_);
         // for (int k = 0; k < invR0.outerSize(); ++k)
         //     for (sparse_matrix_t::InnerIterator it(invR0, k); it; ++it) { it.valueRef() = 1. / it.value(); }
         sparse_solver_t invR0;
         invR0.compute(R0_);
         P_ = R1_.transpose() * invR0.solve(R1_);
-        P_built_ = true;
+        built_ = true;
     }
 
     fe_it_ls_elliptic() noexcept = default;
@@ -405,6 +406,102 @@ struct fe_it_ls_elliptic : fe_iterative_optimizer<fe_it_ls_elliptic> {
     template <typename GeoFrame, typename InfoT>
         requires(is_valid_info_t<InfoT>::value)
     fe_it_ls_elliptic(const GeoFrame& gf, InfoT&& info) : fe_iterative_optimizer(gf, info) { }
+};
+
+struct fe_it_ls_elliptic_aldo : fe_iterative_optimizer<fe_it_ls_elliptic_aldo> {
+    struct ls_t {
+        // constructor
+        ls_t(fe_it_ls_elliptic_aldo& m, double lambda) : m_(std::addressof(m)), lambda_(lambda) { }
+
+        // penalized negative log-likelihood at point
+        double operator()(const vector_t& g) {
+            vector_t f = m_->state(g);
+            vector_t res = (m_->y_ - m_->Psi_ * f).array();
+            double L = res.dot(m_->D_ * m_->W_ * res);
+            double P = g.dot(m_->R0_ * g);
+            double J = L + lambda_ * P;
+            return J;
+        }
+        // gradient functor
+        std::function<vector_t(const vector_t&)> derive() {
+            return [this](const vector_t& g) {
+                vector_t f = m_->state(g);
+                vector_t p = m_->adjoint(f);
+                vector_t grad = lambda_ * m_->R0_ * g - m_->R0_ * p;
+                return grad;
+            };
+        }
+        // injected optimization stopping criterion
+        template <typename Optimizer> bool stop_if(Optimizer& opt) {
+            double loss_old = operator()(opt.x_old);
+            double loss_new = operator()(opt.x_new);
+            return std::abs((loss_new - loss_old) / loss_old) < m_->tol_;
+        }
+       private:
+        fe_it_ls_elliptic_aldo* m_;
+        double lambda_;
+    };
+
+    // override fit method
+    auto fit(double lambda, double tol = 1e-15) {
+        fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
+        // check if P has already been built
+        if (!built_) derived().build();
+        // update tolerance
+        tol_ = tol;
+        // optimize
+        BFGS<Dynamic, BacktrackingLineSearch> opt {5000, tol_, 1e-2};
+        // GradientDescent<Dynamic, BacktrackingLineSearch> opt {50000, tol_, 1e-2};
+        g_ = opt.optimize(ls_t(*this, lambda), vector_t::Random(n_dofs_), [](auto value) {
+            std::cout << "obj value: " << value << std ::endl;
+        });
+        f_ = state(g_);
+        lambda_saved_ = lambda;
+        return std::make_pair(f_, beta_);
+    }
+
+    // penalty matrix builder
+    void build() {
+        R1_.prune(1e-10);
+        double alpha = 1e-5;
+        sparse_matrix_t I(n_dofs_, n_dofs_);
+        I.setIdentity();
+        invR1_.compute(R1_ + alpha * I);
+    }
+
+    vector_t state(const vector_t& g) {
+        vector_t f = invR1_.solve(R0_ * g);
+        return f;
+    }
+
+    vector_t adjoint(const vector_t& f) {
+        vector_t p = invR1_.solve(-Psi_.transpose() * (y_ - Psi_ * f));
+        return p;
+    }
+
+    fe_it_ls_elliptic_aldo() noexcept = default;
+    // construct from formula + geoframe
+    template <typename GeoFrame, typename InfoT, typename WeightMatrix>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_it_ls_elliptic_aldo(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
+        fe_iterative_optimizer(formula, gf, info, W) { }
+    template <typename GeoFrame, typename InfoT>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_it_ls_elliptic_aldo(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
+        fe_iterative_optimizer(formula, gf, info) { }
+    // construct with no data
+    template <typename GeoFrame, typename InfoT, typename WeightMatrix>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_it_ls_elliptic_aldo(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
+        fe_iterative_optimizer(gf, info, W) { }
+    template <typename GeoFrame, typename InfoT>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_it_ls_elliptic_aldo(const GeoFrame& gf, InfoT&& info) : fe_iterative_optimizer(gf, info) { }
+   private:
+    vector_t g_;
+    sparse_solver_t invR1_;
+   public:
+    const vector_t& misfit() const { return g_; }
 };
 
 struct fe_it_ls_dirichlet : fe_iterative_optimizer<fe_it_ls_dirichlet> {
@@ -436,9 +533,9 @@ struct fe_it_ls_dirichlet : fe_iterative_optimizer<fe_it_ls_dirichlet> {
     };
 
     // penalty matrix builder
-    void build_P() {
+    void build() {
         P_ = R1_;
-        P_built_ = true;
+        built_ = true;
     }
 
     fe_it_ls_dirichlet() noexcept = default;
@@ -472,6 +569,20 @@ template <typename BilinearForm, typename LinearForm> struct fe_it_ls_elliptic {
     };
    public:
     fe_it_ls_elliptic(const BilinearForm& bilinear_form, const LinearForm& linear_form) :
+        info_(std::make_tuple(bilinear_form, linear_form)) { }
+    const info_t& get() const { return info_; }
+   private:
+    info_t info_;
+};
+
+template <typename BilinearForm, typename LinearForm> struct fe_it_ls_elliptic_aldo {
+    using solver_t = internals::fe_it_ls_elliptic_aldo;
+   private:
+    struct info_t {
+        std::tuple<BilinearForm, LinearForm> penalty;
+    };
+   public:
+    fe_it_ls_elliptic_aldo(const BilinearForm& bilinear_form, const LinearForm& linear_form) :
         info_(std::make_tuple(bilinear_form, linear_form)) { }
     const info_t& get() const { return info_; }
    private:
