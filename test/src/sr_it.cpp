@@ -49,13 +49,18 @@ TEST(sr_elliptic_it, test_01) {
 */
 
 TEST(sr_elliptic_it_aldo, test_01) {
+    using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
+    using vector_t = Eigen::Matrix<double, Dynamic, 1>;
     // geometry
     std::string mesh_path = "../data/mesh/unit_square_60/";
     Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
-    l1.load_csv<double>("../data/sr/01/response.csv");
+    vector_t y = read_csv<double>("../data/sr/01/response.csv", true, true).as_matrix().col(0);
+    y -= y.array().mean() * vector_t::Ones(60 * 60);
+    data[0].data().append_blk("y", y);
+
     // physics
     FeSpace Vh(D, P1<1>);
     TrialFunction f(Vh);

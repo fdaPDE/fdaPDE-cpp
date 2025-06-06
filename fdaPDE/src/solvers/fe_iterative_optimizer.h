@@ -248,7 +248,7 @@ template <typename Derived> struct fe_iterative_optimizer {
         tol_ = tol;
         // optimize
         BFGS<Dynamic, BacktrackingLineSearch> opt {50000, tol_, 1e-2};
-        // GradientDescent<Dynamic, BacktrackingLineSearch> opt {50000, tol_, 1e-2};
+        // GradientDescent<Dynamic> opt {50000, tol_, 1e-2};   // BacktrackingLineSearch
         f_ = opt.optimize(
           typename Derived::ls_t(derived(), lambda), vector_t::Ones(n_dofs_)   // Random
           // , [](auto value) { std::cout << "obj value: " << value << std ::endl;  }
@@ -332,7 +332,7 @@ template <typename Derived> struct fe_iterative_optimizer {
     mutable sparse_solver_t invR0_;
     std::optional<sparse_matrix_t> B_;   // \Psi matrix corrected for missing observations
 
-    matrix_t P_, R0invP_;   // n_dofs x n_dofs penalty matrix P_ = R1^\top * (R0)^{-1} * R1
+    matrix_t P_;   // n_dofs x n_dofs penalty matrix P_ = R1^\top * (R0)^{-1} * R1
     vector_t f_, beta_;
     // basis system evaluation handle
     std::function<sparse_matrix_t(const matrix_t& locs)> point_eval_;
@@ -450,8 +450,8 @@ struct fe_it_ls_elliptic_aldo : fe_iterative_optimizer<fe_it_ls_elliptic_aldo> {
         // update tolerance
         tol_ = tol;
         // optimize
-        BFGS<Dynamic, BacktrackingLineSearch> opt {5000, tol_, 1e-2};
-        // GradientDescent<Dynamic, BacktrackingLineSearch> opt {50000, tol_, 1e-2};
+        // BFGS<Dynamic, BacktrackingLineSearch> opt {5000, tol_, 1e-2};
+        GradientDescent<Dynamic, BacktrackingLineSearch> opt {50000, tol_, 1e-2};
         g_ = opt.optimize(ls_t(*this, lambda), vector_t::Random(n_dofs_), [](auto value) {
             std::cout << "obj value: " << value << std ::endl;
         });
@@ -462,20 +462,20 @@ struct fe_it_ls_elliptic_aldo : fe_iterative_optimizer<fe_it_ls_elliptic_aldo> {
 
     // penalty matrix builder
     void build() {
-        R1_.prune(1e-10);
-        double alpha = 1e-5;
         sparse_matrix_t I(n_dofs_, n_dofs_);
         I.setIdentity();
-        invR1_.compute(R1_ + alpha * I);
+        vector_t one = vector_t::Ones(n_dofs_);
+        Proj_ = I - (R0_ * one * one.transpose()) / (one.transpose() * R0_ * one);
+        invPTR1P_.compute(Proj_.transpose() * R1_ * Proj_);
     }
 
     vector_t state(const vector_t& g) {
-        vector_t f = invR1_.solve(R0_ * g);
+        vector_t f = invPTR1P_.solve(Proj_.transpose() * R0_ * g);
         return f;
     }
 
     vector_t adjoint(const vector_t& f) {
-        vector_t p = invR1_.solve(-Psi_.transpose() * (y_ - Psi_ * f));
+        vector_t p = invPTR1P_.solve(-Proj_.transpose() * Psi_.transpose() * (y_ - Psi_ * f));
         return p;
     }
 
@@ -499,7 +499,8 @@ struct fe_it_ls_elliptic_aldo : fe_iterative_optimizer<fe_it_ls_elliptic_aldo> {
     fe_it_ls_elliptic_aldo(const GeoFrame& gf, InfoT&& info) : fe_iterative_optimizer(gf, info) { }
    private:
     vector_t g_;
-    sparse_solver_t invR1_;
+    matrix_t Proj_;
+    dense_solver_t invPTR1P_;
    public:
     const vector_t& misfit() const { return g_; }
 };
