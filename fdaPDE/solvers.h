@@ -28,6 +28,7 @@
 
 namespace fdapde {
 
+struct it_solver { };
 struct ls_solver { };
 struct de_solver { };
   
@@ -35,6 +36,7 @@ struct de_solver { };
 
 // generic iterative optimization solver
 #include "src/solvers/fe_iterative_optimizer.h"
+#include "src/solvers/fe_iterative_optimizer_dti.h"
 
 // least square solvers
 #include "src/solvers/fe_ls_elliptic.h"

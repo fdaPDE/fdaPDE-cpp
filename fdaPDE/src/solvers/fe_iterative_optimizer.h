@@ -14,8 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __FE_LS_ELLIPTIC_SOLVER_IT_H__
-#define __FE_LS_ELLIPTIC_SOLVER_IT_H__
+#ifndef __FE_ITERATIVE_OPTIMIZER__
+#define __FE_ITERATIVE_OPTIMIZER__
 
 #include "header_check.h"
 
@@ -379,12 +379,12 @@ struct fe_it_ls_elliptic : fe_iterative_optimizer<fe_it_ls_elliptic> {
 
     // penalty matrix builder
     void build_P() {
-        // sparse_matrix_t invR0 = lump(R0_);
-        // for (int k = 0; k < invR0.outerSize(); ++k)
-        //     for (sparse_matrix_t::InnerIterator it(invR0, k); it; ++it) { it.valueRef() = 1. / it.value(); }
-        sparse_solver_t invR0;
-        invR0.compute(R0_);
-        P_ = R1_.transpose() * invR0.solve(R1_);
+        sparse_matrix_t invR0 = lump(R0_);
+        for (int k = 0; k < invR0.outerSize(); ++k)
+            for (sparse_matrix_t::InnerIterator it(invR0, k); it; ++it) { it.valueRef() = 1. / it.value(); }
+        // sparse_solver_t invR0;
+        // invR0.compute(R0_);
+        P_ = R1_.transpose() * invR0 * R1_;   // invR0.solve(R1_);
         P_built_ = true;
     }
 
@@ -494,4 +494,4 @@ template <typename BilinearForm, typename LinearForm> struct fe_it_ls_dirichlet 
 
 }   // namespace fdapde
 
-#endif   // __FE_LS_ELLIPTIC_SOLVER_IT_H__
+#endif   // __FE_ITERATIVE_OPTIMIZER__

@@ -24,6 +24,7 @@
 
 #include "solvers.h"
 #include "src/models/fr.h"
+#include "src/models/fdti.h"
 #include "src/models/fpca.h"
 
 // clang-format on
