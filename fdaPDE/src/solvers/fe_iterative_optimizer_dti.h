@@ -17,23 +17,11 @@
 #ifndef __FE_ITERATIVE_OPTIMIZER_DTI__
 #define __FE_ITERATIVE_OPTIMIZER_DTI__
 
+#include "../dti_utility.h"
 #include "header_check.h"
-
-using namespace Eigen::indexing;
 
 namespace fdapde {
 namespace internals {
-
-struct dwi_data {
-   protected:
-    using vector_t = Eigen::Matrix<double, Dynamic, 1>;
-    using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
-   public:
-    vector_t b;
-    matrix_t g;
-    vector_t S0;
-    matrix_t S;
-};
 
 template <typename Derived> struct fe_it_opt_dti {
    protected:
@@ -166,133 +154,23 @@ template <typename Derived> struct fe_it_opt_dti {
         return;
     }
 
-    vector_t get_row(const vector_t& V, int row, int size) const {
-        int n = V.size() / size;
-        vector_t v(n);
-        for (int i = 0; i < n; ++i) { v[i] = V[i * size + row]; }
-        return v;
-    }
-
-    void write_row(const vector_t& v, vector_t& V, int row, int size) const {
-        int n = v.size();
-        for (int i = 0; i < n; ++i) { V[i * size + row] = v[i]; }
-    }
-
-    vector_t get_component(const vector_t& V, int k, int size) const {
-        vector_t v(size);
-        v = V(seqN(k * size, size));
-        return v;
-    }
-
-    matrix_t to_matrix(const vector_t& V, int size) const {
-        int n = V.size() / size;
-        matrix_t M(size, n);
-        for (int k = 0; k < n; ++k) M.col(k) = get_component(V, k, n_dofs_);
-        return M;
-    }
-
-    vector_t to_vector(const matrix_t& V) const {
-        int n = V.cols();
-        int size = V.rows();
-        vector_t v(size * n);
-        for (int k = 0; k < n; ++k) v(seqN(k * size, size)) = V.col(k);
-        return v;
-    }
-
-    // matrix view of a symmetrix matrix in vector format
-    matrix_t matrix_view(const vector_t& s) const {
-        // assert to check that the lenght of s il ok
-        matrix_t S(n_dim_, n_dim_);
-        for (int i = 0; i < n_dim_; ++i) S(i, i) = s[i];
-        int index = 0;
-        for (int i = 0; i < n_dim_; ++i) {
-            for (int j = i + 1; j < n_dim_; ++j) {
-                S(j, i) = S(i, j) = s[n_dim_ + index];
-                index++;
-            }
-        }
-        return S;
-    }
-
-    vector_t vector_view(const matrix_t& S) const {
-        // assert to check that the lenght of s il ok
-        vector_t s(n_dim_ * (n_dim_ + 1) / 2);
-        for (int i = 0; i < n_dim_; ++i) s[i] = S(i, i);
-        int index = 0;
-        for (int i = 0; i < n_dim_; ++i) {
-            for (int j = i + 1; j < n_dim_; ++j) {
-                s[n_dim_ + index] = S(i, j);
-                index++;
-            }
-        }
-        return s;
-    }
-
-    // Attenzione: la formula fornita è R^T M R, ma la decomposizione spettrale di L è R S R^T.
-    // Se la derivata direzionale è definita come d_G exp(L), e la formula è R^T M R,
-    // significa che R è la matrice degli autovettori di L.
-    // In base alla formula d_G exp.L = R^T M R
-    // l'immagine mostra M = d_RGR^T exp.S
-    // e poi d_G exp.L = R^T M R
-    // L'uso di RGR^T per M e poi R^TMR non è immediato.
-    // Se L = R S R^T, allora exp(L) = R exp(S) R^T.
-    // La derivata d_G exp(L) dovrebbe essere R d_{R^T G R} exp(S) R^T.
-    // Quindi M = d_{R^T G R} exp(S), e la formula finale sarebbe R M R^T.
-    // Se fosse R^T M R, allora M dovrebbe essere d_G exp(L') dove L'=RSR^T.
-    // Assumiamo che la formula d_G exp.L = R^T M R sia corretta e che R sia
-    // la matrice degli autovettori di L.
-
-    matrix_t computeM(const matrix_t& G, const matrix_t& R, const vector_t& S_diag) const {
-        int d = S_diag.size();
-        matrix_t M = R.transpose() * G * R;
-
-        for (int l = 0; l < d; ++l) {
-            for (int m = 0; m < d; ++m) {
-                double s_l = S_diag(l);
-                double s_m = S_diag(m);
-                if (std::abs(s_l - s_m) > 1e-9) {
-                    M(l, m) *= (std::exp(s_m) - std::exp(s_l)) / (s_m - s_l);
-                } else {
-                    M(l, m) *= std::exp(s_l);
-                }
-            }
-        }
-        return M;
-    }
-
-    vector_t dG_exp(double b, const vector_t& g, const matrix_t& L) {
-        matrix_t G = b * g * g.transpose();   // controllare che b sia necessario
-        Eigen::SelfAdjointEigenSolver<matrix_t> es_L(L);
-        matrix_t R = es_L.eigenvectors();
-        vector_t S_diag = es_L.eigenvalues();
-
-        matrix_t M = computeM(G, R, S_diag);
-
-        matrix_t dG_exp_L = R * M * R.transpose();
-
-        return vector_view(dG_exp_L);
-    }
-
     // main fit entry point
     auto fit(double lambda, double tol = 1e-15) {
-        std::cout << "fit" << std::endl;
         fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
         // check if P has already been built
         if (!built_) derived().build_P();
         // update tolerance
         tol_ = tol;
         // optimize
-        BFGS<Dynamic, BacktrackingLineSearch> opt {50000, tol_, 1e-2};
-        // GradientDescent<Dynamic, BacktrackingLineSearch> opt {50000, tol_, 1e-2};
-        std::cout << "optimizer" << std::endl;
+        // BFGS<Dynamic, BacktrackingLineSearch> opt {5000, tol_, 1e3};   // , BacktrackingLineSearch
+        GradientDescent<Dynamic, BacktrackingLineSearch> opt {10000, tol_, 1e3};   // , BacktrackingLineSearch
         vector_t vec_L = opt.optimize(
-          typename Derived::opt_functor_t(derived(), lambda), vector_t::Random(n_dofs_ * (n_dim_ + 1) * n_dim_ / 2),
-          [](auto value) { std::cout << "obj value: " << value << std ::endl; });
+          typename Derived::opt_functor_t(derived(), lambda),    //
+          vector_t::Zero(n_dofs_ * (n_dim_ + 1) * n_dim_ / 2),   //
+          [](auto value) { std::cout << value << ", "; });
         L_ = to_matrix(vec_L, n_dofs_);
-        std::cout << "optimizer" << std::endl;
 
         lambda_saved_ = lambda;
-        std::cout << "fit" << std::endl;
         return L_;
     }
     template <typename LambdaT>
@@ -398,21 +276,23 @@ struct fe_it_opt_dti_linearized_gaussian_dirichlet : fe_it_opt_dti<fe_it_opt_dti
         // penalized negative log-likelihood at point
         double operator()(const vector_t& L) {
             double obj = 0;
-            vector_t S0 = m_->data_.S0;
+            vector_t S0 = m_->data_.S0();
+            matrix_t L_locs = m_->Psi_ * to_matrix(L, m_->n_dofs_);
             // loss
-            for (int i = 0; i < m_->n_obs(); ++i) {
-                vector_t Si = m_->data_.S.col(i);
-                double bi = m_->data_.b[i];
-                vector_t gi = m_->data_.g.col(i);
-                for (int j = 0; j < m_->n_locs_; ++j) {
-                    matrix_t Lj = m_->matrix_view(m_->get_row(L, j, m_->n_dofs()));
-                    obj += std::pow(log(S0[j] / Si[j]) - bi * gi.dot(Lj * gi), 2);
+            for (int j = 0; j < m_->n_locs(); ++j) {
+                matrix_t Lj = expm(matrix_view(L_locs.row(j)));
+                for (int i = 0; i < m_->n_obs(); ++i) {
+                    double bi = m_->data_.b()[i];
+                    vector_t gi = m_->data_.g().col(i);
+                    vector_t Si = m_->data_.S().col(i);
+                    double diff = log(S0[j] / Si[j]) - bi * gi.dot(Lj * gi);
+                    obj += diff * diff;
                 }
             }
             obj /= m_->n_obs() * m_->n_locs();
             // penalty
             for (int k = 0; k < m_->n_dim() * (m_->n_dim() + 1) / 2; ++k) {
-                vector_t lk = m_->get_component(L, k, m_->n_dofs());
+                vector_t lk = get_component(L, k, m_->n_dofs());
                 obj += lambda_ * lk.dot(m_->P_ * lk);
             };
             return obj;
@@ -420,24 +300,25 @@ struct fe_it_opt_dti_linearized_gaussian_dirichlet : fe_it_opt_dti<fe_it_opt_dti
         // gradient functor
         std::function<vector_t(const vector_t&)> derive() {
             return [this](const vector_t& L) {
-                matrix_t gradient_locs(m_->n_locs(), m_->n_dim() * (m_->n_dim() + 1) / 2);
-                vector_t S0 = m_->data_.S0;
+                matrix_t gradient_locs = matrix_t::Zero(m_->n_locs(), m_->n_dim() * (m_->n_dim() + 1) / 2);
+                vector_t S0 = m_->data_.S0();
+                matrix_t L_locs = m_->Psi_ * to_matrix(L, m_->n_dofs_);
                 // loss
-                for (int i = 0; i < m_->n_obs_; ++i) {
-                    vector_t Si = m_->data_.S.col(i);
-                    double bi = m_->data_.b[i];
-                    vector_t gi = m_->data_.g.col(i);
-                    for (int j = 0; j < m_->n_locs_; ++j) {
-                        matrix_t Lj = m_->matrix_view(m_->get_row(L, j, m_->n_dofs()));
-                        vector_t dG_exp_L = m_->dG_exp(bi, gi, Lj);
-                        vector_t gradient_loc_j = -(log(S0[j] / Si[j]) - bi * gi.dot(Lj * gi)) * dG_exp_L;
-                        gradient_locs.row(j) = gradient_loc_j;
+                for (int j = 0; j < m_->n_locs_; ++j) {
+                    matrix_t Lj = matrix_view(L_locs.row(j));
+                    for (int i = 0; i < m_->n_obs_; ++i) {
+                        vector_t Si = m_->data_.S().col(i);
+                        double bi = m_->data_.b()[i];
+                        vector_t gi = m_->data_.g().col(i);
+                        vector_t dG_exp_L = dG_exp(bi, gi, Lj);
+                        double diff = log(S0[j] / Si[j]) - bi * gi.dot(expm(Lj) * gi);
+                        gradient_locs.row(j) -= bi * diff * dG_exp_L;
                     }
                 }
-                matrix_t gradient = m_->Psi().transpose() * gradient_locs;
+                matrix_t gradient = 2.0 * m_->Psi().transpose() * gradient_locs / (m_->n_obs() * m_->n_locs());
                 // penalty
-                gradient += lambda_ * m_->P_ * m_->to_matrix(L, m_->n_dofs());
-                return m_->to_vector(gradient);
+                gradient += 2.0 * lambda_ * m_->P_ * to_matrix(L, m_->n_dofs());
+                return to_vector(gradient);
             };
         }
         // injected optimization stopping criterion
@@ -445,6 +326,7 @@ struct fe_it_opt_dti_linearized_gaussian_dirichlet : fe_it_opt_dti<fe_it_opt_dti
             double loss_old = operator()(opt.x_old);
             double loss_new = operator()(opt.x_new);
             return std::abs((loss_new - loss_old) / loss_old) < m_->tol_;
+            // return (opt.x_old - opt.x_new).norm() / opt.x_old.norm() < m_->tol_;
         }
        private:
         fe_it_opt_dti_linearized_gaussian_dirichlet* m_;

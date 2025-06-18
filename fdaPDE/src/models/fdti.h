@@ -37,6 +37,7 @@ class FDTI {
     FDTI(const vector_t& b, const matrix_t& g, const GeoFrame& gf, Penalty&& penalty) noexcept :
         solver_(), geo_category_(gf[0].category().begin(), gf[0].category().end()) {
         fdapde_assert(gf.n_layers() == 1);
+
         solver_ = solver_t(b, g, gf, penalty.get());
     }
     template <typename... Args> auto fit(Args&&... args) {
@@ -56,6 +57,7 @@ class FDTI {
     }
     int n_obs() const { return solver_->n_obs_; }
     int n_locs() const { return solver_->n_locs_; }
+    const sparse_matrix_t& Psi() const { return solver_.Psi(); }
     // double edf(int r = 100, int seed = random_seed) { return solver_.edf(r, seed); }
     matrix_t fitted() const { return solver_.Psi() * solver_.D(); }
     // matrix_t residuals() const { return Y_ - fitted().replicate(1, Y_.rows()).transpose(); }

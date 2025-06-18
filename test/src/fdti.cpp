@@ -14,6 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#include "logger.h"
+std::ofstream file;
+
 using namespace fdapde;
 using fdapde::test::almost_equal;
 
@@ -42,13 +45,26 @@ TEST(fdti_it, test_01) {
     auto F = integral(D)(u * v);
     // modeling
     FDTI m(b, g, data, fe_it_opt_dti_linearized_gaussian_dirichlet(a, F));
-    m.fit(1e-0);
+    matrix_t Ln_true = read_csv<double>("../data/vsr/tensors/L_true_locs.csv").as_matrix();
 
+    std::string filename = "../data/vsr/tensors/RESULTS/descent.csv";
+    {
+        std::ofstream clearFile(filename, std::ios::trunc);
+        if (!clearFile.is_open()) { std::cerr << "Error clearing file.\n"; }
+        // File is cleared here
+    }
+
+    file.open(filename, std::ios::app);
+
+    m.fit(1e-18, 1e-10);
+
+    file.close();
+
+    std::cout << std::endl;
     std::cout << std::endl;
     matrix_t Ln = m.Ln();
     std::cout << Ln.topRows(10) << std::endl;
     std::cout << std::endl;
-    matrix_t Ln_true = read_csv<double>("../data/vsr/tensors/L_true_locs.csv").as_matrix();
     std::cout << Ln_true.topRows(10) << std::endl;
     std::cout << std::endl;
 
@@ -66,7 +82,8 @@ TEST(fdti_it, test_01) {
         }
     }
 
-    write_csv("../data/vsr/tensors/D_est_locs.csv", exp_data);
+    std::cout << (Ln - Ln_true).norm() / (Ln.size()) << std::endl;
 
-    // EXPECT_TRUE(almost_equal<double>(Ln, "../data/vsr/tensors/L_true_locs.csv"));
+    write_csv("../data/vsr/tensors/D_est_locs.csv", exp_data);
+    EXPECT_TRUE(almost_equal<double>(Ln, Ln_true));
 }
