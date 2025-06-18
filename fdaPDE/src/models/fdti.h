@@ -37,8 +37,10 @@ class FDTI {
     FDTI(const vector_t& b, const matrix_t& g, const GeoFrame& gf, Penalty&& penalty) noexcept :
         solver_(), geo_category_(gf[0].category().begin(), gf[0].category().end()) {
         fdapde_assert(gf.n_layers() == 1);
-
         solver_ = solver_t(b, g, gf, penalty.get());
+        // room for results
+        D_.resize(solver_.n_dofs(), solver_.n_cols());
+        Dn_.resize(solver_.n_locs(), solver_.n_cols());
     }
     template <typename... Args> auto fit(Args&&... args) {
         solver_.fit(std::forward<Args>(args)...);
@@ -50,10 +52,17 @@ class FDTI {
         matrix_t Ln = solver_.Ln();
         return Ln;
     }
-    const matrix_t& D() const {
+    const matrix_t& D() {
         // implement cache
-        D_ = solver_.L();   // compute D starting from D
+        matrix_t L = this->L();
+        D_ = inv_log_transform(L);
         return D_;
+    }
+    const matrix_t& Dn() {
+        // implement cache
+        matrix_t Ln = this->Ln();
+        Dn_ = inv_log_transform(Ln);
+        return Dn_;
     }
     int n_obs() const { return solver_->n_obs_; }
     int n_locs() const { return solver_->n_locs_; }
@@ -124,7 +133,7 @@ class FDTI {
    private:
     solver_t solver_;
     std::vector<ltype> geo_category_;
-    matrix_t D_;
+    matrix_t D_, Dn_;
     binary_t nan_pattern_;
 };
 

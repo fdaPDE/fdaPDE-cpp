@@ -102,6 +102,7 @@ template <typename Derived> struct fe_it_opt_dti {
         n_locs_ = gf[0].rows();
         n_obs_ = gf[0].template col<double>("S").as_matrix().cols();
         n_dim_ = embed_dim;
+        n_cols_ = n_dim_ * (n_dim_ + 1) / 2;
 
         data_ = dwi_data {
           b,
@@ -149,7 +150,7 @@ template <typename Derived> struct fe_it_opt_dti {
         gf = gf;
         n_locs_ = gf[0].rows();
         n_obs_ = gf[0].template col<double>("S").as_matrix().cols();
-        // n_dim_ = ; ?? serve
+        // n_dim_ = ; ?? serve, non penso perchè la dim dell'embed_space dipende dalla penalty e qua è già settata.
         eval_basis_at_(gf);   // update \Psi matrix
         return;
     }
@@ -165,8 +166,8 @@ template <typename Derived> struct fe_it_opt_dti {
         // BFGS<Dynamic, BacktrackingLineSearch> opt {5000, tol_, 1e3};   // , BacktrackingLineSearch
         GradientDescent<Dynamic, BacktrackingLineSearch> opt {10000, tol_, 1e3};   // , BacktrackingLineSearch
         vector_t vec_L = opt.optimize(
-          typename Derived::opt_functor_t(derived(), lambda),    //
-          vector_t::Zero(n_dofs_ * (n_dim_ + 1) * n_dim_ / 2),   //
+          typename Derived::opt_functor_t(derived(), lambda),   //
+          vector_t::Zero(n_dofs_ * n_cols_),                    //
           [](auto value) { std::cout << value << ", "; });
         L_ = to_matrix(vec_L, n_dofs_);
 
@@ -222,6 +223,7 @@ template <typename Derived> struct fe_it_opt_dti {
     int n_obs() const { return n_obs_; }
     int n_locs() const { return n_locs_; }
     int n_dim() const { return n_dim_; }
+    int n_cols() const { return n_cols_; }
     const sparse_matrix_t& mass() const { return R0_; }
     const sparse_matrix_t& stiff() const { return R1_; }
     const sparse_matrix_t& Psi() const { return Psi_; }
@@ -244,7 +246,7 @@ template <typename Derived> struct fe_it_opt_dti {
     // matrices for hutchinson stochastic estimation of Tr[S]
     std::optional<matrix_t> Us_;
     std::optional<double> lambda_saved_ = -1;
-    int n_dofs_ = 0, n_locs_ = 0, n_obs_ = 0, n_dim_ = 0;
+    int n_dofs_ = 0, n_locs_ = 0, n_obs_ = 0, n_dim_ = 0, n_cols_ = 0;
     sparse_matrix_t R0_;    // n_dofs x n_dofs matrix [R0]_{ij} = \int_D \psi_i * \psi_j
     sparse_matrix_t R1_;    // n_dofs x n_dofs matrix [R1]_{ij} = \int_D a(\psi_i, \psi_j)
     sparse_matrix_t Psi_;   // n_obs x n_dofs matrix [Psi]_{ij} = \psi_j(p_i)
@@ -291,7 +293,7 @@ struct fe_it_opt_dti_linearized_gaussian_dirichlet : fe_it_opt_dti<fe_it_opt_dti
             }
             obj /= m_->n_obs() * m_->n_locs();
             // penalty
-            for (int k = 0; k < m_->n_dim() * (m_->n_dim() + 1) / 2; ++k) {
+            for (int k = 0; k < m_->n_cols(); ++k) {
                 vector_t lk = get_component(L, k, m_->n_dofs());
                 obj += lambda_ * lk.dot(m_->P_ * lk);
             };
@@ -300,7 +302,7 @@ struct fe_it_opt_dti_linearized_gaussian_dirichlet : fe_it_opt_dti<fe_it_opt_dti
         // gradient functor
         std::function<vector_t(const vector_t&)> derive() {
             return [this](const vector_t& L) {
-                matrix_t gradient_locs = matrix_t::Zero(m_->n_locs(), m_->n_dim() * (m_->n_dim() + 1) / 2);
+                matrix_t gradient_locs = matrix_t::Zero(m_->n_locs(), m_->n_cols());
                 vector_t S0 = m_->data_.S0();
                 matrix_t L_locs = m_->Psi_ * to_matrix(L, m_->n_dofs_);
                 // loss

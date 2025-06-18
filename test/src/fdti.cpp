@@ -68,22 +68,10 @@ TEST(fdti_it, test_01) {
     std::cout << Ln_true.topRows(10) << std::endl;
     std::cout << std::endl;
 
-    matrix_t exp_data(Ln.rows(), 4);
-    for (int i = 0; i < Ln.rows(); ++i) {
-        Eigen::Matrix<double, 2, 2> m;
-        m(0, 0) = Ln(i, 0);
-        m(1, 1) = Ln(i, 1);
-        m(0, 1) = Ln(i, 2);   // / std::sqrt(2);
-        m(1, 0) = m(0, 1);
-
-        Eigen::Matrix<double, 2, 2> exp_m = expm(m);
-        for (int j = 0; j < exp_m.rows(); ++j) {
-            for (int h = 0; h < exp_m.cols(); ++h) { exp_data(i, j * exp_m.rows() + h) = exp_m(j, h); }
-        }
-    }
+    matrix_t Dn = m.Dn();
 
     std::cout << (Ln - Ln_true).norm() / (Ln.size()) << std::endl;
 
-    write_csv("../data/vsr/tensors/D_est_locs.csv", exp_data);
+    write_csv("../data/vsr/tensors/D_est_locs.csv", Dn);
     EXPECT_TRUE(almost_equal<double>(Ln, Ln_true));
 }
