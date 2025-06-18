@@ -67,69 +67,6 @@ class FDTI {
     int n_obs() const { return solver_->n_obs_; }
     int n_locs() const { return solver_->n_locs_; }
     const sparse_matrix_t& Psi() const { return solver_.Psi(); }
-    // double edf(int r = 100, int seed = random_seed) { return solver_.edf(r, seed); }
-    matrix_t fitted() const { return solver_.Psi() * solver_.D(); }
-    // matrix_t residuals() const { return Y_ - fitted().replicate(1, Y_.rows()).transpose(); }
-
-    // Generalized Cross Validation index
-    /*
-    struct gcv_t : public ScalarFieldBase<n_lambda, gcv_t> {
-        using Base = ScalarFieldBase<1, gcv_t>;
-        static constexpr int StaticInputSize = n_lambda;
-        static constexpr int NestAsRef = 0;
-        static constexpr int XprBits = 0;
-        using Scalar = double;
-        using InputType = Vector<Scalar, StaticInputSize>;
-        using edf_cache_t = std::unordered_map<
-          std::array<double, StaticInputSize>, double, internals::std_array_hash<double, StaticInputSize>>;
-
-        gcv_t() noexcept = default;
-        gcv_t(FDTI* model, const edf_cache_t& edf_cache) :
-            model_(model),
-            n_(model->n_obs()),
-            k_(model->n_stat_units()),
-            edf_cache_(edf_cache),
-            r_(100),
-            seed_(random_seed) { }
-        gcv_t(FDTI* model, const edf_cache_t& edf_cache, int r, int seed) :
-            model_(model), n_(model->n_obs()), k_(model->n_stat_units()), edf_cache_(edf_cache), r_(r), seed_(seed) { }
-        gcv_t(FDTI* model) : gcv_t(model, edf_cache_t()) { }
-        gcv_t(FDTI* model, int r, int seed) : gcv_t(model, edf_cache_t(), r, seed) { }
-
-        template <typename InputType_>
-            requires(internals::is_subscriptable<InputType_, int>)
-        constexpr double operator()(const InputType_& lambda) {
-            return internals::apply_index_pack<n_lambda>([&]<int... Ns_>() { return operator()(lambda[Ns_]...); });
-        }
-        template <typename... LambdaT>
-            requires(std::is_convertible_v<LambdaT, double> && ...) && (sizeof...(LambdaT) == StaticInputSize)
-        constexpr double operator()(LambdaT... lambda) {
-            model_->fit(static_cast<double>(lambda)...);
-            std::array<double, StaticInputSize> lambda_vec {lambda...};
-            if (edf_cache_.find(lambda_vec) == edf_cache_.end()) {   // cache Tr[S]
-                edf_cache_[lambda_vec] = model_->edf(r_, seed_);
-            }
-            double dor = n_ * k_ - edf_cache_.at(lambda_vec);   // residual degrees of freedom
-            matrix_t residuals = (~model_->nan_pattern_).select(model_->residuals(), 0);
-            double gcv = ((n_ * k_) / std::pow(dor, 2)) * residuals.squaredNorm();
-            // al posto di (n_) forse ci vuole il numero di non nan in nan_pattern_?
-            return gcv;
-        }
-        // observers
-        const edf_cache_t& edf_cache() const { return edf_cache_; }
-        edf_cache_t& edf_cache() { return edf_cache_; }
-       private:
-        FDTI* model_;
-        int n_ = 0, k_ = 0;
-        edf_cache_t edf_cache_;
-        // stochastic edf approximation parameter
-        int r_, seed_;
-    };
-    gcv_t gcv() { return gcv_t(this); }
-    gcv_t gcv(const typename gcv_t::edf_cache_t& edf_cache) { return gcv_t(this, edf_cache); }
-    gcv_t gcv(int r, int seed) { return gcv_t(this, r, seed); }
-    gcv_t gcv(const typename gcv_t::edf_cache_t& edf_cache, int r, int seed) { return gcv_t(this, edf_cache, r, seed); }
-    */
    private:
     solver_t solver_;
     std::vector<ltype> geo_category_;
@@ -144,5 +81,68 @@ FDTI(
   Penalty&& solver) -> FDTI<typename Penalty::solver_t>;
 
 }   // namespace fdapde
+
+// double edf(int r = 100, int seed = random_seed) { return solver_.edf(r, seed); }
+// matrix_t residuals() const { return Y_ - fitted().replicate(1, Y_.rows()).transpose(); }
+
+// Generalized Cross Validation index
+/*
+struct gcv_t : public ScalarFieldBase<n_lambda, gcv_t> {
+    using Base = ScalarFieldBase<1, gcv_t>;
+    static constexpr int StaticInputSize = n_lambda;
+    static constexpr int NestAsRef = 0;
+    static constexpr int XprBits = 0;
+    using Scalar = double;
+    using InputType = Vector<Scalar, StaticInputSize>;
+    using edf_cache_t = std::unordered_map<
+      std::array<double, StaticInputSize>, double, internals::std_array_hash<double, StaticInputSize>>;
+
+    gcv_t() noexcept = default;
+    gcv_t(FDTI* model, const edf_cache_t& edf_cache) :
+        model_(model),
+        n_(model->n_obs()),
+        k_(model->n_stat_units()),
+        edf_cache_(edf_cache),
+        r_(100),
+        seed_(random_seed) { }
+    gcv_t(FDTI* model, const edf_cache_t& edf_cache, int r, int seed) :
+        model_(model), n_(model->n_obs()), k_(model->n_stat_units()), edf_cache_(edf_cache), r_(r), seed_(seed) { }
+    gcv_t(FDTI* model) : gcv_t(model, edf_cache_t()) { }
+    gcv_t(FDTI* model, int r, int seed) : gcv_t(model, edf_cache_t(), r, seed) { }
+
+    template <typename InputType_>
+        requires(internals::is_subscriptable<InputType_, int>)
+    constexpr double operator()(const InputType_& lambda) {
+        return internals::apply_index_pack<n_lambda>([&]<int... Ns_>() { return operator()(lambda[Ns_]...); });
+    }
+    template <typename... LambdaT>
+        requires(std::is_convertible_v<LambdaT, double> && ...) && (sizeof...(LambdaT) == StaticInputSize)
+    constexpr double operator()(LambdaT... lambda) {
+        model_->fit(static_cast<double>(lambda)...);
+        std::array<double, StaticInputSize> lambda_vec {lambda...};
+        if (edf_cache_.find(lambda_vec) == edf_cache_.end()) {   // cache Tr[S]
+            edf_cache_[lambda_vec] = model_->edf(r_, seed_);
+        }
+        double dor = n_ * k_ - edf_cache_.at(lambda_vec);   // residual degrees of freedom
+        matrix_t residuals = (~model_->nan_pattern_).select(model_->residuals(), 0);
+        double gcv = ((n_ * k_) / std::pow(dor, 2)) * residuals.squaredNorm();
+        // al posto di (n_) forse ci vuole il numero di non nan in nan_pattern_?
+        return gcv;
+    }
+    // observers
+    const edf_cache_t& edf_cache() const { return edf_cache_; }
+    edf_cache_t& edf_cache() { return edf_cache_; }
+   private:
+    FDTI* model_;
+    int n_ = 0, k_ = 0;
+    edf_cache_t edf_cache_;
+    // stochastic edf approximation parameter
+    int r_, seed_;
+};
+gcv_t gcv() { return gcv_t(this); }
+gcv_t gcv(const typename gcv_t::edf_cache_t& edf_cache) { return gcv_t(this, edf_cache); }
+gcv_t gcv(int r, int seed) { return gcv_t(this, r, seed); }
+gcv_t gcv(const typename gcv_t::edf_cache_t& edf_cache, int r, int seed) { return gcv_t(this, edf_cache, r, seed); }
+*/
 
 #endif   //  __FUNCTIONAL_DTI_H__
