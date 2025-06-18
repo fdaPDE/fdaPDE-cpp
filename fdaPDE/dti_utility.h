@@ -19,30 +19,8 @@
 #define __DTI_UTILITY_H__
 
 namespace fdapde {
+
 namespace internals {
-
-// data structure to store Diffusion-Weighted Imaging (DWI) measurements
-struct dwi_data {
-   protected:
-    using vector_t = Eigen::Matrix<double, Dynamic, 1>;
-    using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
-   private:
-    vector_t b_;    // b-values (diffusion weightings), size: n_gradients
-    matrix_t g_;    // gradient directions, size: n_gradients x n_dim
-    vector_t S0_;   // baseline signal (b = 0), size: n_voxels
-    matrix_t S_;    // diffusion signals, size: n_voxels x n_gradients
-   public:
-    // constructor
-    dwi_data() = default;
-    dwi_data(const vector_t& b, const matrix_t& g, const vector_t& S0, const matrix_t& S) :
-        b_(b), g_(g), S0_(S0), S_(S) { }
-    // getters
-    const vector_t& b() const { return b_; }
-    const matrix_t& g() const { return g_; }
-    const vector_t& S0() const { return S0_; }
-    const matrix_t& S() const { return S_; }
-};
-
 // Compute the directional derivative ∂_G exp(L) for symmetric matrices G = g g^top and L = log(D)
 // using the spectral decomposition of L.
 // This corresponds to evaluating the Fréchet derivative of the matrix exponential at L,
@@ -83,8 +61,84 @@ dG_exp(double b, const Eigen::Matrix<double, Dynamic, 1>& g, const Eigen::Matrix
 
     return vector_view(dG_exp_L);   // flatten result to vector form
 }
-
 }   // namespace internals
+
+// data structure to store Diffusion-Weighted Imaging (DWI) measurements
+struct dwi_data {
+   protected:
+    using vector_t = Eigen::Matrix<double, Dynamic, 1>;
+    using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
+   private:
+    vector_t b_;    // b-values (diffusion weightings), size: n_gradients
+    matrix_t g_;    // gradient directions, size: n_gradients x n_dim
+    vector_t S0_;   // baseline signal (b = 0), size: n_voxels
+    matrix_t S_;    // diffusion signals, size: n_voxels x n_gradients
+   public:
+    // constructor
+    dwi_data() = default;
+    dwi_data(const vector_t& b, const matrix_t& g, const vector_t& S0, const matrix_t& S) :
+        b_(b), g_(g), S0_(S0), S_(S) { }
+    // getters
+    const vector_t& b() const { return b_; }
+    const matrix_t& g() const { return g_; }
+    const vector_t& S0() const { return S0_; }
+    const matrix_t& S() const { return S_; }
+    int n_locs() const { return S_.rows(); }
+    int n_obs() const { return S_.cols(); }
+};
+
+// non so dove metterli ma mi servono
+using vector_t = Eigen::Matrix<double, Dynamic, 1>;
+using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
+
+struct LossFunctor {
+    using loss_fun_t = std::function<double(const dwi_data&, const matrix_t&)>;
+    using grad_loss_fun_t = std::function<matrix_t(const dwi_data&, const matrix_t&)>;
+    LossFunctor(loss_fun_t loss, grad_loss_fun_t grad_loss) : loss(std::move(loss)), grad_loss(std::move(grad_loss)) { }
+    loss_fun_t loss;
+    grad_loss_fun_t grad_loss;
+};
+
+// linearized gaussian loss
+inline const LossFunctor linearized_gaussian_loss {
+  [](const dwi_data& data, const matrix_t& L) -> double {
+      double loss = 0.;
+      int n_locs = data.n_locs();
+      int n_obs = data.n_obs();
+      vector_t S0 = data.S0();
+      for (int j = 0; j < n_locs; ++j) {
+          matrix_t Lj = expm(matrix_view(L.row(j)));
+          for (int i = 0; i < n_obs; ++i) {
+              double bi = data.b()[i];
+              vector_t gi = data.g().col(i);
+              vector_t Si = data.S().col(i);
+              double diff = log(S0[j] / Si[j]) - bi * gi.dot(Lj * gi);
+              loss += diff * diff;
+          }
+      }
+      loss /= n_locs * n_obs;
+      return loss;
+  },
+  [](const dwi_data& data, const matrix_t& L) -> matrix_t {
+      int n_locs = data.n_locs();
+      int n_obs = data.n_obs();
+      int n_cols = L.cols();
+      matrix_t gradient = matrix_t::Zero(n_locs, n_cols);
+      vector_t S0 = data.S0();
+      for (int j = 0; j < n_locs; ++j) {
+          matrix_t Lj = matrix_view(L.row(j));
+          for (int i = 0; i < n_obs; ++i) {
+              vector_t Si = data.S().col(i);
+              double bi = data.b()[i];
+              vector_t gi = data.g().col(i);
+              vector_t dG_exp_L = internals::dG_exp(bi, gi, Lj);
+              double diff = log(S0[j] / Si[j]) - bi * gi.dot(expm(Lj) * gi);
+              gradient.row(j) -= bi * diff * dG_exp_L;
+          }
+      }
+      gradient *= 2.0 / (n_locs * n_obs);
+      return gradient;
+  }};
 
 }   // namespace fdapde
 

@@ -17,6 +17,7 @@
 #ifndef __FUNCTIONAL_DTI_H__
 #define __FUNCTIONAL_DTI_H__
 
+#include "fdaPDE/dti_utility.h"
 #include "header_check.h"
 
 namespace fdapde {
@@ -34,10 +35,12 @@ class FDTI {
    public:
     FDTI() noexcept = default;
     template <typename GeoFrame, typename Penalty>
-    FDTI(const vector_t& b, const matrix_t& g, const GeoFrame& gf, Penalty&& penalty) noexcept :
+    FDTI(
+      const vector_t& b, const matrix_t& g, const GeoFrame& gf, const LossFunctor& loss_functor,
+      Penalty&& penalty) noexcept :
         solver_(), geo_category_(gf[0].category().begin(), gf[0].category().end()) {
         fdapde_assert(gf.n_layers() == 1);
-        solver_ = solver_t(b, g, gf, penalty.get());
+        solver_ = solver_t(b, g, gf, loss_functor, penalty.get());
         // room for results
         D_.resize(solver_.n_dofs(), solver_.n_cols());
         Dn_.resize(solver_.n_locs(), solver_.n_cols());
@@ -78,7 +81,7 @@ class FDTI {
 template <typename GeoFrame, typename Penalty>
 FDTI(
   const Eigen::Matrix<double, Dynamic, 1>& b, const Eigen::Matrix<double, Dynamic, Dynamic>& g, const GeoFrame& gf,
-  Penalty&& solver) -> FDTI<typename Penalty::solver_t>;
+  const LossFunctor& loss_functor, Penalty&& solver) -> FDTI<typename Penalty::solver_t>;
 
 }   // namespace fdapde
 

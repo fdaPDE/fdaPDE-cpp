@@ -17,7 +17,7 @@
 #ifndef __FE_ITERATIVE_OPTIMIZER_DTI__
 #define __FE_ITERATIVE_OPTIMIZER_DTI__
 
-#include "../dti_utility.h"
+#include "fdaPDE/dti_utility.h"
 #include "header_check.h"
 
 namespace fdapde {
@@ -32,6 +32,8 @@ template <typename Derived> struct fe_it_opt_dti {
     using diag_matrix_t = Eigen::DiagonalMatrix<double, Dynamic, Dynamic>;
     using sparse_solver_t = eigen_sparse_solver_movable_wrap<Eigen::SparseLU<sparse_matrix_t>>;
     using dense_solver_t = Eigen::PartialPivLU<matrix_t>;
+    using loss_fun_t = std::function<double(const dwi_data&, const matrix_t&)>;
+    using grad_loss_fun_t = std::function<matrix_t(const dwi_data&, const matrix_t&)>;
     template <typename DataLocs>
     static constexpr bool is_valid_data_locs_descriptor_v =
       std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>;
@@ -85,13 +87,70 @@ template <typename Derived> struct fe_it_opt_dti {
    public:
     static constexpr int n_lambda = 1;
     using solver_category = it_solver;
+    struct opt_functor_t {
+        // constructor
+        opt_functor_t(fe_it_opt_dti& m, double lambda) : m_(std::addressof(m)), lambda_(lambda) { }
+
+        // loss
+        double loss(const dwi_data& data, const matrix_t& L) { return m_->loss_(data, L); }
+        matrix_t grad_loss(const dwi_data& data, const matrix_t& L) { return m_->grad_loss_(data, L); }
+
+        // penalty
+        double penalty(double lambda, const sparse_matrix_t& P, const matrix_t& L) {
+            double penalty = 0;
+            int n_cols = L.cols();
+            for (int k = 0; k < n_cols; ++k) { penalty += L.col(k).dot(P * L.col(k)); };
+            penalty *= lambda;
+            return penalty;
+        }
+        matrix_t grad_penalty(double lambda, const sparse_matrix_t& P, const matrix_t& L) {
+            return 2.0 * lambda * P * L;
+        }
+
+        // penalized negative log-likelihood at point
+        double operator()(const vector_t& vecL) {
+            double obj = 0;
+            matrix_t L = to_matrix(vecL, m_->n_dofs_);
+            matrix_t L_locs = m_->Psi_ * L;
+            // loss
+            obj += loss(m_->data_, L_locs);
+            // penalty
+            obj += penalty(lambda_, m_->P_, L);
+            return obj;
+        }
+        // gradient functor
+        std::function<vector_t(const vector_t& vecL)> derive() {
+            return [this](const vector_t& vecL) {
+                matrix_t gradient = matrix_t::Zero(m_->n_dofs(), m_->n_cols());
+                matrix_t L = to_matrix(vecL, m_->n_dofs_);
+                matrix_t L_locs = m_->Psi_ * L;
+                // loss
+                gradient += m_->Psi().transpose() * grad_loss(m_->data_, L_locs);
+                // penalty
+                gradient += grad_penalty(lambda_, m_->P_, L);
+                return to_vector(gradient);
+            };
+        }
+        // injected optimization stopping criterion
+        template <typename Optimizer> bool stop_if(Optimizer& opt) {
+            double loss_old = operator()(opt.x_old);
+            double loss_new = operator()(opt.x_new);
+            return std::abs((loss_new - loss_old) / loss_old) < m_->tol_;
+            // return (opt.x_old - opt.x_new).norm() / opt.x_old.norm() < m_->tol_;
+        }
+       private:
+        fe_it_opt_dti* m_;
+        double lambda_;
+    };
 
     // default constructor
     fe_it_opt_dti() noexcept = default;
     // construct from geoframe
     template <typename GeoFrame, typename InfoT>
         requires(is_valid_info_t<InfoT>::value)
-    fe_it_opt_dti(const vector_t& b, const matrix_t& g, const GeoFrame& gf, InfoT&& info) {
+    fe_it_opt_dti(
+      const vector_t& b, const matrix_t& g, const GeoFrame& gf, const LossFunctor& loss_functor, InfoT&& info) :
+        loss_(std::move(loss_functor.loss)), grad_loss_(std::move(loss_functor.grad_loss)) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
         using BilinearForm = std::tuple_element_t<0, std::decay_t<decltype(info.penalty)>>;
         using FeSpace = typename BilinearForm::TrialSpace;
@@ -99,17 +158,20 @@ template <typename Derived> struct fe_it_opt_dti {
         using Triangulation = typename FeSpace::Triangulation;
         constexpr int embed_dim = Triangulation::embed_dim;
         fdapde_assert(gf.n_layers() == 1);
-        n_locs_ = gf[0].rows();
-        n_obs_ = gf[0].template col<double>("S").as_matrix().cols();
-        n_dim_ = embed_dim;
-        n_cols_ = n_dim_ * (n_dim_ + 1) / 2;
 
+        // assemble dwi_data object
         data_ = dwi_data {
           b,
           g,
           gf[0].template col<double>("S0").as_matrix(),
           gf[0].template col<double>("S").as_matrix(),
         };
+
+        // set dimensions
+        n_locs_ = data_.n_locs();
+        n_obs_ = data_.n_obs();
+        n_dim_ = embed_dim;
+        n_cols_ = n_dim_ * (n_dim_ + 1) / 2;
 
         const Triangulation& triangulation = gf.template triangulation<0>();
         const FeSpace& fe_space = std::get<0>(info.penalty).trial_space();
@@ -166,14 +228,16 @@ template <typename Derived> struct fe_it_opt_dti {
         // BFGS<Dynamic, BacktrackingLineSearch> opt {5000, tol_, 1e3};   // , BacktrackingLineSearch
         GradientDescent<Dynamic, BacktrackingLineSearch> opt {10000, tol_, 1e3};   // , BacktrackingLineSearch
         vector_t vec_L = opt.optimize(
-          typename Derived::opt_functor_t(derived(), lambda),   //
-          vector_t::Zero(n_dofs_ * n_cols_),                    //
-          [](auto value) { std::cout << value << ", "; });
+          opt_functor_t(*this, lambda),        //
+          vector_t::Zero(n_dofs_ * n_cols_),   //
+          [](auto value) { std::cout << value << ", " << std::endl; });
         L_ = to_matrix(vec_L, n_dofs_);
 
         lambda_saved_ = lambda;
         return L_;
     }
+    // add fit with initializer, this could be particularly useful for the gcv, instead of starting from 0 every time
+    // you can start from the previous
     template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
     auto fit(LambdaT&& lambda, double tol = 1e-15) {
@@ -189,35 +253,6 @@ template <typename Derived> struct fe_it_opt_dti {
         return L_;
     }
    public:
-    // hutchinson approximation for Tr[S]
-    /*
-    double edf(int r = 100, int seed = random_seed) {
-        fdapde_assert(lambda_saved_.has_value());
-        if (!Us_.has_value()) {
-            int seed_ = (seed == random_seed) ? std::random_device()() : seed;
-            std::mt19937 rng(seed_);
-            rademacher_distribution rademacher;
-            Us_->resize(n_locs_, r);
-            for (int i = 0; i < n_locs_; ++i) {
-                for (int j = 0; j < r; ++j) { Us_->operator()(i, j) = rademacher(rng); }
-            }
-        }
-        // Tr[S] \approx \sum_{i=1}^r (u_i^\top * S * u_i)
-        double trS = 0;
-        // std::cout << std::endl;
-        // std::cout << lambda_saved_.value() << " ";
-        for (int i = 0; i < r; ++i) {
-            auto [f, beta] = fit_(Us_->col(i), lambda_saved_.value());
-            vector_t fn(n_locs_);
-            fn = Psi_ * f;
-            trS += Us_->col(i).dot(fn);
-        }
-        // std::cout << trS << " " << r << " " << trS / r << std::endl;
-        fit(lambda_saved_.value());
-        return trS / r;
-    }
-    */
-
     // observers
     int n_dofs() const { return n_dofs_; }
     int n_obs() const { return n_obs_; }
@@ -254,7 +289,9 @@ template <typename Derived> struct fe_it_opt_dti {
     diag_matrix_t D_;       // vector of regions' measures (areal sampling)
     mutable sparse_solver_t invR0_;
     std::optional<sparse_matrix_t> B_;
-    matrix_t P_, R0invP_;
+    sparse_matrix_t P_;
+    loss_fun_t loss_;
+    grad_loss_fun_t grad_loss_;
 
     // basis system evaluation handle
     std::function<sparse_matrix_t(const matrix_t& locs)> point_eval_;
@@ -269,97 +306,68 @@ template <typename Derived> struct fe_it_opt_dti {
 };
 
 // Derived classes
-struct fe_it_opt_dti_linearized_gaussian_dirichlet : fe_it_opt_dti<fe_it_opt_dti_linearized_gaussian_dirichlet> {
-    struct opt_functor_t {
-        // constructor
-        opt_functor_t(fe_it_opt_dti_linearized_gaussian_dirichlet& m, double lambda) :
-            m_(std::addressof(m)), lambda_(lambda) { }
-
-        // penalized negative log-likelihood at point
-        double operator()(const vector_t& L) {
-            double obj = 0;
-            vector_t S0 = m_->data_.S0();
-            matrix_t L_locs = m_->Psi_ * to_matrix(L, m_->n_dofs_);
-            // loss
-            for (int j = 0; j < m_->n_locs(); ++j) {
-                matrix_t Lj = expm(matrix_view(L_locs.row(j)));
-                for (int i = 0; i < m_->n_obs(); ++i) {
-                    double bi = m_->data_.b()[i];
-                    vector_t gi = m_->data_.g().col(i);
-                    vector_t Si = m_->data_.S().col(i);
-                    double diff = log(S0[j] / Si[j]) - bi * gi.dot(Lj * gi);
-                    obj += diff * diff;
-                }
-            }
-            obj /= m_->n_obs() * m_->n_locs();
-            // penalty
-            for (int k = 0; k < m_->n_cols(); ++k) {
-                vector_t lk = get_component(L, k, m_->n_dofs());
-                obj += lambda_ * lk.dot(m_->P_ * lk);
-            };
-            return obj;
-        }
-        // gradient functor
-        std::function<vector_t(const vector_t&)> derive() {
-            return [this](const vector_t& L) {
-                matrix_t gradient_locs = matrix_t::Zero(m_->n_locs(), m_->n_cols());
-                vector_t S0 = m_->data_.S0();
-                matrix_t L_locs = m_->Psi_ * to_matrix(L, m_->n_dofs_);
-                // loss
-                for (int j = 0; j < m_->n_locs_; ++j) {
-                    matrix_t Lj = matrix_view(L_locs.row(j));
-                    for (int i = 0; i < m_->n_obs_; ++i) {
-                        vector_t Si = m_->data_.S().col(i);
-                        double bi = m_->data_.b()[i];
-                        vector_t gi = m_->data_.g().col(i);
-                        vector_t dG_exp_L = dG_exp(bi, gi, Lj);
-                        double diff = log(S0[j] / Si[j]) - bi * gi.dot(expm(Lj) * gi);
-                        gradient_locs.row(j) -= bi * diff * dG_exp_L;
-                    }
-                }
-                matrix_t gradient = 2.0 * m_->Psi().transpose() * gradient_locs / (m_->n_obs() * m_->n_locs());
-                // penalty
-                gradient += 2.0 * lambda_ * m_->P_ * to_matrix(L, m_->n_dofs());
-                return to_vector(gradient);
-            };
-        }
-        // injected optimization stopping criterion
-        template <typename Optimizer> bool stop_if(Optimizer& opt) {
-            double loss_old = operator()(opt.x_old);
-            double loss_new = operator()(opt.x_new);
-            return std::abs((loss_new - loss_old) / loss_old) < m_->tol_;
-            // return (opt.x_old - opt.x_new).norm() / opt.x_old.norm() < m_->tol_;
-        }
-       private:
-        fe_it_opt_dti_linearized_gaussian_dirichlet* m_;
-        double lambda_;
-    };
-
+struct fe_it_opt_dti_dirichlet : fe_it_opt_dti<fe_it_opt_dti_dirichlet> {
     // penalty matrix builder
     void build_P() {
         P_ = R1_;
         built_ = true;
     }
 
-    fe_it_opt_dti_linearized_gaussian_dirichlet() noexcept = default;
+    fe_it_opt_dti_dirichlet() noexcept = default;
     // construct from formula + geoframe
     template <typename GeoFrame, typename InfoT>
         requires(is_valid_info_t<InfoT>::value)
-    fe_it_opt_dti_linearized_gaussian_dirichlet(
-      const vector_t& b, const matrix_t& g, const GeoFrame& gf, InfoT&& info) :
-        fe_it_opt_dti(b, g, gf, info) { }
+    fe_it_opt_dti_dirichlet(
+      const vector_t& b, const matrix_t& g, const GeoFrame& gf, const LossFunctor& loss_functor, InfoT&& info) :
+        fe_it_opt_dti(b, g, gf, loss_functor, info) { }
+};
+
+struct fe_it_opt_dti_elliptic : fe_it_opt_dti<fe_it_opt_dti_elliptic> {
+    // penalty matrix builder
+    void build_P() {
+        std::cout << "elliptic" << std::endl;
+        sparse_matrix_t invR0 = lump(R0_);
+        for (int k = 0; k < invR0.outerSize(); ++k)
+            for (sparse_matrix_t::InnerIterator it(invR0, k); it; ++it) { it.valueRef() = 1. / it.value(); }
+        // sparse_solver_t invR0;
+        // invR0.compute(R0_);
+        P_ = R1_.transpose() * invR0 * R1_;   // invR0.solve(R1_);   //
+        built_ = true;
+    }
+
+    fe_it_opt_dti_elliptic() noexcept = default;
+    // construct from formula + geoframe
+    template <typename GeoFrame, typename InfoT>
+        requires(is_valid_info_t<InfoT>::value)
+    fe_it_opt_dti_elliptic(
+      const vector_t& b, const matrix_t& g, const GeoFrame& gf, const LossFunctor& loss_functor, InfoT&& info) :
+        fe_it_opt_dti(b, g, gf, loss_functor, info) { }
 };
 
 }   // namespace internals
 
-template <typename BilinearForm, typename LinearForm> struct fe_it_opt_dti_linearized_gaussian_dirichlet {
-    using solver_t = internals::fe_it_opt_dti_linearized_gaussian_dirichlet;
+template <typename BilinearForm, typename LinearForm> struct fe_it_opt_dti_dirichlet {
+    using solver_t = internals::fe_it_opt_dti_dirichlet;
    private:
     struct info_t {
         std::tuple<BilinearForm, LinearForm> penalty;
     };
    public:
-    fe_it_opt_dti_linearized_gaussian_dirichlet(const BilinearForm& bilinear_form, const LinearForm& linear_form) :
+    fe_it_opt_dti_dirichlet(const BilinearForm& bilinear_form, const LinearForm& linear_form) :
+        info_(std::make_tuple(bilinear_form, linear_form)) { }
+    const info_t& get() const { return info_; }
+   private:
+    info_t info_;
+};
+
+template <typename BilinearForm, typename LinearForm> struct fe_it_opt_dti_elliptic {
+    using solver_t = internals::fe_it_opt_dti_elliptic;
+   private:
+    struct info_t {
+        std::tuple<BilinearForm, LinearForm> penalty;
+    };
+   public:
+    fe_it_opt_dti_elliptic(const BilinearForm& bilinear_form, const LinearForm& linear_form) :
         info_(std::make_tuple(bilinear_form, linear_form)) { }
     const info_t& get() const { return info_; }
    private:
@@ -367,5 +375,34 @@ template <typename BilinearForm, typename LinearForm> struct fe_it_opt_dti_linea
 };
 
 }   // namespace fdapde
+
+// hutchinson approximation for Tr[S]
+/*
+double edf(int r = 100, int seed = random_seed) {
+    fdapde_assert(lambda_saved_.has_value());
+    if (!Us_.has_value()) {
+        int seed_ = (seed == random_seed) ? std::random_device()() : seed;
+        std::mt19937 rng(seed_);
+        rademacher_distribution rademacher;
+        Us_->resize(n_locs_, r);
+        for (int i = 0; i < n_locs_; ++i) {
+            for (int j = 0; j < r; ++j) { Us_->operator()(i, j) = rademacher(rng); }
+        }
+    }
+    // Tr[S] \approx \sum_{i=1}^r (u_i^\top * S * u_i)
+    double trS = 0;
+    // std::cout << std::endl;
+    // std::cout << lambda_saved_.value() << " ";
+    for (int i = 0; i < r; ++i) {
+        auto [f, beta] = fit_(Us_->col(i), lambda_saved_.value());
+        vector_t fn(n_locs_);
+        fn = Psi_ * f;
+        trS += Us_->col(i).dot(fn);
+    }
+    // std::cout << trS << " " << r << " " << trS / r << std::endl;
+    fit(lambda_saved_.value());
+    return trS / r;
+}
+*/
 
 #endif   // __FE_ITERATIVE_OPTIMIZER_DTI__
