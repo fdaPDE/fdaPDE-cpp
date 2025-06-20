@@ -51,12 +51,15 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
     // Functional penalized iterative reweighted least squares
     template <typename... Args> auto fit(Args&&... args) {
         vector_t lambda(n_lambda);
-        internals::for_each_index_and_args<sizeof...(Args)>([&]<int Ns_, typename Ts_>(const Ts_& ts) {
-            if (Ns_ < n_lambda) {
-                fdapde_static_assert(std::is_convertible_v<Ts_ FDAPDE_COMMA double>, INVALID_SMOOTHING_PARAMETER_TYPE);
-                lambda[Ns_] = ts;
-            }
-        });
+        internals::for_each_index_and_args<sizeof...(Args)>(
+          [&]<int Ns_, typename Ts_>(const Ts_& ts) {
+              if (Ns_ < n_lambda) {
+                  fdapde_static_assert(
+                    std::is_convertible_v<Ts_ FDAPDE_COMMA double>, INVALID_SMOOTHING_PARAMETER_TYPE);
+                  lambda[Ns_] = ts;
+              }
+          },
+          args...);
         // initialize mean vector
         vector_t y = y_;
         solver_.update_response_and_weights(y, vector_t::Ones(n_obs_).asDiagonal());   // restore solver state

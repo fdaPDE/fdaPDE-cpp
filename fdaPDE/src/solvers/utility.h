@@ -64,7 +64,6 @@ lmbQ(const DesignMatrix& X, const InvDesignMatrix& invXtX, const Eigen::Matrix<d
 template <typename Triangulation_, typename FeType_, typename CoordsMatrix_>
     requires(internals::is_eigen_dense_xpr_v<CoordsMatrix_>)
 Eigen::SparseMatrix<double> point_basis_eval(const FeSpace<Triangulation_, FeType_>& fe_space, CoordsMatrix_&& coords) {
-    static constexpr int local_dim = Triangulation_::local_dim;
     static constexpr int embed_dim = Triangulation_::embed_dim;
     fdapde_assert(coords.rows() > 0 && coords.cols() == embed_dim);
 
@@ -113,7 +112,6 @@ point_basis_eval(const FeSpace<Triangulation_, FeType_>& fe_space, const GeoInde
 template <typename Triangulation_, typename CoordsMatrix_>
     requires(internals::is_eigen_dense_xpr_v<CoordsMatrix_>)
 Eigen::SparseMatrix<double> point_basis_eval(const BsSpace<Triangulation_>& bs_space, CoordsMatrix_&& coords) {
-    static constexpr int local_dim = Triangulation_::local_dim;
     static constexpr int embed_dim = Triangulation_::embed_dim;
     fdapde_assert(coords.rows() > 0 && coords.cols() == embed_dim);
 
@@ -156,7 +154,6 @@ std::pair<Eigen::SparseMatrix<double>, Eigen::Matrix<double, Dynamic, 1>> areal_
     using FeSpace_ = FeSpace<Triangulation_, FeType_>;
     fdapde_assert(incidence_mat.rows() > 0 && incidence_mat.cols() == fe_space.triangulation().n_cells());
     static constexpr int local_dim = Triangulation_::local_dim;
-    static constexpr int embed_dim = Triangulation_::embed_dim;
     using FeType = typename FeSpace_::FeType;
     using cell_dof_descriptor = typename FeSpace_::cell_dof_descriptor;
     using BasisType = typename cell_dof_descriptor::BasisType;
@@ -217,7 +214,7 @@ areal_basis_eval(const FeSpace<Triangulation_, FeType_>& fe_space, const GeoInde
 // areal basis evaluation for spline basis system
 template <typename Triangulation_, typename GeoIndex_>
 std::pair<Eigen::SparseMatrix<double>, Eigen::Matrix<double, Dynamic, 1>>
-areal_basis_eval(const BsSpace<Triangulation_>& bs_space, const GeoIndex_& incidence_mat) {
+areal_basis_eval(const BsSpace<Triangulation_>&, const GeoIndex_&) {
     return {};   // TODO
 }
 

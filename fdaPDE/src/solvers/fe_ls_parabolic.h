@@ -140,7 +140,7 @@ class fe_ls_parabolic_mono {
     // construct with no data
     template <typename GeoFrame, typename WeightMatrix, typename InfoT>
         requires(is_valid_info_t<InfoT>::value)
-    fe_ls_parabolic_mono(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : s_(info.ic) {
+    fe_ls_parabolic_mono(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : W_(W), s_(info.ic) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
 	fdapde_assert(gf.n_layers() == 1);
         n_obs_ = gf[0].rows();
@@ -165,7 +165,7 @@ class fe_ls_parabolic_mono {
     template <typename GeoFrame, typename InfoT>
         requires(is_valid_info_t<InfoT>::value)
     fe_ls_parabolic_mono(const GeoFrame& gf, InfoT&& info) :
-        fe_ls_parabolic_mono(gf, info, vector_t::Ones(n_locs_).asDiagonal()) { }
+        fe_ls_parabolic_mono(gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
 
     template <typename Penalty> void discretize(Penalty&& penalty) {
         fdapde_static_assert(internals::is_valid_penalty_pair_v<Penalty>, INVALID_PENALTY_DESCRIPTION);
@@ -226,7 +226,7 @@ class fe_ls_parabolic_mono {
 
         n_obs_ = y.rows();
         n_locs_ = n_obs_;
-        bool require_woodbury_realloc = n_covs_ != X.cols();
+        bool require_woodbury_realloc = std::cmp_not_equal(n_covs_, X.cols());
         n_covs_ = X.cols();
 	eval_basis_at_(locs1);   // update \Psi matrix
 
@@ -254,7 +254,7 @@ class fe_ls_parabolic_mono {
 	// extract temporal mesh
         const auto& time_index = geo_index_cast<1, POINT>(gf[0]);
         const auto& time_coords = time_index.coordinates();
-	bool require_full_tensorization = m_ != time_coords.rows();
+	bool require_full_tensorization = std::cmp_not_equal(m_, time_coords.rows());
         m_ = time_coords.rows();
         fdapde_assert(m_ > 0 && time_coords.cols() == 1);
         DeltaT_ = time_coords(1, 0) - time_coords(0, 0);
@@ -277,7 +277,7 @@ class fe_ls_parabolic_mono {
         for (const std::string& token : formula_.rhs()) {
             if (gf.contains(token)) { covs.push_back(token); }
         }
-	bool require_woodbury_realloc = n_covs_ != covs.size();
+	bool require_woodbury_realloc = std::cmp_not_equal(n_covs_, covs.size());
         n_covs_ = covs.size();
 	const auto& y_data = gf[0].data().template col<double>(formula_.lhs());
         y_.resize(n_locs_, y_data.blk_sz());
@@ -599,10 +599,10 @@ struct fe_ls_parabolic_ieul {
         }
         block_map_t(const block_map_t& other) :
             rows_(other.rows_), cols_(other.cols_), blk_rows_(other.blk_rows_), blk_cols_(other.blk_cols_) {
-            for (int i = 0; i < data_.size(); ++i) { data_.data()[i] = other.data_.data()[i]; }
+            for (std::size_t i = 0; i < data_.size(); ++i) { data_.data()[i] = other.data_.data()[i]; }
         }
         block_map_t& operator=(const block_map_t& other) {
-            for (int i = 0; i < data_.size(); ++i) { data_.data()[i] = other.data_.data()[i]; }
+            for (std::size_t i = 0; i < data_.size(); ++i) { data_.data()[i] = other.data_.data()[i]; }
             rows_ = other.rows_;
             cols_ = other.cols_;
             blk_rows_ = other.blk_rows_;
@@ -696,7 +696,7 @@ struct fe_ls_parabolic_ieul {
     template <typename GeoFrame, typename InfoT, typename WeightMatrix>
         requires(is_valid_info_t<InfoT>::value)
     fe_ls_parabolic_ieul(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
-        s_(info.ic), tol_(info.tol), max_iter_(info.max_iter) {
+        s_(info.ic), W_(W), tol_(info.tol), max_iter_(info.max_iter) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
 	fdapde_assert(gf.n_layers() == 1);
         n_obs_ = gf[0].rows();
@@ -977,8 +977,8 @@ struct fe_ls_parabolic_ieul {
     sparse_matrix_t W_;   // n_obs x n_obs matrix of observation weights
     bool W_changed_, W_const_;   // W_const_ == true \iff W_ is time-wise constant
 
-    int max_iter_;    // maximum number of iterations
     double tol_;      // convergence tolerance
+    int max_iter_;    // maximum number of iterations
     double DeltaT_;   // time step
 };
 

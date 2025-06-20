@@ -32,6 +32,7 @@ struct fe_ls_elliptic {
     using diag_matrix_t   = Eigen::DiagonalMatrix<double, Dynamic, Dynamic>;
     using sparse_solver_t = eigen_sparse_solver_movable_wrap<Eigen::SparseLU<sparse_matrix_t>>;
     using dense_solver_t  = Eigen::PartialPivLU<matrix_t>;
+    using size_t = std::size_t;
     template <typename DataLocs>
     static constexpr bool is_valid_data_locs_descriptor_v =
       std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>;
@@ -80,7 +81,7 @@ struct fe_ls_elliptic {
     }
     void enforce_lhs_dirichlet_bc_(SparseBlockMatrix<double, 2, 2>& A) {
         if (dirichlet_dofs_.size() == 0) { return; }
-        for (int i = 0; i < dirichlet_dofs_.size(); ++i) {
+        for (size_t i = 0; i < dirichlet_dofs_.size(); ++i) {
 	  // zero out row and column in correspondance of Dirichlet-type dofs
 	  A.row(dirichlet_dofs_[i]) *= 0;
 	  A.col(dirichlet_dofs_[i]) *= 0;
@@ -206,7 +207,7 @@ struct fe_ls_elliptic {
         for (const std::string& token : formula_.rhs()) {
             if (gf.contains(token)) { covs.push_back(token); }
         }
-	bool require_woodbury_realloc = n_covs_ != covs.size();
+	bool require_woodbury_realloc = std::cmp_not_equal(n_covs_, covs.size());
         n_covs_ = covs.size();
         const auto& y_data = gf[0].data().template col<double>(formula_.lhs());
         y_.resize(n_locs_, y_data.blk_sz());
@@ -238,7 +239,9 @@ struct fe_ls_elliptic {
         if (old_n_obs != n_obs_) { W_ *= (double)old_n_obs / n_obs_; }
         b_.block(0, 0, n_dofs_, 1) = -PsiNA().transpose() * D_ * W_ * y_;
 	// enforce dirichlet bc, if any
-        for (int i = 0; i < dirichlet_dofs_.size(); ++i) { b_.row(dirichlet_dofs_[i]).setConstant(dirichlet_vals_[i]); }
+        for (size_t i = 0; i < dirichlet_dofs_.size(); ++i) {
+            b_.row(dirichlet_dofs_[i]).setConstant(dirichlet_vals_[i]);
+        }
         return;
     }
     template <typename WeightMatrix> void update_weights(const WeightMatrix& W) {
@@ -257,7 +260,9 @@ struct fe_ls_elliptic {
             b_.block(0, 0, n_dofs_, 1) = -PsiNA().transpose() * D_ * internals::lmbQ(W_, X_, invXtWX_, y_);
         }
         // enforce dirichlet bc, if any
-        for (int i = 0; i < dirichlet_dofs_.size(); ++i) { b_.row(dirichlet_dofs_[i]).setConstant(dirichlet_vals_[i]); }
+        for (size_t i = 0; i < dirichlet_dofs_.size(); ++i) {
+            b_.row(dirichlet_dofs_[i]).setConstant(dirichlet_vals_[i]);
+        }
         W_changed_ = true;
         return;
     }
@@ -290,7 +295,7 @@ struct fe_ls_elliptic {
         if (lambda_saved_.value() != lambda) {
             // update linear system rhs
             b_.block(n_dofs_, 0, n_dofs_, 1) = lambda * u_;
-            for (int i = 0; i < dirichlet_dofs_.size(); ++i) { b_.row(n_dofs_ + dirichlet_dofs_[i]).setZero(); }
+            for (size_t i = 0; i < dirichlet_dofs_.size(); ++i) { b_.row(n_dofs_ + dirichlet_dofs_[i]).setZero(); }
         }
         lambda_saved_ = lambda;
         vector_t x;
@@ -325,7 +330,7 @@ struct fe_ls_elliptic {
         if (n_covs_ == 0) {   // equivalent to calling fit(lambda)
             if (lambda_saved_.value() != lambda) {
                 b_.block(n_dofs_, 0, n_dofs_, 1) = lambda * u_;
-                for (int i = 0; i < dirichlet_dofs_.size(); ++i) { b_.row(n_dofs_ + dirichlet_dofs_[i]).setZero(); }
+                for (size_t i = 0; i < dirichlet_dofs_.size(); ++i) { b_.row(n_dofs_ + dirichlet_dofs_[i]).setZero(); }
             }
             x = invA_.solve(b_);
         } else {
@@ -334,7 +339,7 @@ struct fe_ls_elliptic {
             b.block(0, 0, n_dofs_, 1) = -PsiNA().transpose() * D_ * W_ * y_;
             b.block(n_dofs_, 0, n_dofs_, 1) = lambda * u_;
 	    // enforce Dirichlet BCs, if any
-            for (int i = 0; i < dirichlet_dofs_.size(); ++i) {
+            for (size_t i = 0; i < dirichlet_dofs_.size(); ++i) {
                 b_.row(dirichlet_dofs_[i]).setConstant(dirichlet_vals_[i]);
                 b_.row(n_dofs_ + dirichlet_dofs_[i]).setZero();
             }
@@ -366,7 +371,7 @@ struct fe_ls_elliptic {
             Bs_->topRows(n_dofs_) = -PsiNA().transpose() * D_ * internals::lmbQ(W_, X_, invXtWX_, *Us_);
         }
 	// enforce Dirichlet BCs, if any
-        for (int i = 0; i < dirichlet_dofs_.size(); ++i) {
+        for (size_t i = 0; i < dirichlet_dofs_.size(); ++i) {
             Bs_->row(dirichlet_dofs_[i]).setConstant(dirichlet_vals_[i]);
         }
         matrix_t x = n_covs_ == 0 ? invA_.solve(*Bs_) : woodbury_system_solve(invA_, U_, XtWX_, V_, *Bs_);

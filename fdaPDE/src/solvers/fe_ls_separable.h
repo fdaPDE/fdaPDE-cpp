@@ -110,7 +110,7 @@ class fe_ls_separable_mono {
         return;
     }
     // unrolls the penalty tuple and injects them into discretize()
-    template <typename GeoFrame, typename Penalty> void discretize_loop_(const GeoFrame& gf, Penalty&& penalty) {
+    template <typename Penalty> void discretize_loop_(Penalty&& penalty) {
         using Penalty_ = std::decay_t<Penalty>;
         internals::apply_index_pack<n_lambda>(
           [&]<int... Ns_>() { discretize([&]() { return std::get<Ns_>(penalty); }()...); });
@@ -127,7 +127,7 @@ class fe_ls_separable_mono {
         n_obs_  = gf[0].rows();
         n_locs_ = n_obs_;
 
-	discretize_loop_(gf, info.penalty);
+        discretize_loop_(info.penalty);
         analyze_data(formula, gf, W);
     }
     template <typename GeoFrame, typename InfoT>
@@ -143,7 +143,7 @@ class fe_ls_separable_mono {
         n_obs_  = gf[0].rows();
 	n_locs_ = n_obs_;
 
-	discretize_loop_(gf, info.penalty);
+	discretize_loop_(info.penalty);
 	eval_basis_at_(gf);
     }
     template <typename GeoFrame, typename InfoT>
@@ -244,7 +244,7 @@ class fe_ls_separable_mono {
           X.rows() == locs1.rows() * locs2.rows() && W.rows() == locs1.rows() * locs2.rows() && W.rows() == W.cols());
         n_obs_  = y.rows();
 	n_locs_ = n_obs_;
-        bool require_woodbury_realloc = n_covs_ != X.cols();
+        bool require_woodbury_realloc = std::cmp_not_equal(n_covs_, X.cols());
         n_covs_ = X.cols();
         eval_basis_at_(locs1, locs2);   // update \Psi matrix
         if (require_woodbury_realloc) { U_ = matrix_t::Zero(2 * n_dofs_, n_covs_); }
@@ -267,7 +267,7 @@ class fe_ls_separable_mono {
         for (const std::string& token : formula_.rhs()) {
             if (gf.contains(token)) { covs.push_back(token); }
         }
-        bool require_woodbury_realloc = n_covs_ != covs.size();
+        bool require_woodbury_realloc = std::cmp_not_equal(n_covs_, covs.size());
         n_covs_ = covs.size();
         const auto& y_data = gf[0].data().template col<double>(formula_.lhs());
         y_.resize(n_locs_, y_data.blk_sz());
@@ -606,10 +606,10 @@ class fe_ls_separable_cdti {
         }
         block_map_t(const block_map_t& other) :
             rows_(other.rows_), cols_(other.cols_), blk_rows_(other.blk_rows_), blk_cols_(other.blk_cols_) {
-            for (int i = 0; i < data_.size(); ++i) { data_.data()[i] = other.data_.data()[i]; }
+            for (size_t i = 0; i < data_.size(); ++i) { data_.data()[i] = other.data_.data()[i]; }
         }
         block_map_t& operator=(const block_map_t& other) {
-            for (int i = 0; i < data_.size(); ++i) { data_.data()[i] = other.data_.data()[i]; }
+            for (size_t i = 0; i < data_.size(); ++i) { data_.data()[i] = other.data_.data()[i]; }
             rows_ = other.rows_;
             cols_ = other.cols_;
             blk_rows_ = other.blk_rows_;
@@ -692,24 +692,14 @@ class fe_ls_separable_cdti {
     fe_ls_separable_cdti() noexcept = default;
     template <typename GeoFrame, typename InfoT, typename WeightMatrix>
         requires(is_valid_info_t<InfoT>::value)
-    fe_ls_separable_cdti(
-      const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
-        tol_(info.tol), max_iter_(info.max_iter) {
+    fe_ls_separable_cdti(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
+        max_iter_(info.max_iter), tol_(info.tol) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
 	fdapde_assert(gf.n_layers() == 1);
         n_obs_  = gf[0].rows();
         n_locs_ = n_obs_;
 
-        using T = std::tuple_element_t<0, std::decay_t<decltype(info.penalty)>>;
-        if constexpr (requires(T t) { t.get(); }) {
-            discretize(std::get<0>(info.penalty).get());
-        } else {
-            if constexpr (internals::is_pair_v<T>) {
-                discretize(std::get<0>(info.penalty));   // user supplied penalty pair
-            } else {
-                discretize(std::get<0>(info.penalty)(gf.template triangulation<0>()).get());
-            }
-        }
+        discretize(info.penalty);
         analyze_data(formula, gf, W);
     }
     template <typename GeoFrame, typename InfoT>
@@ -719,9 +709,8 @@ class fe_ls_separable_cdti {
     // construct with no data
     template <typename GeoFrame, typename InfoT, typename WeightMatrix>
         requires(is_valid_info_t<InfoT>::value)
-    fe_ls_separable_cdti(
-      const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
-        tol_(info.tol), max_iter_(info.max_iter) {
+    fe_ls_separable_cdti(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
+        W_(W), max_iter_(info.max_iter), tol_(info.tol) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
 	fdapde_assert(gf.n_layers() == 1);
 	n_obs_  = gf[0].rows();
@@ -738,16 +727,7 @@ class fe_ls_separable_cdti {
             fdapde_assert(DeltaT_ > 0 && lag_i > 0 && almost_equal(DeltaT_ FDAPDE_COMMA lag_i));
         }
 
-        using T = std::tuple_element_t<0, std::decay_t<decltype(info.penalty)>>;
-        if constexpr (requires(T t) { t.get(); }) {
-            discretize(std::get<0>(info.penalty).get());
-        } else {
-            if constexpr (internals::is_pair_v<T>) {
-                discretize(std::get<0>(info.penalty));   // user supplied penalty pair
-            } else {
-                discretize(std::get<0>(info.penalty)(gf.template triangulation<0>()).get());
-            }
-        }
+        discretize(info.penalty);
         u_.resize(n_dofs_ * m_);
         for (int i = 0; i < m_; ++i) { u_.segment(i * n_dofs_, n_dofs_) = u_space_; }
         eval_spatial_basis_at_(gf);
@@ -815,7 +795,7 @@ class fe_ls_separable_cdti {
     }
     // fit from formula
     template <typename GeoFrame, typename WeightMatrix>
-    void analyze_data(const std::string& formula, const GeoFrame& gf, const WeightMatrix& W) {
+    void analyze_data(const std::string& formula, const GeoFrame& gf, const WeightMatrix&) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
         fdapde_assert(gf.n_layers() == 1 && gf[0].category()[1] == ltype::point);
         n_obs_ = gf[0].rows();

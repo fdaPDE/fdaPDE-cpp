@@ -68,7 +68,7 @@ constexpr double adaptive_simpson_integrate(FunctorT&& f, double a, double b, do
 }
 
 // computes the lower incomplete gamma function gamma(a, x) = \int_0^x (t^{a-1} * exp(-t))dt
-constexpr double lower_incomplete_gamma(double a, double x) {
+inline double lower_incomplete_gamma(double a, double x) {
     if (almost_zero(x)) { return 0.0; }
     // lower incomplete gamma integrand
     auto f = [a](double t) {
@@ -82,9 +82,9 @@ constexpr double lower_incomplete_gamma(double a, double x) {
     return adaptive_simpson_integrate(f, 0.0, x, 1e-10);   // integral approximation by adaptive Simpson rule
 }
 // normalized lower incomplete gamma function
-constexpr double gamma_p(double a, double x) { return lower_incomplete_gamma(a, x) / std::tgamma(a); }
+inline double gamma_p(double a, double x) { return lower_incomplete_gamma(a, x) / std::tgamma(a); }
 // inverse error function (based on Newton-Rapson root finder)
-constexpr double inverse_erf(double x, double eps = 1e-10) {
+inline double inverse_erf(double x, double eps = 1e-10) {
     double y = 0.0;
     double delta;
     do {
@@ -188,7 +188,7 @@ struct rademacher_distribution : public internals::distribution_base<std::bernou
     template <typename InputType> constexpr result_type pdf(InputType x) const {
         return (x == 1 || x == -1) ? 0.5 : 0.0;
     }
-    constexpr result_type cdf(double x) const { return x < -1 ? 0 : ((-1 <= x < 1) ? 0.5 : 1.0); }
+    constexpr result_type cdf(double x) const { return x < -1 ? 0 : ((-1 <= x && x < 1) ? 0.5 : 1.0); }
     constexpr result_type mean() const { return 0.0; }
     constexpr result_type variance() const { return 1.0; }
     // random sampling
@@ -389,14 +389,14 @@ class normal_distribution : public internals::distribution_base<std::normal_dist
     constexpr normal_distribution() noexcept = default;
     constexpr normal_distribution(param_type mu, param_type sigma) : Base(mu, sigma), mu_(mu), sigma_(sigma) { }
     // density function
-    constexpr result_type pdf(double x) const {
+    result_type pdf(double x) const {
         constexpr double pi = std::numbers::pi;
         return 1.0 / (std::sqrt(2 * pi) * sigma_) * std::exp(-std::pow(x - mu_, 2) / (2 * std::pow(sigma_, 2)));
     }
-    constexpr result_type cdf(double x) const { return 0.5 * (1 + std::erf((x - mu_) / (sigma_ * std::sqrt(2)))); }
+    result_type cdf(double x) const { return 0.5 * (1 + std::erf((x - mu_) / (sigma_ * std::sqrt(2)))); }
     constexpr param_type mean() const { return mu_; }
     constexpr param_type variance() const { return sigma_ * sigma_; }
-    constexpr double quantile(double alpha) const { return std::sqrt(2.0) * internals::inverse_erf(2.0 * alpha - 1.0); }
+    double quantile(double alpha) const { return std::sqrt(2.0) * internals::inverse_erf(2.0 * alpha - 1.0); }
     // random sampling
     template <typename RandomNumberGenerator> result_type operator()(RandomNumberGenerator& rng) { return distr_(rng); }
 
