@@ -218,15 +218,16 @@ template <typename Derived> struct fe_it_opt_dti {
     }
 
     // main fit entry point
-    auto fit(double lambda, double tol = 1e-15) {
+    auto fit(double lambda, double tol = 1e-15, double step = 1e-2) {
         fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
         // check if P has already been built
         if (!built_) derived().build_P();
         // update tolerance
         tol_ = tol;
+        step_ = step;
         // optimize
-        // BFGS<Dynamic, BacktrackingLineSearch> opt {5000, tol_, 1e3};   // , BacktrackingLineSearch
-        GradientDescent<Dynamic, BacktrackingLineSearch> opt {10000, tol_, 1e3};   // , BacktrackingLineSearch
+        // BFGS<Dynamic, BacktrackingLineSearch> opt {5000, tol_, step_};   // , BacktrackingLineSearch
+        GradientDescent<Dynamic, BacktrackingLineSearch> opt {10000, tol_, step_};   // , BacktrackingLineSearch
         vector_t vec_L = opt.optimize(
           opt_functor_t(*this, lambda),        //
           vector_t::Zero(n_dofs_ * n_cols_),   //
@@ -240,9 +241,9 @@ template <typename Derived> struct fe_it_opt_dti {
     // you can start from the previous
     template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
-    auto fit(LambdaT&& lambda, double tol = 1e-15) {
+    auto fit(LambdaT&& lambda, double tol = 1e-15, double step = 1e-2) {
         fdapde_assert(lambda.size() == n_lambda);
-        return fit(lambda[0], tol);
+        return fit(lambda[0], tol, step);
     }
    private:
     template <typename ResponseT> auto fit_(ResponseT&& response, double lambda) {
@@ -303,6 +304,7 @@ template <typename Derived> struct fe_it_opt_dti {
     bool built_ = false;
 
     double tol_ = 1e-15;
+    double step_ = 1e-2;
 };
 
 // Derived classes

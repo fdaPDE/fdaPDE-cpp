@@ -61,8 +61,8 @@ template <typename Scalar> bool almost_equal(const std::vector<Scalar>& op1, std
 }   // namespace test
 }   // namespace fdapde
 
-// #include "src/prova_dti.cpp"
 #include "src/fdti.cpp"
+// #include "src/prova_dti.cpp"
 // #include "src/sr.cpp"
 // #include "src/sr_dirichlet.cpp"
 // #include "src/sr_it.cpp"

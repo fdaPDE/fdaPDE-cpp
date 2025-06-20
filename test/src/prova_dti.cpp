@@ -33,7 +33,7 @@ double loss(double S0, const vector_t& S, const matrix_t& gradients, matrix_t L)
 
         l += diff * diff;
 
-        vector_t dL = dG_exp(1, gi, L);
+        vector_t dL = fdapde::internals::dG_exp(1, gi, L);
     }
     return l;
 }
@@ -47,7 +47,7 @@ vector_t gradient(double S0, const vector_t& S, const matrix_t& gradients, matri
         matrix_t exp_L = expm(L);
         double diff = std::log(S0 / Si) - gi.transpose() * exp_L * gi;
 
-        vector_t dL = dG_exp(1, gi, L);
+        vector_t dL = fdapde::internals::dG_exp(1, gi, L);
         grad_vec -= 2.0 * diff * dL;
     }
     return grad_vec;
@@ -105,6 +105,8 @@ TEST(fdti_it, test_01) {
     std::cout << "Simulated DWI images" << std::endl;
     std::cout << S.transpose() << std::endl;
 
+    dwi_data data {vector_t::Ones(4), gradients, S0 * vector_t::Ones(1), matrix_t {S.transpose()}};
+
     // Grid resolution
     int res = 50;
     int total = res * res * res;
@@ -126,8 +128,9 @@ TEST(fdti_it, test_01) {
                 L << lxx, lxy, lxy, lyy;
 
                 // Compute loss and gradient
-                obj[index] = loss(S0, S, gradients, L);
-                grad.row(index) = gradient(S0, S, gradients, L).transpose();
+                LossFunctor loss_fn = riccian_loss;
+                obj[index] = loss_fn.loss(data, matrix_t {L_vec.row(index)});
+                grad.row(index) = loss_fn.grad_loss(data, matrix_t {L_vec.row(index)}).row(0);
                 index++;
             }
         }

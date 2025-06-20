@@ -16,6 +16,7 @@
 
 #include "logger.h"
 std::ofstream file;
+#include "fdaPDE/dti_utility.h"
 
 using namespace fdapde;
 using fdapde::test::almost_equal;
@@ -44,7 +45,7 @@ TEST(fdti_it, test_01) {
     ZeroField<2> u;
     auto F = integral(D)(u * v);
     // modeling
-    FDTI m(b, g, data, fe_it_opt_dti_linearized_gaussian_dirichlet(a, F));
+    FDTI m(b, g, data, riccian_loss, fe_it_opt_dti_dirichlet(a, F));
     matrix_t Ln_true = read_csv<double>("../data/vsr/tensors/L_true_locs.csv").as_matrix();
 
     std::string filename = "../data/vsr/tensors/RESULTS/descent.csv";
@@ -56,7 +57,7 @@ TEST(fdti_it, test_01) {
 
     file.open(filename, std::ios::app);
 
-    m.fit(1e-18, 1e-10);
+    m.fit(1e-18, 1e-10, 1e-1);   // 1e3
 
     file.close();
 
@@ -75,3 +76,13 @@ TEST(fdti_it, test_01) {
     write_csv("../data/vsr/tensors/D_est_locs.csv", Dn);
     EXPECT_TRUE(almost_equal<double>(Ln, Ln_true));
 }
+
+/*
+
+
+
+
+
+
+
+*/
