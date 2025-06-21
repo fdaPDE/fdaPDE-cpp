@@ -338,7 +338,7 @@ class gamma_distribution : public internals::distribution_base<std::gamma_distri
     constexpr result_type pdf(InputType x) const {
         return 1 / (std::tgamma(k_) * std::pow(theta_, k_)) * std::pow(x, k_ - 1) * std::exp(-x / theta_);
     }
-    constexpr result_type cdf(double x) const { return internals::gamma_p(k_, x / theta_); }
+    result_type cdf(double x) const { return internals::gamma_p(k_, x / theta_); }
     constexpr result_type mean() const { return k_ * theta_; }
     constexpr result_type variance() const { return k_ * theta_ * theta_; }
     // random sampling
