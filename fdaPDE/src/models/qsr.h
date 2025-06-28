@@ -48,6 +48,18 @@ template <typename VariationalSolver> class QSRPDE {
 	y_ = solver_.response();
     }
 
+    // modifiers
+    template <typename... Args> void discretize(Args&&... args) {
+        return solver_.discretize(std::forward<Args>(args)...);
+    }
+    template <typename GeoFrame, typename WeightMatrix>
+    void analyze_data(const std::string& formula, const GeoFrame& gf, const WeightMatrix& W) {
+        return solver_.analyze_data(formula, gf, W);
+    }
+    template <typename GeoFrame> void analyze_data(const std::string& formula, const GeoFrame& gf) {
+        return analyze_data(formula, gf, vector_t::Ones(gf[0].rows()).asDiagonal());
+    }
+    // fitting
     // Functional penalized iterative reweighted least squares
     template <typename... Args>
         requires(sizeof...(Args) > 0)

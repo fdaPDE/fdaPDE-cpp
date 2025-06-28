@@ -27,7 +27,7 @@ using fdapde::test::almost_equal;
 TEST(de, test_01) {
     // geometry
     std::string mesh_path = "../data/mesh/square_density/";
-    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
     // data
     Eigen::Matrix<double, Dynamic, 1> g_init = read_csv<double>("../data/de/01/f_init.csv").as_matrix().array().log();
     GeoFrame data(D);
@@ -50,7 +50,7 @@ TEST(de, test_01) {
 TEST(de, test_02) {
     // geometry
     std::string mesh_path = "../data/mesh/square_density/";
-    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
     // data
     Eigen::Matrix<double, Dynamic, 1> g_init = read_csv<double>("../data/de/02/f_init.csv").as_matrix().array().log();
     GeoFrame data(D);
@@ -73,7 +73,7 @@ TEST(de, test_03) {
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
     // geometry
     std::string mesh_path = "../data/mesh/unit_square_21/";
-    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
     Triangulation<1, 1> T = Triangulation<1, 1>::UnitInterval(7);
     // data
     Eigen::Matrix<double, Dynamic, 1> g_init = read_csv<double>("../data/de/03/f_init.csv").as_matrix().array().log();

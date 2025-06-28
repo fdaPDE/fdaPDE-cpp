@@ -335,7 +335,7 @@ class gamma_distribution : public internals::distribution_base<std::gamma_distri
     // density function
     template <typename InputType>
         requires(std::is_convertible_v<InputType, double>)
-    constexpr result_type pdf(InputType x) const {
+    result_type pdf(InputType x) const {
         return 1 / (std::tgamma(k_) * std::pow(theta_, k_)) * std::pow(x, k_ - 1) * std::exp(-x / theta_);
     }
     result_type cdf(double x) const { return internals::gamma_p(k_, x / theta_); }
@@ -447,12 +447,12 @@ class chi_squared_distribution : public internals::distribution_base<std::chi_sq
     constexpr chi_squared_distribution(param_type n, param_type s) :
         n_(n), gamma_(n / 2, 2 * std::pow(s, 2)) { }   // scaled constructor
     // density function
-    constexpr result_type pdf(double x) const { return gamma_.pdf(x); }
-    constexpr result_type cdf(double x) const { return gamma_.cdf(x); }
+    result_type pdf(double x) const { return gamma_.pdf(x); }
+    result_type cdf(double x) const { return gamma_.cdf(x); }
     constexpr result_type mean() const { return n_; }
     constexpr result_type variance() const { return 2 * n_; }
     // quantile function (implemented as a binary search loop)
-    constexpr double quantile(double alpha, double tol = 1e-6) {
+    double quantile(double alpha, double tol = 1e-6) {
         // support range [ql, qh] where quantile is searched
         double ql = 0.0;
         double qh = 1000.0;
@@ -491,13 +491,6 @@ class chi_squared_distribution : public internals::distribution_base<std::chi_sq
 #endif
     void set_param(param_type n) { n_ = n; }
 };
-
-[[maybe_unused]] bernoulli_distribution   Bernoulli {};
-[[maybe_unused]] poisson_distribution     Poisson {};
-[[maybe_unused]] exponential_distribution Exponential {};
-[[maybe_unused]] gamma_distribution       Gamma {};
-[[maybe_unused]] normal_distribution      Normal {};
-[[maybe_unused]] chi_squared_distribution ChiSquared {};
   
 }   // namespace fdapde
 
