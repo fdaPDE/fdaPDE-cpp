@@ -103,10 +103,6 @@ struct fe_ls_elliptic {
         requires(is_valid_info_t<InfoT>::value)
     fe_ls_elliptic(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
-        fdapde_assert(gf.n_layers() == 1);
-        n_obs_  = gf[0].rows();
-	n_locs_ = n_obs_;
-	
         discretize(info.penalty);
 	analyze_data(formula, gf, W);
     }
@@ -119,10 +115,6 @@ struct fe_ls_elliptic {
         requires(is_valid_info_t<InfoT>::value)
     fe_ls_elliptic(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
-        fdapde_assert(gf.n_layers() == 1);
-        n_obs_  = gf[0].rows();
-	n_locs_ = n_obs_;
-	
         discretize(info.penalty);
         eval_basis_at_(gf);
     }
@@ -358,7 +350,7 @@ struct fe_ls_elliptic {
             int seed_ = (seed == random_seed) ? std::random_device()() : seed;
             std::mt19937 rng(seed_);
             rademacher_distribution rademacher;
-            Us_->resize(n_locs_, r);
+            Us_ = matrix_t(n_locs_, r);
             for (int i = 0; i < n_locs_; ++i) {
                 for (int j = 0; j < r; ++j) { Us_->operator()(i, j) = rademacher(rng); }
             }

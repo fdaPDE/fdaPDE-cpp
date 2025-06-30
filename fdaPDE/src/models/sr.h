@@ -35,25 +35,24 @@ class SRPDE {
     template <typename GeoFrame, typename Penalty>
     SRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) noexcept :
         solver_(), geo_category_(gf[0].category().begin(), gf[0].category().end()) {
-        fdapde_assert(gf.n_layers() == 1);	
+        discretize(penalty.get().penalty);
+        analyze_data(formula, gf);
+    }
+    // modifiers
+    template <typename... Args> void discretize(Args&&... args) { solver_.discretize(std::forward<Args>(args)...); }
+    template <typename GeoFrame, typename WeightMatrix>
+    void analyze_data(const std::string& formula, const GeoFrame& gf, const WeightMatrix& W) {
+        fdapde_assert(gf.n_layers() == 1);
         Formula formula_(formula);
 	n_obs_  = gf[0].rows();
 	n_covs_ = 0;
         for (const std::string& token : formula_.rhs()) {
             if (gf.contains(token)) { n_covs_++; }
         }
-        solver_ = solver_t(formula, gf, penalty.get());
-    }
-    // modifiers
-    template <typename... Args> void discretize(Args&&... args) {
-        return solver_.discretize(std::forward<Args>(args)...);
-    }
-    template <typename GeoFrame, typename WeightMatrix>
-    void analyze_data(const std::string& formula, const GeoFrame& gf, const WeightMatrix& W) {
-        return solver_.analyze_data(formula, gf, W);
+        solver_.analyze_data(formula, gf, W);
     }
     template <typename GeoFrame> void analyze_data(const std::string& formula, const GeoFrame& gf) {
-        return analyze_data(formula, gf, vector_t::Ones(gf[0].rows()).asDiagonal());
+        analyze_data(formula, gf, vector_t::Ones(gf[0].rows()).asDiagonal());
     }
     // fitting
     template <typename... Args> auto fit(Args&&... args) { return solver_.fit(std::forward<Args>(args)...); }
@@ -112,7 +111,7 @@ class SRPDE {
             if (edf_cache_.find(lambda_vec) == edf_cache_.end()) {   // cache Tr[S]
                 edf_cache_[lambda_vec] = model_->edf(r_, seed_);
             }
-            double dor = n_ - (q_ + edf_cache_.at(lambda_vec));   // residual degrees of freedom	    
+            double dor = n_ - (q_ + edf_cache_.at(lambda_vec));   // residual degrees of freedom
             return (n_ / std::pow(dor, 2)) * (model_->fitted() - model_->response()).squaredNorm();
         }
         // observers

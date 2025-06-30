@@ -93,8 +93,27 @@ inline double inverse_erf(double x, double eps = 1e-10) {
     } while (std::fabs(delta) > eps);
     return y;
 }
+  
+}   // namespace internals
 
-template <typename Distribution_> class distribution_base {
+class simd_distribution {
+#ifdef __FDAPDE_HAS_EIGEN__   // SIMD vectorized
+   public:
+    using matrix_t = Eigen::Matrix<double, Dynamic, 1>;
+    constexpr simd_distribution() = default;
+  
+    virtual matrix_t variance(const matrix_t& x) const = 0;
+    virtual matrix_t link    (const matrix_t& x) const = 0;
+    virtual matrix_t inv_link(const matrix_t& x) const = 0;
+    virtual matrix_t der_link(const matrix_t& x) const = 0;
+    virtual double   deviance(const matrix_t& x, const matrix_t& y) const = 0;
+#endif
+    virtual ~simd_distribution() = default;
+};
+
+namespace internals {
+  
+template <typename Distribution_> class distribution_base : public simd_distribution {
    public:
     using Distribution = Distribution_;
     constexpr distribution_base() noexcept { }
@@ -104,8 +123,7 @@ template <typename Distribution_> class distribution_base {
 
     template <typename T, typename F>
         requires(
-          internals::is_vector_like_v<T> &&
-          std::is_convertible_v<internals::subscript_result_of_t<T, int>, double>)
+          internals::is_vector_like_v<T> && std::is_convertible_v<internals::subscript_result_of_t<T, int>, double>)
     constexpr std::vector<double> apply_(const T& x, F&& f) const {
         std::vector<double> res(x.size());
         for (std::size_t i = 0; i < x.size(); ++i) { res[i] = f(x[i]); }
@@ -118,7 +136,7 @@ template <typename Distribution_> class distribution_base {
 struct bernoulli_distribution : public internals::distribution_base<std::bernoulli_distribution> {
     using result_type = double;
     using param_type  = double;
-   private:
+   protected:
     using Base = internals::distribution_base<std::bernoulli_distribution>;
     using Base::distr_;
     param_type p_ = 0;
@@ -159,13 +177,19 @@ struct bernoulli_distribution : public internals::distribution_base<std::bernoul
     constexpr result_type deviance(T x, T y) const {
         return almost_zero(y) ? 2 * std::log(1.0 / (1.0 - x)) : 2.0 * std::log(1.0 / x);
     }
-    // SIMD vectorized
-    using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
-    matrix_t variance(const matrix_t& x) const { return x.array() * (1 - x.array()); }
-    matrix_t link    (const matrix_t& x) const { return ((1 - x.array()).inverse() * x.array()).log(); }
-    matrix_t inv_link(const matrix_t& x) const { return (1 + ((-x).array().exp())).inverse(); }
-    matrix_t der_link(const matrix_t& x) const { return (x.array() * (1 - x.array())).inverse(); }
-
+#ifdef __FDAPDE_HAS_EIGEN__   // SIMD vectorized
+    using matrix_t = Eigen::Matrix<double, Dynamic, 1>;
+    matrix_t variance(const matrix_t& x) const override { return x.array() * (1 - x.array()); }
+    matrix_t link    (const matrix_t& x) const override { return ((1 - x.array()).inverse() * x.array()).log(); }
+    matrix_t inv_link(const matrix_t& x) const override { return (1 + ((-x).array().exp())).inverse(); }
+    matrix_t der_link(const matrix_t& x) const override { return (x.array() * (1 - x.array())).inverse(); }
+    double deviance(const matrix_t& x, const matrix_t& y) const override {
+        fdapde_assert(x.cols() == 1 && y.cols() == 1 && x.rows() == y.rows());
+        double dev_ = 0;
+        for (int i = 0, n = x.rows(); i < n; ++i) { dev_ += deviance(x(i, 0), y(i, 0)); }
+        return dev_;
+    }
+#endif
     template <typename T> constexpr auto transform(const T& data) const {
         if constexpr (internals::is_eigen_dense_xpr_v<T>) {
             return 0.5 * (data.array() + 0.5);
@@ -176,11 +200,11 @@ struct bernoulli_distribution : public internals::distribution_base<std::bernoul
     void set_param(param_type p) { p_ = p; }
 };
 
-struct rademacher_distribution : public internals::distribution_base<std::bernoulli_distribution> {
+struct rademacher_distribution : public bernoulli_distribution {
     using result_type = double;
-    using param_type  = double;
+    using param_type = double;
    private:
-    using Base = internals::distribution_base<std::bernoulli_distribution>;
+    using Base = bernoulli_distribution;
     using Base::distr_;
    public:
     constexpr rademacher_distribution() noexcept : Base(0.5) { }
@@ -249,13 +273,18 @@ struct poisson_distribution : public internals::distribution_base<std::poisson_d
     constexpr result_type deviance(T x, T y) const {
         return y > 0 ? y * std::log(y / x) - (y - x) : x;
     }
-    // SIMD vectorized
+#ifdef __FDAPDE_HAS_EIGEN__   // SIMD vectorized
     using matrix_t = Eigen::Matrix<double, Dynamic, 1>;
-    matrix_t variance(const matrix_t& x) const { return x; }
-    matrix_t link    (const matrix_t& x) const { return x.array().log(); }
-    matrix_t inv_link(const matrix_t& x) const { return x.array().exp(); }
-    matrix_t der_link(const matrix_t& x) const { return x.array().inverse(); }
-
+    matrix_t variance(const matrix_t& x) const override { return x; }
+    matrix_t link    (const matrix_t& x) const override { return x.array().log(); }
+    matrix_t inv_link(const matrix_t& x) const override { return x.array().exp(); }
+    matrix_t der_link(const matrix_t& x) const override { return x.array().inverse(); }
+    double deviance(const matrix_t& x, const matrix_t& y) const override {
+        fdapde_assert(x.cols() == 1 && y.cols() == 1 && x.rows() == y.rows());
+        return ((y.array() > 0).select(y.array() * ((y.array() / x.array()).log() - 1) + x.array(), x.array()))
+          .sum();
+    }
+#endif
     template <typename T> constexpr auto transform(const T& data) const {
         if constexpr (internals::is_eigen_dense_xpr_v<T>) {
             return matrix_t((data.array() <= 0).select(1.0, data));
@@ -311,12 +340,16 @@ struct exponential_distribution : public internals::distribution_base<std::expon
     constexpr result_type deviance(T x, T y) const {
         return 2 * ((y - x) / x - std::log(y / x));
     }
-#ifdef __FDAPDE_HAS_EIGEN__  // SIMD vectorized
+#ifdef __FDAPDE_HAS_EIGEN__   // SIMD vectorized
     using matrix_t = Eigen::Matrix<double, Dynamic, 1>;
-    matrix_t variance(const matrix_t& x) const { return x.array().pow(2); }
-    matrix_t link    (const matrix_t& x) const { return (-x).array().inverse(); }
-    matrix_t inv_link(const matrix_t& x) const { return (-x).array().inverse(); }
-    matrix_t der_link(const matrix_t& x) const { return x.array().pow(2).inverse(); }
+    matrix_t variance(const matrix_t& x) const override { return x.array().pow(2); }
+    matrix_t link    (const matrix_t& x) const override { return (-x).array().inverse(); }
+    matrix_t inv_link(const matrix_t& x) const override { return (-x).array().inverse(); }
+    matrix_t der_link(const matrix_t& x) const override { return x.array().pow(2).inverse(); }
+    double deviance(const matrix_t& x, const matrix_t& y) const override {
+        fdapde_assert(x.cols() == 1 && y.cols() == 1 && x.rows() == y.rows());
+        return (2 * ((y.array() - x.array()) / x.array() - (y.array() / x.array()).log())).sum();
+    }
 #endif
     void set_param(param_type l) { l_ = l; }
 };
@@ -364,12 +397,16 @@ class gamma_distribution : public internals::distribution_base<std::gamma_distri
     constexpr result_type deviance(T x, T y) const {
         return 2 * ((y - x) / x - std::log(y / x));
     }
-#ifdef __FDAPDE_HAS_EIGEN__  // SIMD vectorized
+#ifdef __FDAPDE_HAS_EIGEN__   // SIMD vectorized
     using matrix_t = Eigen::Matrix<double, Dynamic, 1>;
-    matrix_t variance(const matrix_t& x) const { return x.array().pow(2); }
-    matrix_t link    (const matrix_t& x) const { return (-x).array().inverse(); }
-    matrix_t inv_link(const matrix_t& x) const { return (-x).array().inverse(); }
-    matrix_t der_link(const matrix_t& x) const { return x.array().pow(2).inverse(); }
+    matrix_t variance(const matrix_t& x) const override { return x.array().pow(2); }
+    matrix_t link    (const matrix_t& x) const override { return (-x).array().inverse(); }
+    matrix_t inv_link(const matrix_t& x) const override { return (-x).array().inverse(); }
+    matrix_t der_link(const matrix_t& x) const override { return x.array().pow(2).inverse(); }
+    double deviance(const matrix_t& x, const matrix_t& y) const override {
+        fdapde_assert(x.cols() == 1 && y.cols() == 1 && x.rows() == y.rows());
+        return (2 * ((y.array() - x.array()) / x.array() - (y.array() / x.array()).log())).sum();
+    }
 #endif
     void set_param(param_type k, param_type theta) {
         k_ = k;
@@ -420,12 +457,16 @@ class normal_distribution : public internals::distribution_base<std::normal_dist
     constexpr result_type deviance(T x, T y) const {
         return (x - y) * (x - y);
     }
-#ifdef __FDAPDE_HAS_EIGEN__  // SIMD vectorized
+#ifdef __FDAPDE_HAS_EIGEN__   // SIMD vectorized
     using matrix_t = Eigen::Matrix<double, Dynamic, 1>;
-    matrix_t variance(const matrix_t& x) const { return matrix_t::Ones(x.rows()); }
-    const matrix_t& link(const matrix_t& x) const { return x; }
-    const matrix_t& inv_link(const matrix_t& x) const { return x; }
-    matrix_t der_link(const matrix_t& x) const { return matrix_t::Ones(x.rows()); }
+    matrix_t variance(const matrix_t& x) const override { return matrix_t::Ones(x.rows()); }
+    matrix_t link    (const matrix_t& x) const override { return x; }
+    matrix_t inv_link(const matrix_t& x) const override { return x; }
+    matrix_t der_link(const matrix_t& x) const override { return matrix_t::Ones(x.rows()); }
+    double deviance(const matrix_t& x, const matrix_t& y) const override {
+        fdapde_assert(x.cols() == 1 && y.cols() == 1 && x.rows() == y.rows());
+        return (x - y).squaredNorm();
+    }
 #endif
     void set_param(param_type mu, param_type sigma) {
         mu_ = mu;
@@ -484,10 +525,11 @@ class chi_squared_distribution : public internals::distribution_base<std::chi_sq
     }
 #ifdef __FDAPDE_HAS_EIGEN__  // SIMD vectorized
     using matrix_t = Eigen::Matrix<double, Dynamic, 1>;
-    matrix_t variance(const matrix_t& x) const { return gamma_.variance(x); }
-    matrix_t link    (const matrix_t& x) const { return gamma_.link(x); }
-    matrix_t inv_link(const matrix_t& x) const { return gamma_.inv_link(x); }
-    matrix_t der_link(const matrix_t& x) const { return gamma_.der_link(x); }
+    matrix_t variance(const matrix_t& x) const override { return gamma_.variance(x); }
+    matrix_t link    (const matrix_t& x) const override { return gamma_.link(x); }
+    matrix_t inv_link(const matrix_t& x) const override { return gamma_.inv_link(x); }
+    matrix_t der_link(const matrix_t& x) const override { return gamma_.der_link(x); }
+    double deviance(const matrix_t& x, const matrix_t& y) const override { return gamma_.deviance(x, y); }
 #endif
     void set_param(param_type n) { n_ = n; }
 };

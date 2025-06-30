@@ -21,17 +21,44 @@
 
 namespace fdapde {
 
-template <typename VariationalSolver, typename Distribution> class GSRPDE {
+template <typename VariationalSolver>
+    requires(std::is_same_v<typename VariationalSolver::solver_category, ls_solver>)
+class GSRPDE {
    private:
     using solver_t = std::decay_t<VariationalSolver>;
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
     static constexpr int n_lambda = solver_t::n_lambda;
    public:
-    GSRPDE() noexcept = default;
+    GSRPDE() noexcept : distr_(), solver_() { }
     template <typename GeoFrame, typename Penalty>
+    GSRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) noexcept : distr_(), solver_() {
+        discretize(penalty.get().penalty);
+        analyze_data(formula, gf);
+    }
+    template <typename GeoFrame, typename Distribution, typename Penalty>
     GSRPDE(const std::string& formula, const GeoFrame& gf, const Distribution& distr, Penalty&& penalty) noexcept :
-        distr_(distr), solver_() {
+        GSRPDE(formula, gf, penalty) {
+        discretize(penalty.get().penalty);
+        analyze_data(formula, gf);
+        set_family(distr);
+    }
+
+    // modifiers
+    template <typename Distribution> void set_family(const Distribution& distr) {
+        distr_ = std::make_shared<Distribution>(distr);
+        // store distribution transform handle
+        transform_ = [this, distr](vector_t& mu, const vector_t& y) {
+            if constexpr (requires(Distribution d, vector_t v) { d.transform(v); }) {
+                mu = distr.transform(y);
+            } else {
+                mu = y;
+            }
+        };
+    }
+    template <typename... Args> void discretize(Args&&... args) { solver_.discretize(std::forward<Args>(args)...); }
+    template <typename GeoFrame, typename WeightMatrix>
+    void analyze_data(const std::string& formula, const GeoFrame& gf, const WeightMatrix& W) {
         fdapde_assert(gf.n_layers() == 1);
         Formula formula_(formula);
         n_obs_ = gf[0].rows();
@@ -39,29 +66,16 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
         for (const std::string& token : formula_.rhs()) {
             if (gf.contains(token)) { n_covs_++; }
         }
-        // discretize
-        if constexpr (requires(Penalty p) { p.get(); }) {
-            solver_ = solver_t(formula, gf, penalty.get());
-        } else {
-            solver_ = solver_t(formula, gf, penalty(gf.template triangulation<0>()).get());
-        }
-	y_ = solver_.response();
-    }
-
-    // modifiers
-    template <typename... Args> void discretize(Args&&... args) {
-        return solver_.discretize(std::forward<Args>(args)...);
-    }
-    template <typename GeoFrame, typename WeightMatrix>
-    void analyze_data(const std::string& formula, const GeoFrame& gf, const WeightMatrix& W) {
-        return solver_.analyze_data(formula, gf, W);
+        solver_.analyze_data(formula, gf, W);
+        y_ = solver_.response();
     }
     template <typename GeoFrame> void analyze_data(const std::string& formula, const GeoFrame& gf) {
-        return analyze_data(formula, gf, vector_t::Ones(gf[0].rows()).asDiagonal());
+        analyze_data(formula, gf, vector_t::Ones(gf[0].rows()).asDiagonal());
     }
     // fitting
     // Functional penalized iterative reweighted least squares
     template <typename... Args> auto fit(Args&&... args) {
+        fdapde_assert(distr_ != nullptr);
         vector_t lambda(n_lambda);
         internals::for_each_index_and_args<sizeof...(Args)>(
           [&]<int Ns_, typename Ts_>(const Ts_& ts) {
@@ -75,24 +89,20 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
         // initialize mean vector
         vector_t y = y_;
         solver_.update_response_and_weights(y, vector_t::Ones(n_obs_).asDiagonal());   // restore solver state
-        if constexpr (requires(Distribution d, vector_t v) { d.transform(v); }) {
-            mu_ = distr_.transform(y);
-        } else {
-            mu_ = y;
-        }
+        transform_(mu_, y);
         double Jold = std::numeric_limits<double>::max(), Jnew = 0;
         n_iter_ = 0;
         while (n_iter_ < max_iter_ && std::abs(Jnew - Jold) > tol_) {
-            vector_t G = distr_.der_link(mu_);   // G^(k) = diag(g'(\mu^(k)_1), ..., g'(\mu^(k)_n))
-            pW_ = ((G.array().pow(2) * distr_.variance(mu_).array()).inverse()).matrix();
-            py_ = G.asDiagonal() * (y - mu_) + distr_.link(mu_);
+            vector_t G = distr_->der_link(mu_);   // G^(k) = diag(g'(\mu^(k)_1), ..., g'(\mu^(k)_n))
+            pW_ = ((G.array().pow(2) * distr_->variance(mu_).array()).inverse()).matrix();
+            py_ = G.asDiagonal() * (y - mu_) + distr_->link(mu_);
             // \argmin_{\beta, f} [ \norm(W^{1/2} * (y - X * \beta - f_n))^2 + P_{\lambda}(f) ]
 	    solver_.update_response_and_weights(py_, pW_.asDiagonal());
             solver_.fit(std::forward<Args>(args)...);
-            mu_ = distr_.inv_link(fitted());    
+            mu_ = distr_->inv_link(fitted());
             // prepare for next iteration
             double data_loss =
-              (distr_.variance(mu_).array().sqrt().inverse().matrix().asDiagonal() * (y - mu_)).squaredNorm() / n_obs_;
+              (distr_->variance(mu_).array().sqrt().inverse().matrix().asDiagonal() * (y - mu_)).squaredNorm() / n_obs_;
             Jold = Jnew;
             Jnew = data_loss + solver_.ftPf(lambda);
 	    n_iter_++;
@@ -121,11 +131,21 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
         static constexpr int XprBits = 0;
         using Scalar = double;
         using InputType = Vector<Scalar, StaticInputSize>;
+        using edf_cache_t = std::unordered_map<
+          std::array<double, StaticInputSize>, double, internals::std_array_hash<double, StaticInputSize>>;
 
         gcv_t() noexcept = default;
-        gcv_t(GSRPDE* model) : model_(model), n_(model->n_obs()), q_(model->n_covs()), r_(100), seed_(random_seed) { }
-        gcv_t(GSRPDE* model, int r, int seed) :
-            model_(model), n_(model->n_obs()), q_(model->n_covs()), r_(r), seed_(seed) { }
+        gcv_t(GSRPDE* model, const edf_cache_t& edf_cache) :
+            model_(model),
+            n_(model->n_obs()),
+            q_(model->n_covs()),
+            edf_cache_(edf_cache),
+            r_(100),
+            seed_(random_seed) { }
+        gcv_t(GSRPDE* model, const edf_cache_t& edf_cache, int r, int seed) :
+            model_(model), n_(model->n_obs()), q_(model->n_covs()), edf_cache_(edf_cache), r_(r), seed_(seed) { }
+        gcv_t(GSRPDE* model) : gcv_t(model, edf_cache_t()) { }
+        gcv_t(GSRPDE* model, int r, int seed) : gcv_t(model, edf_cache_t(), r, seed) { }
 
         template <typename InputType_>
             requires(internals::is_subscriptable<InputType_, int>)
@@ -137,27 +157,29 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
         constexpr double operator()(LambdaT... lambda) {
             model_->fit(static_cast<double>(lambda)...);
             std::array<double, StaticInputSize> lambda_vec {lambda...};
-            if (edf_map_.find(lambda_vec) == edf_map_.end()) {   // cache Tr[S]
-                edf_map_[lambda_vec] = model_->edf(r_, seed_);
+            if (edf_cache_.find(lambda_vec) == edf_cache_.end()) {   // cache Tr[S]
+                edf_cache_[lambda_vec] = model_->edf(r_, seed_);
             }
-            double dor = n_ - (q_ + edf_map_.at(lambda_vec));   // residual degrees of freedom
+            double dor = n_ - (q_ + edf_cache_.at(lambda_vec));   // residual degrees of freedom
 	    // compute total deviance
-            vector_t mu = model_->distr_.inv_link(model_->fitted());
-            double total_deviance = 0;
-            for (int i = 0; i < n_; ++i) { total_deviance += model_->distr_.deviance(mu[i], model_->y_(i, 0)); }
+            vector_t mu = model_->distr_->inv_link(model_->fitted());
+            double total_deviance = model_->distr_->deviance(mu, model_->y_);
             return (n_ / std::pow(dor, 2)) * total_deviance;
         }
+        // observers
+        const edf_cache_t& edf_cache() const { return edf_cache_; }
+        edf_cache_t& edf_cache() { return edf_cache_; }
        private:
         GSRPDE* model_;
         int n_ = 0, q_ = 0;
-        std::unordered_map<
-          std::array<double, StaticInputSize>, double, internals::std_array_hash<double, StaticInputSize>>
-          edf_map_;
+        edf_cache_t edf_cache_;
         // stochastic edf approximation parameter
         int r_, seed_;
     };
     gcv_t gcv() { return gcv_t(this); }
+    gcv_t gcv(const typename gcv_t::edf_cache_t& edf_cache) { return gcv_t(this, edf_cache); }
     gcv_t gcv(int r, int seed) { return gcv_t(this, r, seed); }
+    gcv_t gcv(const typename gcv_t::edf_cache_t& edf_cache, int r, int seed) { return gcv_t(this, edf_cache, r, seed); }
 
     // inference
   
@@ -169,7 +191,8 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
     int max_iter_ = 200;   // fpirls maximum iteration number
     double tol_ = 1e-6;    // fprils convergence tolerance
 
-    Distribution distr_;
+    std::shared_ptr<simd_distribution> distr_;
+    std::function<void(vector_t&, const vector_t&)> transform_;
     solver_t solver_;
     int n_obs_ = 0, n_covs_ = 0;
     int n_iter_ = 0;
@@ -178,8 +201,10 @@ template <typename VariationalSolver, typename Distribution> class GSRPDE {
 // deduction guide
 template <typename GeoFrame, typename Distribution, typename Penalty>
 GSRPDE(const std::string& formula, const GeoFrame& gf, const Distribution& distr, Penalty&& solver)
-  -> GSRPDE<typename Penalty::solver_t, Distribution>;
-
+  -> GSRPDE<typename Penalty::solver_t>;
+template <typename GeoFrame, typename Penalty>
+GSRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& solver) -> GSRPDE<typename Penalty::solver_t>;
+  
 }   // namespace fdapde
 
 #endif   // __GENERALIZED_SPATIAL_REGRESSION_H__
