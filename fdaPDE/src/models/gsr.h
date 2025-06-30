@@ -163,8 +163,7 @@ class GSRPDE {
             double dor = n_ - (q_ + edf_cache_.at(lambda_vec));   // residual degrees of freedom
 	    // compute total deviance
             vector_t mu = model_->distr_->inv_link(model_->fitted());
-            double total_deviance = model_->distr_->deviance(mu, model_->y_);
-            return (n_ / std::pow(dor, 2)) * total_deviance;
+            return (n_ / std::pow(dor, 2)) * model_->distr_->deviance(mu, model_->y_);
         }
         // observers
         const edf_cache_t& edf_cache() const { return edf_cache_; }
@@ -176,6 +175,7 @@ class GSRPDE {
         // stochastic edf approximation parameter
         int r_, seed_;
     };
+    friend gcv_t;
     gcv_t gcv() { return gcv_t(this); }
     gcv_t gcv(const typename gcv_t::edf_cache_t& edf_cache) { return gcv_t(this, edf_cache); }
     gcv_t gcv(int r, int seed) { return gcv_t(this, r, seed); }

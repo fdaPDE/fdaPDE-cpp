@@ -88,7 +88,9 @@ struct fe_de_separable {
         int n_shape_functions = func_space.n_shape_functions();
         matrix_t m(n_quad_nodes, n_shape_functions);
         for (int i = 0; i < n_quad_nodes; ++i) {
-            for (int j = 0; j < n_shape_functions; ++j) { m(i, j) = func_space.eval_shape_value(j, quad.nodes.row(i)); }
+            for (int j = 0; j < n_shape_functions; ++j) {
+                m(i, j) = func_space.eval_shape_value(j, quad.nodes.row(i).transpose());
+            }
         }
         return m;
     }
@@ -124,7 +126,7 @@ struct fe_de_separable {
                    lambda_[1] * g.dot(m_->PT_ * g);
         }
         // gradient functor
-        std::function<vector_t(const vector_t&)> derive() {
+        std::function<vector_t(const vector_t&)> gradient() {
             return [this, dllik = vector_t(-m_->Psi_.transpose() * vector_t::Ones(m_->n_obs_))](const vector_t& g) {
                 return vector_t(
                   dllik + m_->n_obs_ * m_->grad_int_exp_(g) + 2 * (lambda_[0] * m_->PD_ + lambda_[1] * m_->PT_) * g);

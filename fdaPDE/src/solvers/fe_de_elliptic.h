@@ -52,7 +52,7 @@ struct fe_de_elliptic {
             return -(m_->Psi_ * g).sum() + m_->n_obs_ * m_->int_exp_(g) + lambda_ * g.dot(m_->P_ * g);
         }
         // gradient functor
-        std::function<vector_t(const vector_t&)> derive() {
+        std::function<vector_t(const vector_t&)> gradient() {
             return [this, dllik = vector_t(-m_->Psi_.transpose() * vector_t::Ones(m_->n_obs_))](const vector_t& g) {
                 return vector_t(dllik + m_->n_obs_ * m_->grad_int_exp_(g) + 2 * lambda_ * m_->P_ * g);
             };
@@ -100,7 +100,7 @@ struct fe_de_elliptic {
 	vector_t w(n_quad_nodes);
         for (int i = 0; i < n_quad_nodes; ++i) {
             for (int j = 0; j < n_shape_functions; ++j) {
-                PsiQuad(i, j) = fe_space.eval_shape_value(j, quad_rule.nodes.row(i));
+                PsiQuad(i, j) = fe_space.eval_shape_value(j, quad_rule.nodes.row(i).transpose());
             }
             w[i] = quad_rule.weights[i];
         }

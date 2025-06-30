@@ -526,18 +526,20 @@ template <typename VariationalSolver> class fPCA {
    public:
     fPCA() noexcept = default;
     template <typename GeoFrame, typename Penalty>
-    fPCA(const std::string& colname, const GeoFrame& gf, Penalty&& penalty) noexcept :
-        smoother_(), data_(gf[0].data().template col<double>(colname).as_matrix()) {
+    fPCA(const std::string& colname, const GeoFrame& gf, Penalty&& penalty) noexcept : smoother_(), data_() {
+        discretize(penalty.get().penalty);
+        analyze_data(colname, gf);
+    }
+    template <typename... Args> void discretize(Args&&... args) {
+        smoother_.discretize(std::forward<Args>(args)...);
+        n_dofs_ = smoother_.n_dofs();
+    }
+    template <typename GeoFrame> void analyze_data(const std::string& colname, const GeoFrame& gf) {
         fdapde_assert(gf.n_layers() == 1);
+        data_ = gf[0].data().template col<double>(colname).as_matrix();
         n_locs_ = data_.rows();
-	n_units_ = data_.cols();
-        if constexpr (requires(Penalty p) { p.get(); }) {
-            smoother_ = smoother_t(gf, penalty.get());
-        } else {
-            smoother_ = smoother_t(gf, penalty(gf.template triangulation<0>()).get());
-        }
-	n_dofs_ = smoother_.n_dofs();
-	// detect if data_ has at least one missing value
+        n_units_ = data_.cols();
+        // detect if data_ has at least one missing value
         has_nan_ = false;
         for (int i = 0; i < n_locs_; ++i) {
             for (int j = 0; j < n_units_; ++j) {
@@ -554,11 +556,11 @@ template <typename VariationalSolver> class fPCA {
     auto fit(int rank, const LambdaT& lambda_grid, int flag = ComputeRandSVD, Policy policy = Policy()) {
         fdapde_assert(lambda_grid.size() % n_lambda == 0);
         auto solver_ = policy.get(smoother_);   // instantiate solver implementation
-        f_.resize(n_dofs_ , rank);
+        f_.resize(n_dofs_, rank);
         s_.resize(n_units_, rank);
         f_norm_.resize(rank);
         lambda_.resize(n_lambda, rank);
-	// dispatch to processing logic
+        // dispatch to processing logic
         if (has_nan_) {
             // default to OptimMSRE calibration, if no calibration provided
             if (lambda_grid.size() > n_lambda && (flag & 0b11110) == 0) { flag = flag | OptimizeMSRE; }
@@ -576,7 +578,7 @@ template <typename VariationalSolver> class fPCA {
             s_ = std::move(s);
             f_norm_ = solver_.loadings_norm();
         }
-	lambda_ = solver_.lambda();
+        lambda_ = solver_.lambda();
         return std::tie(f_, s_);
     }
     // observers
