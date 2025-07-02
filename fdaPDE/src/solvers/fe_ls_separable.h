@@ -111,7 +111,6 @@ class fe_ls_separable_mono {
     }
     // unrolls the penalty tuple and injects them into discretize()
     template <typename Penalty> void discretize_loop_(Penalty&& penalty) {
-        using Penalty_ = std::decay_t<Penalty>;
         internals::apply_index_pack<n_lambda>(
           [&]<int... Ns_>() { discretize([&]() { return std::get<Ns_>(penalty); }()...); });
         return;
@@ -164,7 +163,6 @@ class fe_ls_separable_mono {
         // one penalty must be on a FeSpace
         fdapde_static_assert(is_fe_space_v<FS1> || is_fe_space_v<FS2>, NO_FINITE_ELEMENT_SPACE_DETECTED);
         constexpr int fe_space_index = is_fe_space_v<FS1> ? 0 : 1;
-        using FeSpace = std::tuple_element_t<fe_space_index, FunctionSpaces>;
         constexpr int bs_space_index = is_fe_space_v<FS1> ? 1 : 0;
         using BsSpace = std::tuple_element_t<bs_space_index, FunctionSpaces>;
         // we enforce a space-time (or SpaceMajor) expansion of the field by reordering the forms so that, index 0

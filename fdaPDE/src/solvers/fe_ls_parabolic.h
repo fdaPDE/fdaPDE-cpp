@@ -808,7 +808,6 @@ struct fe_ls_parabolic_ieul {
         y_ = y;
 	// correct \Psi for missing observations
         auto nan_pattern = na_matrix(y);
-        int old_n_obs = n_obs_;
         if (nan_pattern.any()) {
             n_obs_ = n_locs_ - nan_pattern.count();
             B_.resize(m_);

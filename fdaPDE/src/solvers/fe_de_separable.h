@@ -76,7 +76,6 @@ struct fe_de_separable {
     }
     // injects penalty tuple into discretize()
     template <typename GeoFrame, typename Penalty> void discretize_loop_(const GeoFrame& gf, Penalty&& penalty) {
-        using Penalty_ = std::decay_t<Penalty>;
         auto pen_tuple = tuplify_penalty_(gf, penalty);
         internals::apply_index_pack<n_lambda>([&]<int... Ns_>() { discretize(std::get<Ns_>(pen_tuple)...); });
         return;
@@ -280,7 +279,6 @@ struct fe_de_separable {
         // one penalty must be on a FeSpace
         fdapde_static_assert(is_fe_space_v<FS1> || is_fe_space_v<FS2>, NO_FINITE_ELEMENT_SPACE_DETECTED);
         constexpr int fe_space_index = is_fe_space_v<FS1> ? 0 : 1;
-        using FeSpace = std::tuple_element_t<fe_space_index, FunctionSpaces>;
         constexpr int bs_space_index = is_fe_space_v<FS1> ? 1 : 0;
         using BsSpace = std::tuple_element_t<bs_space_index, FunctionSpaces>;
 	// enforce a space-time (or SpaceMajor) expansion: index 0 refer to the spatial finite element discretization
