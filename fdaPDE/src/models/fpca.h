@@ -520,7 +520,6 @@ template <typename VariationalSolver> class fPCA {
     using smoother_t = std::decay_t<VariationalSolver>;
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
-    using data_t   = Eigen::Map<const Eigen::Matrix<double, Dynamic, Dynamic, Eigen::ColMajor>>;
     using binary_t = BinaryMatrix<Dynamic, Dynamic>;
     static constexpr int n_lambda = smoother_t::n_lambda;
    public:
@@ -533,12 +532,14 @@ template <typename VariationalSolver> class fPCA {
     template <typename... Args> void discretize(Args&&... args) {
         smoother_.discretize(std::forward<Args>(args)...);
         n_dofs_ = smoother_.n_dofs();
+	return;
     }
     template <typename GeoFrame> void analyze_data(const std::string& colname, const GeoFrame& gf) {
         fdapde_assert(gf.n_layers() == 1);
         data_ = gf[0].data().template col<double>(colname).as_matrix();
         n_locs_ = data_.rows();
         n_units_ = data_.cols();
+	smoother_.analyze_data(gf, vector_t::Ones(gf[0].rows()).asDiagonal());
         // detect if data_ has at least one missing value
         has_nan_ = false;
         for (int i = 0; i < n_locs_; ++i) {
@@ -549,6 +550,7 @@ template <typename VariationalSolver> class fPCA {
                 }
             }
         }
+	return;
     }
 
     template <typename LambdaT, typename Policy = fpca_power_solver>
@@ -588,7 +590,7 @@ template <typename VariationalSolver> class fPCA {
     const std::vector<double>& loadings_norm() const { return f_norm_; }
     const matrix_t& lambda() const { return lambda_; }
    private:
-    data_t data_;           // mapped geoframe data
+    matrix_t data_;         // mapped geoframe data
     smoother_t smoother_;   // variational solver used in the smoothing step
     bool has_nan_;
 

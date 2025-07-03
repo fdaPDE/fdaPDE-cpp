@@ -215,7 +215,17 @@ struct fe_ls_elliptic {
         update_response_and_weights(y_, W);   // this updates also design_matrix releated matrices
         return;
     }
-  
+    // evaluates basis system at physical locations
+    template <typename GeoFrame, typename WeightMatrix> void analyze_data(const GeoFrame& gf, const WeightMatrix& W) {
+        fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
+        fdapde_assert(gf.n_layers() == 1);
+        n_obs_ = gf[0].rows();
+        n_locs_ = n_obs_;
+        eval_basis_at_(gf);   // update \Psi matrix
+        W_ = W;
+        return;
+    }
+
     // modifiers
     void update_response(const vector_t& y) {
         fdapde_assert(Psi_.rows() > 0 && y.rows() == n_locs_ && y.cols() == 1);
