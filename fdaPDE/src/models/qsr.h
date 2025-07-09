@@ -192,7 +192,7 @@ template <typename VariationalSolver> class QSRPDE {
     vector_t py_;          // y - (1 - 2 * alpha) * |y - X * beta - f|
     vector_t pW_;          // diagonal of W^k = 1 / (2 * n * |y - X * beta - f|)
     vector_t mu_;          // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : quantile vector at step k
-    double eps_ = -1e-1;   // pinball loss smoothing factor
+    double eps_ = -3;      // pinball loss smoothing factor (defaulted to non-smoothed pinball)
     int max_iter_ = 200;   // fpirls maximum iteration number
     double tol_ = 1e-6;    // fprils convergence tolerance
     double tol_weights_ = 1e-6;

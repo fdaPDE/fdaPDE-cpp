@@ -85,8 +85,6 @@ struct fe_de_elliptic {
 	using DofHandler = typename FeSpace::DofHandlerType;
 	using Triangulation = typename FeSpace::Triangulation;
         constexpr int embed_dim = Triangulation::embed_dim;
-        fdapde_assert(gf.n_layers() == 1 && gf[0].category()[0] == ltype::point);
-        n_obs_ = gf[0].rows();
 	const Triangulation& triangulation = gf.template triangulation<0>();
 	const FeSpace& fe_space = std::get<0>(info.penalty).trial_space();
 	const DofHandler& dof_handler = fe_space.dof_handler();
@@ -104,15 +102,6 @@ struct fe_de_elliptic {
             }
             w[i] = quad_rule.weights[i];
         }
-        // eval physical basis at spatial locations
-        const auto& spatial_index = geo_index_cast<0, POINT>(gf[0]);
-        if (spatial_index.points_at_dofs()) {
-            Psi_.resize(n_obs_, n_dofs_);
-            Psi_.setIdentity();
-        } else {
-            Psi_ = point_eval_(spatial_index.coordinates());
-        }
-
         // store handle for approximation of \int_D (e^g)
         int_exp_ = [&, PsiQuad, w](const vector_t& g) {
             double val_ = 0;
@@ -132,6 +121,8 @@ struct fe_de_elliptic {
             }
             return grad;
         };
+
+	analyze_data(gf);
     }
 
     // perform finite element based numerical discretization
@@ -158,7 +149,22 @@ struct fe_de_elliptic {
         };
         return;
     }
-  
+    // fit from geoframe
+    template <typename GeoFrame> void analyze_data(const GeoFrame& gf) {
+        fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
+        fdapde_assert(gf.n_layers() == 1 && gf[0].category()[0] == ltype::point);
+        n_obs_ = gf[0].rows();
+
+        // eval physical basis at spatial locations
+        const auto& spatial_index = geo_index_cast<0, POINT>(gf[0]);
+        if (spatial_index.points_at_dofs()) {
+            Psi_.resize(n_obs_, n_dofs_);
+            Psi_.setIdentity();
+        } else {
+            Psi_ = point_eval_(spatial_index.coordinates());
+        }
+	return;
+    }
     // main fit entry point
     template <typename Optimizer> const vector_t& fit(double lambda, const vector_t& g_init, Optimizer&& opt) {
         g_ = opt.optimize(llik_t(*this, lambda, tol_), g_init);
