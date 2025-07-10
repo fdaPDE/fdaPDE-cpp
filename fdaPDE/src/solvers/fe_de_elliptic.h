@@ -80,16 +80,40 @@ struct fe_de_elliptic {
         requires(is_valid_info_t<InfoT>::value)
     fe_de_elliptic(const GeoFrame& gf, InfoT&& info) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
-        using BilinearForm = std::tuple_element_t<0, std::decay_t<decltype(info.penalty)>>;
+        discretize(gf, info.penalty);
+        analyze_data(gf);
+    }
+
+    // perform finite element based numerical discretization
+    template <typename GeoFrame, typename Penalty> void discretize(const GeoFrame& gf, Penalty&& penalty) {
+        fdapde_static_assert(internals::is_valid_penalty_pair_v<Penalty>, INVALID_PENALTY_DESCRIPTION);
+        using BilinearForm = std::tuple_element_t<0, std::decay_t<Penalty>>;
+        using LinearForm = std::tuple_element_t<1, std::decay_t<Penalty>>;
         using FeSpace = typename BilinearForm::TrialSpace;
 	using DofHandler = typename FeSpace::DofHandlerType;
 	using Triangulation = typename FeSpace::Triangulation;
         constexpr int embed_dim = Triangulation::embed_dim;
-	const Triangulation& triangulation = gf.template triangulation<0>();
-	const FeSpace& fe_space = std::get<0>(info.penalty).trial_space();
-	const DofHandler& dof_handler = fe_space.dof_handler();
 
-        discretize(info.penalty);
+        // discretization
+        const FeSpace& fe_space = std::get<0>(penalty).trial_space();
+        const Triangulation& triangulation = gf.template triangulation<0>();
+        const DofHandler& dof_handler = fe_space.dof_handler();
+        const BilinearForm& bilinear_form = std::get<0>(penalty);
+        const LinearForm& linear_form = std::get<1>(penalty);
+        n_dofs_ = bilinear_form.n_dofs();   // number of basis functions over physical domain
+        internals::fe_mass_assembly_loop<FeSpace> mass_assembler(bilinear_form.trial_space());
+        R0_ = mass_assembler.assemble();
+        R1_ = bilinear_form.assemble();
+        u_ = linear_form.assemble();
+
+        // penalty matrix
+        sparse_solver_t invR0;
+        invR0.compute(R0_);
+        P_ = R1_.transpose() * invR0.solve(R1_);
+        // store handles for basis system evaluation at locations
+        point_eval_ = [fe_space = bilinear_form.trial_space()](const matrix_t& locs) -> decltype(auto) {
+            return internals::point_basis_eval(fe_space, locs);
+        };
 	// eval reference basis at quadrature nodes, store de_quadrature weights
         de_quadrature_t<embed_dim> quad_rule;
         int n_quad_nodes = quad_rule.order;
@@ -103,7 +127,7 @@ struct fe_de_elliptic {
             w[i] = quad_rule.weights[i];
         }
         // store handle for approximation of \int_D (e^g)
-        int_exp_ = [&, PsiQuad, w](const vector_t& g) {
+        int_exp_ = [&, dof_handler, PsiQuad, w](const vector_t& g) {
             double val_ = 0;
             for (auto it = triangulation.cells_begin(); it != triangulation.cells_end(); ++it) {
                 val_ += w.dot((PsiQuad * g(dof_handler.dofs().row(it->id()))).array().exp().matrix()) * it->measure();
@@ -111,7 +135,7 @@ struct fe_de_elliptic {
 	    return val_;
         };
         // store handle for approximation of \nabla_g(\int_D (e^g))
-        grad_int_exp_ = [&, PsiQuad, w](const vector_t& g) {
+        grad_int_exp_ = [&, dof_handler, PsiQuad, w](const vector_t& g) {
             vector_t grad = vector_t::Zero(g.rows());
             for (auto it = triangulation.cells_begin(); it != triangulation.cells_end(); ++it) {
                 grad(dof_handler.dofs().row(it->id())) +=
@@ -120,33 +144,7 @@ struct fe_de_elliptic {
                   it->measure();
             }
             return grad;
-        };
-
-	analyze_data(gf);
-    }
-
-    // perform finite element based numerical discretization
-    template <typename Penalty> void discretize(Penalty&& penalty) {
-        fdapde_static_assert(internals::is_valid_penalty_pair_v<Penalty>, INVALID_PENALTY_DESCRIPTION);
-        using BilinearForm = std::tuple_element_t<0, std::decay_t<Penalty>>;
-        using LinearForm = std::tuple_element_t<1, std::decay_t<Penalty>>;
-        using FeSpace = typename BilinearForm::TrialSpace;
-	// discretization
-        const BilinearForm& bilinear_form = std::get<0>(penalty);
-        const LinearForm& linear_form = std::get<1>(penalty);
-        n_dofs_ = bilinear_form.n_dofs();   // number of basis functions over physical domain
-        internals::fe_mass_assembly_loop<FeSpace> mass_assembler(bilinear_form.trial_space());
-        R0_ = mass_assembler.assemble();
-        R1_ = bilinear_form.assemble();
-        u_  = linear_form.assemble();
-	// penalty matrix
-	sparse_solver_t invR0;
-	invR0.compute(R0_);
-	P_ = R1_.transpose() * invR0.solve(R1_);
-	// store handles for basis system evaluation at locations
-        point_eval_ = [fe_space = bilinear_form.trial_space()](const matrix_t& locs) -> decltype(auto) {
-            return internals::point_basis_eval(fe_space, locs);
-        };
+        };	
         return;
     }
     // fit from geoframe
