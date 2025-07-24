@@ -33,13 +33,13 @@ class GSRPDE {
     GSRPDE() noexcept : distr_(), solver_() { }
     template <typename GeoFrame, typename Penalty>
     GSRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) noexcept : distr_(), solver_() {
-        discretize(penalty.get().penalty);
+        discretize(penalty.get());
         analyze_data(formula, gf);
     }
     template <typename GeoFrame, typename Distribution, typename Penalty>
     GSRPDE(const std::string& formula, const GeoFrame& gf, const Distribution& distr, Penalty&& penalty) noexcept :
         GSRPDE(formula, gf, penalty) {
-        discretize(penalty.get().penalty);
+        discretize(penalty.get());
         analyze_data(formula, gf);
         set_family(distr);
     }

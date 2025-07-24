@@ -31,9 +31,13 @@ struct fe_de_elliptic {
     using sparse_solver_t = eigen_sparse_solver_movable_wrap<Eigen::SparseLU<sparse_matrix_t>>;
     template <typename DataLocs>
     static constexpr bool is_valid_data_locs_descriptor_v = std::is_same_v<DataLocs, matrix_t>;
-    template <typename InfoT> struct is_valid_info_t {
-        static constexpr bool value = requires(InfoT info) { info.penalty; };
+    template <typename Penalty> struct is_valid_penalty {
+        static constexpr bool value = requires(Penalty penalty) {
+            penalty.bilinear_form();
+            penalty.linear_form();
+        };
     };
+    template <typename Penalty> static constexpr bool is_valid_penalty_v = is_valid_penalty<Penalty>::value;
     // high-order quadrature for integration of constraint \int_D (e^g)
     template <int EmbedDim> struct de_quadrature {
         using type = std::conditional_t<EmbedDim == 1, QS1DP7_, std::conditional_t<EmbedDim == 2, QS2DP4_, QS3DP5_>>;
@@ -76,30 +80,30 @@ struct fe_de_elliptic {
     };
 
     fe_de_elliptic() noexcept = default;
-    template <typename GeoFrame, typename InfoT>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_de_elliptic(const GeoFrame& gf, InfoT&& info) {
+    template <typename GeoFrame, typename Penalty>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_de_elliptic(const GeoFrame& gf, Penalty&& penalty) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
-        discretize(gf, info.penalty);
+        discretize(penalty);
         analyze_data(gf);
     }
 
     // perform finite element based numerical discretization
-    template <typename GeoFrame, typename Penalty> void discretize(const GeoFrame& gf, Penalty&& penalty) {
-        fdapde_static_assert(internals::is_valid_penalty_pair_v<Penalty>, INVALID_PENALTY_DESCRIPTION);
-        using BilinearForm = std::tuple_element_t<0, std::decay_t<Penalty>>;
-        using LinearForm = std::tuple_element_t<1, std::decay_t<Penalty>>;
+    template <typename Penalty> void discretize(Penalty&& penalty) {
+        using BilinearForm = typename std::decay_t<Penalty>::BilinearForm;
+        using LinearForm = typename std::decay_t<Penalty>::LinearForm;
+        fdapde_static_assert(
+          internals::is_valid_penalty_pair_v<BilinearForm FDAPDE_COMMA LinearForm>, INVALID_PENALTY_DESCRIPTION);
         using FeSpace = typename BilinearForm::TrialSpace;
 	using DofHandler = typename FeSpace::DofHandlerType;
 	using Triangulation = typename FeSpace::Triangulation;
         constexpr int embed_dim = Triangulation::embed_dim;
 
         // discretization
-        const FeSpace& fe_space = std::get<0>(penalty).trial_space();
-        const Triangulation& triangulation = gf.template triangulation<0>();
+        const BilinearForm& bilinear_form = penalty.bilinear_form();
+        const LinearForm& linear_form = penalty.linear_form();
+        const FeSpace& fe_space = bilinear_form.trial_space();
         const DofHandler& dof_handler = fe_space.dof_handler();
-        const BilinearForm& bilinear_form = std::get<0>(penalty);
-        const LinearForm& linear_form = std::get<1>(penalty);
         n_dofs_ = bilinear_form.n_dofs();   // number of basis functions over physical domain
         internals::fe_mass_assembly_loop<FeSpace> mass_assembler(bilinear_form.trial_space());
         R0_ = mass_assembler.assemble();
@@ -114,7 +118,10 @@ struct fe_de_elliptic {
         point_eval_ = [fe_space = bilinear_form.trial_space()](const matrix_t& locs) -> decltype(auto) {
             return internals::point_basis_eval(fe_space, locs);
         };
-	// eval reference basis at quadrature nodes, store de_quadrature weights
+
+	// geometry
+        const Triangulation& triangulation = fe_space.triangulation();
+        // eval reference basis at quadrature nodes, store de_quadrature weights
         de_quadrature_t<embed_dim> quad_rule;
         int n_quad_nodes = quad_rule.order;
         int n_shape_functions = fe_space.n_shape_functions();
@@ -144,7 +151,7 @@ struct fe_de_elliptic {
                   it->measure();
             }
             return grad;
-        };	
+        };
         return;
     }
     // fit from geoframe
@@ -152,7 +159,6 @@ struct fe_de_elliptic {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
         fdapde_assert(gf.n_layers() == 1 && gf[0].category()[0] == ltype::point);
         n_obs_ = gf[0].rows();
-
         // eval physical basis at spatial locations
         const auto& spatial_index = geo_index_cast<0, POINT>(gf[0]);
         if (spatial_index.points_at_dofs()) {
@@ -164,15 +170,16 @@ struct fe_de_elliptic {
 	return;
     }
     // main fit entry point
-    template <typename Optimizer> const vector_t& fit(double lambda, const vector_t& g_init, Optimizer&& opt) {
-        g_ = opt.optimize(llik_t(*this, lambda, tol_), g_init);
+    template <typename Optimizer, typename... Callbacks>
+    const vector_t& fit(double lambda, const vector_t& g_init, Optimizer&& opt, Callbacks&&... callbacks) {
+        g_ = opt.optimize(llik_t(*this, lambda, tol_), g_init, std::forward<Callbacks>(callbacks)...);
         return g_;
     }
-    template <typename Optimizer, typename LambdaT>
+    template <typename Optimizer, typename LambdaT, typename... Callbacks>
         requires(internals::is_vector_like_v<LambdaT>)
-    const vector_t& fit(LambdaT&& lambda, const vector_t& g_init, Optimizer&& opt) {
+    const vector_t& fit(LambdaT&& lambda, const vector_t& g_init, Optimizer&& opt, Callbacks&&... callbacks) {
         fdapde_assert(lambda.size() == n_lambda);
-        return fit(lambda[0]);
+        return fit(lambda[0], g_init, opt, std::forward<Callbacks>(callbacks)...);
     }
     // modifiers
     void set_llik_tolerance(double tol) { tol_ = tol; }
@@ -207,21 +214,31 @@ struct fe_de_elliptic {
 
 }   // namespace internals
 
-// elliptic solver factory
-template <typename BilinearForm, typename LinearForm> struct fe_de_elliptic {
+// elliptic solver API
+template <typename BilinearForm_, typename LinearForm_> struct fe_de_elliptic {
     using solver_t = internals::fe_de_elliptic;
    private:
-    struct info_t {
-        std::tuple<BilinearForm, LinearForm> penalty;
+    struct penalty_packet {
+        using BilinearForm = std::decay_t<BilinearForm_>;
+        using LinearForm = std::decay_t<LinearForm_>;
+       private:
+        BilinearForm bilinear_form_;
+        LinearForm linear_form_;
+       public:
+        penalty_packet(const BilinearForm_& bilinear_form, const LinearForm_& linear_form) :
+            bilinear_form_(bilinear_form), linear_form_(linear_form) { }
+        // observers
+        const BilinearForm& bilinear_form() const { return bilinear_form_; }
+        const LinearForm& linear_form() const { return linear_form_; }
     };
    public:
-    fe_de_elliptic(const BilinearForm& bilinear_form, const LinearForm& linear_form) :
-        info_(std::make_tuple(bilinear_form, linear_form)) { }
-    const info_t& get() const { return info_; }
+    fe_de_elliptic(const BilinearForm_& bilinear_form, const LinearForm_& linear_form) :
+        penalty_(bilinear_form, linear_form) { }
+    const penalty_packet& get() const { return penalty_; }
    private:
-    info_t info_;
-};  
-  
+    penalty_packet penalty_;
+};
+
 }   // namespace fdapde
 
 #endif   // __FE_DE_ELLIPTIC_SOLVER_H__

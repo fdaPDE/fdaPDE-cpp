@@ -15,7 +15,6 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 using namespace fdapde;
-using fdapde::test::read_mesh;
 using fdapde::test::almost_equal;
 
 // test 1
@@ -28,13 +27,21 @@ using fdapde::test::almost_equal;
 //    distribution: poisson
 TEST(gsr, test_01) {
     // geometry
-    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_40");
+    std::string mesh_path = "../data/mesh/unit_square_40/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", "../data/gsr/01/locs.csv");
     l1.load_csv<double>("../data/gsr/01/response.csv");
+    // physics
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction v(Vh);
+    auto a = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u;
+    auto F = integral(D)(u * v);
     // modeling
-    GSRPDE m("y ~ f", data, Poisson, fe_laplace());
+    GSRPDE m("y ~ f", data, fdapde::poisson_distribution(), fe_ls_elliptic(a, F));
     m.fit(/* lambda = */ 1.25e-06);
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/gsr/01/field.mtx"));
@@ -50,13 +57,21 @@ TEST(gsr, test_01) {
 //    distribution: bernulli
 TEST(gsr, test_02) {
     // geometry
-    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_40");
+    std::string mesh_path = "../data/mesh/unit_square_40/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", "../data/gsr/02/locs.csv");
     l1.load_csv<double>("../data/gsr/02/response.csv");
+    // physics
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction v(Vh);
+    auto a = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u;
+    auto F = integral(D)(u * v);
     // modeling
-    GSRPDE m("y ~ f", data, Bernoulli, fe_laplace());
+    GSRPDE m("y ~ f", data, fdapde::bernoulli_distribution(), fe_ls_elliptic(a, F));
     m.fit(/* lambda = */ 1.25e-06);
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/gsr/02/field.mtx"));
@@ -72,13 +87,21 @@ TEST(gsr, test_02) {
 //    distribution: exponential
 TEST(gsr, test_03) {
     // geometry
-    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_40");
+    std::string mesh_path = "../data/mesh/unit_square_40/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", "../data/gsr/03/locs.csv");
     l1.load_csv<double>("../data/gsr/03/response.csv");
+    // physics
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction v(Vh);
+    auto a = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u;
+    auto F = integral(D)(u * v);
     // modeling
-    GSRPDE m("y ~ f", data, Exponential, fe_laplace());
+    GSRPDE m("y ~ f", data, fdapde::exponential_distribution(), fe_ls_elliptic(a, F));
     m.fit(/* lambda = */ 1.25e-06);
     
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/gsr/03/field.mtx"));
@@ -94,13 +117,21 @@ TEST(gsr, test_03) {
 //    distribution: gamma
 TEST(gsr, test_04) {
     // geometry
-    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/unit_square_40");
+    std::string mesh_path = "../data/mesh/unit_square_40/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
     // data
     GeoFrame data(D);
     auto& l1 = data.insert_scalar_layer<POINT>("l1", "../data/gsr/04/locs.csv");
     l1.load_csv<double>("../data/gsr/04/response.csv");
+    // physics
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction v(Vh);
+    auto a = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u;
+    auto F = integral(D)(u * v);
     // modeling
-    GSRPDE m("y ~ f", data, Gamma, fe_laplace());
+    GSRPDE m("y ~ f", data, fdapde::gamma_distribution(), fe_ls_elliptic(a, F));
     m.fit(/* lambda = */ 1.25e-06);
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/gsr/04/field.mtx"));
@@ -109,21 +140,31 @@ TEST(gsr, test_04) {
 TEST(gsr, test_05) {
     // geometry
     Triangulation<1, 1> T = Triangulation<1, 1>::Interval(0, 1, 4);
-    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/c_shaped");
+    std::string mesh_path = "../data/mesh/c_shaped/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
     // data
     GeoFrame data(D, T);
     auto& l1 = data.insert_scalar_layer<POINT, POINT>("l1", std::pair {"../data/gsr/05/locs.csv", MESH_NODES});
     l1.load_csv<double>("../data/gsr/05/response.csv");
     l1.load_csv<double>("../data/gsr/05/design_matrix.csv");
-    // modeling
-    BsSpace Vh(T, 3);
+    // physics
+    FeSpace Vh(D, P1<1>);   // linear finite element in space
     TrialFunction f(Vh);
     TestFunction  v(Vh);
-    auto a = integral(T)(dxx(f) * dxx(v));
-    ScalarField<1, decltype([](const Eigen::Matrix<double, 1, 1>& p) { return 0; })> u;
-    auto F = integral(T)(u * v);
+    auto a_D = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u_D;
+    auto F_D = integral(D)(u_D * v);
 
-    GSRPDE m("y ~ x1 + x2 + f", data, Gamma, fe_separable(Direct, fe_laplace(), std::pair {a, F}));
+    BsSpace Bh(T, 3);   // cubic B-splines in time
+    TrialFunction g(Bh);
+    TestFunction  w(Bh);
+    auto a_T = integral(T)(dxx(g) * dxx(w));
+    ZeroField<1> u_T;
+    auto F_T = integral(T)(u_T * w);
+
+    GSRPDE m(
+      "y ~ x1 + x2 + f", data, fdapde::gamma_distribution(),
+      fe_ls_separable_mono(std::pair {a_D, F_D}, std::pair {a_T, F_T}));
     m.fit(/* lambda = */ 1.491640405739802e-06 , 1.491640405739802e-06);
     
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/gsr/05/field.mtx"));
@@ -133,7 +174,8 @@ TEST(gsr, test_05) {
 TEST(gsr, test_06) {
     // geometry
     Triangulation<1, 1> T = Triangulation<1, 1>::Interval(0, 2. / 3, 3);
-    Triangulation<2, 2> D = read_mesh<2, 2>("../data/mesh/c_shaped");
+    std::string mesh_path = "../data/mesh/c_shaped/";
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
     // data
     GeoFrame data(D, T);
     auto& l1 = data.insert_scalar_layer<POINT, POINT>("l1", std::pair {"../data/gsr/06/locs.csv", MESH_NODES});
@@ -143,12 +185,12 @@ TEST(gsr, test_06) {
     // physics
     FeSpace Vh(D, P1<1>);
     TrialFunction f(Vh);
-    TestFunction v(Vh);
+    TestFunction  v(Vh);
     auto a = integral(D)(dot(grad(f), grad(v)));
-    ScalarField<2, decltype([](const Eigen::Matrix<double, 2, 1>& p) { return 0; })> u;
+    ZeroField<2> u;
     auto F = integral(D)(u * v);
     // modeling
-    GSRPDE m("y ~ x1 + x2 + f", data, Gamma, fe_parabolic(Direct, std::pair {a, F}, ic));
+    GSRPDE m("y ~ x1 + x2 + f", data, fdapde::gamma_distribution(), fe_ls_parabolic_mono(std::pair {a, F}, ic));
     m.fit(/* lambda = */ std::pow(0.1, 2.5) / data[0].rows(), std::pow(0.1, 2.5));
 
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/gsr/06/field.mtx"));

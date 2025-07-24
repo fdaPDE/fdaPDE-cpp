@@ -136,7 +136,7 @@ TEST(sr, test_04) {
     // calibration
     std::vector<double> lambda_grid(13);
     for (int i = 0; i < 13; ++i) { lambda_grid[i] = std::pow(10, -6.0 + 0.25 * i) / data[0].rows(); }
-    GridOptimizer<1> optimizer;
+    GridSearch<1> optimizer;
     optimizer.optimize(m.gcv(100, 476813), lambda_grid);
 
     EXPECT_TRUE(almost_equal<double>(optimizer.values(), "../data/sr/04/gcvs.mtx"));
@@ -171,7 +171,7 @@ TEST(sr, test_05) {
     // calibration
     std::vector<double> lambda_grid(25);
     for (int i = 0; i < 25; ++i) { lambda_grid[i] = std::pow(10, -3.0 + 0.25 * i) / data[0].rows(); }
-    GridOptimizer<1> optimizer;
+    GridSearch<1> optimizer;
     optimizer.optimize(m.gcv(100, 66546513), lambda_grid);
 
     EXPECT_TRUE(almost_equal<double>(optimizer.values(), "../data/sr/05/gcvs.mtx"));

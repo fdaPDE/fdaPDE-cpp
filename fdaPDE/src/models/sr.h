@@ -35,7 +35,7 @@ class SRPDE {
     template <typename GeoFrame, typename Penalty>
     SRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) noexcept :
         solver_(), geo_category_(gf[0].category().begin(), gf[0].category().end()) {
-        discretize(penalty.get().penalty);
+        discretize(penalty.get());
         analyze_data(formula, gf);
     }
     // modifiers
@@ -349,7 +349,8 @@ class SRPDE {
 
 // deduction guide
 template <typename GeoFrame, typename Penalty>
-SRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& solver) -> SRPDE<typename Penalty::solver_t>;
+SRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& solver)
+  -> SRPDE<typename std::decay_t<Penalty>::solver_t>;
 
 }   // namespace fdapde
 

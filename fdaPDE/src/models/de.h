@@ -32,8 +32,8 @@ class DEPDE {
 
     DEPDE() noexcept = default;
     template <typename GeoFrame, typename Penalty> DEPDE(const GeoFrame& gf, Penalty&& penalty) noexcept : solver_() {
-        analyze_data(gf);
         discretize(penalty.get());
+        analyze_data(gf);
     }
     template <typename... Args> const vector_t& fit(Args&&... args) { return solver_.fit(std::forward<Args>(args)...); }
     template <typename... Args> void discretize(Args&&... args) { solver_.discretize(std::forward<Args>(args)...); }
@@ -57,7 +57,7 @@ class DEPDE {
 
 // deduction guide
 template <typename GeoFrame, typename Penalty>
-DEPDE(const GeoFrame& gf, Penalty&& solver) -> DEPDE<typename Penalty::solver_t>;
+DEPDE(const GeoFrame& gf, Penalty&& solver) -> DEPDE<typename std::decay_t<Penalty>::solver_t>;
 
 }   // namespace fdapde
 

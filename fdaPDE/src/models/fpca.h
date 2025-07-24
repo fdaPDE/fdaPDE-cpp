@@ -76,8 +76,7 @@ template <typename VariationalSolver> class fpca_power_iteration_impl {
             } break;
             case OptimizeGCV: {
                 auto gcv_functor = [&](auto lambda) { return gcv_(X, lambda, V.col(i)); };
-                // GridOptimizer<n_lambda> optimizer;
-                GridOptimizer<n_lambda> optimizer;
+                GridSearch<n_lambda> optimizer;
                 opt_lambda = optimizer.optimize(gcv_functor, lambda_grid);
             } break;
             case OptimizeMSRE: {
@@ -197,8 +196,7 @@ template <typename VariationalSolver> class fpca_subspace_iteration_impl {
         } break;
         case OptimizeGCV: {
             auto gcv_functor = [&](auto lambda) { return gcv_(X, rank, lambda, V); };
-            // GridOptimizer<n_lambda> optimizer;
-            GridOptimizer<n_lambda> optimizer;
+            GridSearch<n_lambda> optimizer;
             opt_lambda = optimizer.optimize(gcv_functor, lambda_grid);
         } break;
         case OptimizeMSRE: {
@@ -312,8 +310,7 @@ template <typename VariationalSolver> class fpca_direct_impl {
         } break;
         case OptimizeGCV: {
             auto gcv_functor = [&](auto lambda) { return gcv_(X, rank, lambda, flag); };
-            // GridOptimizer<n_lambda> optimizer;
-            GridOptimizer<n_lambda> optimizer;
+            GridSearch<n_lambda> optimizer;
             opt_lambda = optimizer.optimize(gcv_functor, lambda_grid);
         } break;
         case OptimizeMSRE: {

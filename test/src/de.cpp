@@ -42,7 +42,7 @@ TEST(de, test_01) {
     // modeling
     DEPDE m(data, fe_de_elliptic(a, F));
     m.set_llik_tolerance(1e-15);
-    m.fit(0.1, g_init, BFGS<Dynamic> {500, 1e-5, 1e-2});
+    m.fit(0.1, g_init, BFGS<Dynamic>(500, 1e-5, 1e-2));
 
     EXPECT_TRUE(almost_equal<double>(m.log_density(), "../data/de/01/log_density.mtx"));
 }
@@ -64,7 +64,7 @@ TEST(de, test_02) {
     auto F = integral(D)(u * v);
     // modeling
     DEPDE m(data, fe_de_elliptic(a, F));
-    m.fit(0.1, g_init, GradientDescent<Dynamic, BacktrackingLineSearch> {1000, 1e-5, 1e-2});
+    m.fit(0.1, g_init, GradientDescent<Dynamic>(1000, 1e-5, 1e-2), BacktrackingLineSearch());
 
     EXPECT_TRUE(almost_equal<double>(m.log_density(), "../data/de/02/log_density.mtx"));
 }
@@ -99,8 +99,8 @@ TEST(de, test_03) {
     // modeling
     DEPDE m(data, fe_de_separable(std::pair {a_D, F_D}, std::pair {a_T, F_T}));
     m.set_llik_tolerance(1e-15);
-    m.fit(0.00025, 0.01, g_init, BFGS<Dynamic> {100, 1e-5, 1e-2});
-    
+    m.fit(0.00025, 0.01, g_init, BFGS<Dynamic>(100, 1e-5, 1e-2));
+
     EXPECT_TRUE(almost_equal<double>(m.log_density(), "../data/de/03/log_density.mtx"));
 }
 

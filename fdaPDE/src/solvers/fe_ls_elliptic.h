@@ -36,9 +36,13 @@ struct fe_ls_elliptic {
     template <typename DataLocs>
     static constexpr bool is_valid_data_locs_descriptor_v =
       std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>;
-    template <typename InfoT> struct is_valid_info_t {
-        static constexpr bool value = requires(InfoT info) { info.penalty; };
+    template <typename Penalty> struct is_valid_penalty {
+        static constexpr bool value = requires(Penalty penalty) {
+            penalty.bilinear_form();
+            penalty.linear_form();
+        };
     };
+    template <typename Penalty> static constexpr bool is_valid_penalty_v = is_valid_penalty<Penalty>::value;
 
     // evaluation of basis system at spatial locations
     template <typename DataLocs>
@@ -99,39 +103,40 @@ struct fe_ls_elliptic {
 
     fe_ls_elliptic() noexcept = default;
     // construct from formula + geoframe
-    template <typename GeoFrame, typename InfoT, typename WeightMatrix>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_ls_elliptic(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : W_(W) {
+    template <typename GeoFrame, typename Penalty, typename WeightMatrix>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_ls_elliptic(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
-        discretize(info.penalty);
+        discretize(penalty);
 	analyze_data(formula, gf, W);
     }
-    template <typename GeoFrame, typename InfoT>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_ls_elliptic(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
-        fe_ls_elliptic(formula, gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    template <typename GeoFrame, typename Penalty>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_ls_elliptic(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) :
+        fe_ls_elliptic(formula, gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
     // construct with no data
-    template <typename GeoFrame, typename InfoT, typename WeightMatrix>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_ls_elliptic(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : W_(W) {
+    template <typename GeoFrame, typename Penalty, typename WeightMatrix>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_ls_elliptic(const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
-        discretize(info.penalty);
+        discretize(penalty);
         eval_basis_at_(gf);
     }
-    template <typename GeoFrame, typename InfoT>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_ls_elliptic(const GeoFrame& gf, InfoT&& info) :
-        fe_ls_elliptic(gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    template <typename GeoFrame, typename Penalty>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_ls_elliptic(const GeoFrame& gf, Penalty&& penalty) :
+        fe_ls_elliptic(gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
 
     // perform finite element based numerical discretization
     template <typename Penalty> void discretize(Penalty&& penalty) {
-        fdapde_static_assert(internals::is_valid_penalty_pair_v<Penalty>, INVALID_PENALTY_DESCRIPTION);
-        using BilinearForm = std::tuple_element_t<0, std::decay_t<Penalty>>;
-        using LinearForm = std::tuple_element_t<1, std::decay_t<Penalty>>;
+        using BilinearForm = typename std::decay_t<Penalty>::BilinearForm;
+        using LinearForm = typename std::decay_t<Penalty>::LinearForm;
+        fdapde_static_assert(
+          internals::is_valid_penalty_pair_v<BilinearForm FDAPDE_COMMA LinearForm>, INVALID_PENALTY_DESCRIPTION);
         using FeSpace = typename BilinearForm::TrialSpace;
 	// discretization
-        const BilinearForm& bilinear_form = std::get<0>(penalty);
-        const LinearForm& linear_form = std::get<1>(penalty);
+        const BilinearForm& bilinear_form = penalty.bilinear_form();
+        const LinearForm& linear_form = penalty.linear_form();
         n_dofs_ = bilinear_form.n_dofs();   // number of basis functions over physical domain
         internals::fe_mass_assembly_loop<FeSpace> mass_assembler(bilinear_form.trial_space());
         R0_ = mass_assembler.assemble();
@@ -483,19 +488,29 @@ struct fe_ls_elliptic {
 
 }   // namespace internals
 
-// elliptic solver factory
-template <typename BilinearForm, typename LinearForm> struct fe_ls_elliptic {
+// elliptic solver API
+template <typename BilinearForm_, typename LinearForm_> struct fe_ls_elliptic {
     using solver_t = internals::fe_ls_elliptic;
    private:
-    struct info_t {
-        std::tuple<BilinearForm, LinearForm> penalty;
+    struct penalty_packet {
+        using BilinearForm = std::decay_t<BilinearForm_>;
+        using LinearForm = std::decay_t<LinearForm_>;
+       private:
+        BilinearForm bilinear_form_;
+        LinearForm linear_form_;
+       public:
+        penalty_packet(const BilinearForm_& bilinear_form, const LinearForm_& linear_form) :
+            bilinear_form_(bilinear_form), linear_form_(linear_form) { }
+        // observers
+        const BilinearForm& bilinear_form() const { return bilinear_form_; }
+        const LinearForm& linear_form() const { return linear_form_; }
     };
    public:
-    fe_ls_elliptic(const BilinearForm& bilinear_form, const LinearForm& linear_form) :
-        info_(std::make_tuple(bilinear_form, linear_form)) { }
-    const info_t& get() const { return info_; }
+    fe_ls_elliptic(const BilinearForm_& bilinear_form, const LinearForm_& linear_form) :
+        penalty_(bilinear_form, linear_form) { }
+    const penalty_packet& get() const { return penalty_; }
    private:
-    info_t info_;
+    penalty_packet penalty_;
 };
 
 }   // namespace fdapde

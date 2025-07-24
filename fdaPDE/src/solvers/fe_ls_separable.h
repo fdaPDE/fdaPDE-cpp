@@ -36,9 +36,23 @@ class fe_ls_separable_mono {
     template <typename DataLocs>
     static constexpr bool is_valid_data_locs_descriptor_v =
       std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>;
-    template <typename InfoT> struct is_valid_info_t {
-        static constexpr bool value = requires(InfoT info) { info.penalty; };
+    template <typename Penalty> struct is_valid_penalty {
+       private:
+        using LhsPenalty = typename Penalty::LhsPenalty;
+        using RhsPenalty = typename Penalty::RhsPenalty;
+        template <typename Penalty_> struct is_valid_penalty_impl {
+            static constexpr bool value = requires(Penalty_ penalty) {
+                penalty.bilinear_form();
+                penalty.linear_form();
+            };
+        };
+       public:
+        static constexpr bool value = requires(Penalty penalty) {
+            penalty.lhs_penalty();
+            penalty.rhs_penalty();
+        } && is_valid_penalty_impl<LhsPenalty>::value && is_valid_penalty_impl<RhsPenalty>::value;
     };
+    template <typename Penalty> static constexpr bool is_valid_penalty_v = is_valid_penalty<Penalty>::value;
 
     template <typename Tuple> struct function_space_tuple {
         using type = decltype([]<size_t... Is_>(std::index_sequence<Is_...>) {
@@ -48,12 +62,12 @@ class fe_ls_separable_mono {
     template <typename Penalty1, typename Penalty2>
     const auto& fe_penalty_(const Penalty1& penalty1, const Penalty2& penalty2) const {
         return select_one_between(
-          penalty1, penalty2, []() { return  is_fe_space_v<typename std::tuple_element_t<0, Penalty1>::TrialSpace>; });
+          penalty1, penalty2, []() { return  is_fe_space_v<typename Penalty1::BilinearForm::TrialSpace>; });
     }
     template <typename Penalty1, typename Penalty2>
     const auto& bs_penalty_(const Penalty1& penalty1, const Penalty2& penalty2) const {
         return select_one_between(
-          penalty1, penalty2, []() { return !is_fe_space_v<typename std::tuple_element_t<0, Penalty1>::TrialSpace>; });
+          penalty1, penalty2, []() { return !is_fe_space_v<typename Penalty1::BilinearForm::TrialSpace>; });
     }
    public:
     static constexpr int n_lambda = 2;
@@ -109,55 +123,57 @@ class fe_ls_separable_mono {
         Psi_ = kronecker(Psi__[1], Psi__[0]);
         return;
     }
-    // unrolls the penalty tuple and injects them into discretize()
-    template <typename Penalty> void discretize_loop_(Penalty&& penalty) {
-        internals::apply_index_pack<n_lambda>(
-          [&]<int... Ns_>() { discretize([&]() { return std::get<Ns_>(penalty); }()...); });
-        return;
-    }
    public:
     fe_ls_separable_mono() noexcept = default;
     // construct from formula + geoframe
-    template <typename GeoFrame, typename WeightMatrix, typename InfoT>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_ls_separable_mono(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) {
+    template <typename GeoFrame, typename WeightMatrix, typename Penalty>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_ls_separable_mono(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
 	fdapde_assert(gf.n_layers() == 1);
         n_obs_  = gf[0].rows();
         n_locs_ = n_obs_;
 
-        discretize_loop_(info.penalty);
+        discretize(penalty);
         analyze_data(formula, gf, W);
     }
-    template <typename GeoFrame, typename InfoT>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_ls_separable_mono(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
-        fe_ls_separable_mono(formula, gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    template <typename GeoFrame, typename Penalty>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_ls_separable_mono(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) :
+        fe_ls_separable_mono(formula, gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
     // construct with no data
-    template <typename GeoFrame, typename InfoT, typename WeightMatrix>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_ls_separable_mono(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : W_(W) {
+    template <typename GeoFrame, typename Penalty, typename WeightMatrix>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_ls_separable_mono(const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
 	fdapde_assert(gf.n_layers() == 1);
         n_obs_  = gf[0].rows();
 	n_locs_ = n_obs_;
 
-	discretize_loop_(info.penalty);
+	discretize(penalty);
 	eval_basis_at_(gf);
     }
-    template <typename GeoFrame, typename InfoT>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_ls_separable_mono(const GeoFrame& gf, InfoT&& info) :
-        fe_ls_separable_mono(gf, info.penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    template <typename GeoFrame, typename Penalty>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_ls_separable_mono(const GeoFrame& gf, Penalty&& penalty) :
+        fe_ls_separable_mono(gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
 
     // numerical discretization
-    template <typename Penalty1, typename Penalty2> void discretize(Penalty1&& penalty1, Penalty2&& penalty2) {
+    template <typename Penalty> void discretize(Penalty&& penalty) {
+        using LhsPenalty = typename std::decay_t<Penalty>::LhsPenalty;
+        using LhsBilinearForm = typename LhsPenalty::BilinearForm;
+        using LhsLinearForm = typename LhsPenalty::LinearForm;
         fdapde_static_assert(
-          internals::is_valid_penalty_pair_v<Penalty1> && internals::is_valid_penalty_pair_v<Penalty2>,
-          INVALID_PENALTY_DESCRIPTION);
-        using BilinearForms =
-          std::tuple<std::tuple_element_t<0, std::decay_t<Penalty1>>, std::tuple_element_t<0, std::decay_t<Penalty2>>>;
-        using FunctionSpaces = typename function_space_tuple<BilinearForms>::type;
+          internals::is_valid_penalty_pair_v<LhsBilinearForm FDAPDE_COMMA LhsLinearForm>, INVALID_PENALTY_DESCRIPTION);
+        const LhsPenalty& penalty1 = penalty.lhs_penalty();
+        using RhsPenalty = typename std::decay_t<Penalty>::RhsPenalty;
+        using RhsBilinearForm = typename RhsPenalty::BilinearForm;
+        using RhsLinearForm = typename RhsPenalty::LinearForm;
+        fdapde_static_assert(
+          internals::is_valid_penalty_pair_v<RhsBilinearForm FDAPDE_COMMA RhsLinearForm>, INVALID_PENALTY_DESCRIPTION);
+        const RhsPenalty& penalty2 = penalty.rhs_penalty();
+	
+        using FunctionSpaces = typename function_space_tuple<std::tuple<LhsBilinearForm, RhsBilinearForm>>::type;
         using FS1 = std::tuple_element_t<0, FunctionSpaces>;
         using FS2 = std::tuple_element_t<1, FunctionSpaces>;
         // one penalty must be on a FeSpace
@@ -170,8 +186,8 @@ class fe_ls_separable_mono {
         const auto& fe_penalty = fe_penalty_(penalty1, penalty2);
         const auto& bs_penalty = bs_penalty_(penalty1, penalty2);
         // get references to bilinear and linear forms
-        auto bilinear_form = std::tie(std::get<0>(fe_penalty), std::get<0>(bs_penalty));
-        auto linear_form   = std::tie(std::get<1>(fe_penalty), std::get<1>(bs_penalty));
+        auto bilinear_form = std::tie(fe_penalty.bilinear_form(), bs_penalty.bilinear_form());
+        auto linear_form = std::tie(fe_penalty.linear_form(), bs_penalty.linear_form());
         {
             const BsSpace& bs_space = std::get<bs_space_index>(bilinear_form).trial_space();
             fdapde_assert(bs_space.sobolev_regularity() > 1);
@@ -529,26 +545,6 @@ class fe_ls_separable_mono {
     bool W_changed_;
 };
 
-}   // namespace internals
-
-// separable monolithic solver method
-template <typename... Penalty>
-    requires(sizeof...(Penalty) == 2 && (internals::is_valid_penalty_pair_v<Penalty> && ...))
-struct fe_ls_separable_mono {
-    using solver_t = internals::fe_ls_separable_mono;
-   private:
-    struct info_t {
-        std::tuple<Penalty...> penalty;
-    };
-   public:
-    fe_ls_separable_mono(const Penalty&... penalty) : info_(std::make_tuple(penalty...)) { }
-    const info_t& get() const { return info_; }
-   private:
-    info_t info_;
-};
-
-namespace internals {
-
 // central difference time integration loop
 class fe_ls_separable_cdti {
    private:
@@ -562,14 +558,16 @@ class fe_ls_separable_cdti {
     template <typename DataLocs>
     static constexpr bool is_valid_data_locs_descriptor_v =
       std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>;
-    template <typename InfoT> struct is_valid_info_t {
-        static constexpr bool value = requires(InfoT info) {
-            info.penalty;
-	    info.max_iter;
-	    info.tol;
+    template <typename Penalty> struct is_valid_penalty {
+        static constexpr bool value = requires(Penalty penalty) {
+            penalty.bilinear_form();
+            penalty.linear_form();
+            penalty.max_iter();
+            penalty.tol();
         };
     };
-  
+    template <typename Penalty> static constexpr bool is_valid_penalty_v = is_valid_penalty<Penalty>::value;
+
     class block_map_t {
         static constexpr int Order = 3;
         using Scalar = double;
@@ -688,27 +686,25 @@ class fe_ls_separable_cdti {
     using solver_category = ls_solver;
 
     fe_ls_separable_cdti() noexcept = default;
-    template <typename GeoFrame, typename InfoT, typename WeightMatrix>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_ls_separable_cdti(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
-        max_iter_(info.max_iter), tol_(info.tol) {
+    template <typename GeoFrame, typename Penalty, typename WeightMatrix>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_ls_separable_cdti(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
 	fdapde_assert(gf.n_layers() == 1);
         n_obs_  = gf[0].rows();
         n_locs_ = n_obs_;
 
-        discretize(info.penalty);
+        discretize(penalty);
         analyze_data(formula, gf, W);
     }
-    template <typename GeoFrame, typename InfoT>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_ls_separable_cdti(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
-        fe_ls_separable_cdti(formula, gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    template <typename GeoFrame, typename Penalty>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_ls_separable_cdti(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) :
+        fe_ls_separable_cdti(formula, gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
     // construct with no data
-    template <typename GeoFrame, typename InfoT, typename WeightMatrix>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_ls_separable_cdti(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
-        W_(W), max_iter_(info.max_iter), tol_(info.tol) {
+    template <typename GeoFrame, typename Penalty, typename WeightMatrix>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_ls_separable_cdti(const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
 	fdapde_assert(gf.n_layers() == 1);
 	n_obs_  = gf[0].rows();
@@ -725,27 +721,28 @@ class fe_ls_separable_cdti {
             fdapde_assert(DeltaT_ > 0 && lag_i > 0 && almost_equal(DeltaT_ FDAPDE_COMMA lag_i));
         }
 
-        discretize(info.penalty);
+        discretize(penalty);
         u_.resize(n_dofs_ * m_);
         for (int i = 0; i < m_; ++i) { u_.segment(i * n_dofs_, n_dofs_) = u_space_; }
         eval_spatial_basis_at_(gf);
     }
-    template <typename GeoFrame, typename InfoT>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_ls_separable_cdti(const GeoFrame& gf, InfoT&& info) :
-        fe_ls_separable_cdti(gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    template <typename GeoFrame, typename Penalty>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_ls_separable_cdti(const GeoFrame& gf, Penalty&& penalty) :
+        fe_ls_separable_cdti(gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
 
     template <typename Penalty> void discretize(Penalty&& penalty) {
-        // fdapde_static_assert(internals::is_valid_penalty_pair_v<Penalty>, INVALID_PENALTY_DESCRIPTION);
-        using BilinearForm = std::tuple_element_t<0, std::decay_t<Penalty>>;
-        using LinearForm = std::tuple_element_t<1, std::decay_t<Penalty>>;
+        using BilinearForm = typename std::decay_t<Penalty>::BilinearForm;
+        using LinearForm = typename std::decay_t<Penalty>::LinearForm;
+        fdapde_static_assert(
+          internals::is_valid_penalty_pair_v<BilinearForm FDAPDE_COMMA LinearForm>, INVALID_PENALTY_DESCRIPTION);
         using FeSpace = typename BilinearForm::TrialSpace;
         fdapde_static_assert(
           std::is_same_v<typename FeSpace::discretization_category FDAPDE_COMMA finite_element_tag>,
           NO_FINITE_ELEMENT_SPACE_DETECTED);
         // discretization
-        const BilinearForm& bilinear_form = std::get<0>(penalty);
-        const LinearForm& linear_form = std::get<1>(penalty);
+        const BilinearForm& bilinear_form = penalty.bilinear_form();
+        const LinearForm& linear_form = penalty.linear_form();
         n_dofs_ = bilinear_form.n_dofs();
         internals::fe_mass_assembly_loop<FeSpace> mass_assembler(bilinear_form.trial_space());
         R0_ = mass_assembler.assemble();
@@ -758,6 +755,9 @@ class fe_ls_separable_cdti {
         areal_eval_ = [fe_space = bilinear_form.trial_space()](const binary_t& locs) -> decltype(auto) {
             return internals::areal_basis_eval(fe_space, locs);
         };
+	// store numerical scheme parameters
+	max_iter_ = penalty.max_iter();
+	tol_ = penalty.tol();
 	return;
     }
     // non-parametric fit
@@ -788,7 +788,7 @@ class fe_ls_separable_cdti {
             u_.resize(n_dofs_ * m_);
             for (int i = 0; i < m_; ++i) { u_.segment(i * n_dofs_, n_dofs_) = u_space_; }
         }
-        update_response_and_weights(y, W);
+        // update_response_and_weights(y, W);
         return;
     }
     // fit from formula
@@ -1024,23 +1024,73 @@ class fe_ls_separable_cdti {
 
 }   // namespace internals
 
-// separable central finite differences time stepping method
+// separable solver API
+// monolithic method
+template <typename... Penalty>
+    requires(sizeof...(Penalty) == 2 && (internals::is_pair_v<Penalty> && ...))
+struct fe_ls_separable_mono {
+    using solver_t = internals::fe_ls_separable_mono;
+   private:
+    struct penalty_packet {
+        template <typename Penalty_> struct penalty_bit {
+            using BilinearForm = std::tuple_element_t<0, std::decay_t<Penalty_>>;
+            using LinearForm = std::tuple_element_t<1, std::decay_t<Penalty_>>;
+           private:
+            BilinearForm bilinear_form_;
+            LinearForm linear_form_;
+           public:
+            penalty_bit(const Penalty_& penalty) :
+                bilinear_form_(std::get<0>(penalty)), linear_form_(std::get<1>(penalty)) { }
+            // observers
+            const BilinearForm& bilinear_form() const { return bilinear_form_; }
+            const LinearForm& linear_form() const { return linear_form_; }
+        };
+        using LhsPenalty = penalty_bit<std::tuple_element_t<0, std::tuple<Penalty...>>>;
+        using RhsPenalty = penalty_bit<std::tuple_element_t<1, std::tuple<Penalty...>>>;
+
+        penalty_packet(const Penalty&... penalty) : penalty_(penalty...) { }
+        // observers
+        const LhsPenalty& lhs_penalty() const { return std::get<0>(penalty_); }
+        const RhsPenalty& rhs_penalty() const { return std::get<1>(penalty_); }
+       private:
+        std::tuple<penalty_bit<Penalty>...> penalty_;
+    };
+   public:
+    fe_ls_separable_mono(const Penalty&... penalty) : penalty_(penalty...) { }
+    const penalty_packet& get() const { return penalty_; }
+   private:
+    penalty_packet penalty_;
+};
+
+// central finite differences time stepping method
 template <typename Penalty>
-    requires(internals::is_valid_penalty_pair_v<Penalty>)
+    requires(internals::is_pair_v<Penalty>)
 struct fe_ls_separable_cdti {
     using solver_t = internals::fe_ls_separable_cdti;
    private:
-    struct info_t {
-        Penalty penalty;
-        int max_iter = 50;
-        double tol = 1e-4;
+    struct penalty_packet {
+        using BilinearForm = std::tuple_element_t<0, std::decay_t<Penalty>>;
+        using LinearForm = std::tuple_element_t<1, std::decay_t<Penalty>>;
+       private:
+        BilinearForm bilinear_form_;
+        LinearForm linear_form_;
+        int max_iter_ = 50;
+        double tol_ = 1e-4;
+       public:
+        penalty_packet(const BilinearForm& bilinear_form, const LinearForm& linear_form, int max_iter, double tol) :
+            bilinear_form_(bilinear_form), linear_form_(linear_form), max_iter_(max_iter), tol_(tol) { }
+        // observers
+        const BilinearForm& bilinear_form() const { return bilinear_form_; }
+        const LinearForm& linear_form() const { return linear_form_; }
+        int max_iter() const { return max_iter_; }
+        double tol() const { return tol_; }
     };
    public:
     fe_ls_separable_cdti(const Penalty& penalty, int max_iter = 50, double tol = 1e-4) :
-        info_(penalty, max_iter, tol) { }
-    const info_t& get() const { return info_; }
+        penalty_(std::get<0>(penalty), std::get<1>(penalty), max_iter, tol) { }
+    const penalty_packet& get() const { return penalty_; }
    private:
-    info_t info_;
+    penalty_packet penalty_;
 };
 
 }   // namespace fdapde

@@ -32,10 +32,10 @@ template <typename VariationalSolver> class QSRPDE {
     template <typename GeoFrame, typename Penalty>
     QSRPDE(const std::string& formula, const GeoFrame& gf, double alpha, Penalty&& penalty) noexcept :
         solver_(), alpha_(alpha) {
-        discretize(penalty.get().penalty);
+        discretize(penalty.get());
         analyze_data(formula, gf);
     }
-    template <typename GeoFrame, typename Penalty>
+    template <typename GeoFrame, typename Penalty>   // default to median fitting
     QSRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) noexcept :
         QSRPDE(formula, gf, 0.5, penalty) { }
 
