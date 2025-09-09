@@ -278,7 +278,7 @@ class fe_ls_separable_mono {
         // parse formula, extract response vector and design matrix
         Formula formula_(formula);
         std::vector<std::string> covs;
-        for (const std::string& token : formula_.rhs()) {
+        for (const std::string& token : formula_.covs()) {
             if (gf.contains(token)) { covs.push_back(token); }
         }
         bool require_woodbury_realloc = std::cmp_not_equal(n_covs_, covs.size());

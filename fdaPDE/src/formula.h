@@ -20,11 +20,41 @@
 namespace fdapde {
 
 class Formula {
+    // available tokens
+    struct efx_token {
+       private:
+        std::string cov_;
+        std::string efx_;
+       public:
+        efx_token(const std::string& cov, const std::string& efx) : cov_(cov), efx_(efx) { }
+        // observers
+        const std::string& cov() const { return cov_; }
+        const std::string& efx() const { return efx_; }
+        friend std::ostream& operator<<(std::ostream& os, const efx_token& m) {
+            os << "(" << m.cov_ << ", " << m.efx_ << ")";
+            return os;
+        }
+    };
+
     std::string lhs_;
-    std::vector<std::string> rhs_;
+    std::vector<std::string> covs_;
+    std::vector<efx_token> efxs_;
 
     void throw_parse_error_(const std::string& msg) {
         throw std::runtime_error(std::string("Formula parse error: ") + msg);
+    }
+    void analyze_token_(std::string token) {
+        size_t pos = token.find('|');
+        if (pos != std::string::npos) {
+            std::string cov_token, efx_token;
+            cov_token = token.substr(0, pos);
+            token.erase(0, pos + 1);
+            efx_token = token;
+            efxs_.emplace_back(cov_token, efx_token);
+        } else {
+            covs_.push_back(token);
+        }
+        return;
     }
    public:
     Formula() noexcept = default;
@@ -37,20 +67,21 @@ class Formula {
         // rhs parsing logic
         std::string rhs = formula.substr(tilde + 1, formula.size() - tilde - 1);
         std::erase(rhs, ' ');
-	if (rhs.empty())  { throw_parse_error_("no rhs found."); }
+        if (rhs.empty()) { throw_parse_error_("no rhs found."); }
         size_t pos = rhs.find('+');
         std::string token;
         while (pos != std::string::npos) {
             token = rhs.substr(0, pos);
-            rhs_.push_back(token);
+            analyze_token_(token);
             rhs.erase(0, pos + 1);
-	    pos = rhs.find('+');
+            pos = rhs.find('+');
         }
-        rhs_.push_back(rhs);
+        analyze_token_(rhs);
     }
     // observers
     const std::string& lhs() const { return lhs_; }
-    const std::vector<std::string>& rhs() const { return rhs_; }
+    const std::vector<std::string>& covs() const { return covs_; }
+    const std::vector<efx_token>& efxs() const { return efxs_; }
 };
 
 }   // namespace fdapde
