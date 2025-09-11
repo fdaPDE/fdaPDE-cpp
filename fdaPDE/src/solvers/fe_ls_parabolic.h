@@ -413,7 +413,7 @@ class fe_ls_parabolic_mono {
     // hutchinson approximation for Tr[S]
     double edf(int r = 100, int seed = random_seed) {
         fdapde_assert(lambda_saved_.has_value());
-        if (!Ys_.has_value() || !Bs_.has_value()) {
+        if (!Ys_.has_value() || !Bs_.has_value() || r != Us_->rows()) {   // force reconstruction if r differs from old
             int seed_ = (seed == random_seed) ? std::random_device()() : seed;
             std::mt19937 rng(seed_);
             rademacher_distribution rademacher;
