@@ -66,6 +66,10 @@ class GSRPDE {
         for (const std::string& token : formula_.covs()) {
             if (gf.contains(token)) { n_covs_++; }
         }
+
+        // save NAN pattern before correction with zeros 
+        na_pattern_ = na_matrix(gf[0].data().template col<double>(formula_.lhs()));
+    
         solver_.analyze_data(formula, gf, W);
         y_ = solver_.response();
     }
@@ -122,6 +126,8 @@ class GSRPDE {
         if (n_covs_ != 0) { fitted_ += solver_.design_matrix() * beta(); }
         return fitted_;
     }
+    const BinaryMatrix<-1, 1>& na_pattern() const {return na_pattern_;}
+
 
     // Generalized Cross Validation index
     struct gcv_t : public ScalarFieldBase<n_lambda, gcv_t> {
@@ -161,9 +167,19 @@ class GSRPDE {
                 edf_cache_[lambda_vec] = model_->edf(r_, seed_);
             }
             double dor = n_ - (q_ + edf_cache_.at(lambda_vec));   // residual degrees of freedom
-	    // compute total deviance
+	        
+            
+            // compute total deviance
             vector_t mu = model_->distr_->inv_link(model_->fitted());
-            return (n_ / std::pow(dor, 2)) * model_->distr_->deviance(mu, model_->y_);
+            vector_t deviance = model_->distr_->deviance(mu, model_->y_); 
+            double norm = 0.;  
+            // compute norm only on observed data
+            for (int i = 0; i < mu.size(); ++i) {
+                if (!model_->na_pattern()[i]) norm += deviance.coeff(i, 0);
+            }
+            
+            return (n_ / std::pow(dor, 2)) * norm;
+            // return (n_ / std::pow(dor, 2)) * model_->distr_->deviance(mu, model_->y_);
         }
         // observers
         const edf_cache_t& edf_cache() const { return edf_cache_; }
@@ -185,6 +201,7 @@ class GSRPDE {
   
    private:
     vector_t y_;
+    BinaryMatrix<-1, 1> na_pattern_;
     vector_t mu_;          // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : mean vector at step k
     vector_t py_;          // \tilde y^k = G^k(y-u^k) + \theta^k
     vector_t pW_;          // diagonal of W^k = ((G^k)^{-2})*((V^k)^{-1})

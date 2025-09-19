@@ -49,6 +49,11 @@ class SRPDE {
         for (const std::string& token : formula_.covs()) {
             if (gf.contains(token)) { n_covs_++; }
         }
+
+        // save NAN pattern before correction with zeros 
+        na_pattern_ = na_matrix(gf[0].data().template col<double>(formula_.lhs()));
+    
+
         solver_.analyze_data(formula, gf, W);
     }
     template <typename GeoFrame> void analyze_data(const std::string& formula, const GeoFrame& gf) {
@@ -73,6 +78,8 @@ class SRPDE {
         }
         return fitted_;
     }
+    const BinaryMatrix<-1, 1>& na_pattern() const {return na_pattern_;}
+
 
     // Generalized Cross Validation index
     struct gcv_t : public ScalarFieldBase<n_lambda, gcv_t> {
@@ -112,7 +119,17 @@ class SRPDE {
                 edf_cache_[lambda_vec] = model_->edf(r_, seed_);
             }
             double dor = n_ - (q_ + edf_cache_.at(lambda_vec));   // residual degrees of freedom
-            return (n_ / std::pow(dor, 2)) * (model_->fitted() - model_->response()).squaredNorm();
+            
+            double norm = 0.;
+            vector_t op1 = model_->response();            
+            vector_t op2 = model_->fitted();
+            // compute norm only on observed data
+            for (int i = 0; i < op1.size(); ++i) {
+                if (!model_->na_pattern()[i]) norm += (op2.coeff(i, 0) - op1.coeff(i, 0))*(op2.coeff(i, 0) - op1.coeff(i, 0));
+            }
+            return (n_ / std::pow(dor, 2)) * norm;   
+            
+            // return (n_ / std::pow(dor, 2)) * (model_->fitted() - model_->response()).squaredNorm();
         }
         // observers
         const edf_cache_t& edf_cache() const { return edf_cache_; }
@@ -345,6 +362,7 @@ class SRPDE {
     solver_t solver_;
     int n_obs_ = 0, n_covs_ = 0;
     std::vector<ltype> geo_category_;
+    BinaryMatrix<-1, 1> na_pattern_; 
 };
 
 // deduction guide

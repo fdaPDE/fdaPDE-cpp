@@ -27,6 +27,7 @@
 #include "src/models/sr.h"
 #include "src/models/gsr.h"
 #include "src/models/qsr.h"
+#include "src/models/msr.h"
 
 // clang-format on
 

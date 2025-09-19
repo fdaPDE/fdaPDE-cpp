@@ -451,6 +451,7 @@ struct fe_ls_elliptic {
     const vector_t& response() const { return y_; }
     const sparse_matrix_t& weights() const { return W_; }
     double lambda() const { return *lambda_saved_; }
+    unsigned int n_obs() const { return n_obs_; } // M added
   
     const matrix_t& U() const { return U_; }
     const matrix_t& V() const { return V_; }

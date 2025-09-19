@@ -51,6 +51,10 @@ template <typename VariationalSolver> class QSRPDE {
         for (const std::string& token : formula_.covs()) {
             if (gf.contains(token)) { n_covs_++; }
         }
+
+        // save NAN pattern before correction with zeros 
+        na_pattern_ = na_matrix(gf[0].data().template col<double>(formula_.lhs()));
+    
         solver_.analyze_data(formula, gf, W);
         y_ = solver_.response();
     }
@@ -121,6 +125,8 @@ template <typename VariationalSolver> class QSRPDE {
         if (n_covs_ != 0) { fitted_ += solver_.design_matrix() * beta(); }
         return fitted_;
     }
+    const BinaryMatrix<-1, 1>& na_pattern() const {return na_pattern_;}
+
     // modifiers
     void set_pinball_smoothing_factor(double eps) { eps_ = eps; }
 
@@ -164,7 +170,7 @@ template <typename VariationalSolver> class QSRPDE {
             double dor = n_ - (q_ + edf_cache_.at(lambda_vec));   // residual degrees of freedom
             double pinball = 0;
             for (int i = 0; i < n_; ++i) {
-                pinball += model_->pinball_loss(model_->y_[i] - model_->mu_[i], std::pow(10, model_->eps_));
+                if (!model_->na_pattern()[i]) pinball += model_->pinball_loss(model_->y_[i] - model_->mu_[i], std::pow(10, model_->eps_));
             }
 	    return (std::pow(pinball, 2) / std::pow(dor, 2));
         }
@@ -188,6 +194,7 @@ template <typename VariationalSolver> class QSRPDE {
   
    private:
     vector_t y_;
+    BinaryMatrix<-1, 1> na_pattern_;
     double alpha_ = 0.5;   // quantile order (default to median)
     vector_t py_;          // y - (1 - 2 * alpha) * |y - X * beta - f|
     vector_t pW_;          // diagonal of W^k = 1 / (2 * n * |y - X * beta - f|)

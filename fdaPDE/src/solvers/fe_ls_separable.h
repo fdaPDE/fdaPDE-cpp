@@ -505,6 +505,7 @@ class fe_ls_separable_mono {
     const vector_t& misfit() const { return g_; }
     const matrix_t& design_matrix() const { return X_; }
     const vector_t& response() const { return y_; }
+    unsigned int n_obs() const { return n_obs_; } // M added
    protected:
     std::optional<std::array<double, n_lambda>> lambda_saved_ = std::array<double, n_lambda> {-1, -1};
     sparse_solver_t invA_;
