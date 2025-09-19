@@ -113,14 +113,12 @@ template <typename VariationalSolver> class MSRPDE {
         // }
         // std::cout << std::endl;
 
-        std::cout << "PRE: n_obs_ in analyze_data msr = " << n_obs_ << std::endl;
-        std::cout << "PRE: solver_.n_obs() in analyze_data msr = " << solver_.n_obs() << std::endl;
         solver_.analyze_data(formula, gf, W);   // M qui avviene la normalizzazione di W_ del solver e vengono corrette per i NA la Psi e la y del solver 
         y_ = solver_.response();                // M corretta per NA
         
         n_obs_ = solver_.n_obs(); // M added
-        std::cout << "POST: n_obs_ in analyze_data msr = " << n_obs_ << std::endl;
-        std::cout << "POST: solver_.n_obs() in analyze_data msr = " << solver_.n_obs() << std::endl;
+        std::cout << "n_obs_ = " << n_obs_ << std::endl;
+        std::cout << "number of data = " << gf[0].rows() << std::endl;
     }
     template <typename GeoFrame> void analyze_data(const std::string& formula, const GeoFrame& gf) {
         return analyze_data(formula, gf, vector_t::Ones(gf[0].rows()).asDiagonal());  // ATT ficticious weights initialization
@@ -144,31 +142,19 @@ template <typename VariationalSolver> class MSRPDE {
           args...);
         matrix_t y = y_;
 
-
-        // debug 
-        std::cout << "n_obs() before fit = " << n_obs() << std::endl;
-
         // initialization (nota M: eseguito due volte la prima volta che viene chiamato il fit, ma è necessario farlo se viene chiamato più volte il fit)      
         initial_weights_();   // smart Delta initialization + correction of Z for missing values
         solver_.update_response_and_weights(y, sparse_mat_weights_);   // restore solver state (qui i pesi vengono anche normalizzati)
-        // for debug 
-        for(int i=0; i<n_groups_; ++i)
-            std::cout << " initial sum abs pW_(" << i << ") =" << pW_(i).lpNorm<1>() << std::endl;
-        
-        // debug 
-        std::cout << "n_obs() before fit 2 = " << n_obs() << std::endl;  
 
-
-        // nota: no scale lambda here 
-        // mu_ = solver_.Psi() * solver_.f();   // M: credo non mi serva perché non mi serve mu_ in quanto non mi servono gli abs res.... 
+        // nota: no scale lambda here (only for quantile regression)
+        // mu_ = solver_.Psi() * solver_.f();   // M: no need of mu_ since does not enter in the abs residuals computation.... 
 
         double Jold = std::numeric_limits<double>::max(), Jnew = 0;
         n_iter_ = 0;
-        // max_iter_ = 1; // ATT per debug
         std::cout << "Start FPIRLS with max_iter_=" << max_iter_ << " and tolerance=" << tol_ << std::endl;
         while (n_iter_ < max_iter_ && std::abs(Jnew - Jold) > tol_) {
             
-            std::cout << "FPIRLS iteration " << n_iter_+1 << std::endl;
+            // std::cout << "FPIRLS iteration " << n_iter_+1 << std::endl;
 
             // compute pseudo observations
             py_ = y; 	
@@ -178,11 +164,6 @@ template <typename VariationalSolver> class MSRPDE {
               
             // compute weights
             update_pW_(); 
-
-            // for debug 
-            for(int i=0; i<n_groups_; ++i)
-                std::cout << " sum abs pW_(" << i << ") at iter" << n_iter_+1 << " =" << pW_(i).lpNorm<1>() << std::endl;
-
 
             // set weights and pseudo-observations to zero where there are missing values
             for(std::size_t i=0; i < y.size(); ++i){   // qui voglio loopare su tutto il vettore, non solo su quelli osservati 
@@ -210,16 +191,10 @@ template <typename VariationalSolver> class MSRPDE {
             }
             update_sparse_mat_weights_(); // update sparse_mat_weights_ with current NA pattern of pW_
 
-            // for debug 
-            for(int i=0; i<n_groups_; ++i)
-                std::cout << "POST MISSING CORRECTION: sum abs pW_(" << i << ") at iter" << n_iter_+1 << " =" << pW_(i).lpNorm<1>() << std::endl;
-
             // \argmin_{\beta, f} [ 1/n * \norm(W^{1/2} * (y - X * \beta - f_n))^2 + P_{\lambda}(f) ]
 	        solver_.update_response_and_weights(py_, sparse_mat_weights_);           
             solver_.fit(std::forward<Args>(args)...);
             mu_ = fitted();   // fn + X%*%beta (no random part here!) 
-            // for debug 
-            std::cout << "sum abs mu at iter" << n_iter_+1 << " =" << mu_.lpNorm<1>() << std::endl;
 
             compute_bhat_();          // mu_ is needed here
             compute_sigma_sq_hat_();  // note: default value is false => metodo Melchionda (calcolo senza edf nelle fpirls iterations)  --> so this value is not stochastic since there are no stochastic edf
@@ -237,14 +212,13 @@ template <typename VariationalSolver> class MSRPDE {
             Jnew = data_loss + solver_.ftPf(lambda);
             n_iter_++;
 
-            // for debug
             std::cout << "data_loss=" << data_loss << std::endl; 
             std::cout << "penalty=" << solver_.ftPf(lambda) << std::endl; 
 
-            std::cout << "   DeltaJ at iter" << n_iter_ << " =" << std::abs(Jnew - Jold) << std::endl;
+            std::cout << "|DeltaJ| at iter" << n_iter_ << " =" << std::abs(Jnew - Jold) << std::endl;
         }
 
-        std::cout << "FPIRLS terminated after " << n_iter_ << " iterations with DeltaJ=" << std::abs(Jnew - Jold) << std::endl;
+        std::cout << "FPIRLS terminated after " << n_iter_ << " iterations with |DeltaJ|=" << std::abs(Jnew - Jold) << std::endl;
         std::cout << "Computing variance estimates at convergence..." << std::endl; 
 
         // compute sigma_sq_hat (with edf) at convergence 
@@ -255,10 +229,6 @@ template <typename VariationalSolver> class MSRPDE {
             Sigma_b_(k) *= Delta_(k);
             Sigma_b_(k) = sigma_sq_hat_/Sigma_b_(k);   // ATT: assumes independence between random components
         }
-
-        // for debug 
-        std::cout << "Final sum abs f = " << solver_.f().cwiseAbs().sum() << std::endl;
-        std::cout << "Final beta = " << solver_.beta() << std::endl;
         
         std::cout << "Final Delta_ = " << Delta_ << std::endl;
         std::cout << "Final sigma_sq_hat_ = " << sigma_sq_hat_ << std::endl;
@@ -333,17 +303,12 @@ template <typename VariationalSolver> class MSRPDE {
         template <typename... LambdaT>
             requires(std::is_convertible_v<LambdaT, double> && ...)
         constexpr double operator()(LambdaT... lambda) {
-            std::cout << "msr GCV operator() here 1" << std::endl;
             model_->fit(static_cast<double>(lambda)...);
-            std::cout << "msr GCV operator() here 2" << std::endl;
             std::array<double, StaticInputSize> lambda_vec {lambda...};
-            std::cout << "msr GCV operator() here 3" << std::endl;
             if (edf_cache_.find(lambda_vec) == edf_cache_.end()) {   // cache Tr[S]
                 edf_cache_[lambda_vec] = model_->edf(r_, seed_);
             }
-            std::cout << "msr GCV operator() here 4" << std::endl;
             double dor = n_ - (q_ + edf_cache_.at(lambda_vec));   // residual degrees of freedom
-            std::cout << "msr GCV operator() here 5" << std::endl;
             
 	        double norm = 0.;
             vector_t op1 = model_->response();            
@@ -353,10 +318,6 @@ template <typename VariationalSolver> class MSRPDE {
             for (int i = 0; i < op1.size(); ++i) {
                 if (!model_->na_pattern()[i]) norm += (op2.coeff(i, 0) - op1.coeff(i, 0))*(op2.coeff(i, 0) - op1.coeff(i, 0));
             }
-            
-            std::cout << "GCV: norm = " << norm << std::endl;
-            std::cout << "GCV: dor = " << dor << std::endl;
-            std::cout << "GCV: (n_ / std::pow(dor, 2)) * norm = " << (n_ / std::pow(dor, 2)) * norm << std::endl;
             // return (n_ / std::pow(dor, 2)) * (model_->fitted() - model_->response()).squaredNorm();  --> M: non tiene conto dei NA!
             return (n_ / std::pow(dor, 2)) * norm;    
         }
@@ -426,21 +387,11 @@ template <typename VariationalSolver> class MSRPDE {
 
                 Z_by_group_(i) = matrix_indexing_(Z(), loc_to_glob_map_[i]);  
                 
-                // for debug
-                std::cout << " norm Z(" << i << ") at iter" << n_iter_ << " =" << (Z_by_group_(i).rowwise().lpNorm<1>()).maxCoeff() << std::endl;
-
-                // for debug
-                std::cout << "PRE missing correction, norm ZTZ(" << i << ") at iter" << n_iter_ << " =" << ((Z_by_group_(i).transpose() * Z_by_group_(i)).rowwise().lpNorm<1>()).maxCoeff() << std::endl;
-
                 // metto a zero le righe di Z che hanno missing data -> questo serve per calcolo di Delta_, Ztilde e quindi b_i, sigma_sq_hat_ etc..
                 for(int glob_idx : loc_to_glob_map_[i]){
                     
                     if(na_pattern_[glob_idx]){ 
                         
-                        // debug
-                        std::cout << "glob_idx=" << glob_idx << std::endl;
-
-                        //std::cout << "set to zero rows of Z missing" << std::endl;
                         std::vector<unsigned int> glob_idxs_of_block = loc_to_glob_map_[i]; 
                         unsigned int block_row_idx; 
                         for(int idx=0; idx < glob_idxs_of_block.size(); ++idx){
@@ -460,11 +411,6 @@ template <typename VariationalSolver> class MSRPDE {
                 ZTZ_(i) = Z_by_group_(i).transpose() * Z_by_group_(i);
             }
 
-            // for debug
-            for(int ii=0; ii<n_groups_; ++ii){
-                std::cout << " norm ZTZ(" << ii << ") at iter" << n_iter_ << " =" << (ZTZ_(ii).rowwise().lpNorm<1>()).maxCoeff() << std::endl;
-            }
-
             // initialize Delta_
             for(int k=0; k < n_random_covs_; ++k){
                 Delta_(k) = 0.; 
@@ -475,10 +421,6 @@ template <typename VariationalSolver> class MSRPDE {
                 }
                 Delta_(k) = std::sqrt( Delta_(k)/n_groups_ ) * 3 / 8;  // ATT 3/8 fa zero (o metti il punto o metti 3/8 dopo)
             }
-
-            // for debug
-            for(int i=0; i<n_random_covs_; ++i)
-                std::cout << " maxCoeff Delta_ at iter" << n_iter_ << " =" << Delta_.maxCoeff() << std::endl;
         
         }
 
@@ -586,9 +528,6 @@ template <typename VariationalSolver> class MSRPDE {
             
             double data_loss_value = 0.;
 
-            // debug 
-            std::cout << "n_obs() in data loss = " << n_obs() << std::endl;
-
             // cast to int to avoid overflow
             int signed_int = n_groups_*n_random_covs_ - n_obs();  
             
@@ -645,7 +584,6 @@ template <typename VariationalSolver> class MSRPDE {
 
         }
 
-        // M: potremmo eliminare queste funzioni e chiamare direttamente solver_.design_matrix() e solver_.random_design_matrix()...
         matrix_t X() const { return solver_.design_matrix(); }
         matrix_t Z() const { return Z_; } 
 
@@ -713,9 +651,6 @@ template <typename VariationalSolver> class MSRPDE {
         
             // Versione Melchionda 
             if(edf_flag){   
-
-                // for debug 
-                std::cout << " sigma_sq_hat_ before edf = " << sigma_sq_hat_ << std::endl;
 
                 double edf_ = edf(100, seed);   // here we set a seed for the edf stochastic computation for reproducibility
                 if(n_covs_ != 0){
