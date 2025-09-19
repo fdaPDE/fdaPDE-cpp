@@ -170,16 +170,12 @@ class GSRPDE {
 	        
             
             // compute total deviance
-            vector_t mu = model_->distr_->inv_link(model_->fitted());
-            vector_t deviance = model_->distr_->deviance(mu, model_->y_); 
-            double norm = 0.;  
-            // compute norm only on observed data
-            for (int i = 0; i < mu.size(); ++i) {
-                if (!model_->na_pattern()[i]) norm += deviance.coeff(i, 0);
+            vector_t mu = model_->distr_->inv_link(model_->fitted()); 
+            // write zeros on mu to compute norm only on observed data
+            for(int i = 0; i < mu.size(); ++i) {
+                if (model_->na_pattern()[i]) mu(i) = 0.;
             }
-            
-            return (n_ / std::pow(dor, 2)) * norm;
-            // return (n_ / std::pow(dor, 2)) * model_->distr_->deviance(mu, model_->y_);
+            return (n_ / std::pow(dor, 2)) * model_->distr_->deviance(mu, model_->y_);
         }
         // observers
         const edf_cache_t& edf_cache() const { return edf_cache_; }

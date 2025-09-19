@@ -411,15 +411,15 @@ int test_norm_gcv() {
     // SRPDE m_sr("y ~ x1 + x2 + f", data, fe_ls_separable_mono(std::pair {a_D, F_D}, std::pair {a_T, F_T}));  
     // opt.optimize(m_sr.gcv(200, 1234), lambda_grid);
 
-    std::cout << "-----------------QSRPDE------------------" << std::endl;
-    // QSRPDE
-    QSRPDE m_qsr("y ~ x1 + x2 + f", data, 0.50, fe_ls_separable_mono(std::pair {a_D, F_D}, std::pair {a_T, F_T}));
-    opt.optimize(m_qsr.gcv(), lambda_grid);
+    // std::cout << "-----------------QSRPDE------------------" << std::endl;
+    // // QSRPDE
+    // QSRPDE m_qsr("y ~ x1 + x2 + f", data, 0.50, fe_ls_separable_mono(std::pair {a_D, F_D}, std::pair {a_T, F_T}));
+    // opt.optimize(m_qsr.gcv(200, 1234), lambda_grid);
 
-    // std::cout << "-----------------GSRPDE------------------" << std::endl;
-    // // GSRPDE
-    // GSRPDE m_gsr("y ~ x1 + x2 + f", data, 0.25, fe_ls_separable_mono(std::pair {a_D, F_D}, std::pair {a_T, F_T}));
-    // opt.optimize(m_gsr.gcv(200, 1234), lambda_grid);
+    std::cout << "-----------------GSRPDE------------------" << std::endl;
+    // GSRPDE
+    GSRPDE m_gsr("y ~ x1 + x2 + f", data, fe_ls_separable_mono(std::pair {a_D, F_D}, std::pair {a_T, F_T}));
+    opt.optimize(m_gsr.gcv(200, 1234), lambda_grid);
 
     return 0;
 }
