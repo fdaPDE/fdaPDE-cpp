@@ -20,23 +20,25 @@
 namespace fdapde {
 namespace internals {
 
-// checks if supplied penalty is valid
-template <typename Penalty> class is_valid_penalty_pair {
-    using Penalty_ = std::decay_t<Penalty>;
+// checks if BilinearForm - LinearForm pair is valid
+template <typename BilinearForm, typename LinearForm> struct is_valid_penalty_pair {
+   private:
+    using BilinearForm_ = std::decay_t<BilinearForm>;
+    using LinearForm_ = std::decay_t<LinearForm>;
    public:
     static constexpr bool value =
-      is_pair_v<Penalty> &&
-      requires(std::tuple_element_t<0, Penalty_> t) {   // first pair element: bilinear form
-          { t.assemble() } -> std::same_as<Eigen::SparseMatrix<double>>;
+      requires(BilinearForm_ bilinear_form) {   // first pair element: bilinear form
+          { bilinear_form.assemble() } -> std::same_as<Eigen::SparseMatrix<double>>;
       } &&
-      requires(std::tuple_element_t<1, Penalty_> t) {   // second pair element: linear form
-          { t.assemble() } -> std::same_as<Eigen::Matrix<double, Dynamic, 1>>;
-      } &&   // linear and bilinear form have same discretization category
-      std::is_same_v<typename std::tuple_element_t<0, Penalty_>::discretization_category FDAPDE_COMMA
-                     typename std::tuple_element_t<1, Penalty_>::discretization_category>;
+      requires(LinearForm_ linear_form) {   // second pair element: linear form
+          { linear_form.assemble() } -> std::same_as<Eigen::Matrix<double, Dynamic, 1>>;
+      } && 
+      std::is_same_v<
+	typename BilinearForm_::discretization_category FDAPDE_COMMA typename LinearForm_::discretization_category>;
 };
-template <typename Penalty> constexpr bool is_valid_penalty_pair_v = is_valid_penalty_pair<Penalty>::value;
-  
+template <typename BilinearForm, typename LinearForm>
+constexpr bool is_valid_penalty_pair_v = is_valid_penalty_pair<BilinearForm, LinearForm>::value;
+
 // efficient left multiplication Q*x, with Q = W * (I - X * (X^\top * W * X)^{-1} * X^\top * W)
 template <typename WeightMatrix, typename DesignMatrix, typename InvDesignMatrix>
 Eigen::Matrix<double, Dynamic, Dynamic> lmbQ(
@@ -64,7 +66,6 @@ lmbQ(const DesignMatrix& X, const InvDesignMatrix& invXtX, const Eigen::Matrix<d
 template <typename Triangulation_, typename FeType_, typename CoordsMatrix_>
     requires(internals::is_eigen_dense_xpr_v<CoordsMatrix_>)
 Eigen::SparseMatrix<double> point_basis_eval(const FeSpace<Triangulation_, FeType_>& fe_space, CoordsMatrix_&& coords) {
-    static constexpr int local_dim = Triangulation_::local_dim;
     static constexpr int embed_dim = Triangulation_::embed_dim;
     fdapde_assert(coords.rows() > 0 && coords.cols() == embed_dim);
 
@@ -113,7 +114,6 @@ point_basis_eval(const FeSpace<Triangulation_, FeType_>& fe_space, const GeoInde
 template <typename Triangulation_, typename CoordsMatrix_>
     requires(internals::is_eigen_dense_xpr_v<CoordsMatrix_>)
 Eigen::SparseMatrix<double> point_basis_eval(const BsSpace<Triangulation_>& bs_space, CoordsMatrix_&& coords) {
-    static constexpr int local_dim = Triangulation_::local_dim;
     static constexpr int embed_dim = Triangulation_::embed_dim;
     fdapde_assert(coords.rows() > 0 && coords.cols() == embed_dim);
 
@@ -156,7 +156,6 @@ std::pair<Eigen::SparseMatrix<double>, Eigen::Matrix<double, Dynamic, 1>> areal_
     using FeSpace_ = FeSpace<Triangulation_, FeType_>;
     fdapde_assert(incidence_mat.rows() > 0 && incidence_mat.cols() == fe_space.triangulation().n_cells());
     static constexpr int local_dim = Triangulation_::local_dim;
-    static constexpr int embed_dim = Triangulation_::embed_dim;
     using FeType = typename FeSpace_::FeType;
     using cell_dof_descriptor = typename FeSpace_::cell_dof_descriptor;
     using BasisType = typename cell_dof_descriptor::BasisType;
@@ -217,7 +216,7 @@ areal_basis_eval(const FeSpace<Triangulation_, FeType_>& fe_space, const GeoInde
 // areal basis evaluation for spline basis system
 template <typename Triangulation_, typename GeoIndex_>
 std::pair<Eigen::SparseMatrix<double>, Eigen::Matrix<double, Dynamic, 1>>
-areal_basis_eval(const BsSpace<Triangulation_>& bs_space, const GeoIndex_& incidence_mat) {
+areal_basis_eval(const BsSpace<Triangulation_>&, const GeoIndex_&) {
     return {};   // TODO
 }
 

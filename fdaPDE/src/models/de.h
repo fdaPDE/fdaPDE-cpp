@@ -32,11 +32,16 @@ class DEPDE {
 
     DEPDE() noexcept = default;
     template <typename GeoFrame, typename Penalty> DEPDE(const GeoFrame& gf, Penalty&& penalty) noexcept : solver_() {
-        fdapde_assert(gf.n_layers() == 1);
-        n_obs_ = gf[0].rows();
-        solver_ = solver_t(gf, penalty.get());
+        discretize(penalty.get());
+        analyze_data(gf);
     }
     template <typename... Args> const vector_t& fit(Args&&... args) { return solver_.fit(std::forward<Args>(args)...); }
+    template <typename... Args> void discretize(Args&&... args) { solver_.discretize(std::forward<Args>(args)...); }
+    template <typename GeoFrame> void analyze_data(const GeoFrame& gf) {
+        fdapde_assert(gf.n_layers() == 1);
+        n_obs_ = gf[0].rows();
+        solver_.analyze_data(gf);
+    }
     // observers
     const vector_t& log_density() const { return solver_.log_density(); }
     vector_t density() const { return solver_.density(); }
@@ -52,7 +57,7 @@ class DEPDE {
 
 // deduction guide
 template <typename GeoFrame, typename Penalty>
-DEPDE(const GeoFrame& gf, Penalty&& solver) -> DEPDE<typename Penalty::solver_t>;
+DEPDE(const GeoFrame& gf, Penalty&& solver) -> DEPDE<typename std::decay_t<Penalty>::solver_t>;
 
 }   // namespace fdapde
 

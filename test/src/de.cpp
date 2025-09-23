@@ -27,7 +27,7 @@ using fdapde::test::almost_equal;
 TEST(de, test_01) {
     // geometry
     std::string mesh_path = "../data/mesh/square_density/";
-    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
     // data
     Eigen::Matrix<double, Dynamic, 1> g_init = read_csv<double>("../data/de/01/f_init.csv").as_matrix().array().log();
     GeoFrame data(D);
@@ -42,7 +42,7 @@ TEST(de, test_01) {
     // modeling
     DEPDE m(data, fe_de_elliptic(a, F));
     m.set_llik_tolerance(1e-15);
-    m.fit(0.1, g_init, BFGS<Dynamic> {500, 1e-5, 1e-2});
+    m.fit(0.1, g_init, BFGS<Dynamic>(500, 1e-5, 1e-2));
 
     EXPECT_TRUE(almost_equal<double>(m.log_density(), "../data/de/01/log_density.mtx"));
 }
@@ -50,7 +50,7 @@ TEST(de, test_01) {
 TEST(de, test_02) {
     // geometry
     std::string mesh_path = "../data/mesh/square_density/";
-    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
     // data
     Eigen::Matrix<double, Dynamic, 1> g_init = read_csv<double>("../data/de/02/f_init.csv").as_matrix().array().log();
     GeoFrame data(D);
@@ -64,7 +64,7 @@ TEST(de, test_02) {
     auto F = integral(D)(u * v);
     // modeling
     DEPDE m(data, fe_de_elliptic(a, F));
-    m.fit(0.1, g_init, GradientDescent<Dynamic, BacktrackingLineSearch> {1000, 1e-5, 1e-2});
+    m.fit(0.1, g_init, GradientDescent<Dynamic>(1000, 1e-5, 1e-2), BacktrackingLineSearch());
 
     EXPECT_TRUE(almost_equal<double>(m.log_density(), "../data/de/02/log_density.mtx"));
 }
@@ -73,7 +73,7 @@ TEST(de, test_03) {
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
     // geometry
     std::string mesh_path = "../data/mesh/unit_square_21/";
-    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv");
+    Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
     Triangulation<1, 1> T = Triangulation<1, 1>::UnitInterval(7);
     // data
     Eigen::Matrix<double, Dynamic, 1> g_init = read_csv<double>("../data/de/03/f_init.csv").as_matrix().array().log();
@@ -99,8 +99,8 @@ TEST(de, test_03) {
     // modeling
     DEPDE m(data, fe_de_separable(std::pair {a_D, F_D}, std::pair {a_T, F_T}));
     m.set_llik_tolerance(1e-15);
-    m.fit(0.00025, 0.01, g_init, BFGS<Dynamic> {100, 1e-5, 1e-2});
-    
+    m.fit(0.00025, 0.01, g_init, BFGS<Dynamic>(100, 1e-5, 1e-2));
+
     EXPECT_TRUE(almost_equal<double>(m.log_density(), "../data/de/03/log_density.mtx"));
 }
 

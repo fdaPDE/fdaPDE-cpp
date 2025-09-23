@@ -32,6 +32,18 @@ template <typename VariationalSolver> class QSRPDE {
     template <typename GeoFrame, typename Penalty>
     QSRPDE(const std::string& formula, const GeoFrame& gf, double alpha, Penalty&& penalty) noexcept :
         solver_(), alpha_(alpha) {
+        discretize(penalty.get());
+        analyze_data(formula, gf);
+    }
+    template <typename GeoFrame, typename Penalty>   // default to median fitting
+    QSRPDE(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) noexcept :
+        QSRPDE(formula, gf, 0.5, penalty) { }
+
+    // modifiers
+    void set_level(double alpha) { alpha_ = alpha; }
+    template <typename... Args> void discretize(Args&&... args) { solver_.discretize(std::forward<Args>(args)...); }
+    template <typename GeoFrame, typename WeightMatrix>
+    void analyze_data(const std::string& formula, const GeoFrame& gf, const WeightMatrix& W) {
         fdapde_assert(gf.n_layers() == 1);
         Formula formula_(formula);
         n_obs_ = gf[0].rows();
@@ -39,15 +51,13 @@ template <typename VariationalSolver> class QSRPDE {
         for (const std::string& token : formula_.rhs()) {
             if (gf.contains(token)) { n_covs_++; }
         }
-	// discretize
-        if constexpr (requires(Penalty p) { p.get(); }) {
-            solver_ = solver_t(formula, gf, penalty.get());
-        } else {
-            solver_ = solver_t(formula, gf, penalty(gf.template triangulation<0>()).get());
-        }
-	y_ = solver_.response();
+        solver_.analyze_data(formula, gf, W);
+        y_ = solver_.response();
     }
-
+    template <typename GeoFrame> void analyze_data(const std::string& formula, const GeoFrame& gf) {
+        return analyze_data(formula, gf, vector_t::Ones(gf[0].rows()).asDiagonal());
+    }
+    // fitting
     // Functional penalized iterative reweighted least squares
     template <typename... Args>
         requires(sizeof...(Args) > 0)
@@ -122,11 +132,21 @@ template <typename VariationalSolver> class QSRPDE {
         static constexpr int XprBits = 0;
         using Scalar = double;
         using InputType = Vector<Scalar, StaticInputSize>;
+        using edf_cache_t = std::unordered_map<
+          std::array<double, StaticInputSize>, double, internals::std_array_hash<double, StaticInputSize>>;
 
         gcv_t() noexcept = default;
-        gcv_t(QSRPDE* model) : model_(model), n_(model->n_obs()), q_(model->n_covs()), r_(100), seed_(random_seed) { }
-        gcv_t(QSRPDE* model, int r, int seed) :
-            model_(model), n_(model->n_obs()), q_(model->n_covs()), r_(r), seed_(seed) { }
+        gcv_t(QSRPDE* model, const edf_cache_t& edf_cache) :
+            model_(model),
+            n_(model->n_obs()),
+            q_(model->n_covs()),
+            edf_cache_(edf_cache),
+            r_(100),
+            seed_(random_seed) { }
+        gcv_t(QSRPDE* model, const edf_cache_t& edf_cache, int r, int seed) :
+            model_(model), n_(model->n_obs()), q_(model->n_covs()), edf_cache_(edf_cache), r_(r), seed_(seed) { }
+        gcv_t(QSRPDE* model) : gcv_t(model, edf_cache_t()) { }
+        gcv_t(QSRPDE* model, int r, int seed) : gcv_t(model, edf_cache_t(), r, seed) { }
 
         template <typename InputType_>
             requires(internals::is_subscriptable<InputType_, int>)
@@ -138,28 +158,31 @@ template <typename VariationalSolver> class QSRPDE {
         constexpr double operator()(LambdaT... lambda) {
             model_->fit(static_cast<double>(lambda)...);
             std::array<double, StaticInputSize> lambda_vec {lambda...};
-            if (edf_map_.find(lambda_vec) == edf_map_.end()) {   // cache Tr[S]
-                edf_map_[lambda_vec] = model_->edf(r_, seed_);
+            if (edf_cache_.find(lambda_vec) == edf_cache_.end()) {   // cache Tr[S]
+                edf_cache_[lambda_vec] = model_->edf(r_, seed_);
             }
-            double dor = n_ - (q_ + edf_map_.at(lambda_vec));   // residual degrees of freedom
+            double dor = n_ - (q_ + edf_cache_.at(lambda_vec));   // residual degrees of freedom
             double pinball = 0;
             for (int i = 0; i < n_; ++i) {
                 pinball += model_->pinball_loss(model_->y_[i] - model_->mu_[i], std::pow(10, model_->eps_));
             }
 	    return (std::pow(pinball, 2) / std::pow(dor, 2));
         }
+        // observers
+        const edf_cache_t& edf_cache() const { return edf_cache_; }
+        edf_cache_t& edf_cache() { return edf_cache_; }
        private:
         QSRPDE* model_;
         int n_ = 0, q_ = 0;
-        std::unordered_map<
-          std::array<double, StaticInputSize>, double, internals::std_array_hash<double, StaticInputSize>>
-          edf_map_;
+        edf_cache_t edf_cache_;
         // stochastic edf approximation parameter
         int r_, seed_;
     };
     friend gcv_t;
     gcv_t gcv() { return gcv_t(this); }
+    gcv_t gcv(const typename gcv_t::edf_cache_t& edf_cache) { return gcv_t(this, edf_cache); }
     gcv_t gcv(int r, int seed) { return gcv_t(this, r, seed); }
+    gcv_t gcv(const typename gcv_t::edf_cache_t& edf_cache, int r, int seed) { return gcv_t(this, edf_cache, r, seed); }
 
     // inference
   
@@ -169,7 +192,7 @@ template <typename VariationalSolver> class QSRPDE {
     vector_t py_;          // y - (1 - 2 * alpha) * |y - X * beta - f|
     vector_t pW_;          // diagonal of W^k = 1 / (2 * n * |y - X * beta - f|)
     vector_t mu_;          // \mu^k = [ \mu^k_1, ..., \mu^k_n ] : quantile vector at step k
-    double eps_ = -1e-1;   // pinball loss smoothing factor
+    double eps_ = -3;      // pinball loss smoothing factor (defaulted to non-smoothed pinball)
     int max_iter_ = 200;   // fpirls maximum iteration number
     double tol_ = 1e-6;    // fprils convergence tolerance
     double tol_weights_ = 1e-6;

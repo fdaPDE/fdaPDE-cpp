@@ -76,8 +76,7 @@ template <typename VariationalSolver> class fpca_power_iteration_impl {
             } break;
             case OptimizeGCV: {
                 auto gcv_functor = [&](auto lambda) { return gcv_(X, lambda, V.col(i)); };
-                // GridOptimizer<n_lambda> optimizer;
-                GridOptimizer<n_lambda> optimizer;
+                GridSearch<n_lambda> optimizer;
                 opt_lambda = optimizer.optimize(gcv_functor, lambda_grid);
             } break;
             case OptimizeMSRE: {
@@ -197,8 +196,7 @@ template <typename VariationalSolver> class fpca_subspace_iteration_impl {
         } break;
         case OptimizeGCV: {
             auto gcv_functor = [&](auto lambda) { return gcv_(X, rank, lambda, V); };
-            // GridOptimizer<n_lambda> optimizer;
-            GridOptimizer<n_lambda> optimizer;
+            GridSearch<n_lambda> optimizer;
             opt_lambda = optimizer.optimize(gcv_functor, lambda_grid);
         } break;
         case OptimizeMSRE: {
@@ -312,8 +310,7 @@ template <typename VariationalSolver> class fpca_direct_impl {
         } break;
         case OptimizeGCV: {
             auto gcv_functor = [&](auto lambda) { return gcv_(X, rank, lambda, flag); };
-            // GridOptimizer<n_lambda> optimizer;
-            GridOptimizer<n_lambda> optimizer;
+            GridSearch<n_lambda> optimizer;
             opt_lambda = optimizer.optimize(gcv_functor, lambda_grid);
         } break;
         case OptimizeMSRE: {
@@ -520,24 +517,27 @@ template <typename VariationalSolver> class fPCA {
     using smoother_t = std::decay_t<VariationalSolver>;
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
-    using data_t   = Eigen::Map<const Eigen::Matrix<double, Dynamic, Dynamic, Eigen::ColMajor>>;
     using binary_t = BinaryMatrix<Dynamic, Dynamic>;
     static constexpr int n_lambda = smoother_t::n_lambda;
    public:
     fPCA() noexcept = default;
     template <typename GeoFrame, typename Penalty>
-    fPCA(const std::string& colname, const GeoFrame& gf, Penalty&& penalty) noexcept :
-        smoother_(), data_(gf[0].data().template col<double>(colname).as_matrix()) {
+    fPCA(const std::string& colname, const GeoFrame& gf, Penalty&& penalty) noexcept : smoother_(), data_() {
+        discretize(penalty.get().penalty);
+        analyze_data(colname, gf);
+    }
+    template <typename... Args> void discretize(Args&&... args) {
+        smoother_.discretize(std::forward<Args>(args)...);
+        n_dofs_ = smoother_.n_dofs();
+	return;
+    }
+    template <typename GeoFrame> void analyze_data(const std::string& colname, const GeoFrame& gf) {
         fdapde_assert(gf.n_layers() == 1);
+        data_ = gf[0].data().template col<double>(colname).as_matrix();
         n_locs_ = data_.rows();
-	n_units_ = data_.cols();
-        if constexpr (requires(Penalty p) { p.get(); }) {
-            smoother_ = smoother_t(gf, penalty.get());
-        } else {
-            smoother_ = smoother_t(gf, penalty(gf.template triangulation<0>()).get());
-        }
-	n_dofs_ = smoother_.n_dofs();
-	// detect if data_ has at least one missing value
+        n_units_ = data_.cols();
+	smoother_.analyze_data(gf, vector_t::Ones(gf[0].rows()).asDiagonal());
+        // detect if data_ has at least one missing value
         has_nan_ = false;
         for (int i = 0; i < n_locs_; ++i) {
             for (int j = 0; j < n_units_; ++j) {
@@ -547,6 +547,7 @@ template <typename VariationalSolver> class fPCA {
                 }
             }
         }
+	return;
     }
 
     template <typename LambdaT, typename Policy = fpca_power_solver>
@@ -554,11 +555,11 @@ template <typename VariationalSolver> class fPCA {
     auto fit(int rank, const LambdaT& lambda_grid, int flag = ComputeRandSVD, Policy policy = Policy()) {
         fdapde_assert(lambda_grid.size() % n_lambda == 0);
         auto solver_ = policy.get(smoother_);   // instantiate solver implementation
-        f_.resize(n_dofs_ , rank);
+        f_.resize(n_dofs_, rank);
         s_.resize(n_units_, rank);
         f_norm_.resize(rank);
         lambda_.resize(n_lambda, rank);
-	// dispatch to processing logic
+        // dispatch to processing logic
         if (has_nan_) {
             // default to OptimMSRE calibration, if no calibration provided
             if (lambda_grid.size() > n_lambda && (flag & 0b11110) == 0) { flag = flag | OptimizeMSRE; }
@@ -576,7 +577,7 @@ template <typename VariationalSolver> class fPCA {
             s_ = std::move(s);
             f_norm_ = solver_.loadings_norm();
         }
-	lambda_ = solver_.lambda();
+        lambda_ = solver_.lambda();
         return std::tie(f_, s_);
     }
     // observers
@@ -586,7 +587,7 @@ template <typename VariationalSolver> class fPCA {
     const std::vector<double>& loadings_norm() const { return f_norm_; }
     const matrix_t& lambda() const { return lambda_; }
    private:
-    data_t data_;           // mapped geoframe data
+    matrix_t data_;         // mapped geoframe data
     smoother_t smoother_;   // variational solver used in the smoothing step
     bool has_nan_;
 

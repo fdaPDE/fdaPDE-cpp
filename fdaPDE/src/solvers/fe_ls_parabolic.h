@@ -36,12 +36,14 @@ class fe_ls_parabolic_mono {
     template <typename DataLocs>
     static constexpr bool is_valid_data_locs_descriptor_v =
       std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>;
-    template <typename InfoT> struct is_valid_info_t {
-        static constexpr bool value = requires(InfoT info) {
-            info.ic;
-            info.penalty;
+    template <typename Penalty> struct is_valid_penalty {
+        static constexpr bool value = requires(Penalty penalty) {
+            penalty.bilinear_form();
+            penalty.linear_form();
+            penalty.ic();
         };
     };
+    template <typename Penalty> static constexpr bool is_valid_penalty_v = is_valid_penalty<Penalty>::value;
 
     // basis evaluation at locations
     template <typename DataLocs>
@@ -110,7 +112,7 @@ class fe_ls_parabolic_mono {
         }
         u_.resize(n_dofs_ * m);
         for (int i = 0; i < m; ++i) { u_.segment(i * n_dofs_, n_dofs_) = u__; }
-        // correct first n discretized force rows as (u_1 + (R0 * s) / DeltaT)
+        // correct first n discretized force rows as (u_1 + (R0 * s) / DeltaT);
         u_.segment(0, n_dofs_) += (1.0 / DeltaT_) * (R0__ * s_);
         Psi_ = kronecker(Im, Psi__);
         return;
@@ -121,26 +123,25 @@ class fe_ls_parabolic_mono {
 
     fe_ls_parabolic_mono() noexcept = default;
     // construct from formula + geoframe
-    template <typename GeoFrame, typename WeightMatrix, typename InfoT>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_ls_parabolic_mono(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
-        s_(info.ic) {
+    template <typename GeoFrame, typename WeightMatrix, typename Penalty>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_ls_parabolic_mono(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
 	fdapde_assert(gf.n_layers() == 1);
         n_obs_ = gf[0].rows();
         n_locs_ = n_obs_;
 
-        discretize(info.penalty);
+        discretize(penalty);
         analyze_data(formula, gf, W);
     }
-    template <typename GeoFrame, typename InfoT>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_ls_parabolic_mono(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
-        fe_ls_parabolic_mono(formula, gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    template <typename GeoFrame, typename Penalty>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_ls_parabolic_mono(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) :
+        fe_ls_parabolic_mono(formula, gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
     // construct with no data
-    template <typename GeoFrame, typename WeightMatrix, typename InfoT>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_ls_parabolic_mono(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) : s_(info.ic) {
+    template <typename GeoFrame, typename WeightMatrix, typename Penalty>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_ls_parabolic_mono(const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
 	fdapde_assert(gf.n_layers() == 1);
         n_obs_ = gf[0].rows();
@@ -156,25 +157,26 @@ class fe_ls_parabolic_mono {
             double lag_i = time_coords(i + 1, 0) - time_coords(i, 0);
             fdapde_assert(DeltaT_ > 0 && lag_i > 0 && almost_equal(DeltaT_ FDAPDE_COMMA lag_i));
         }
-        discretize(info.penalty);
+        discretize(penalty);
         // basis system evaluation
 	eval_basis_at_(gf);
 	tensorize_(m_);
     }
 
-    template <typename GeoFrame, typename InfoT>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_ls_parabolic_mono(const GeoFrame& gf, InfoT&& info) :
-        fe_ls_parabolic_mono(gf, info, vector_t::Ones(n_locs_).asDiagonal()) { }
+    template <typename GeoFrame, typename Penalty>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_ls_parabolic_mono(const GeoFrame& gf, Penalty&& penalty) :
+        fe_ls_parabolic_mono(gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
 
     template <typename Penalty> void discretize(Penalty&& penalty) {
-        fdapde_static_assert(internals::is_valid_penalty_pair_v<Penalty>, INVALID_PENALTY_DESCRIPTION);
-        using BilinearForm = std::tuple_element_t<0, std::decay_t<Penalty>>;
-        using LinearForm = std::tuple_element_t<1, std::decay_t<Penalty>>;
+        using BilinearForm = typename std::decay_t<Penalty>::BilinearForm;
+        using LinearForm = typename std::decay_t<Penalty>::LinearForm;
+        fdapde_static_assert(
+          internals::is_valid_penalty_pair_v<BilinearForm FDAPDE_COMMA LinearForm>, INVALID_PENALTY_DESCRIPTION);
         using FeSpace = typename BilinearForm::TrialSpace;
 	// discretization
-	const BilinearForm& bilinear_form = std::get<0>(penalty);
-        const LinearForm& linear_form = std::get<1>(penalty);
+	const BilinearForm& bilinear_form = penalty.bilinear_form();
+        const LinearForm& linear_form = penalty.linear_form();
         n_dofs_ = bilinear_form.n_dofs();   // number of basis functions over physical domain
 	internals::fe_mass_assembly_loop<FeSpace> mass_assembler(bilinear_form.trial_space());
         R0__ = mass_assembler.assemble();
@@ -187,6 +189,8 @@ class fe_ls_parabolic_mono {
         areal_eval_ = [fe_space = bilinear_form.trial_space()](const binary_t& locs) -> decltype(auto) {
             return internals::areal_basis_eval(fe_space, locs);
         };
+	// store initial condition
+	s_ = penalty.ic();
 	return;
     }
     // non-parametric fit
@@ -226,7 +230,7 @@ class fe_ls_parabolic_mono {
 
         n_obs_ = y.rows();
         n_locs_ = n_obs_;
-        bool require_woodbury_realloc = n_covs_ != X.cols();
+        bool require_woodbury_realloc = std::cmp_not_equal(n_covs_, X.cols());
         n_covs_ = X.cols();
 	eval_basis_at_(locs1);   // update \Psi matrix
 
@@ -254,7 +258,7 @@ class fe_ls_parabolic_mono {
 	// extract temporal mesh
         const auto& time_index = geo_index_cast<1, POINT>(gf[0]);
         const auto& time_coords = time_index.coordinates();
-	bool require_full_tensorization = m_ != time_coords.rows();
+	bool require_full_tensorization = std::cmp_not_equal(m_, time_coords.rows());
         m_ = time_coords.rows();
         fdapde_assert(m_ > 0 && time_coords.cols() == 1);
         DeltaT_ = time_coords(1, 0) - time_coords(0, 0);
@@ -277,7 +281,7 @@ class fe_ls_parabolic_mono {
         for (const std::string& token : formula_.rhs()) {
             if (gf.contains(token)) { covs.push_back(token); }
         }
-	bool require_woodbury_realloc = n_covs_ != covs.size();
+	bool require_woodbury_realloc = std::cmp_not_equal(n_covs_, covs.size());
         n_covs_ = covs.size();
 	const auto& y_data = gf[0].data().template col<double>(formula_.lhs());
         y_.resize(n_locs_, y_data.blk_sz());
@@ -290,7 +294,7 @@ class fe_ls_parabolic_mono {
             X_.resize(n_obs_, n_covs_);   // assemble design matrix
             for (int i = 0; i < n_covs_; ++i) { gf[0].data().template col<double>(covs[i]).assign_to(X_.col(i)); }
         }
-	update_response_and_weights(y_, W); 
+        update_response_and_weights(y_, W); 
         return;
     }
 
@@ -418,16 +422,16 @@ class fe_ls_parabolic_mono {
                 for (int j = 0; j < r; ++j) { Us_->operator()(i, j) = rademacher(rng); }
             }
             Ys_ = Us_->transpose() * Psi_;
-            Bs_ = matrix_t::Zero(2 * n_dofs_, r);   // implicitly enforce homogeneous forcing
+            Bs_ = matrix_t::Zero(2 * m_ * n_dofs_, r);   // implicitly enforce homogeneous forcing
         }
         if (n_covs_ == 0) {
-            Bs_->topRows(n_dofs_) = -PsiNA().transpose() * D_ * W_ * (*Us_);
+            Bs_->topRows(m_ * n_dofs_) = -PsiNA().transpose() * D_ * W_ * (*Us_);
         } else {
-            Bs_->topRows(n_dofs_) = -PsiNA().transpose() * D_ * internals::lmbQ(W_, X_, invXtWX_, *Us_);
+            Bs_->topRows(m_ * n_dofs_) = -PsiNA().transpose() * D_ * internals::lmbQ(W_, X_, invXtWX_, *Us_);
         }
         matrix_t x = n_covs_ == 0 ? invA_.solve(*Bs_) : woodbury_system_solve(invA_, U_, XtWX_, V_, *Bs_);
         double trS = 0;   // monte carlo Tr[S] approximation
-        for (int i = 0; i < r; ++i) { trS += Ys_->row(i).dot(x.col(i).head(n_dofs_)); }
+        for (int i = 0; i < r; ++i) { trS += Ys_->row(i).dot(x.col(i).head(m_ * n_dofs_)); }
         return trS / r;
     }
     template <typename... LambdaT>
@@ -556,14 +560,17 @@ struct fe_ls_parabolic_ieul {
     template <typename DataLocs>
     static constexpr bool is_valid_data_locs_descriptor_v =
       std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>;
-    template <typename InfoT> struct is_valid_info_t {
-        static constexpr bool value = requires(InfoT info) {
-            info.ic;
-            info.penalty;
-	    info.max_iter;
-	    info.tol;
+    template <typename Penalty> struct is_valid_penalty {
+        static constexpr bool value = requires(Penalty penalty) {
+            penalty.ic();
+            penalty.bilinear_form();
+            penalty.linear_form();
+            penalty.max_iter();
+            penalty.tol();
         };
     };
+    template <typename Penalty> static constexpr bool is_valid_penalty_v = is_valid_penalty<Penalty>::value;
+  
     // auxiliary time-mapping data structure
     class block_map_t {
         static constexpr int Order = 3;
@@ -599,10 +606,10 @@ struct fe_ls_parabolic_ieul {
         }
         block_map_t(const block_map_t& other) :
             rows_(other.rows_), cols_(other.cols_), blk_rows_(other.blk_rows_), blk_cols_(other.blk_cols_) {
-            for (int i = 0; i < data_.size(); ++i) { data_.data()[i] = other.data_.data()[i]; }
+            for (std::size_t i = 0; i < data_.size(); ++i) { data_.data()[i] = other.data_.data()[i]; }
         }
         block_map_t& operator=(const block_map_t& other) {
-            for (int i = 0; i < data_.size(); ++i) { data_.data()[i] = other.data_.data()[i]; }
+            for (std::size_t i = 0; i < data_.size(); ++i) { data_.data()[i] = other.data_.data()[i]; }
             rows_ = other.rows_;
             cols_ = other.cols_;
             blk_rows_ = other.blk_rows_;
@@ -676,27 +683,25 @@ struct fe_ls_parabolic_ieul {
     using solver_category = ls_solver;
 
     fe_ls_parabolic_ieul() noexcept = default;
-    template <typename GeoFrame, typename InfoT, typename WeightMatrix>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_ls_parabolic_ieul(const std::string& formula, const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
-        s_(info.ic), tol_(info.tol), max_iter_(info.max_iter) {
+    template <typename GeoFrame, typename Penalty, typename WeightMatrix>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_ls_parabolic_ieul(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
 	fdapde_assert(gf.n_layers() == 1);
         n_obs_ = gf[0].rows();
 	n_locs_ = n_obs_;
 
-	discretize(info.penalty);
+	discretize(penalty);
 	analyze_data(formula, gf, W);
     }
-    template <typename GeoFrame, typename InfoT>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_ls_parabolic_ieul(const std::string& formula, const GeoFrame& gf, InfoT&& info) :
-        fe_ls_parabolic_ieul(formula, gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    template <typename GeoFrame, typename Penalty>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_ls_parabolic_ieul(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) :
+        fe_ls_parabolic_ieul(formula, gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
     // construct with no data
-    template <typename GeoFrame, typename InfoT, typename WeightMatrix>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_ls_parabolic_ieul(const GeoFrame& gf, InfoT&& info, const WeightMatrix& W) :
-        s_(info.ic), tol_(info.tol), max_iter_(info.max_iter) {
+    template <typename GeoFrame, typename Penalty, typename WeightMatrix>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_ls_parabolic_ieul(const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
 	fdapde_assert(gf.n_layers() == 1);
         n_obs_ = gf[0].rows();
@@ -712,23 +717,24 @@ struct fe_ls_parabolic_ieul {
             double lag_i = time_coords(i + 1, 0) - time_coords(i, 0);
             fdapde_assert(DeltaT_ > 0 && lag_i > 0 && almost_equal(DeltaT_ FDAPDE_COMMA lag_i));
         }
-	discretize(info.penalty);
+	discretize(penalty);
 	eval_spatial_basis_at_(gf);
     }
-    template <typename GeoFrame, typename InfoT>
-        requires(is_valid_info_t<InfoT>::value)
-    fe_ls_parabolic_ieul(const GeoFrame& gf, InfoT&& info) :
-        fe_ls_parabolic_ieul(gf, info, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    template <typename GeoFrame, typename Penalty>
+        requires(is_valid_penalty_v<Penalty>)
+    fe_ls_parabolic_ieul(const GeoFrame& gf, Penalty&& penalty) :
+        fe_ls_parabolic_ieul(gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
 
     // finite element discretization of spatial dimension
     template <typename Penalty> void discretize(Penalty&& penalty) {
-        fdapde_static_assert(internals::is_valid_penalty_pair_v<Penalty>, INVALID_PENALTY_DESCRIPTION);
-        using BilinearForm = std::tuple_element_t<0, std::decay_t<Penalty>>;
-        using LinearForm = std::tuple_element_t<1, std::decay_t<Penalty>>;
+        using BilinearForm = typename std::decay_t<Penalty>::BilinearForm;
+        using LinearForm = typename std::decay_t<Penalty>::LinearForm;
+        fdapde_static_assert(
+          internals::is_valid_penalty_pair_v<BilinearForm FDAPDE_COMMA LinearForm>, INVALID_PENALTY_DESCRIPTION);
         using FeSpace = typename BilinearForm::TrialSpace;
 	// discretization
-        const BilinearForm& bilinear_form = std::get<0>(penalty);
-        const LinearForm& linear_form = std::get<1>(penalty);
+        const BilinearForm& bilinear_form = penalty.bilinear_form();
+        const LinearForm& linear_form = penalty.linear_form();
         n_dofs_ = bilinear_form.n_dofs();   // number of basis functions over physical domain
         internals::fe_mass_assembly_loop<FeSpace> mass_assembler(bilinear_form.trial_space());
         R0_ = mass_assembler.assemble();
@@ -741,6 +747,10 @@ struct fe_ls_parabolic_ieul {
         areal_eval_ = [fe_space = bilinear_form.trial_space()](const binary_t& locs) -> decltype(auto) {
             return internals::areal_basis_eval(fe_space, locs);
         };
+	// store initial conditions, numerical scheme parameters
+	s_ = penalty.ic();
+	max_iter_ = penalty.max_iter();
+	tol_ = penalty.tol();
         return;
     }
     // non-parametric fit
@@ -808,7 +818,6 @@ struct fe_ls_parabolic_ieul {
         y_ = y;
 	// correct \Psi for missing observations
         auto nan_pattern = na_matrix(y);
-        int old_n_obs = n_obs_;
         if (nan_pattern.any()) {
             n_obs_ = n_locs_ - nan_pattern.count();
             B_.resize(m_);
@@ -977,50 +986,79 @@ struct fe_ls_parabolic_ieul {
     sparse_matrix_t W_;   // n_obs x n_obs matrix of observation weights
     bool W_changed_, W_const_;   // W_const_ == true \iff W_ is time-wise constant
 
-    int max_iter_;    // maximum number of iterations
     double tol_;      // convergence tolerance
+    int max_iter_;    // maximum number of iterations
     double DeltaT_;   // time step
 };
 
 }   // namespace internals
 
-// separable solver factories
+// parabolic solver API
 // monolithic method
 template <typename Penalty>
-    requires(internals::is_valid_penalty_pair_v<Penalty>)
+    requires(internals::is_pair_v<Penalty>)
 struct fe_ls_parabolic_mono {
     using solver_t = internals::fe_ls_parabolic_mono;
    private:
-    struct info_t {
-        Eigen::Matrix<double, Dynamic, 1> ic;
-        Penalty penalty;
+    struct penalty_packet {
+        using BilinearForm = std::tuple_element_t<0, std::decay_t<Penalty>>;
+        using LinearForm = std::tuple_element_t<1, std::decay_t<Penalty>>;
+       private:
+        BilinearForm bilinear_form_;
+        LinearForm linear_form_;
+        Eigen::Matrix<double, Dynamic, 1> ic_;
+       public:
+        penalty_packet(
+          const BilinearForm& bilinear_form, const LinearForm& linear_form,
+          const Eigen::Matrix<double, Dynamic, 1>& ic) :
+            bilinear_form_(bilinear_form), linear_form_(linear_form), ic_(ic) { }
+        // observers
+        const BilinearForm& bilinear_form() const { return bilinear_form_; }
+        const LinearForm& linear_form() const { return linear_form_; }
+        const Eigen::Matrix<double, Dynamic, 1>& ic() const { return ic_; }
     };
    public:
     template <typename InitialCondition>
-    fe_ls_parabolic_mono(const Penalty& penalty, const InitialCondition& ic) : info_(ic, penalty) { }
-    const info_t& get() const { return info_; }
+    fe_ls_parabolic_mono(const Penalty& penalty, const InitialCondition& ic) :
+        penalty_(std::get<0>(penalty), std::get<1>(penalty), ic) { }
+    const penalty_packet& get() const { return penalty_; }
    private:
-    info_t info_;
+    penalty_packet penalty_;
 };
 // implicit euler time integration method
 template <typename Penalty>
-    requires(internals::is_valid_penalty_pair_v<Penalty>)
+    requires(internals::is_pair_v<Penalty>)
 struct fe_ls_parabolic_ieul {
     using solver_t = internals::fe_ls_parabolic_ieul;
    private:
-    struct info_t {
-        Eigen::Matrix<double, Dynamic, 1> ic;
-        Penalty penalty;
-        int max_iter = 50;
-        double tol = 1e-4;
+    struct penalty_packet {
+        using BilinearForm = std::tuple_element_t<0, std::decay_t<Penalty>>;
+        using LinearForm = std::tuple_element_t<1, std::decay_t<Penalty>>;
+       private:
+        BilinearForm bilinear_form_;
+        LinearForm linear_form_;
+        Eigen::Matrix<double, Dynamic, 1> ic_;
+        int max_iter_ = 50;
+        double tol_ = 1e-4;
+       public:
+        penalty_packet(
+          const BilinearForm& bilinear_form, const LinearForm& linear_form, const Eigen::Matrix<double, Dynamic, 1>& ic,
+          int max_iter, double tol) :
+            bilinear_form_(bilinear_form), linear_form_(linear_form), ic_(ic), max_iter_(max_iter), tol_(tol) { }
+        // observers
+        const BilinearForm& bilinear_form() const { return bilinear_form_; }
+        const LinearForm& linear_form() const { return linear_form_; }
+        const Eigen::Matrix<double, Dynamic, 1>& ic() const { return ic_; }
+        int max_iter() const { return max_iter_; }
+        double tol() const { return tol_; }
     };
    public:
     template <typename InitialCondition>
     fe_ls_parabolic_ieul(const Penalty& penalty, const InitialCondition& ic, int max_iter = 50, double tol = 1e-4) :
-        info_(ic, penalty, max_iter, tol) { }
-    const info_t& get() const { return info_; }
+        penalty_(std::get<0>(penalty), std::get<1>(penalty), ic, max_iter, tol) { }
+    const penalty_packet& get() const { return penalty_; }
    private:
-    info_t info_;
+    penalty_packet penalty_;
 };
 
 }   // namespace fdapde
