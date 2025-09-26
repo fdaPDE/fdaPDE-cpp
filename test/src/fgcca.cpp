@@ -63,7 +63,7 @@ TEST(de, test_01) {
     {
         Eigen::Matrix<double, Dynamic, Dynamic> X1 = read_csv<double>(path + "X1.csv").as_matrix();
         auto& level = gf_1.insert_scalar_layer<POINT>("data", path + "locs_1.csv");
-        level.load_blk("X1", X1);
+        level.load_blk("X1", X1.transpose());
     }
     internals::FunctionalBlock block_1("X1", gf_1, fe_ls_elliptic(a, F), 0.1);
     std::cout << block_1 << std::endl;
@@ -72,7 +72,7 @@ TEST(de, test_01) {
     {
         Eigen::Matrix<double, Dynamic, Dynamic> X2 = read_csv<double>(path + "X2.csv").as_matrix();
         auto& level = gf_2.insert_scalar_layer<POINT>("data", path + "locs_2.csv");
-        level.load_blk("X2", X2);
+        level.load_blk("X2", X2.transpose());
     }
     internals::FunctionalBlock block_2("X2", gf_2, fe_ls_elliptic(a, F), 0.1);
     std::cout << block_2 << std::endl;
@@ -81,7 +81,7 @@ TEST(de, test_01) {
     {
         Eigen::Matrix<double, Dynamic, Dynamic> X3 = read_csv<double>(path + "X3.csv").as_matrix();
         auto& level = gf_3.insert_scalar_layer<POINT>("data", path + "locs_3.csv");
-        level.load_blk("X3", X3);
+        level.load_blk("X3", X3.transpose());
     }
     internals::FunctionalBlock block_3("X3", gf_3, fe_ls_elliptic(a, F), 0.1);
     std::cout << block_3 << std::endl;
@@ -90,12 +90,68 @@ TEST(de, test_01) {
     {
         Eigen::Matrix<double, Dynamic, Dynamic> X4 = read_csv<double>(path + "X4.csv").as_matrix();
         auto& level = gf_4.insert_scalar_layer<POINT>("data", path + "locs_4.csv");
-        level.load_blk("X4", X4);
+        level.load_blk("X4", X4.transpose());
     }
     internals::FunctionalBlock block_4("X4", gf_4, fe_ls_elliptic(a, F), 0.1);
+    block_4.set_lambda(1e-12);
     std::cout << block_4 << std::endl;
-    block_4.l_compute(Eigen::Matrix<double, Eigen::Dynamic, 1>::Ones(201), 1e-12);
+    block_4.l_compute(Eigen::Matrix<double, Eigen::Dynamic, 1>::Ones(201));
     std::cout << block_4.loadings_m().transpose() << "\n" << std::endl;
     std::cout << block_4.components().transpose().leftCols(10) << "\n" << std::endl;
+
+}
+
+
+TEST(de, test_02) {
+    std::string path = "../../../../projects/cca/";
+
+    // geometries
+    Triangulation<1, 1> I(0, 1, 21);
+
+    // define physics
+    FeSpace Bh(I, P1<1>);
+    TrialFunction f(Bh);
+    TestFunction  v(Bh);
+    auto a = integral(I)(dx(f) * dx(v));
+    ZeroField<1> u;
+    auto F = integral(I)(u * v);
+
+    // vector of blocks
+    using BlockPtr = std::unique_ptr<internals::BaseBlock>;
+    std::vector<BlockPtr> blocks;
+
+    // add blocks
+
+    Eigen::Matrix<double, Dynamic, Dynamic> X1 = read_csv<double>(path + "X1.csv").as_matrix();
+    blocks.emplace_back(make_multivariate_block("X1", X1, 1e-6));
+
+    GeoFrame gf_2(I);
+    {
+        Eigen::Matrix<double, Dynamic, Dynamic> X2 = read_csv<double>(path + "X2.csv").as_matrix();
+        auto& level = gf_2.insert_scalar_layer<POINT>("data", path + "locs_2.csv");
+        level.load_blk("X2", X2.transpose());
+    }
+    blocks.emplace_back(make_functional_block("X2", gf_2, fe_ls_elliptic(a, F), 1e-6));
+    blocks.back() -> set_lambda(1e-12);
+
+    Eigen::Matrix<double, Dynamic, Dynamic> X3 = read_csv<double>(path + "X3.csv").as_matrix();
+    blocks.emplace_back(make_multivariate_block("X3", X3, 1e-6));
+
+    GeoFrame gf_4(I);
+    {
+        Eigen::Matrix<double, Dynamic, Dynamic> X4 = read_csv<double>(path + "X4.csv").as_matrix();
+        auto& level = gf_4.insert_scalar_layer<POINT>("data", path + "locs_4.csv");
+        level.load_blk("X4", X4.transpose());
+    }
+    blocks.emplace_back(make_functional_block("X4", gf_4, fe_ls_elliptic(a, F), 1e-6));
+    blocks.back() -> set_lambda(1e-12);
+
+    for (auto& block : blocks) {
+        std::cout << *block << std::endl;
+        block -> l_compute(Eigen::Matrix<double, Eigen::Dynamic, 1>::Ones(block -> n_obs()));
+        std::cout << block -> loadings_m().transpose() << "\n" << std::endl;
+        std::cout << block -> components().transpose().leftCols(10) << "\n" << std::endl;
+    }
+
 
 }
