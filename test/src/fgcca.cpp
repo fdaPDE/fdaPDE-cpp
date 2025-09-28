@@ -17,7 +17,7 @@
 using namespace fdapde;
 using fdapde::test::almost_equal;
 
-TEST(de, test_00) {
+TEST(rgcca, test_00) {
     std::string path = "../../../../projects/cca/";
 
     // data
@@ -43,8 +43,7 @@ TEST(de, test_00) {
 
 }
 
-
-TEST(de, test_01) {
+TEST(rgcca, test_01) {
     std::string path = "../../../../projects/cca/";
 
     // geometries
@@ -102,7 +101,7 @@ TEST(de, test_01) {
 }
 
 
-TEST(de, test_02) {
+TEST(rgcca, test_02) {
     std::string path = "../../../../projects/cca/";
 
     // geometries
@@ -116,42 +115,171 @@ TEST(de, test_02) {
     ZeroField<1> u;
     auto F = integral(I)(u * v);
 
+    // initialize an RGCCA object
+    RGCCA rgcca(201, RGCCA::Scheme::Factorial());
+    rgcca.set_n_comp(1);                // or more, when you implement deflation
+
+    // vector of blocks
+    using BlockPtr = std::unique_ptr<internals::BaseBlock>;
+    std::vector<BlockPtr> blocks;
+
+    double tau = 1e-6;
+
+    // add blocks
+    Eigen::Matrix<double, Dynamic, Dynamic> X1 = read_csv<double>(path + "X1.csv").as_matrix();
+    rgcca.add_multivariate_block("X1", X1);
+
+    Eigen::Matrix<double, Dynamic, Dynamic> X2 = read_csv<double>(path + "X2.csv").as_matrix();
+    rgcca.add_multivariate_block("X2", X2);
+
+    Eigen::Matrix<double, Dynamic, Dynamic> X3 = read_csv<double>(path + "X3.csv").as_matrix();
+    rgcca.add_multivariate_block("X3", X3);
+
+    Eigen::Matrix<double, Dynamic, Dynamic> X4 = read_csv<double>(path + "X4.csv").as_matrix();
+    rgcca.add_multivariate_block("X4", X4);
+
+    // set optimal tau
+    rgcca.set_tau_auto_all();
+
+    // show blocks
+    for (auto& block : rgcca.blocks()) {
+        std::cout << *block << std::endl;
+    }
+
+    // add connections
+    rgcca.connect(0,2);
+    rgcca.connect(1,3);
+
+    for (int j = 0; j < rgcca.n_blocks(); ++j) {
+        const auto& X = rgcca.blocks()[j]->data();
+        Eigen::BDCSVD<RGCCA::Matrix> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        const double s1 = svd.singularValues()(0);
+        const double n  = double(rgcca.n_obs());
+        const double tau = rgcca.blocks()[j]->tau();
+        const double predicted = 1.0 / std::sqrt(((1.0 - tau)/double(n)) * s1 * s1 + tau);
+        std::cout << "block " << j
+                  << "  s1=" << s1
+                  << "  predicted ||a||=" << predicted
+                  << std::endl;
+    }
+
+    // fit
+    auto res = rgcca.fit();
+
+    for (int j = 0; j < rgcca.n_blocks(); ++j) {
+        const auto& a = rgcca.blocks()[j]->loadings().col(rgcca.h());
+        std::cout << "block " << j << "  ||a||=" << a.norm()
+                  << "  a^T Σ a=" << std::sqrt( (a.transpose() * rgcca.blocks()[j]->Sigma() * a)(0) )
+                  << std::endl;
+    }
+    std::cout << std::endl;
+
+    // results
+    std::cout << "n_iters: " << res.iters << std::endl;
+    std::cout << "Monotone: " << res.monotone << std::endl;
+    int iter = 1;
+    double val_old = 0;
+    for (auto& val : res.obj_history){
+        std::cout << "Iter: \t" << iter;
+        std::cout << "\tFit: \t" << val;
+        std::cout << "\tDiff: \t" << val - val_old << std::endl;
+        val_old = val;
+        iter++;
+    }
+    std::cout << std::endl;
+
+    // covariance
+    std::cout << rgcca.covariance_matrix() << std::endl;
+    std::cout << std::endl;
+
+    // covariance
+    for (auto& block : rgcca.blocks()) {
+        std::cout << block -> loadings_m().col(0).norm() << " ";
+    }
+    std::cout << std::endl;
+    std::cout << std::endl;
+
+    for (auto& block : rgcca.blocks()) {
+        write_csv(path + "loadings_"+ block -> name() + ".csv", block -> loadings_m());
+        write_csv(path + "components_"+ block -> name() + ".csv", block -> components());
+    }
+}
+
+
+TEST(rgcca, test_03) {
+    std::string path = "../../../../projects/cca/";
+
+    // geometries
+    Triangulation<1, 1> I(0, 1, 101);
+
+    // define physics
+    FeSpace Bh(I, P1<1>);
+    TrialFunction f(Bh);
+    TestFunction  v(Bh);
+    auto a = integral(I)(dx(f)*dx(v) + 10000*f*v);
+    ZeroField<1> u;
+    auto F = integral(I)(u * v);
+
+    // initialize an RGCCA object
+    RGCCA rgcca(201, RGCCA::Scheme::Factorial());
+    rgcca.set_n_comp(1);                // or more, when you implement deflation
+
     // vector of blocks
     using BlockPtr = std::unique_ptr<internals::BaseBlock>;
     std::vector<BlockPtr> blocks;
 
     // add blocks
-
-    Eigen::Matrix<double, Dynamic, Dynamic> X1 = read_csv<double>(path + "X1.csv").as_matrix();
-    blocks.emplace_back(make_multivariate_block("X1", X1, 1e-6));
-
-    GeoFrame gf_2(I);
-    {
-        Eigen::Matrix<double, Dynamic, Dynamic> X2 = read_csv<double>(path + "X2.csv").as_matrix();
-        auto& level = gf_2.insert_scalar_layer<POINT>("data", path + "locs_2.csv");
-        level.load_blk("X2", X2.transpose());
+    for (int i = 1; i <=4; ++i) {
+        GeoFrame gf(I);
+        Eigen::Matrix<double, Dynamic, Dynamic> X = read_csv<double>(path + "X"+std::to_string(i)+".csv").as_matrix();
+        auto& level = gf.insert_scalar_layer<POINT>("data", path + "locs_"+std::to_string(i)+".csv");
+        level.load_blk("X"+std::to_string(i), X.transpose());
+        rgcca.add_functional_block("X"+std::to_string(i), gf, fe_ls_elliptic(a, F));
     }
-    blocks.emplace_back(make_functional_block("X2", gf_2, fe_ls_elliptic(a, F), 1e-6));
-    blocks.back() -> set_lambda(1e-12);
 
-    Eigen::Matrix<double, Dynamic, Dynamic> X3 = read_csv<double>(path + "X3.csv").as_matrix();
-    blocks.emplace_back(make_multivariate_block("X3", X3, 1e-6));
+    // add connections
+    rgcca.connect(0,2);
+    rgcca.connect(1,3);
 
-    GeoFrame gf_4(I);
-    {
-        Eigen::Matrix<double, Dynamic, Dynamic> X4 = read_csv<double>(path + "X4.csv").as_matrix();
-        auto& level = gf_4.insert_scalar_layer<POINT>("data", path + "locs_4.csv");
-        level.load_blk("X4", X4.transpose());
-    }
-    blocks.emplace_back(make_functional_block("X4", gf_4, fe_ls_elliptic(a, F), 1e-6));
-    blocks.back() -> set_lambda(1e-12);
+    // set parameters tau
+    rgcca.set_tau_auto_all();
+    rgcca.set_lambda_all(1e-6);
 
-    for (auto& block : blocks) {
+    // show blocks
+    for (auto& block : rgcca.blocks()) {
         std::cout << *block << std::endl;
-        block -> l_compute(Eigen::Matrix<double, Eigen::Dynamic, 1>::Ones(block -> n_obs()));
-        std::cout << block -> loadings_m().transpose() << "\n" << std::endl;
-        std::cout << block -> components().transpose().leftCols(10) << "\n" << std::endl;
     }
 
+    // fit
+    auto res = rgcca.fit();
 
+    // results
+    std::cout << "n_iters: " << res.iters << std::endl;
+    std::cout << "Monotone: " << res.monotone << std::endl;
+    int iter = 1;
+    double val_old = 0;
+    for (auto& val : res.obj_history){
+        std::cout << "Iter: \t" << iter;
+        std::cout << "\tFit: \t" << val;
+        std::cout << "\tDiff: \t" << val - val_old << std::endl;
+        val_old = val;
+        iter++;
+    }
+    std::cout << std::endl;
+
+    // covariance
+    std::cout << rgcca.covariance_matrix() << std::endl;
+    std::cout << std::endl;
+
+    // covariance
+    for (auto& block : rgcca.blocks()) {
+        std::cout << block -> loadings_m().col(0).norm() << " ";
+    }
+    std::cout << std::endl;
+    std::cout << std::endl;
+
+    for (auto& block : rgcca.blocks()) {
+        write_csv(path + "f_loadings_"+ block -> name() + ".csv", block -> loadings_m());
+        write_csv(path + "f_components_"+ block -> name() + ".csv", block -> components());
+    }
 }
