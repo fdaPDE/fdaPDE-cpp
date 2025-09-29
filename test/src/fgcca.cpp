@@ -37,9 +37,9 @@ TEST(rgcca, test_00) {
     internals::MultivariateBlock block_4("X4", X4, 0.1);
     std::cout << block_4 << std::endl;
 
-    block_4.l_compute(Eigen::Matrix<double, Eigen::Dynamic, 1>::Ones(201));
-    std::cout << block_4.loadings_m().transpose() << "\n" << std::endl;
-    std::cout << block_4.components().transpose().leftCols(10) << "\n" << std::endl;
+    // block_4.l_compute(Eigen::Matrix<double, Eigen::Dynamic, 1>::Ones(201));
+    // std::cout << block_4.loadings_m().transpose() << "\n" << std::endl;
+    // std::cout << block_4.components().transpose().leftCols(10) << "\n" << std::endl;
 
 }
 
@@ -94,9 +94,9 @@ TEST(rgcca, test_01) {
     internals::FunctionalBlock block_4("X4", gf_4, fe_ls_elliptic(a, F), 0.1);
     block_4.set_lambda(1e-12);
     std::cout << block_4 << std::endl;
-    block_4.l_compute(Eigen::Matrix<double, Eigen::Dynamic, 1>::Ones(201));
-    std::cout << block_4.loadings_m().transpose() << "\n" << std::endl;
-    std::cout << block_4.components().transpose().leftCols(10) << "\n" << std::endl;
+    // block_4.l_compute(Eigen::Matrix<double, Eigen::Dynamic, 1>::Ones(201));
+    // std::cout << block_4.loadings_m().transpose() << "\n" << std::endl;
+    // std::cout << block_4.components().transpose().leftCols(10) << "\n" << std::endl;
 
 }
 
@@ -104,52 +104,30 @@ TEST(rgcca, test_01) {
 TEST(rgcca, test_02) {
     std::string path = "../../../../projects/cca/";
 
-    // geometries
-    Triangulation<1, 1> I(0, 1, 21);
+    // chose options
+    RGCCA::Options options;
+    options.tau_selection = TauSelection::Automatic;
 
-    // define physics
-    FeSpace Bh(I, P1<1>);
-    TrialFunction f(Bh);
-    TestFunction  v(Bh);
-    auto a = integral(I)(dx(f) * dx(v));
-    ZeroField<1> u;
-    auto F = integral(I)(u * v);
-
-    // initialize an RGCCA object
-    RGCCA rgcca(201, RGCCA::Scheme::Factorial());
-    rgcca.set_n_comp(1);                // or more, when you implement deflation
-
-    // vector of blocks
-    using BlockPtr = std::unique_ptr<internals::BaseBlock>;
-    std::vector<BlockPtr> blocks;
-
-    double tau = 1e-6;
+    // model initialization
+    int n_comp = 2;
+    RGCCA rgcca(201, Scheme::Factorial(), options, n_comp);
 
     // add blocks
     Eigen::Matrix<double, Dynamic, Dynamic> X1 = read_csv<double>(path + "X1.csv").as_matrix();
     rgcca.add_multivariate_block("X1", X1);
-
     Eigen::Matrix<double, Dynamic, Dynamic> X2 = read_csv<double>(path + "X2.csv").as_matrix();
     rgcca.add_multivariate_block("X2", X2);
-
     Eigen::Matrix<double, Dynamic, Dynamic> X3 = read_csv<double>(path + "X3.csv").as_matrix();
     rgcca.add_multivariate_block("X3", X3);
-
     Eigen::Matrix<double, Dynamic, Dynamic> X4 = read_csv<double>(path + "X4.csv").as_matrix();
     rgcca.add_multivariate_block("X4", X4);
-
-    // set optimal tau
-    rgcca.set_tau_auto_all();
-
-    // show blocks
-    for (auto& block : rgcca.blocks()) {
-        std::cout << *block << std::endl;
-    }
 
     // add connections
     rgcca.connect(0,2);
     rgcca.connect(1,3);
 
+    /*
+    // check
     for (int j = 0; j < rgcca.n_blocks(); ++j) {
         const auto& X = rgcca.blocks()[j]->data();
         Eigen::BDCSVD<RGCCA::Matrix> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
@@ -162,10 +140,12 @@ TEST(rgcca, test_02) {
                   << "  predicted ||a||=" << predicted
                   << std::endl;
     }
+    */
 
     // fit
-    auto res = rgcca.fit();
+    auto results = rgcca.fit();
 
+    /*
     for (int j = 0; j < rgcca.n_blocks(); ++j) {
         const auto& a = rgcca.blocks()[j]->loadings().col(rgcca.h());
         std::cout << "block " << j << "  ||a||=" << a.norm()
@@ -173,30 +153,9 @@ TEST(rgcca, test_02) {
                   << std::endl;
     }
     std::cout << std::endl;
+    */
 
-    // results
-    std::cout << "n_iters: " << res.iters << std::endl;
-    std::cout << "Monotone: " << res.monotone << std::endl;
-    int iter = 1;
-    double val_old = 0;
-    for (auto& val : res.obj_history){
-        std::cout << "Iter: \t" << iter;
-        std::cout << "\tFit: \t" << val;
-        std::cout << "\tDiff: \t" << val - val_old << std::endl;
-        val_old = val;
-        iter++;
-    }
-    std::cout << std::endl;
-
-    // covariance
-    std::cout << rgcca.covariance_matrix() << std::endl;
-    std::cout << std::endl;
-
-    // covariance
-    for (auto& block : rgcca.blocks()) {
-        std::cout << block -> loadings_m().col(0).norm() << " ";
-    }
-    std::cout << std::endl;
+    std::cout << results << std::endl;
     std::cout << std::endl;
 
     for (auto& block : rgcca.blocks()) {
@@ -210,23 +169,23 @@ TEST(rgcca, test_03) {
     std::string path = "../../../../projects/cca/";
 
     // geometries
-    Triangulation<1, 1> I(0, 1, 101);
+    Triangulation<1, 1> I(0, 1, 21);
 
-    // define physics
+    // define physics (same for all the blocks)
     FeSpace Bh(I, P1<1>);
     TrialFunction f(Bh);
     TestFunction  v(Bh);
-    auto a = integral(I)(dx(f)*dx(v) + 10000*f*v);
+    auto a = integral(I)(dx(f) * dx(v));
     ZeroField<1> u;
     auto F = integral(I)(u * v);
 
-    // initialize an RGCCA object
-    RGCCA rgcca(201, RGCCA::Scheme::Factorial());
-    rgcca.set_n_comp(1);                // or more, when you implement deflation
+    // chose options
+    RGCCA::Options options;
+    options.tau_selection = TauSelection::Automatic;
 
-    // vector of blocks
-    using BlockPtr = std::unique_ptr<internals::BaseBlock>;
-    std::vector<BlockPtr> blocks;
+    // model initialization
+    int n_comp = 2;
+    RGCCA rgcca(201, Scheme::Factorial(), options, n_comp);
 
     // add blocks
     for (int i = 1; i <=4; ++i) {
@@ -241,41 +200,39 @@ TEST(rgcca, test_03) {
     rgcca.connect(0,2);
     rgcca.connect(1,3);
 
-    // set parameters tau
-    rgcca.set_tau_auto_all();
+    // set lambda parameter
     rgcca.set_lambda_all(1e-6);
 
-    // show blocks
-    for (auto& block : rgcca.blocks()) {
-        std::cout << *block << std::endl;
+    /*
+    // check
+    for (int j = 0; j < rgcca.n_blocks(); ++j) {
+        const auto& X = rgcca.blocks()[j]->data();
+        Eigen::BDCSVD<RGCCA::Matrix> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        const double s1 = svd.singularValues()(0);
+        const double n  = double(rgcca.n_obs());
+        const double tau = rgcca.blocks()[j]->tau();
+        const double predicted = 1.0 / std::sqrt(((1.0 - tau)/double(n)) * s1 * s1 + tau);
+        std::cout << "block " << j
+                  << "  s1=" << s1
+                  << "  predicted ||a||=" << predicted
+                  << std::endl;
     }
+    */
 
     // fit
-    auto res = rgcca.fit();
+    auto results = rgcca.fit();
 
-    // results
-    std::cout << "n_iters: " << res.iters << std::endl;
-    std::cout << "Monotone: " << res.monotone << std::endl;
-    int iter = 1;
-    double val_old = 0;
-    for (auto& val : res.obj_history){
-        std::cout << "Iter: \t" << iter;
-        std::cout << "\tFit: \t" << val;
-        std::cout << "\tDiff: \t" << val - val_old << std::endl;
-        val_old = val;
-        iter++;
+    /*
+    for (int j = 0; j < rgcca.n_blocks(); ++j) {
+        const auto& a = rgcca.blocks()[j]->loadings().col(rgcca.h());
+        std::cout << "block " << j << "  ||a||=" << a.norm()
+                  << "  a^T Σ a=" << std::sqrt( (a.transpose() * rgcca.blocks()[j]->Sigma() * a)(0) )
+                  << std::endl;
     }
     std::cout << std::endl;
+    */
 
-    // covariance
-    std::cout << rgcca.covariance_matrix() << std::endl;
-    std::cout << std::endl;
-
-    // covariance
-    for (auto& block : rgcca.blocks()) {
-        std::cout << block -> loadings_m().col(0).norm() << " ";
-    }
-    std::cout << std::endl;
+    std::cout << results << std::endl;
     std::cout << std::endl;
 
     for (auto& block : rgcca.blocks()) {

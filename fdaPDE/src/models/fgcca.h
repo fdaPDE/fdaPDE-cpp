@@ -20,6 +20,10 @@
 #include "header_check.h"
 
 namespace fdapde {
+enum class Init { Random, SVD };
+enum class DesignMode {Empty, FullyConnected};
+enum class TauSelection {Manual, Automatic};
+enum class Deflation { None, Scores, Loadings };
 
 namespace internals {
 
@@ -27,18 +31,26 @@ class BaseBlock;   // forward decl for operator<<
 std::ostream& operator<<(std::ostream& os, const BaseBlock& b);
 
 class BaseBlock {
-   public:
+public:
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
     using Vector = Eigen::Matrix<double, Eigen::Dynamic, 1>;
     using SparseMatrix = Eigen::SparseMatrix<double, Eigen::ColMajor, int>;
     using SparseSolver = eigen_sparse_solver_movable_wrap<Eigen::SimplicialLDLT<SparseMatrix>>;
 
-    BaseBlock(std::string block_name, Matrix data, int n_nodes, double tau = 0.0, int n_comp = 1) :
+    BaseBlock(std::string block_name, Matrix data, const int n_nodes, const double tau = 0.0, const int n_comp = 1) :
         block_name_(std::move(block_name)), data_(std::move(data)), n_nodes_(n_nodes), tau_(tau), n_comp_(n_comp) { }
 
     virtual ~BaseBlock() = default;
 
     // ---- Uniform public API ----
+
+    // Initialization
+    void init() {
+        ensure_sigma_();
+        ensure_lc_();
+    }
+
+    // Data
     [[nodiscard]] const std::string& name() const { return block_name_; }
     [[nodiscard]] const Matrix& data() const { return data_; }
     Matrix& data() {
@@ -46,10 +58,12 @@ class BaseBlock {
         return data_;
     }
 
+    // Dimensions
     [[nodiscard]] int n_obs() const { return static_cast<int>(data_.rows()); }
     [[nodiscard]] int n_covs() const { return static_cast<int>(data_.cols()); }
     [[nodiscard]] int n_nodes() const { return n_nodes_; }
 
+    // Components
     [[nodiscard]] int n_comp() const { return n_comp_; }
     void set_n_comp(const int n_comp) {
         if (n_comp <= 0) throw std::invalid_argument("n_comp must be > 0");
@@ -58,48 +72,72 @@ class BaseBlock {
         components_ready_ = false;
     }
 
+    // Deflation
     [[nodiscard]] int h() const { return h_; }
     void set_h(int idx) {
         if (idx < 0 || idx >= n_comp_) throw std::out_of_range("h");
         h_ = idx;
     }
     void next_component() { set_h(h_ + 1); }
-
-    [[nodiscard]] double tau() const { return tau_; }
-    void set_tau(double tau) {
-        tau_ = tau;
+    void deflate(const Deflation mode) {
+        if (h() == n_comp()) throw std::out_of_range("h");
+        switch (mode) {
+        case Deflation::Scores:   deflate_scores_(); break;
+        case Deflation::Loadings: deflate_loadings_(); break;
+        case Deflation::None: default: break;
+        }
+        // data_ changed -> Σ invalid; cached scores/loadings are now stale
         invalidate_sigma_();
     }
 
-    [[nodiscard]] const SparseMatrix& Sigma() const {
-        ensure_sigma_();
-        return Sigma_;
-    }
-    SparseSolver& invSigma() {
-        ensure_sigma_();
-        return invSigma_;
-    }
-
-    Matrix& loadings() {
-        ensure_lc_();
-        return loadings_;
-    }
-    Matrix loadings_m() {
-        ensure_lc_();
-        return Psi() * loadings_;
-    }
-    Matrix& components() {
-        ensure_lc_();
-        return components_;
+    // Shrinkage parameter
+    [[nodiscard]] double tau() const { return tau_; }
+    void set_tau(const double tau) {
+        if (tau > 0) tau_ = tau;
+        else select_tau_auto_();
+        invalidate_sigma_();
     }
 
-    void init() {
-        ensure_sigma_();
-        ensure_lc_();
+    // Sigma
+    [[nodiscard]] const SparseMatrix& Sigma() const { ensure_sigma_(); return Sigma_; }
+    SparseSolver& invSigma() { ensure_sigma_(); return invSigma_; }
+
+    // Loadings
+    Matrix& loadings() { ensure_lc_(); return loadings_; }
+    Matrix loadings_m() { ensure_lc_(); return Psi() * loadings_; }
+    Matrix& components() { ensure_lc_(); return components_; }
+
+    // ---- Clean virtual interface ----
+    [[nodiscard]] virtual const SparseMatrix& Psi() const = 0;
+    virtual void l_compute(const Vector& nu) = 0;
+
+    // Virtual printer
+    virtual void print(std::ostream& os) const {
+        const Matrix& X = data();   // no copy
+        using Index = Eigen::Index;
+        const Index max_rows = 3, max_cols = 5;
+        const Index rows = std::min<Index>(max_rows, X.rows());
+        const Index cols = std::min<Index>(max_cols, X.cols());
+        os << name() << " Block preview (" << X.rows() << " x " << X.cols() << "):\n";
+        for (Index i = 0; i < rows; ++i) {
+            for (Index j = 0; j < cols; ++j) {
+                os << X(i, j);
+                if (j + 1 < cols) os << '\t';
+            }
+            if (X.cols() > cols) os << "\t...";
+            os << '\n';
+        }
+        if (X.rows() > rows) os << "...\n";
+        os << "tau = " << tau() << std::endl;
     }
 
-    // mixOmics/RGCCA tau.estimate: Schäfer–Strimmer analytic shrinkage from correlation
-    void select_tau_auto() {
+    // Hyperparameters (default no-op). The model can call this on all blocks.
+    virtual void set_lambda(double) { }   // default: ignored
+
+protected:
+
+    // tau estimate using Schäfer–Strimmer analytic shrinkage from correlation
+    void select_tau_auto_() {
         const int n = n_obs(), p = n_covs();
         if (n < 2 || p < 1) throw std::runtime_error("tau_auto: need n>=2 and p>=1");
 
@@ -132,33 +170,7 @@ class BaseBlock {
         set_tau(tau_hat);  // invalidates Sigma_; recomputed lazily
     }
 
-    // ---- Clean virtual interface ----
-    [[nodiscard]] virtual const SparseMatrix& Psi() const = 0;
-    virtual void l_compute(const Vector& nu) = 0;
-
-    // virtual printer
-    virtual void print(std::ostream& os) const {
-        const Matrix& X = data();   // no copy
-        using Index = Eigen::Index;
-        const Index max_rows = 3, max_cols = 5;
-        const Index rows = std::min<Index>(max_rows, X.rows());
-        const Index cols = std::min<Index>(max_cols, X.cols());
-        os << name() << " Block preview (" << X.rows() << " x " << X.cols() << "):\n";
-        for (Index i = 0; i < rows; ++i) {
-            for (Index j = 0; j < cols; ++j) {
-                os << X(i, j);
-                if (j + 1 < cols) os << '\t';
-            }
-            if (X.cols() > cols) os << "\t...";
-            os << '\n';
-        }
-        if (X.rows() > rows) os << "...\n";
-        os << "tau = " << tau() << std::endl;
-    }
-
-    // Hyperparameters (default no-op). The model can call this on all blocks.
-    virtual void set_lambda(double) { }   // default: ignored
-   protected:
+    // Sigma
     void compute_sigma_() {
         SparseMatrix I(n_covs(), n_covs());
         I.setIdentity();
@@ -173,6 +185,8 @@ class BaseBlock {
         if (!sigma_ready_) const_cast<BaseBlock*>(this)->compute_sigma_();
     }
     void invalidate_sigma_() { sigma_ready_ = false; }
+
+    // Loadings and Components
     void ensure_lc_() {
         if (!loadings_ready_) {
             loadings_.setZero(n_nodes_, n_comp_);
@@ -183,8 +197,8 @@ class BaseBlock {
             components_ready_ = true;
         }
     }
-    // Scale factor s so that Var(eta) = 1 where eta has length n_obs()
     [[nodiscard]] double scale_to_unit_score_variance_(Vector& eta) const {
+        // Scale factor s so that Var(eta) = 1 where eta has length n_obs()
         const double v = eta.squaredNorm() / static_cast<double>(n_obs());
         if (v <= 0.0) return 1.0;
         const double s = 1.0 / std::sqrt(v);
@@ -192,9 +206,49 @@ class BaseBlock {
         return s;
     }
 
-    // state
+    // Deflation
+    void deflate_scores_() {
+
+        // --- Scores deflation (uncorrelated scores next)
+        // R = I - η η^T / (η^T η)
+        // Then X <- R X
+
+        ensure_lc_(); // make sure components() is sized
+        const Vector eta = components().col(h_);   // effective components  (length n_obs)
+        const int n = n_obs();
+
+        // Assemble projection matrix
+        Matrix R = Matrix::Identity(n, n);
+        const double denom = eta.squaredNorm();
+        if (denom <= 0.0) return;
+        R.noalias() -= (eta * eta.transpose()) / denom;
+
+        // Apply left projection in scores space
+        data_ = R * data_;
+    }
+    void deflate_loadings_() {
+
+        // --- Loadings deflation (orthogonal loadings next)
+        // R = I - a a^T / (a^T a)
+        // Then X <- X R
+
+        ensure_lc_(); // make sure loadings() is sized so loadings_m() is OK
+        const Vector a_m = loadings_m().col(h_);   // effective loading a_m = Ψ f  (length n_covs)
+        const int p = n_covs();
+
+        // Assemble projection matrix
+        Matrix R = Matrix::Identity(p, p);
+        const double denom = a_m.squaredNorm();
+        if (denom <= 0.0) return;
+        R.noalias() -= (a_m * a_m.transpose()) / denom;
+
+        // Apply right projection in variable space
+        data_ = data_ * R;
+    }
+
+    // State
     std::string block_name_;
-    Matrix data_;   // n_obs x n_covs
+    Matrix data_; // n_obs x n_covs
     int n_nodes_ {0};
     double tau_ {0.0};
     int n_comp_ {1};
@@ -216,7 +270,7 @@ inline std::ostream& operator<<(std::ostream& os, const BaseBlock& b) {
 
 // ========== MultivariateBlock ==========
 class MultivariateBlock final : public BaseBlock {
-   public:
+public:
     using Base = BaseBlock;
     using Matrix = Base::Matrix;
     using Vector = Base::Vector;
@@ -256,14 +310,14 @@ class MultivariateBlock final : public BaseBlock {
         os << "type: MultivariateBlock, n_nodes = n_covs = " << n_nodes();
         os << "\n";
     }
-   private:
+private:
     SparseMatrix Psi_;   // identity
 };
 
 // ========== FunctionalBlock ==========
 template <class PenaltyType>
 class FunctionalBlock final : public BaseBlock {
-   public:
+public:
     using Base = BaseBlock;
     using Vector = Base::Vector;
     using Matrix = Base::Matrix;
@@ -313,7 +367,7 @@ class FunctionalBlock final : public BaseBlock {
         os << ", lambda = " << lambda_;
         os << "\n";
     }
-   private:
+private:
     lSolverType solver_;
     double lambda_ = 1e-12;   // owned by the block (set by the model)
 };
@@ -331,116 +385,102 @@ std::unique_ptr<internals::BaseBlock> make_functional_block(
 }
 }   // namespace internals
 
+
+
+// ===== Scheme (g, w, phi) =====
+struct Scheme {
+    std::function<double(double)> g;   // g(t)
+    std::function<double(double)> w;   // w(t)
+    double phi = 1.0;
+    const char* name = "custom";
+
+    static Scheme Horst() {
+        return {[](double t) { return t; }, [](double) { return 1.0; }, 1.0, "Horst"};
+    }
+    static Scheme Centroid() {
+        return {
+            [](double t) { return std::abs(t); }, [](double t) { return t >= 0 ? 1.0 : -1.0; }, 1.0, "Centroid"};
+    }
+    static Scheme Factorial() {
+        return {[](double t) { return t * t; }, [](double t) { return t; }, 2.0, "Factorial"};
+    }
+};
+
+
+struct Result {
+    using Block = internals::BaseBlock;
+    using Matrix = Block::Matrix;
+
+    int h = 0;
+    int J = 0;
+    std::vector<double> obj_history;
+    bool monotone = true;
+    int iters = 0;
+    Matrix covariance_matrix;
+    std::vector<double> tau_values;
+
+    explicit Result(const int n_blocks) : J(n_blocks), covariance_matrix(J,J), tau_values(J) {}
+
+};
+
+// forward declaration of pretty printers
+std::ostream& operator<<(std::ostream& os, const Result& r);
+std::ostream& operator<<(std::ostream& os, const std::vector<Result>& results);
+
 class RGCCA {
-   public:
+public:
     using Block = internals::BaseBlock;
     using BlockPtr = std::unique_ptr<Block>;
     using Matrix = Block::Matrix;
     using Vector = Block::Vector;
 
-    // ===== Scheme (g, w, phi) =====
-    struct Scheme {
-        std::function<double(double)> g;   // g(t)
-        std::function<double(double)> w;   // w(t)
-        double phi = 1.0;
-        const char* name = "custom";
-
-        static Scheme Horst() {
-            return {[](double t) { return t; }, [](double) { return 1.0; }, 1.0, "Horst"};
-        }
-        static Scheme Centroid() {
-            return {
-              [](double t) { return std::abs(t); }, [](double t) { return t >= 0 ? 1.0 : -1.0; }, 1.0, "Centroid"};
-        }
-        static Scheme Factorial() {
-            return {[](double t) { return t * t; }, [](double t) { return t; }, 2.0, "Factorial"};
-        }
-    };
-
     struct Options {
-        enum class Init { Random, SVD };
-
-        int n_comp;
         int max_iter;
         double tol;
         unsigned seed;
         bool verbose;
         bool cache_covariances;
         Init init;
+        TauSelection tau_selection;
+        Deflation deflation_mode;
 
         explicit Options(
-          const int n_comp_ = 1, const int max_iter_ = 1000, const double tol_ = 1e-8, const unsigned seed_ = 0,
-          const Init init_ = Init::SVD,
+          const int max_iter_ = 1000, const double tol_ = 1e-8, const unsigned seed_ = 0,
+          const Init init_ = Init::SVD, const TauSelection tau_selection_ = TauSelection::Automatic,
+          const Deflation deflation_mode_ = Deflation::Scores,
           const bool verbose_ = false, const bool cache_ = true) :
-            n_comp(n_comp_),
             max_iter(max_iter_),
             tol(tol_),
             seed(seed_),
             init(init_),
+            tau_selection(tau_selection_),
+            deflation_mode(deflation_mode_),
             verbose(verbose_),
             cache_covariances(cache_) { }
     };
 
-    struct Result {
-        std::vector<double> obj_history;
-        bool monotone = true;
-        int iters = 0;
-    };
-
-    enum class DesignMode {
-        Empty,
-        FullyConnected
-    };
-
-    explicit RGCCA(int n_obs, Scheme scheme = RGCCA::Scheme::Horst(), Options opt = Options(), const int n_comp = 1) :
-        n_obs_(n_obs), scheme_(std::move(scheme)), opt_(opt) {
-        opt_.n_comp = n_comp;
-    }
+    explicit RGCCA(const int n_obs, const Scheme& scheme = Scheme::Horst(), const Options& opt = Options(), const int n_comp = 1) :
+        n_obs_(n_obs), scheme_(std::move(scheme)), opt_(opt), n_comp_(n_comp) {}
 
     // ===== Blocks =====
     int add_block(BlockPtr b) {
         if (!b) throw std::invalid_argument("RGCCA/add_block: null block");
-        if (b->n_obs() != n_obs_) throw std::invalid_argument("RGCCA/add_block: n_obs mismatch");
-        b->set_n_comp(opt_.n_comp);
-        b->set_h(h_);
-        const int j = static_cast<int>(blocks_.size());
+        if (b->n_obs() != n_obs()) throw std::invalid_argument("RGCCA/add_block: n_obs mismatch");
+        b->set_n_comp(n_comp());
         blocks_.emplace_back(std::move(b));
         initialized_ = false;   // topology/caches need a fresh init later
-        return j;
+        return ++J_;
     }
     int add_multivariate_block(std::string name, Matrix& X, const double tau = 0.0) {
-        return add_block(internals::make_multivariate_block(std::move(name), X, tau, opt_.n_comp));
+        return add_block(internals::make_multivariate_block(std::move(name), X, tau));
     }
     template <class Tri, class Pen>
     int add_functional_block(std::string name, GeoFrame<Tri>& gf, Pen&& pen, const double tau = 0.0) {
-        return add_block(
-          internals::make_functional_block(std::move(name), gf, std::forward<Pen>(pen), tau, opt_.n_comp));
+        return add_block(internals::make_functional_block(std::move(name), gf, std::forward<Pen>(pen), tau));
     }
+    [[nodiscard]] int n_blocks() { return J_; }
 
-    // ===== One-shot init (does all resizes) =====
-    void init(const DesignMode mode) {
-        const int J = static_cast<int>(blocks_.size());
-        if (J < 2) throw std::runtime_error("RGCCA/init: need ≥ 2 blocks");
-        // resize design
-        C_.resize(J, J);
-        C_.setConstant(false);
-        if (mode == DesignMode::FullyConnected) {
-            for (int j = 0; j < J; ++j)
-                for (int k = 0; k < J; ++k)
-                    if (k != j) C_(j, k) = true;   // diag remains false
-        }
-        // resize covariance cache + dirty mask
-        Cov_.setZero(J, J);
-        dirty_.setOnes(J, J);
-        for (int i = 0; i < J; ++i) {
-            Cov_(i, i) = 1.0;
-            dirty_(i, i) = 0;
-        }
-        initialized_ = true;
-        user_defined_design_ = (mode == DesignMode::Empty);   // means user will set edges
-    }
-
-    // If user calls connect before init, we lazily init with an EMPTY graph.
+    // Connect blocks
     void connect(int j, int k, bool on = true) {
         if (!initialized_) init(DesignMode::Empty);
         check_index_(j);
@@ -450,50 +490,93 @@ class RGCCA {
         user_defined_design_ = true;
     }
 
-    void set_tau_auto_all() {
-        for (auto& b : blocks_) b->select_tau_auto();
+    // ===== One-shot init (does all resizes) =====
+    void init(const DesignMode mode) {
+        const int J = n_blocks();
+        if (J < 2) throw std::runtime_error("RGCCA/init: need ≥ 2 blocks");
+        // resize design
+        C_.resize(J, J);
+        C_.setConstant(false);
+        if (mode == DesignMode::FullyConnected) {
+            for (int j = 0; j < J; ++j)
+                for (int k = 0; k < J; ++k)
+                    if (k != j) C_(j, k) = true;   // diag remains false
+        }
+        initialized_ = true;
+        user_defined_design_ = (mode == DesignMode::Empty);   // means user will set edges
+    }
+    void init_comp() {
+        if (opt_.tau_selection == TauSelection::Automatic) { set_tau_auto_all_(); }
+        clear_covariance_cache_();
     }
 
-    void set_lambda_all(double lambda) {
-        for (auto& b : blocks_) b->set_lambda(lambda);
-    }
+    // Parameters setters
+    void set_lambda_all(const double lambda) const { for (auto& b : blocks_) b->set_lambda(lambda); }
 
-    void set_n_comp(int n_comp) {
+    // Components
+    void set_n_comp(const int n_comp) {
         if (n_comp <= 0) throw std::invalid_argument("n_comp must be > 0");
-        opt_.n_comp = n_comp;
+        n_comp_ = n_comp;
         for (auto& b : blocks_) b->set_n_comp(n_comp);
         if (h_ >= n_comp) set_h(n_comp - 1);
     }
-
     [[nodiscard]] int h() const { return h_; }
-    void set_h(int h) {
-        if (h < 0 || h >= opt_.n_comp) throw std::out_of_range("component index");
+    void set_h(const int h) {
+        if (h < 0 || h >= n_comp_) throw std::out_of_range("component index");
         h_ = h;
         for (auto& b : blocks_) b->set_h(h_);
     }
+    void next_comp() {
+        if (!is_last_comp()) set_h(h() + 1);
+    }
+    bool is_last_comp() {
+        if (!is_last_comp_) {
+            if (h() + 1 == n_comp()) is_last_comp_ = true;
+            return false;
+        }
+        return true;
+    }
 
-    // ===== Fit (single component) =====
-    Result fit() {
-        const int J = static_cast<int>(blocks_.size());
-        if (J < 2) throw std::runtime_error("RGCCA: need ≥ 2 blocks");
+    // Deflation
+    void deflate_all() const {
+        for (auto& b : blocks_) b->deflate(opt_.deflation_mode);
+    }
+
+    // Fit
+    std::vector<Result> fit() {
         if (!initialized_) {
             // user didn't call init ⇒ assume fully connected (off-diagonal true)
             init(DesignMode::FullyConnected);
         }
+
+        // room for results
+        std::vector<Result> results;
+        results.reserve(n_comp());
+
+        // components loop
+        for (set_h(0); !is_last_comp(); next_comp()) {
+            init_comp();
+            results.push_back(fit_component());
+            deflate_all();
+        }
+
+        return results;
+    }
+    Result fit_component() {
+        const int J = n_blocks();
+        if (J < 2) throw std::runtime_error("RGCCA: need ≥ 2 blocks");
 
         // random or SVD init for ν_l
         for (auto& b : blocks_) {
             b->set_h(h_);
             Vector nu;
 
-            if (opt_.init == Options::Init::SVD) {
+            if (opt_.init == Init::SVD) {
                 // Compute U(:,1) from thin SVD of X (n_obs x n_covs)
                 const Matrix& X = b->data();
                 // Use BDCSVD for larger problems, JacobiSVD is fine for smaller ones
                 Eigen::BDCSVD<Matrix> svd(X, Eigen::ComputeThinU);
                 nu = svd.matrixU().col(0);
-                // Orient consistently (optional): make dot(X nu, nu) >= 0
-                if (nu.mean() < 0.0) nu = -nu;
             } else { // Random
                 std::mt19937_64 rng(opt_.seed);
                 std::uniform_real_distribution<double> U(-1.0, 1.0);
@@ -503,7 +586,7 @@ class RGCCA {
         }
 
         // all cov pairs are dirty; we'll fill on demand
-        Result res;
+        Result res(n_blocks());
         res.obj_history.reserve(opt_.max_iter + 1);
         res.obj_history.push_back(objective_());
 
@@ -531,47 +614,54 @@ class RGCCA {
             const double rel  = std::abs(f - prev) / (std::abs(prev) + 1e-16);
             if (rel < opt_.tol) break;
         }
-        return res;
-    }
+        compute_covariance_matrix_(res.covariance_matrix);
+        get_tau(res.tau_values);
 
-    [[nodiscard]] Matrix covariance_matrix(int comp = -1) const {
-        if (comp < 0) comp = h();
-        const int J = static_cast<int>(blocks_.size());
-        Matrix Cov(J, J);
-        for (int j = 0; j < J; ++j) {
-            const Vector eta_j = eta_(*blocks_[j], comp);
-            for (int k = 0; k < J; ++k) {
-                const Vector eta_k = eta_(*blocks_[k], comp);
-                Cov(j, k) = cov_(eta_j, eta_k);
-            }
-        }
-        return Cov;
+        return res;
     }
 
     // ===== Accessors =====
     [[nodiscard]] int n_obs() const { return n_obs_; }
+    [[nodiscard]] int n_comp() const { return n_comp_; }
     [[nodiscard]] int n_blocks() const { return static_cast<int>(blocks_.size()); }
     [[nodiscard]] const Scheme& scheme() const { return scheme_; }
     [[nodiscard]] const Options& options() const { return opt_; }
     [[nodiscard]] const std::vector<BlockPtr>& blocks() const { return blocks_; }
     [[nodiscard]] const Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>& C() const { return C_; }
-    [[nodiscard]] const Matrix& cached_cov() const { return Cov_; }
     [[nodiscard]] bool initialized() const { return initialized_; }
     [[nodiscard]] bool user_defined_design() const { return user_defined_design_; }
-   private:
-    // ===== Helpers =====
-    Vector eta_(Block& b, int comp = -1) const {
-        if (comp < 0) comp = h();
-        return b.components().col(comp);   // η_j = X_j a_mj
+
+private:
+    void clear_covariance_cache_() {
+        const int J = n_blocks();
+        // resize covariance cache + dirty mask
+        Cov_.setZero(J, J);
+        dirty_.setOnes(J, J);
+        for (int i = 0; i < J; ++i) {
+            Cov_(i, i) = 1.0;
+            dirty_(i, i) = 0;
+        }
     }
 
+    void get_tau(std::vector<double> & tau_values) const {
+        for (std::size_t i = 0; i < tau_values.size(); ++i) {
+            tau_values[i] = blocks_[i]->tau();
+        }
+    }
+
+    void set_tau_auto_all_() const { for (auto& b : blocks_) b->set_tau(-1); }
+
+    // ===== Helpers =====
+    Vector eta_(Block& b) const {
+        return b.components().col(h()); // η_j = X_j a_mj
+    }
     [[nodiscard]] double cov_(const Vector& u, const Vector& v) const {
         return (1.0 / static_cast<double>(n_obs_)) * u.dot(v);
     }
 
-    // objective f = Σ_{j<k} C_jk * g( cov(η_j, η_k) )
+    // objective f = Σ_{j,k} C_jk * g( cov(η_j, η_k) )
     double objective_() {
-        const int J = static_cast<int>(blocks_.size());
+        const int J = n_blocks();
         double f = 0.0;
         for (int j = 0; j < J; ++j) {
             const Vector eta_j = eta_(*blocks_[j]);
@@ -585,11 +675,22 @@ class RGCCA {
         return f;
     }
 
+    // Covariance matrix
+    void compute_covariance_matrix_(Matrix & Cov) const {
+        const int J = n_blocks();
+        for (int j = 0; j < J; ++j) {
+            const Vector eta_j = eta_(*blocks_[j]);
+            for (int k = 0; k < J; ++k) {
+                const Vector eta_k = eta_(*blocks_[k]);
+                Cov(j, k) = cov_(eta_j, eta_k);
+            }
+        }
+    }
+
     // --- covariance cache management ---
     void mark_cov_rowcol_dirty_(int l) {
         if (!opt_.cache_covariances) return;
-        const int J = (int)blocks_.size();
-        for (int k = 0; k < J; ++k) {
+        for (int k = 0; k < n_blocks(); ++k) {
             dirty_(l, k) = 1;
             dirty_(k, l) = 1;
         }
@@ -605,9 +706,8 @@ class RGCCA {
         dirty_(l, k) = dirty_(k, l) = 0;
         return c;
     }
-
     void ensure_cov_shapes_() {
-        const int J = (int)blocks_.size();
+        const int J = n_blocks();
         if (Cov_.rows() != J) {
             Cov_.setZero(J, J);
             for (int i = 0; i < J; ++i) Cov_(i, i) = 1.0;
@@ -618,14 +718,19 @@ class RGCCA {
         }
     }
 
+    // indexes
     void check_index_(int j) const {
         if (j < 0 || j >= static_cast<int>(blocks_.size())) throw std::out_of_range("block index");
     }
-   private:
+
+private:
+    int J_ {0};
     int n_obs_;   // global #observations
     int h_ {0};   // current component index
     Scheme scheme_;
     Options opt_;
+    int n_comp_{0};
+    bool is_last_comp_{false};
 
     std::vector<BlockPtr> blocks_;
 
@@ -638,6 +743,45 @@ class RGCCA {
     Eigen::ArrayXXi dirty_ {0, 0};   // 1=dirty, 0=clean
 };
 
-}   // namespace fdapde
+
+// Pretty printer for a single Result
+inline std::ostream& operator<<(std::ostream& os, const Result& r) {
+    os << "n_iters   : " << r.iters << "\n";
+    os << "monotone  : " << (r.monotone ? "yes" : "no") << "\n";
+    os << std::endl;
+    os << "shrinkage parameters used : " << std::endl;
+    for (size_t i = 0; i < r.tau_values.size(); ++i) {
+        os << "- Block " << i+1  << ": tau = "<< r.tau_values[i] << "\n";
+    }
+    os << std::endl;
+    os << "objective :\n";
+    double prev = 0.0;
+    for (size_t i = 0; i < r.obj_history.size(); ++i) {
+        const double val = r.obj_history[i];
+        os << "- iter " << std::setw(3) << (i + 1)
+           << " | fit = " << std::setw(12) << std::setprecision(8) << val
+           << " | diff = " << std::setw(12) << (val - prev) << "\n";
+        prev = val;
+    }
+    os << std::endl;
+    os << "covariance matrix :\n";
+    os << r.covariance_matrix << std::endl;
+
+    return os;
+}
+
+// Pretty printer for a vector of Result (components)
+inline std::ostream& operator<<(std::ostream& os, const std::vector<Result>& results) {
+    for (size_t h = 0; h < results.size(); ++h) {
+        os << "========================================\n";
+        os << "Component " << (h + 1) << "\n";
+        os << "----------------------------------------\n";
+        os << results[h]; // delegate to the single-result printer
+        os << "\n";
+    }
+    return os;
+}
+
+}
 
 #endif   // __FGCCA_H__
