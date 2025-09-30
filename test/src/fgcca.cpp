@@ -92,7 +92,7 @@ TEST(rgcca, test_01) {
         level.load_blk("X4", X4.transpose());
     }
     internals::FunctionalBlock block_4("X4", gf_4, fe_ls_elliptic(a, F), 0.1);
-    block_4.set_lambda(1e-12);
+    block_4.set_lambda(1e-15);
     std::cout << block_4 << std::endl;
     // block_4.l_compute(Eigen::Matrix<double, Eigen::Dynamic, 1>::Ones(201));
     // std::cout << block_4.loadings_m().transpose() << "\n" << std::endl;
@@ -109,8 +109,9 @@ TEST(rgcca, test_02) {
     options.tau_selection = TauSelection::Automatic;
 
     // model initialization
-    int n_comp = 2;
+    int n_comp = 3;
     RGCCA rgcca(201, Scheme::Factorial(), options, n_comp);
+    rgcca.set_noise_sigma_sqr(1e-1);
 
     // add blocks
     Eigen::Matrix<double, Dynamic, Dynamic> X1 = read_csv<double>(path + "X1.csv").as_matrix();
@@ -123,6 +124,7 @@ TEST(rgcca, test_02) {
     rgcca.add_multivariate_block("X4", X4);
 
     // add connections
+    rgcca.connect(0,1);
     rgcca.connect(0,2);
     rgcca.connect(1,3);
 
@@ -184,8 +186,9 @@ TEST(rgcca, test_03) {
     options.tau_selection = TauSelection::Automatic;
 
     // model initialization
-    int n_comp = 2;
+    int n_comp = 3;
     RGCCA rgcca(201, Scheme::Factorial(), options, n_comp);
+    rgcca.set_noise_sigma_sqr(1e-1);
 
     // add blocks
     for (int i = 1; i <=4; ++i) {
@@ -197,11 +200,12 @@ TEST(rgcca, test_03) {
     }
 
     // add connections
+    rgcca.connect(0,1);
     rgcca.connect(0,2);
     rgcca.connect(1,3);
 
     // set lambda parameter
-    rgcca.set_lambda_all(1e-6);
+    rgcca.set_lambda_all(1e-15);
 
     /*
     // check

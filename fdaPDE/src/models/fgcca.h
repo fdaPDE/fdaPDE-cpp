@@ -98,6 +98,10 @@ public:
         invalidate_sigma_();
     }
 
+    // Noise variance
+    void set_noise_sigma_sqr(double noise_sigma_sqr) { noise_sigma_sqr_ = std::max(0.0, noise_sigma_sqr); }
+    std::optional<double> noise_sigma_sqr() const { return noise_sigma_sqr_; }
+
     // Sigma
     [[nodiscard]] const SparseMatrix& Sigma() const { ensure_sigma_(); return Sigma_; }
     SparseSolver& invSigma() { ensure_sigma_(); return invSigma_; }
@@ -106,6 +110,39 @@ public:
     Matrix& loadings() { ensure_lc_(); return loadings_; }
     Matrix loadings_m() { ensure_lc_(); return Psi() * loadings_; }
     Matrix& components() { ensure_lc_(); return components_; }
+
+    struct InitInfo { bool active; Vector nu; double s1; double s1_edge; double frac; };
+
+    InitInfo svd_init(double epsilon = 0.5) const {
+        InitInfo out{false, Vector::Zero(n_obs()), 0.0, 0.0, 0.0};
+        const Matrix& X = data();
+        if (X.size() == 0) return out;
+
+        const Eigen::BDCSVD<Matrix> svd(X, Eigen::ComputeThinU);
+        if (svd.singularValues().size() == 0) return out;
+
+        out.s1 = svd.singularValues()(0);
+        const double fro2 = X.squaredNorm();
+        out.frac = (fro2 > 0.0) ? (out.s1*out.s1)/fro2 : 0.0;
+
+        // If no σ² set, fall back to your energy test
+        if (!noise_sigma_sqr_.has_value()) {
+            out.active = (out.frac >= 1e-3);
+        } else {
+            const double sigma = std::sqrt(std::max(0.0, *noise_sigma_sqr_));
+            const double n = static_cast<double>(n_obs());
+            const double p = static_cast<double>(n_covs());
+            out.s1_edge = sigma * (std::sqrt(n) + std::sqrt(p)) * (1.0 - epsilon);
+            out.active = (out.s1 > out.s1_edge);
+        }
+
+        if (out.active) {
+            out.nu = svd.matrixU().col(0);
+        } else {
+            out.nu.setZero();
+        }
+        return out;
+    }
 
     // ---- Clean virtual interface ----
     [[nodiscard]] virtual const SparseMatrix& Psi() const = 0;
@@ -253,6 +290,8 @@ protected:
     double tau_ {0.0};
     int n_comp_ {1};
     int h_ {0};
+
+    std::optional<double> noise_sigma_sqr_;
 
     Matrix loadings_, components_;
     bool loadings_ready_ {false}, components_ready_ {false};
@@ -416,10 +455,15 @@ struct Result {
     std::vector<double> obj_history;
     bool monotone = true;
     int iters = 0;
+    Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic> C;
     Matrix covariance_matrix;
     std::vector<double> tau_values;
+    std::vector<double> active_blocks;
+    std::vector<double> s1_blocks;
+    std::vector<double> s1_edge_blocks;
 
-    explicit Result(const int n_blocks) : J(n_blocks), covariance_matrix(J,J), tau_values(J) {}
+    explicit Result(const int n_blocks) : J(n_blocks), C(J, J), covariance_matrix(J,J),
+    tau_values(J), active_blocks(J), s1_blocks(J), s1_edge_blocks(J)  {}
 
 };
 
@@ -502,6 +546,7 @@ public:
                 for (int k = 0; k < J; ++k)
                     if (k != j) C_(j, k) = true;   // diag remains false
         }
+        if (noise_sigma_sqr_.has_value()) set_noise_sigma_sqr_all_();
         initialized_ = true;
         user_defined_design_ = (mode == DesignMode::Empty);   // means user will set edges
     }
@@ -510,8 +555,14 @@ public:
         clear_covariance_cache_();
     }
 
+    // Noise
+    void set_noise_sigma_sqr(double noise_sigma_sqr) { noise_sigma_sqr_ = std::max(0.0, noise_sigma_sqr); }
+    std::optional<double> noise_sigma_sqr() const { return noise_sigma_sqr_; }
+
     // Parameters setters
-    void set_lambda_all(const double lambda) const { for (auto& b : blocks_) b->set_lambda(lambda); }
+    void set_lambda_all(const double lambda) const {
+        for (auto& b : blocks_) b->set_lambda(lambda);
+    }
 
     // Components
     void set_n_comp(const int n_comp) {
@@ -566,53 +617,73 @@ public:
         const int J = n_blocks();
         if (J < 2) throw std::runtime_error("RGCCA: need ≥ 2 blocks");
 
-        // random or SVD init for ν_l
-        for (auto& b : blocks_) {
-            b->set_h(h_);
-            Vector nu;
+        // room for results
+        Result res(n_blocks());
 
+        // make a component local copy of the connection matrix C
+        res.C = C_;
+
+        // random or SVD init for ν_l
+        for (int j = 0; j < J; ++j) {
+            auto& b = blocks_[j];
+            b->set_h(h_);
             if (opt_.init == Init::SVD) {
-                // Compute U(:,1) from thin SVD of X (n_obs x n_covs)
-                const Matrix& X = b->data();
-                // Use BDCSVD for larger problems, JacobiSVD is fine for smaller ones
-                Eigen::BDCSVD<Matrix> svd(X, Eigen::ComputeThinU);
-                nu = svd.matrixU().col(0);
+                const auto info = b->svd_init();
+                if (!info.active) {
+                    res.active_blocks[j] = false;
+                    res.s1_blocks[j] = info.s1;
+                    res.s1_edge_blocks[j] = info.s1_edge;
+                    // nothing to be done loadings and components are already initialized at 0
+                } else {
+                    res.active_blocks[j] = true;
+                    res.s1_blocks[j] = info.s1;
+                    res.s1_edge_blocks[j] = info.s1_edge;
+                    std::cout << "nu_" << j << " " << info.nu.transpose().leftCols(10) << std::endl;
+                    b->l_compute(info.nu);  // block handles normalization
+                    std::cout << "a_" << j << " " << b->loadings_m().col(h()).transpose().leftCols(10) << std::endl;
+                }
             } else { // Random
                 std::mt19937_64 rng(opt_.seed);
                 std::uniform_real_distribution<double> U(-1.0, 1.0);
-                nu = Vector::NullaryExpr(n_obs_, [&]{ return U(rng); });
+                const Vector nu = Vector::NullaryExpr(n_obs_, [&]{ return U(rng); });
+                b->l_compute(nu);  // block handles normalization
             }
-            b->l_compute(nu);  // block handles normalization
         }
 
-        // all cov pairs are dirty; we'll fill on demand
-        Result res(n_blocks());
+        // disconnect blocks that are not active
+        for (int j = 0; j < J; ++j) if (!res.active_blocks[j]) {
+            for (int k = 0; k < J; ++k) { res.C(j,k) = false; res.C(k,j) = false; }
+        }
+
+        // room for objective function evaluations
         res.obj_history.reserve(opt_.max_iter + 1);
         res.obj_history.push_back(objective_());
 
-        for (int s = 0; s < opt_.max_iter; ++s) {
-            for (int l = 0; l < J; ++l) {
-                Vector nu_l = Vector::Zero(n_obs_);
-                const Vector eta_l = eta_(*blocks_[l]);
-                for (int k = 0; k < J; ++k) {
-                    if (k == l || !C_(l,k)) continue;   // <— exclude self
-                    const Vector eta_k = eta_(*blocks_[k]);
-                    const double cov_lk = cov_value_(l, k, eta_l, eta_k);   // uses/saves cache, marks clean
-                    const double w_lk = scheme_.w(cov_lk);
-                    nu_l.noalias() += w_lk * eta_k;   // no aliasing with RHS
+        if ( !no_connections_(res.C) ) {
+            for (int s = 0; s < opt_.max_iter; ++s) {
+                for (int l = 0; l < J; ++l) {
+                    Vector nu_l = Vector::Zero(n_obs_);
+                    const Vector eta_l = eta_(*blocks_[l]);
+                    for (int k = 0; k < J; ++k) {
+                        if (k == l || !res.C(l,k)) continue;   // <— exclude self
+                        const Vector eta_k = eta_(*blocks_[k]);
+                        const double cov_lk = cov_value_(l, k, eta_l, eta_k);   // uses/saves cache, marks clean
+                        const double w_lk = scheme_.w(cov_lk);
+                        nu_l.noalias() += w_lk * eta_k;   // no aliasing with RHS
+                    }
+                    blocks_[l]->l_compute(nu_l);   // block handles normalization
+                    mark_cov_rowcol_dirty_(l);     // η_l changed → invalidate its row/col
                 }
-                blocks_[l]->l_compute(nu_l);   // block handles normalization
-                mark_cov_rowcol_dirty_(l);     // η_l changed → invalidate its row/col
+
+                const double f = objective_();
+                const double prev = res.obj_history.back();
+                res.obj_history.push_back(f);
+                res.iters = s + 1;
+
+                if (res.obj_history.back() + 1e-15 < res.obj_history[res.obj_history.size() - 2]) res.monotone = false;
+                const double rel  = std::abs(f - prev) / (std::abs(prev) + 1e-16);
+                if (rel < opt_.tol) break;
             }
-
-            const double f = objective_();
-            const double prev = res.obj_history.back();
-            res.obj_history.push_back(f);
-            res.iters = s + 1;
-
-            if (res.obj_history.back() + 1e-15 < res.obj_history[res.obj_history.size() - 2]) res.monotone = false;
-            const double rel  = std::abs(f - prev) / (std::abs(prev) + 1e-16);
-            if (rel < opt_.tol) break;
         }
         compute_covariance_matrix_(res.covariance_matrix);
         get_tau(res.tau_values);
@@ -650,6 +721,7 @@ private:
     }
 
     void set_tau_auto_all_() const { for (auto& b : blocks_) b->set_tau(-1); }
+    void set_noise_sigma_sqr_all_() const { for (auto& b : blocks_) b->set_noise_sigma_sqr(*noise_sigma_sqr_); }
 
     // ===== Helpers =====
     Vector eta_(Block& b) const {
@@ -723,6 +795,17 @@ private:
         if (j < 0 || j >= static_cast<int>(blocks_.size())) throw std::out_of_range("block index");
     }
 
+    bool no_connections_(Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic> C) {
+        bool flag = true;
+        const int J = n_blocks();
+        for (int j = 0; j < J && flag; ++j) {
+            for (int k = 0; k < J && flag; ++k) {
+                flag = flag && !C(j, k);
+            }
+        }
+        return flag;
+    }
+
 private:
     int J_ {0};
     int n_obs_;   // global #observations
@@ -731,6 +814,8 @@ private:
     Options opt_;
     int n_comp_{0};
     bool is_last_comp_{false};
+
+    std::optional<double> noise_sigma_sqr_;
 
     std::vector<BlockPtr> blocks_;
 
@@ -763,6 +848,15 @@ inline std::ostream& operator<<(std::ostream& os, const Result& r) {
            << " | diff = " << std::setw(12) << (val - prev) << "\n";
         prev = val;
     }
+    os << std::endl;
+    os << "active blocks :\n";
+    for (size_t i = 0; i < r.active_blocks.size(); ++i) {
+        os << "- Block " << i+1  << ": " << (r.active_blocks[i] ? "active    " : "non-active" )
+           << " ("<< r.s1_blocks[i]<< (r.active_blocks[i] ? " > " : " < ") << r.s1_edge_blocks[i] << ")" << "\n";
+    }
+    os << std::endl;
+    os << "connections matrix :\n";
+    os << r.C << std::endl;
     os << std::endl;
     os << "covariance matrix :\n";
     os << r.covariance_matrix << std::endl;
