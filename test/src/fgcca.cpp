@@ -111,7 +111,7 @@ TEST(rgcca, test_02) {
     // model initialization
     int n_comp = 3;
     RGCCA rgcca(201, Scheme::Factorial(), options, n_comp);
-    rgcca.set_noise_sigma_sqr(1e-1);
+    rgcca.set_noise_sigma_sqr(0.2);
 
     // add blocks
     Eigen::Matrix<double, Dynamic, Dynamic> X1 = read_csv<double>(path + "X1.csv").as_matrix();
@@ -184,11 +184,12 @@ TEST(rgcca, test_03) {
     // chose options
     RGCCA::Options options;
     options.tau_selection = TauSelection::Automatic;
+    options.lambda_selection = LambdaSelection::Automatic;
 
     // model initialization
     int n_comp = 3;
     RGCCA rgcca(201, Scheme::Factorial(), options, n_comp);
-    rgcca.set_noise_sigma_sqr(1e-1);
+    rgcca.set_noise_sigma_sqr(0.2);
 
     // add blocks
     for (int i = 1; i <=4; ++i) {
@@ -205,7 +206,7 @@ TEST(rgcca, test_03) {
     rgcca.connect(1,3);
 
     // set lambda parameter
-    rgcca.set_lambda_all(1e-15);
+    rgcca.set_lambda_all(-1);
 
     /*
     // check

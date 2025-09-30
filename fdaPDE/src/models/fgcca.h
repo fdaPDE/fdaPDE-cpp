@@ -22,6 +22,7 @@
 namespace fdapde {
 enum class Init { Random, SVD };
 enum class DesignMode {Empty, FullyConnected};
+enum class LambdaSelection {Manual, Automatic};
 enum class TauSelection {Manual, Automatic};
 enum class Deflation { None, Scores, Loadings };
 
@@ -329,17 +330,17 @@ public:
         init();
 
         // 1) raw loading (no Σ-normalization)
-        Vector a_raw = invSigma().solve(data().transpose() * nu);
+        Vector a = invSigma().solve(data().transpose() * nu);
 
         // (optional) orientation for interpretability
-        if (a_raw.mean() < 0) a_raw = -a_raw;
+        if (a.mean() < 0) a = -a;
 
         // 2) raw scores (η̃) and unit-variance rescale
-        Vector eta = data() * a_raw;
+        Vector eta = data() * a;
         const double s = scale_to_unit_score_variance_(eta); // scales eta to Var(η)=1
 
         // 3) store scaled loadings and scores
-        loadings().col(h())   = s * a_raw;      // keep η = X (Psi a) consistent
+        loadings().col(h())   = s * a;      // keep η = X (Psi a) consistent
         components().col(h()) = eta;            // already scaled to unit variance
     }
 
@@ -351,6 +352,60 @@ public:
     }
 private:
     SparseMatrix Psi_;   // identity
+};
+
+// GCV utils
+template<class Fun>
+inline std::pair<double,double> argmin_over_log_grid(Fun&& f, const double log10_min, const double log10_max, int n_grid) {
+    if(n_grid<2) n_grid=2;
+    double best_log=log10_min;
+    double best_val=std::numeric_limits<double>::infinity();
+    const double step=(log10_max-log10_min)/(n_grid-1);
+    for(int i=0;i<n_grid;++i) {
+        const double lg = log10_min+i*step;
+        double lam = std::pow(10.0,lg);
+        if (const double val = f(lam); val < best_val) {
+            best_val=val;
+            best_log=lg;
+        }
+    }
+    return{std::pow(10.0,best_log),best_val};
+}
+
+struct GCVConfig {
+    // log10 λ range (broad defaults; adjust if you know scale)
+    double log10_min = -12.0;
+    double log10_max = 4.0;
+    int    grid      = 100;
+
+    // edf() stochastic trace settings (if your solver uses Hutch++ etc.)
+    int    edf_r     = 100;
+    int    edf_seed  = 12345;
+
+    // safety
+    double eps_dof   = 1e-12;  // avoid divide-by-zero in denominator
+};
+
+
+template <class Smoother>
+struct GCVEval {
+    Smoother* s;     // must expose: fit(λ), edf(r,seed), response(), fn(), n_obs(), n_covs()
+    GCVConfig cfg;
+
+    double operator()(double lambda) {
+        s->fit(lambda); // update fit for this λ
+
+        const int n = s->n_obs();
+        const int q = s->n_covs();
+        const double trS = s->edf(cfg.edf_r, cfg.edf_seed);
+
+        const auto& y  = s->response();
+        const auto yhat = s->fn();
+        const double rss = (yhat - y).squaredNorm();
+
+        const double dor = std::max( cfg.eps_dof, double(n) - (double(q) + trS) ); // residual dof
+        return (double(n) / (dor * dor)) * rss;
+    }
 };
 
 // ========== FunctionalBlock ==========
@@ -376,19 +431,44 @@ public:
     // The model must set lambda before calling l_compute
     void set_lambda(double lambda) override { lambda_ = lambda; }
 
+    // Optional: expose a config setter (or pass config from RGCCA Options later)
+    void set_gcv_config(const GCVConfig& cfg) { gcv_cfg_ = cfg; }
+
+    // pick λ by GCV given current response/weights already set in solver_
+    std::pair<bool, double> select_lambda_gcv_() {
+        GCVEval<lSolverType> gcv{ &solver_, gcv_cfg_ };
+        auto [lambda_opt, gcv_opt] = argmin_over_log_grid(
+            [&](double lam){ return gcv(lam); },
+            gcv_cfg_.log10_min, gcv_cfg_.log10_max, gcv_cfg_.grid
+        );
+        return {lambda_opt < std::pow(10.0, gcv_cfg_.log10_max) , lambda_opt};
+    }
+
     void l_compute(const Vector& nu) override {
         assert(nu.size() == n_obs() && "nu must have size n_obs (rows of X)");
         init();
 
         const Vector z = invSigma().solve(data().transpose() * nu);
         solver_.update_response_and_weights(z, Sigma());
+        if(lambda_ < 0.0) {
+            auto [success, lambda_opt] = select_lambda_gcv_();
+            if (!success) {
+                loadings().col(h())   = Vector::Zero(n_nodes());
+                components().col(h()) = Vector::Zero(n_obs());;
+                return;
+            }
+            lambda_ = lambda_opt; // the optimal lambda is saved for subsequent calls
+        }
+
         solver_.fit(lambda_);
-
         Vector f = solver_.f();
-        if (f.mean() < 0) f = -f;
 
-        // a_m_raw = Psi f_raw; scores η̃ = X a_m_raw
+        // a_m = Psi f; scores η̃ = X a_m
         Vector a_m = Psi() * f;
+        if (a_m.mean() < 0) {
+            a_m = -a_m;
+            f = -f;
+        }
         Vector eta = data() * a_m;
 
         // unit-variance rescale for scores; apply the same factor to both f and a_m
@@ -396,7 +476,7 @@ public:
 
         // store
         loadings().col(h())   = s * f;      // pre-Psi loadings kept coherent
-        components().col(h()) = eta;            // unit-variance scores
+        components().col(h()) = eta;        // unit-variance scores
     }
 
     // print override
@@ -408,7 +488,8 @@ public:
     }
 private:
     lSolverType solver_;
-    double lambda_ = 1e-12;   // owned by the block (set by the model)
+    double lambda_ = -1.0;   // < 0 means "use GCV"
+    GCVConfig gcv_cfg_;
 };
 
 inline std::unique_ptr<internals::BaseBlock> make_multivariate_block(
@@ -423,8 +504,6 @@ std::unique_ptr<internals::BaseBlock> make_functional_block(
       std::move(name), gf, std::forward<PenaltyType>(pen), tau, n_comp);
 }
 }   // namespace internals
-
-
 
 // ===== Scheme (g, w, phi) =====
 struct Scheme {
@@ -445,7 +524,7 @@ struct Scheme {
     }
 };
 
-
+// ===== Results =====
 struct Result {
     using Block = internals::BaseBlock;
     using Matrix = Block::Matrix;
@@ -471,6 +550,7 @@ struct Result {
 std::ostream& operator<<(std::ostream& os, const Result& r);
 std::ostream& operator<<(std::ostream& os, const std::vector<Result>& results);
 
+// ===== RGCCA =====
 class RGCCA {
 public:
     using Block = internals::BaseBlock;
@@ -485,12 +565,14 @@ public:
         bool verbose;
         bool cache_covariances;
         Init init;
+        LambdaSelection lambda_selection;
         TauSelection tau_selection;
         Deflation deflation_mode;
 
         explicit Options(
           const int max_iter_ = 1000, const double tol_ = 1e-8, const unsigned seed_ = 0,
           const Init init_ = Init::SVD, const TauSelection tau_selection_ = TauSelection::Automatic,
+          const LambdaSelection lambda_selection_ = LambdaSelection::Automatic,
           const Deflation deflation_mode_ = Deflation::Scores,
           const bool verbose_ = false, const bool cache_ = true) :
             max_iter(max_iter_),
@@ -498,6 +580,7 @@ public:
             seed(seed_),
             init(init_),
             tau_selection(tau_selection_),
+            lambda_selection(lambda_selection_),
             deflation_mode(deflation_mode_),
             verbose(verbose_),
             cache_covariances(cache_) { }
@@ -552,6 +635,7 @@ public:
     }
     void init_comp() {
         if (opt_.tau_selection == TauSelection::Automatic) { set_tau_auto_all_(); }
+        if (opt_.lambda_selection == LambdaSelection::Automatic) { set_lambda_auto_all_(); }
         clear_covariance_cache_();
     }
 
@@ -638,9 +722,7 @@ public:
                     res.active_blocks[j] = true;
                     res.s1_blocks[j] = info.s1;
                     res.s1_edge_blocks[j] = info.s1_edge;
-                    std::cout << "nu_" << j << " " << info.nu.transpose().leftCols(10) << std::endl;
                     b->l_compute(info.nu);  // block handles normalization
-                    std::cout << "a_" << j << " " << b->loadings_m().col(h()).transpose().leftCols(10) << std::endl;
                 }
             } else { // Random
                 std::mt19937_64 rng(opt_.seed);
@@ -655,9 +737,14 @@ public:
             for (int k = 0; k < J; ++k) { res.C(j,k) = false; res.C(k,j) = false; }
         }
 
+
         // room for objective function evaluations
         res.obj_history.reserve(opt_.max_iter + 1);
         res.obj_history.push_back(objective_());
+
+        // require lambda selection also at the first iteration
+        if (opt_.lambda_selection == LambdaSelection::Automatic) { set_lambda_auto_all_(); }
+
 
         if ( !no_connections_(res.C) ) {
             for (int s = 0; s < opt_.max_iter; ++s) {
@@ -721,6 +808,7 @@ private:
     }
 
     void set_tau_auto_all_() const { for (auto& b : blocks_) b->set_tau(-1); }
+    void set_lambda_auto_all_() const { for (auto& b : blocks_) b->set_lambda(-1); }
     void set_noise_sigma_sqr_all_() const { for (auto& b : blocks_) b->set_noise_sigma_sqr(*noise_sigma_sqr_); }
 
     // ===== Helpers =====

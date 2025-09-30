@@ -438,6 +438,8 @@ struct fe_ls_elliptic {
     matrix_t Q() const { return internals::lmbQ(W_, X_, invXtWX_, matrix_t::Identity(n_locs_, n_locs_)); }
 
     // observers
+    int n_obs() const { return n_obs_; }
+    int n_covs() const { return n_covs_; }
     int n_dofs() const { return n_dofs_; }
     const sparse_matrix_t& mass() const { return R0_; }
     const sparse_matrix_t& stiff() const { return R1_; }
