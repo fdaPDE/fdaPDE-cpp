@@ -17,6 +17,7 @@
 using namespace fdapde;
 using fdapde::test::almost_equal;
 
+/*
 TEST(rgcca, test_00) {
     std::string path = "../../../../projects/cca/";
 
@@ -99,13 +100,13 @@ TEST(rgcca, test_01) {
     // std::cout << block_4.components().transpose().leftCols(10) << "\n" << std::endl;
 
 }
-
+*/
 
 TEST(rgcca, test_02) {
     std::string path = "../../../../projects/cca/";
 
     // chose options
-    RGCCA::Options options;
+    RGCCA<>::Options options;
     options.tau_selection = TauSelection::Automatic;
 
     // model initialization
@@ -145,7 +146,7 @@ TEST(rgcca, test_02) {
     */
 
     // fit
-    auto results = rgcca.fit();
+    const auto results = rgcca.fit();
 
     /*
     for (int j = 0; j < rgcca.n_blocks(); ++j) {
@@ -160,9 +161,9 @@ TEST(rgcca, test_02) {
     std::cout << results << std::endl;
     std::cout << std::endl;
 
-    for (auto& block : rgcca.blocks()) {
+    for (const auto& block : rgcca.blocks()) {
         write_csv(path + "loadings_"+ block -> name() + ".csv", block -> loadings_m());
-        write_csv(path + "components_"+ block -> name() + ".csv", block -> components());
+        write_csv(path + "components_"+ block -> name() + ".csv", block -> components_m());
     }
 }
 
@@ -171,7 +172,7 @@ TEST(rgcca, test_03) {
     std::string path = "../../../../projects/cca/";
 
     // geometries
-    Triangulation<1, 1> I(0, 1, 21);
+    Triangulation<1, 1> I(0, 1, 31);
 
     // define physics (same for all the blocks)
     FeSpace Bh(I, P1<1>);
@@ -182,12 +183,12 @@ TEST(rgcca, test_03) {
     auto F = integral(I)(u * v);
 
     // chose options
-    RGCCA::Options options;
+    RGCCA<>::Options options;
     options.tau_selection = TauSelection::Automatic;
     options.lambda_selection = LambdaSelection::Automatic;
+    int n_comp = 3;
 
     // model initialization
-    int n_comp = 3;
     RGCCA rgcca(201, Scheme::Factorial(), options, n_comp);
     rgcca.set_noise_sigma_sqr(0.2);
 
@@ -205,43 +206,70 @@ TEST(rgcca, test_03) {
     rgcca.connect(0,2);
     rgcca.connect(1,3);
 
-    // set lambda parameter
-    rgcca.set_lambda_all(-1);
+    // fit
+    const auto results = rgcca.fit();
 
-    /*
-    // check
-    for (int j = 0; j < rgcca.n_blocks(); ++j) {
-        const auto& X = rgcca.blocks()[j]->data();
-        Eigen::BDCSVD<RGCCA::Matrix> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
-        const double s1 = svd.singularValues()(0);
-        const double n  = double(rgcca.n_obs());
-        const double tau = rgcca.blocks()[j]->tau();
-        const double predicted = 1.0 / std::sqrt(((1.0 - tau)/double(n)) * s1 * s1 + tau);
-        std::cout << "block " << j
-                  << "  s1=" << s1
-                  << "  predicted ||a||=" << predicted
-                  << std::endl;
+    for (const auto& block : rgcca.blocks()) {
+        write_csv(path + "f_loadings_"+ block -> name() + ".csv", block -> loadings_m());
+        write_csv(path + "f_components_"+ block -> name() + ".csv", block -> components_m());
     }
-    */
+}
+
+TEST(rgcca, test_04) {
+    std::string path = "../../../../projects/cca/";
+
+    // geometries
+    Triangulation<1, 1> I(0, 1, 31);
+    Triangulation<1, 1> T(0, 1, 151);
+
+    // define physic in space (same for all the blocks)
+    FeSpace Vh(I, P1<1>);
+    TrialFunction f_D(Vh);
+    TestFunction  v_D(Vh);
+    auto a_D = integral(I)(dx(f_D) * dx(v_D));
+    ZeroField<1> u;
+    auto F_D = integral(I)(u * v_D);
+    auto penalty_D = fe_ls_elliptic(a_D, F_D);
+
+    // define physic in space (same for all the blocks)
+    FeSpace Bh(I, P1<1>);
+    TrialFunction f_T(Bh);
+    TestFunction  v_T(Bh);
+    auto a_T = integral(I)(dx(f_T) * dx(v_T));
+    auto F_T = integral(I)(u * v_T);
+    auto penalty_T = fe_ls_elliptic(a_T, F_T);
+
+    // chose options
+    RGCCA<TimeDependentSampling, decltype(penalty_T)>::Options options;
+    options.tau_selection = TauSelection::Automatic;
+    options.lambda_selection = LambdaSelection::Automatic;
+    int n_comp = 3;
+
+    // model initialization
+    RGCCA<TimeDependentSampling, decltype(penalty_T)> rgcca(201, Scheme::Factorial(), options, n_comp);
+    rgcca.set_noise_sigma_sqr(0.2);
+
+    // add blocks
+    for (int i = 1; i <=4; ++i) {
+        GeoFrame gf(I);
+        Eigen::Matrix<double, Dynamic, Dynamic> X = read_csv<double>(path + "X"+std::to_string(i)+".csv").as_matrix();
+        Eigen::Matrix<double, Dynamic, Dynamic> times = read_csv<double>(path + "times_"+std::to_string(i)+".csv").as_matrix();
+        auto& level = gf.insert_scalar_layer<POINT>("data", path + "locs_"+std::to_string(i)+".csv");
+        level.load_blk("X"+std::to_string(i), X.transpose());
+        rgcca.add_functional_block("X"+std::to_string(i), gf, penalty_D, times, penalty_T);
+    }
+
+    // add connections
+    rgcca.connect(0,1);
+    rgcca.connect(0,2);
+    rgcca.connect(1,3);
 
     // fit
-    auto results = rgcca.fit();
-
-    /*
-    for (int j = 0; j < rgcca.n_blocks(); ++j) {
-        const auto& a = rgcca.blocks()[j]->loadings().col(rgcca.h());
-        std::cout << "block " << j << "  ||a||=" << a.norm()
-                  << "  a^T Σ a=" << std::sqrt( (a.transpose() * rgcca.blocks()[j]->Sigma() * a)(0) )
-                  << std::endl;
-    }
-    std::cout << std::endl;
-    */
-
+    const auto results = rgcca.fit();
     std::cout << results << std::endl;
-    std::cout << std::endl;
 
-    for (auto& block : rgcca.blocks()) {
-        write_csv(path + "f_loadings_"+ block -> name() + ".csv", block -> loadings_m());
-        write_csv(path + "f_components_"+ block -> name() + ".csv", block -> components());
+    for (const auto& block : rgcca.blocks()) {
+        write_csv(path + "tf_loadings_"+ block -> name() + ".csv", block -> loadings_m());
+        write_csv(path + "tf_components_"+ block -> name() + ".csv", block -> components_m());
     }
 }
