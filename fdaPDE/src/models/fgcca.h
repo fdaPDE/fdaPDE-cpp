@@ -26,14 +26,15 @@ enum class LambdaSelection {Manual, Automatic};
 enum class TauSelection {Manual, Automatic};
 enum class Deflation { None, Scores, Loadings };
 
-struct IndependentSampling;
-struct TimeDependentSampling;
 
 namespace internals {
 
-template <typename SamplingStrategy, typename ComponentsPenaltyType> class BaseBlock;   // forward decl for operator<<
-template <typename SamplingStrategy, typename ComponentsPenaltyType>
-std::ostream& operator<<(std::ostream& os, const BaseBlock<SamplingStrategy, ComponentsPenaltyType>& b);
+struct empty_t {
+
+    template<class... Args>
+    explicit empty_t(Args&&...) noexcept {}
+
+};
 
 struct NullSolver {
     // common aliases used by your code
@@ -63,12 +64,34 @@ struct NullSolver {
     // if you ever query Psi() in the time smoother
     const sparse_matrix_t& Psi() const { static sparse_matrix_t Z; return Z; }
 };
-struct empty_penalty {
-    using solver_t = NullSolver;                 // <— key line
-    template<class... Args>
-    explicit empty_penalty(Args&&...) noexcept {}
+
+}
+
+struct IndependentSampling {
+    using solver_t = internals::NullSolver;;
+};
+struct TimeDependentSampling {
+    using solver_t = internals::fe_ls_elliptic;
+
+    static void discretize(const Triangulation<1, 1>& T, solver_t& solver_) {
+        // define physic in space (same for all the blocks)
+        FeSpace Vh(T, P1<1>);
+        TrialFunction f_T(Vh);
+        TestFunction  v_T(Vh);
+        auto a_T = integral(T)(dx(f_T) * dx(v_T));
+        ZeroField<1> u;
+        auto F_T = integral(T)(u * v_T);
+        auto penalty = fdapde::fe_ls_elliptic(a_T, F_T);
+        solver_.discretize(penalty.get());
+    }
+
 };
 
+namespace internals {
+
+template <typename SamplingStrategy> class BaseBlock;   // forward decl for operator<<
+template <typename SamplingStrategy>
+std::ostream& operator<<(std::ostream& os, const BaseBlock<SamplingStrategy>& b);
 
 // GCV utils
 template<class Fun>
@@ -123,31 +146,33 @@ struct GCVEval {
     }
 };
 
-template <typename SamplingStrategy = IndependentSampling, typename ComponentsPenaltyType = empty_penalty>
+template <typename SamplingStrategy = IndependentSampling>
 class BaseBlock {
 public:
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
     using Vector = Eigen::Matrix<double, Eigen::Dynamic, 1>;
     using SparseMatrix = Eigen::SparseMatrix<double, Eigen::ColMajor, int>;
     using SparseSolver = eigen_sparse_solver_movable_wrap<Eigen::SimplicialLDLT<SparseMatrix>>;
-    using ComponentsSolverType = typename std::decay_t<ComponentsPenaltyType>::solver_t;
+    using ComponentsSolverType = typename std::decay_t<SamplingStrategy>::solver_t;
 
     template<typename S = SamplingStrategy>
     requires std::same_as<S, IndependentSampling>
-    BaseBlock(std::string block_name, Matrix data, const int n_nodes_loadings, const double tau = 0.0) :
-        block_name_(std::move(block_name)), data_(std::move(data)), n_nodes_loadings_(n_nodes_loadings), tau_(tau) {
+    BaseBlock(const std::string block_name, const Matrix& data, const int n_nodes_loadings, const double tau = 0.0) :
+        block_name_(block_name), data_(data), n_nodes_loadings_(n_nodes_loadings), tau_(tau) {
         I_.resize(n_obs(), n_obs());
         I_.setIdentity();
         n_nodes_components_ = n_obs();
     }
 
     template<typename S = SamplingStrategy>
-    requires (std::same_as<SamplingStrategy, TimeDependentSampling> && !std::same_as<ComponentsPenaltyType, empty_penalty>)
-    BaseBlock(std::string block_name, Matrix data, const int n_nodes_loadings, const Matrix& times, ComponentsPenaltyType penalty, const double tau = 0.0) :
-        block_name_(std::move(block_name)), data_(std::move(data)), n_nodes_loadings_(n_nodes_loadings), tau_(tau) {
+    requires std::same_as<SamplingStrategy, TimeDependentSampling>
+    BaseBlock(const std::string block_name, const Triangulation<1, 1>& T, const Matrix& times, const Matrix& data, const int n_nodes_loadings, const double tau = 0.0) :
+        block_name_(block_name), data_(data), n_nodes_loadings_(n_nodes_loadings), tau_(tau) {
+        I_.resize(n_obs(), n_obs());
         I_.resize(n_obs(), n_obs());
         I_.setIdentity();
-        components_solver_.discretize(penalty.get());
+
+        SamplingStrategy::discretize(T, components_solver_);
         components_solver_.analyze_data(times, Vector::Zero(n_obs()), I_);
         n_nodes_components_ = components_solver_.n_dofs();
     }
@@ -463,7 +488,7 @@ protected:
     double lambda_components_{-1};
 
     // State
-    std::string block_name_;
+    const std::string block_name_;
     Matrix data_; // n_obs x n_covs
     int n_nodes_loadings_ {0};
     int n_nodes_components_ {0};
@@ -484,17 +509,17 @@ protected:
 };
 
 // single non-member operator<< visible to all derived classes
-template <typename SamplingStrategy, typename ComponentsPenaltyType>
-inline std::ostream& operator<<(std::ostream& os, const BaseBlock<SamplingStrategy, ComponentsPenaltyType>& b) {
+template <typename SamplingStrategy>
+inline std::ostream& operator<<(std::ostream& os, const BaseBlock<SamplingStrategy>& b) {
     b.print(os);   // virtual dispatch -> works for Multivariate/Functional too
     return os;
 }
 
 // ========== MultivariateBlock ==========
-template <typename SamplingStrategy = IndependentSampling, typename ComponentsPenaltyType = empty_penalty>
-class MultivariateBlock final : public BaseBlock<SamplingStrategy, ComponentsPenaltyType> {
+template <typename SamplingStrategy = IndependentSampling>
+class MultivariateBlock final : public BaseBlock<SamplingStrategy> {
 public:
-    using Base = BaseBlock<SamplingStrategy, ComponentsPenaltyType>;
+    using Base = BaseBlock<SamplingStrategy>;
     using Matrix = typename Base::Matrix;
     using Vector = typename Base::Vector;
     using SparseMatrix = typename Base::SparseMatrix;
@@ -513,15 +538,15 @@ public:
 
     template<typename S = SamplingStrategy>
     requires std::same_as<S, IndependentSampling>
-    MultivariateBlock(std::string block_name, const Matrix& X, const double tau = 0.0) :
-        Base(std::move(block_name), X, static_cast<int>(X.cols()), tau) {
+    MultivariateBlock(const std::string block_name, const Matrix& X, const double tau = 0.0) :
+        Base(block_name, X, static_cast<int>(X.cols()), tau) {
         init_multivariate();
     }
 
     template<typename S = SamplingStrategy>
-    requires (std::same_as<SamplingStrategy, TimeDependentSampling> && !std::same_as<ComponentsPenaltyType, empty_penalty>)
-    MultivariateBlock(std::string block_name, const Matrix& X, const Matrix& times, ComponentsPenaltyType components_penalty, const double tau = 0.0) :
-        Base(std::move(block_name), X, static_cast<int>(X.cols()), times, std::move(components_penalty), tau) {
+    requires std::same_as<SamplingStrategy, TimeDependentSampling>
+    MultivariateBlock(const std::string block_name, const Triangulation<1, 1>& T, const Matrix& times, const Matrix& X,  const double tau = 0.0) :
+        Base(block_name, T, times, X, static_cast<int>(X.cols()), tau) {
         init_multivariate();
     }
 
@@ -553,10 +578,10 @@ private:
 };
 
 // ========== FunctionalBlock ==========
-template <class LoadingsPenaltyType, typename SamplingStrategy = IndependentSampling, typename ComponentsPenaltyType = empty_penalty>
-class FunctionalBlock final : public BaseBlock<SamplingStrategy, ComponentsPenaltyType> {
+template <class LoadingsPenaltyType, typename SamplingStrategy = IndependentSampling>
+class FunctionalBlock final : public BaseBlock<SamplingStrategy> {
 public:
-    using Base = BaseBlock<SamplingStrategy, ComponentsPenaltyType>;
+    using Base = BaseBlock<SamplingStrategy>;
     using Vector = typename Base::Vector;
     using Matrix = typename Base::Matrix;
     using SparseMatrix = typename Base::SparseMatrix;
@@ -575,7 +600,7 @@ public:
 
     template <typename GeoFrame>
     requires std::same_as<SamplingStrategy, IndependentSampling>
-    FunctionalBlock(std::string block_name, GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, const double tau = 0.0) :
+    FunctionalBlock(const std::string block_name, GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, const double tau = 0.0) :
         Base(block_name, gf[0].template col<double>(block_name).as_matrix().transpose(), gf.template triangulation<0>().n_nodes(), tau) {
         components_solver_.discretize(loadings_penalty.get());
         components_solver_.analyze_data(gf, Sigma());
@@ -583,11 +608,10 @@ public:
     }
 
     template <typename GeoFrame>
-    requires (std::same_as<SamplingStrategy, TimeDependentSampling> && !std::same_as<ComponentsPenaltyType, empty_penalty>)
-    FunctionalBlock(std::string block_name, GeoFrame& gf,
-                LoadingsPenaltyType&& loadings_penalty,
-                const Matrix& times, ComponentsPenaltyType components_penalty, const double tau = 0.0) :
-        Base(block_name, gf[0].template col<double>(block_name).as_matrix().transpose(), gf.template triangulation<0>().n_nodes(), times, std::move(components_penalty), tau) {
+    requires std::same_as<SamplingStrategy, TimeDependentSampling>
+    FunctionalBlock(const std::string block_name, const Triangulation<1, 1>& T, const Matrix& times, GeoFrame& gf,
+                LoadingsPenaltyType&& loadings_penalty, const double tau = 0.0) :
+        Base(block_name, T, times, gf[0].template col<double>(block_name).as_matrix().transpose(), gf.template triangulation<0>().n_nodes(), tau) {
         components_solver_.discretize(loadings_penalty.get());
         components_solver_.analyze_data(gf, Sigma());
         init();
@@ -648,39 +672,34 @@ private:
 
 
 
-template <typename SamplingStrategy = IndependentSampling, typename ComponentsPenaltyType = empty_penalty>
+template <typename SamplingStrategy, typename Matrix = Eigen::Matrix<double, Dynamic, Dynamic>>
 requires std::same_as<SamplingStrategy, IndependentSampling>
-inline std::unique_ptr<internals::BaseBlock<SamplingStrategy, ComponentsPenaltyType>>
-make_multivariate_block(std::string name, Eigen::Matrix<double, Dynamic, Dynamic>& data, double tau = 0.0) {
-    return std::make_unique<internals::MultivariateBlock<SamplingStrategy, ComponentsPenaltyType>>(std::move(name), std::move(data), tau);
+inline std::unique_ptr<internals::BaseBlock<SamplingStrategy>>
+make_multivariate_block(std::string block_name, const Matrix& data, double tau = 0.0) {
+    return std::make_unique<internals::MultivariateBlock<SamplingStrategy>>(block_name, data, tau);
 }
 
-template <typename SamplingStrategy = IndependentSampling, typename ComponentsPenaltyType = empty_penalty>
-requires (std::same_as<SamplingStrategy, TimeDependentSampling> && !std::same_as<ComponentsPenaltyType, empty_penalty>)
-inline std::unique_ptr<internals::BaseBlock<SamplingStrategy, ComponentsPenaltyType>>
-make_multivariate_block(std::string name, Eigen::Matrix<double, Dynamic, Dynamic>& data, Eigen::Matrix<double, Dynamic, Dynamic>& times,
-                        ComponentsPenaltyType components_penalty, double tau = 0.0) {
-    return std::make_unique<internals::MultivariateBlock<SamplingStrategy, ComponentsPenaltyType>>(
-        std::move(name), std::move(data), times, std::move(components_penalty), tau);
+template <typename SamplingStrategy, typename Matrix = Eigen::Matrix<double, Dynamic, Dynamic>>
+requires std::same_as<SamplingStrategy, TimeDependentSampling>
+inline std::unique_ptr<internals::BaseBlock<SamplingStrategy>>
+make_multivariate_block(std::string block_name, const Triangulation<1, 1>& T, Matrix& times, const Matrix& data, double tau = 0.0) {
+    return std::make_unique<internals::MultivariateBlock<SamplingStrategy>>(block_name, T, times, data, tau);
 }
 
-
-template <typename GeoFrame, typename LoadingsPenaltyType, typename SamplingStrategy = IndependentSampling, typename ComponentsPenaltyType = empty_penalty>
+template <typename SamplingStrategy, typename GeoFrame, typename LoadingsPenaltyType>
 requires std::same_as<SamplingStrategy, IndependentSampling>
-std::unique_ptr<internals::BaseBlock<SamplingStrategy, ComponentsPenaltyType>>
-make_functional_block(std::string name, GeoFrame& gf, LoadingsPenaltyType&& pen, double tau = 0.0) {
-    return std::make_unique<internals::FunctionalBlock<LoadingsPenaltyType, SamplingStrategy, ComponentsPenaltyType>>(
-      std::move(name), gf, std::forward<LoadingsPenaltyType>(pen), tau);
+std::unique_ptr<internals::BaseBlock<SamplingStrategy>>
+make_functional_block(std::string block_name, GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, double tau = 0.0) {
+    return std::make_unique<internals::FunctionalBlock<LoadingsPenaltyType, SamplingStrategy>>(
+      block_name, gf, std::forward<LoadingsPenaltyType>(loadings_penalty), tau);
 }
 
-template <typename GeoFrame, typename LoadingsPenaltyType, typename SamplingStrategy = IndependentSampling, typename ComponentsPenaltyType = empty_penalty>
-requires (std::same_as<SamplingStrategy, TimeDependentSampling> && !std::same_as<ComponentsPenaltyType, empty_penalty>)
-std::unique_ptr<internals::BaseBlock<SamplingStrategy, ComponentsPenaltyType>>
-make_functional_block(std::string name, GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty,
-                      Eigen::Matrix<double, Dynamic, Dynamic>& times, ComponentsPenaltyType components_penalty, double tau = 0.0) {
-    return std::make_unique<internals::FunctionalBlock<LoadingsPenaltyType, SamplingStrategy, ComponentsPenaltyType>>(
-        std::move(name), gf, std::forward<LoadingsPenaltyType>(loadings_penalty),
-        times, std::move(components_penalty), tau);
+template <typename SamplingStrategy, typename GeoFrame, typename LoadingsPenaltyType, typename Matrix = Eigen::Matrix<double, Dynamic, Dynamic>>
+requires std::same_as<SamplingStrategy, TimeDependentSampling>
+std::unique_ptr<internals::BaseBlock<SamplingStrategy>>
+make_functional_block(std::string block_name, const Triangulation<1, 1>& T, const Matrix& times, GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, double tau = 0.0) {
+    return std::make_unique<internals::FunctionalBlock<LoadingsPenaltyType, SamplingStrategy>>(
+        block_name, T, times, gf, std::forward<LoadingsPenaltyType>(loadings_penalty), tau);
 }
 
 
@@ -734,13 +753,14 @@ std::ostream& operator<<(std::ostream& os, const Result& r);
 std::ostream& operator<<(std::ostream& os, const std::vector<Result>& results);
 
 // ===== RGCCA =====
-template <typename SamplingStrategy = IndependentSampling, typename ComponentsPenaltyType = internals::empty_penalty>
+template <typename SamplingStrategy = IndependentSampling>
 class RGCCA {
 public:
-    using Block = internals::BaseBlock<SamplingStrategy, ComponentsPenaltyType>;
+    using Block = internals::BaseBlock<SamplingStrategy>;
     using BlockPtr = std::unique_ptr<Block>;
     using Matrix = typename Block::Matrix;
     using Vector = typename Block::Vector;
+    using SamplingDomain = std::conditional_t<std::same_as<SamplingStrategy, TimeDependentSampling>, Triangulation<1, 1>, internals::empty_t>;
 
     struct Options {
         int max_iter;
@@ -770,8 +790,15 @@ public:
             cache_covariances(cache_) { }
     };
 
+    template <typename S = SamplingStrategy>
+    requires std::same_as<S, IndependentSampling>
     explicit RGCCA(const int n_obs, const Scheme& scheme = Scheme::Horst(), const Options& opt = Options(), const int n_comp = 1) :
-        n_obs_(n_obs), scheme_(std::move(scheme)), opt_(opt), n_comp_(n_comp) {}
+        n_obs_(n_obs), scheme_(scheme), opt_(opt), n_comp_(n_comp) {}
+
+    template <typename S = SamplingStrategy>
+    requires std::same_as<S, TimeDependentSampling>
+    explicit RGCCA(const int n_obs, const Triangulation<1, 1>& T, const Scheme& scheme = Scheme::Horst(), const Options& opt = Options(), const int n_comp = 1) :
+        n_obs_(n_obs), T_(T), scheme_(scheme), opt_(opt), n_comp_(n_comp) {}
 
     // ===== Blocks =====
     int add_block(BlockPtr b) {
@@ -785,28 +812,23 @@ public:
 
     template<typename S = SamplingStrategy>
     requires std::same_as<S, IndependentSampling>
-    int add_multivariate_block(std::string name, Matrix& X, const double tau = 0.0) {
-        return add_block(internals::make_multivariate_block(std::move(name), X, tau));
-    }
-    template <typename GeoFrame, typename LoadingsPenaltyType>
-    requires std::same_as<SamplingStrategy, IndependentSampling>
-    int add_functional_block(std::string name, GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, const double tau = 0.0) {
-        return add_block(internals::make_functional_block(std::move(name), gf, std::forward<LoadingsPenaltyType>(loadings_penalty), tau));
+    int add_multivariate_block(std::string block_name, Matrix& X, const double tau = 0.0) {
+        return add_block(internals::make_multivariate_block<SamplingStrategy>(block_name, X, tau));
     }
     template<typename S = SamplingStrategy>
     requires std::same_as<S, TimeDependentSampling>
-    int add_multivariate_block(std::string name, Matrix& X, Matrix& times, ComponentsPenaltyType components_penalty, const double tau = 0.0) {
-        return add_block(internals::make_multivariate_block<S, ComponentsPenaltyType>(
-            std::move(name), X, times, std::move(components_penalty), tau));
+    int add_multivariate_block(std::string block_name, const Matrix& times, Matrix& X, const double tau = 0.0) {
+        return add_block(internals::make_multivariate_block<SamplingStrategy>(block_name, T_, times, X, tau));
+    }
+    template <typename GeoFrame, typename LoadingsPenaltyType>
+    requires std::same_as<SamplingStrategy, IndependentSampling>
+    int add_functional_block(std::string block_name, const GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, const double tau = 0.0) {
+        return add_block(internals::make_functional_block<SamplingStrategy>(block_name, gf, std::forward<LoadingsPenaltyType>(loadings_penalty), tau));
     }
     template <typename GeoFrame, typename LoadingsPenaltyType>
     requires std::same_as<SamplingStrategy, TimeDependentSampling>
-    int add_functional_block(std::string name, GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty,
-                             Matrix& times, ComponentsPenaltyType components_penalty,
-                             const double tau = 0.0) {
-        return add_block(internals::make_functional_block<GeoFrame, LoadingsPenaltyType, SamplingStrategy, ComponentsPenaltyType>(
-            std::move(name), gf, std::forward<LoadingsPenaltyType>(loadings_penalty),
-            times, std::move(components_penalty), tau));
+    int add_functional_block(std::string block_name, const Matrix& times, const GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, const double tau = 0.0) {
+        return add_block(internals::make_functional_block<SamplingStrategy>(block_name, T_, times, gf, std::forward<LoadingsPenaltyType>(loadings_penalty), tau));
     }
 
 
@@ -1114,7 +1136,8 @@ private:
 
 private:
     int J_ {0};
-    int n_obs_;   // global #observations
+    int n_obs_ {0}; // global number of observations
+    SamplingDomain T_; // only used by TimeDependentSampling
     int h_ {0};   // current component index
     Scheme scheme_;
     Options opt_;

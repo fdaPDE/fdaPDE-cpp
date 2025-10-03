@@ -38,7 +38,7 @@ TEST(rgcca, test_00) {
     internals::MultivariateBlock block_4("X4", X4, 0.1);
     std::cout << block_4 << std::endl;
 
-    // block_4.l_compute(Eigen::Matrix<double, Eigen::Dynamic, 1>::Ones(201));
+    // block_4.l_compute(Eigen::Matrix<double, Eigen::Dynamic, 1>::Ones(401));
     // std::cout << block_4.loadings_m().transpose() << "\n" << std::endl;
     // std::cout << block_4.components().transpose().leftCols(10) << "\n" << std::endl;
 
@@ -95,7 +95,7 @@ TEST(rgcca, test_01) {
     internals::FunctionalBlock block_4("X4", gf_4, fe_ls_elliptic(a, F), 0.1);
     block_4.set_lambda(1e-15);
     std::cout << block_4 << std::endl;
-    // block_4.l_compute(Eigen::Matrix<double, Eigen::Dynamic, 1>::Ones(201));
+    // block_4.l_compute(Eigen::Matrix<double, Eigen::Dynamic, 1>::Ones(401));
     // std::cout << block_4.loadings_m().transpose() << "\n" << std::endl;
     // std::cout << block_4.components().transpose().leftCols(10) << "\n" << std::endl;
 
@@ -111,7 +111,7 @@ TEST(rgcca, test_02) {
 
     // model initialization
     int n_comp = 3;
-    RGCCA rgcca(201, Scheme::Factorial(), options, n_comp);
+    RGCCA rgcca(401, Scheme::Factorial(), options, n_comp);
     rgcca.set_noise_sigma_sqr(0.2);
 
     // add blocks
@@ -189,7 +189,7 @@ TEST(rgcca, test_03) {
     int n_comp = 3;
 
     // model initialization
-    RGCCA rgcca(201, Scheme::Factorial(), options, n_comp);
+    RGCCA rgcca(401, Scheme::Factorial(), options, n_comp);
     rgcca.set_noise_sigma_sqr(0.2);
 
     // add blocks
@@ -219,34 +219,26 @@ TEST(rgcca, test_04) {
     std::string path = "../../../../projects/cca/";
 
     // geometries
-    Triangulation<1, 1> I(0, 1, 31);
     Triangulation<1, 1> T(0, 1, 151);
+    Triangulation<1, 1> I(0, 1, 31);
 
     // define physic in space (same for all the blocks)
     FeSpace Vh(I, P1<1>);
     TrialFunction f_D(Vh);
-    TestFunction  v_D(Vh);
+    TestFunction v_D(Vh);
     auto a_D = integral(I)(dx(f_D) * dx(v_D));
     ZeroField<1> u;
     auto F_D = integral(I)(u * v_D);
-    auto penalty_D = fe_ls_elliptic(a_D, F_D);
-
-    // define physic in space (same for all the blocks)
-    FeSpace Bh(I, P1<1>);
-    TrialFunction f_T(Bh);
-    TestFunction  v_T(Bh);
-    auto a_T = integral(I)(dx(f_T) * dx(v_T));
-    auto F_T = integral(I)(u * v_T);
-    auto penalty_T = fe_ls_elliptic(a_T, F_T);
+    auto penalty = fe_ls_elliptic(a_D, F_D);
 
     // chose options
-    RGCCA<TimeDependentSampling, decltype(penalty_T)>::Options options;
+    RGCCA<TimeDependentSampling>::Options options;
     options.tau_selection = TauSelection::Automatic;
     options.lambda_selection = LambdaSelection::Automatic;
     int n_comp = 3;
 
     // model initialization
-    RGCCA<TimeDependentSampling, decltype(penalty_T)> rgcca(201, Scheme::Factorial(), options, n_comp);
+    RGCCA<TimeDependentSampling> rgcca(401, T, Scheme::Factorial(), options, n_comp);
     rgcca.set_noise_sigma_sqr(0.2);
 
     // add blocks
@@ -256,7 +248,7 @@ TEST(rgcca, test_04) {
         Eigen::Matrix<double, Dynamic, Dynamic> times = read_csv<double>(path + "times_"+std::to_string(i)+".csv").as_matrix();
         auto& level = gf.insert_scalar_layer<POINT>("data", path + "locs_"+std::to_string(i)+".csv");
         level.load_blk("X"+std::to_string(i), X.transpose());
-        rgcca.add_functional_block("X"+std::to_string(i), gf, penalty_D, times, penalty_T);
+        rgcca.add_functional_block("X"+std::to_string(i), times, gf, fe_ls_elliptic(a_D, F_D));
     }
 
     // add connections
