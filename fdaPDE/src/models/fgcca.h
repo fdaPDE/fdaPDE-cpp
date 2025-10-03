@@ -20,55 +20,61 @@
 #include "header_check.h"
 
 namespace fdapde {
+
 enum class Init { Random, SVD };
 enum class DesignMode {Empty, FullyConnected};
 enum class LambdaSelection {Manual, Automatic};
 enum class TauSelection {Manual, Automatic};
 enum class Deflation { None, Scores, Loadings };
 
-
 namespace internals {
 
 struct empty_t {
-
     template<class... Args>
     explicit empty_t(Args&&...) noexcept {}
-
 };
 
-struct NullSolver {
-    // common aliases used by your code
+struct identity_ls {
     using vector_t = Eigen::VectorXd;
     using matrix_t = Eigen::MatrixXd;
     using sparse_matrix_t = Eigen::SparseMatrix<double>;
 
-    template<class... Args>
-    explicit NullSolver(Args&&...) noexcept {}
+    explicit identity_ls(const int n_dofs) : n_dofs_(n_dofs) {}
 
-    // --- stubs matching the methods you might call ---
-    template<class... Args> void discretize(Args&&...) {}
-    template<class... Args> void analyze_data(Args&&...) {}
-    template<class... Args> void update_response_and_weights(Args&&...) {}
-    template<class... Args> void fit(Args&&...) {}
+    // Shapes / accessors used by GCV path (harmless no-ops here)
+    [[nodiscard]] int n_dofs()  const { return n_dofs_; }
+    [[nodiscard]] int n_obs()   const { return static_cast<int>(y_.size()); }
+    [[nodiscard]] int n_covs()  const { return 0; } // no param covariates in identity model
+    [[nodiscard]] double edf(int = 0, int = 0) const { return 0; } // hat-trace is 0 for identity
 
-    // EDF / sizes
-    double edf(int = 0, int = 0) const { return 0.0; }
-    int n_obs()  const { return 0; }
-    int n_covs() const { return 0; }
+    // Data flow API
+    void analyze_data() {
+        Psi_.resize(n_dofs_, n_dofs_);
+        Psi_.setIdentity();
+    }
 
-    // outputs used in GCV paths etc.
-    const vector_t& response() const { static vector_t z; return z; }
-    vector_t fn() const { return {}; }
-    const vector_t& f() const { static vector_t z; return z; }
+    void update_response_and_weights(const vector_t& y, const sparse_matrix_t& /*W*/) { y_ = y; }
 
-    // if you ever query Psi() in the time smoother
-    const sparse_matrix_t& Psi() const { static sparse_matrix_t Z; return Z; }
+    // Identity: fitted values equal response
+    void fit(double /*lambda*/) { f_ = y_; }
+
+    // Outputs
+    [[nodiscard]] const vector_t& response() const { return y_; }
+    [[nodiscard]] vector_t fn() const { return f_; }     // fitted values
+    [[nodiscard]] const vector_t& f() const { return f_; }
+    [[nodiscard]] const sparse_matrix_t& Psi() const { return Psi_; }
+
+private:
+    int n_dofs_{0};
+    vector_t y_;
+    vector_t f_;
+    sparse_matrix_t Psi_;
 };
 
 }
 
 struct IndependentSampling {
-    using solver_t = internals::NullSolver;;
+    using solver_t = internals::identity_ls;
 };
 struct TimeDependentSampling {
     using solver_t = internals::fe_ls_elliptic;
@@ -94,8 +100,7 @@ template <typename SamplingStrategy>
 std::ostream& operator<<(std::ostream& os, const BaseBlock<SamplingStrategy>& b);
 
 // GCV utils
-template<class Fun>
-inline std::pair<double,double> argmin_over_log_grid(Fun&& f, const double log10_min, const double log10_max, int n_grid) {
+template<class Fun> inline std::pair<double,double> argmin_over_log_grid(Fun&& f, const double log10_min, const double log10_max, int n_grid) {
     if(n_grid<2) n_grid=2;
     double best_log=log10_min;
     double best_val=std::numeric_limits<double>::infinity();
@@ -110,7 +115,6 @@ inline std::pair<double,double> argmin_over_log_grid(Fun&& f, const double log10
     }
     return{std::pow(10.0,best_log),best_val};
 }
-
 struct GCVConfig {
     // log10 λ range (broad defaults; adjust if you know scale)
     double log10_min = -12.0;
@@ -124,9 +128,7 @@ struct GCVConfig {
     // safety
     double eps_dof = 1e-12;  // avoid divide-by-zero in denominator
 };
-
-template <class Smoother>
-struct GCVEval {
+template <class Smoother> struct GCVEval {
     Smoother* s;     // must expose: fit(λ), edf(r,seed), response(), fn(), n_obs(), n_covs()
     GCVConfig cfg;
 
@@ -145,8 +147,16 @@ struct GCVEval {
         return (static_cast<double>(n) / (dor * dor)) * rss;
     }
 };
+template <typename SolverType> std::pair<bool, double> select_lambda_with_gcv(SolverType& solver, const GCVConfig& gcv_cfg) {
+    GCVEval<SolverType> gcv{ &solver, gcv_cfg };
+    auto [lambda_opt, gcv_opt] = argmin_over_log_grid(
+        [&](double lam){ return gcv(lam); },
+        gcv_cfg.log10_min, gcv_cfg.log10_max, gcv_cfg.grid
+    );
+    return {lambda_opt < std::pow(10.0, gcv_cfg.log10_max) , lambda_opt};
+}
 
-template <typename SamplingStrategy = IndependentSampling>
+template <typename SamplingStrategy>
 class BaseBlock {
 public:
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
@@ -157,24 +167,22 @@ public:
 
     template<typename S = SamplingStrategy>
     requires std::same_as<S, IndependentSampling>
-    BaseBlock(const std::string block_name, const Matrix& data, const int n_nodes_loadings, const double tau = 0.0) :
-        block_name_(block_name), data_(data), n_nodes_loadings_(n_nodes_loadings), tau_(tau) {
-        I_.resize(n_obs(), n_obs());
-        I_.setIdentity();
-        n_nodes_components_ = n_obs();
+    BaseBlock(const std::string& block_name, const Matrix& data, const int n_nodes_loadings, const double tau = 0.0) :
+        block_name_(block_name), data_(data), components_solver_(data.rows()), n_nodes_loadings_(n_nodes_loadings), tau_(tau) {
+        // Init components solver
+        components_solver_.analyze_data();
     }
 
     template<typename S = SamplingStrategy>
     requires std::same_as<SamplingStrategy, TimeDependentSampling>
-    BaseBlock(const std::string block_name, const Triangulation<1, 1>& T, const Matrix& times, const Matrix& data, const int n_nodes_loadings, const double tau = 0.0) :
+    BaseBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Matrix& times, const Matrix& data, const int n_nodes_loadings, const double tau = 0.0) :
         block_name_(block_name), data_(data), n_nodes_loadings_(n_nodes_loadings), tau_(tau) {
-        I_.resize(n_obs(), n_obs());
+        // Init sparse identity
         I_.resize(n_obs(), n_obs());
         I_.setIdentity();
-
+        // Init components solver
         SamplingStrategy::discretize(T, components_solver_);
         components_solver_.analyze_data(times, Vector::Zero(n_obs()), I_);
-        n_nodes_components_ = components_solver_.n_dofs();
     }
 
     virtual ~BaseBlock() = default;
@@ -190,10 +198,7 @@ public:
     // Data
     [[nodiscard]] const std::string& name() const { return block_name_; }
     [[nodiscard]] const Matrix& data() const { return data_; }
-    Matrix& data() {
-        invalidate_sigma_();
-        return data_;
-    }
+    Matrix& data() { invalidate_sigma_(); return data_; }
 
     // Dimensions
     [[nodiscard]] int n_obs() const { return static_cast<int>(data_.rows()); }
@@ -205,26 +210,9 @@ public:
     void set_n_comp(const int n_comp) {
         if (n_comp <= 0) throw std::invalid_argument("n_comp must be > 0");
         n_comp_ = n_comp;
-        loadings_ready_ = false;   // force resize on next access
+        // force resize on next access
+        loadings_ready_ = false;
         components_ready_ = false;
-    }
-
-    // Deflation
-    [[nodiscard]] int h() const { return h_; }
-    void set_h(const int idx) {
-        if (idx < 0 || idx >= n_comp_) throw std::out_of_range("h");
-        h_ = idx;
-    }
-    void next_component() { set_h(h_ + 1); }
-    void deflate(const Deflation mode) {
-        if (h() == n_comp()) throw std::out_of_range("h");
-        switch (mode) {
-        case Deflation::Scores:   deflate_scores_(); break;
-        case Deflation::Loadings: deflate_loadings_(); break;
-        case Deflation::None: default: break;
-        }
-        // data_ changed -> Σ invalid; cached scores/loadings are now stale
-        invalidate_sigma_();
     }
 
     // Shrinkage parameter
@@ -235,33 +223,26 @@ public:
         invalidate_sigma_();
     }
 
-    // Hyperparameters (default no-op). The model can call this on all blocks.
-    virtual void set_lambda_loadings(const double) { }  // default: ignored
-    [[nodiscard]] virtual double lambda_loadings() const { return std::numeric_limits<double>::quiet_NaN(); }
-    void set_lambda_components(const double lambda) { lambda_components_ = lambda; }
+    // Components regularization utilities
+    void set_lambda_components(const double lambda) { *lambda_components_ = lambda; }
     [[nodiscard]] double lambda_components() const {
         if constexpr (std::same_as<SamplingStrategy, IndependentSampling>) return std::numeric_limits<double>::quiet_NaN();
-        if (lambda_components_ > 0) return lambda_components_;
+        if (!lambda_components_.has_value() && *lambda_components_ > 0) return *lambda_components_;
         return std::numeric_limits<double>::quiet_NaN();
     }
+    void set_components_gcv_config(const GCVConfig& cfg) { components_gcv_cfg_ = cfg; }
+
+    // Loadings regularization utilities
+    virtual void set_lambda_loadings(const double) {};
+    [[nodiscard]] virtual double lambda_loadings() const { return std::numeric_limits<double>::quiet_NaN(); }
 
     // Noise variance
     void set_noise_sigma_sqr(double noise_sigma_sqr) { noise_sigma_sqr_ = std::max(0.0, noise_sigma_sqr); }
-    std::optional<double> noise_sigma_sqr() const { return noise_sigma_sqr_; }
-
-    // Sigma
-    [[nodiscard]] const SparseMatrix& Sigma() const { ensure_sigma_(); return Sigma_; }
-    SparseSolver& invSigma() { ensure_sigma_(); return invSigma_; }
-
-    // Loadings & Components
-    Matrix& loadings() { ensure_lc_(); return loadings_; }
-    Matrix loadings_m() { ensure_lc_(); return Psi_D() * loadings_; }
-    Matrix& components() { ensure_lc_(); return components_; }
-    Matrix components_m() { ensure_lc_(); return Psi_T() * components_; }
+    [[nodiscard]] std::optional<double> noise_sigma_sqr() const { return noise_sigma_sqr_; }
 
     // Inner-Component initialization
-    struct InitInfo { bool active; Vector nu; double s1; double s1_edge; double frac; };
-    InitInfo svd_init(double epsilon = 0.5) const {
+    struct InitInfo { bool active{false}; Vector nu; double s1{0}; double s1_edge{0}; double frac{0}; };
+    InitInfo svd_init(const double epsilon = 0.5) const {
         InitInfo out{false, Vector::Zero(n_obs()), 0.0, 0.0, 0.0};
         const Matrix& X = data();
         if (X.size() == 0) return out;
@@ -278,8 +259,8 @@ public:
             out.active = (out.frac >= 1e-3);
         } else {
             const double sigma = std::sqrt(std::max(0.0, *noise_sigma_sqr_));
-            const double n = static_cast<double>(n_obs());
-            const double p = static_cast<double>(n_covs());
+            const auto n = static_cast<double>(n_obs());
+            const auto p = static_cast<double>(n_covs());
             out.s1_edge = sigma * (std::sqrt(n) + std::sqrt(p)) * (1.0 - epsilon);
             out.active = (out.s1 > out.s1_edge);
         }
@@ -292,11 +273,26 @@ public:
         return out;
     }
 
-    [[nodiscard]] const SparseMatrix Psi_T() const {
-        if constexpr (std::same_as<SamplingStrategy, IndependentSampling>) return I_;
-        return components_solver_.Psi();
+    // Sigma
+    [[nodiscard]] const SparseMatrix& Sigma() const { ensure_sigma_(); return Sigma_; }
+    SparseSolver& invSigma() { ensure_sigma_(); return invSigma_; }
+
+    // Current component index & Deflation
+    [[nodiscard]] int h() const { return h_; }
+    void set_h(const int idx) { if (idx < 0 || idx >= n_comp_) throw std::out_of_range("h"); h_ = idx; }
+    void next_component() { set_h(h_ + 1); }
+    void deflate(const Deflation mode) {
+        if (h() == n_comp()) throw std::out_of_range("h");
+        switch (mode) {
+        case Deflation::Scores:   deflate_scores_(); break;
+        case Deflation::Loadings: deflate_loadings_(); break;
+        case Deflation::None: default: break;
+        }
+        // data_ changed -> Σ invalid; cached scores/loadings are now stale
+        invalidate_sigma_();
     }
 
+    // Main compute method
     void compute(const Vector& nu) {
         // Compute loadings
         loadings().col(h()) = l_compute_(nu);
@@ -311,8 +307,15 @@ public:
         scale_to_unit_score_variance_();
     }
 
-    // ---- Clean virtual interface ----
-    [[nodiscard]] virtual const SparseMatrix& Psi_D() const = 0;
+    // Psi matrices
+    [[nodiscard]] virtual const SparseMatrix& Psi_D() const = 0; // It depends on the loadings solver
+    [[nodiscard]] const SparseMatrix& Psi_T() const { return components_solver_.Psi(); }
+
+    // Loadings & Components
+    Matrix& loadings() { ensure_lc_(); return loadings_; }
+    Matrix loadings_m() { ensure_lc_(); return Psi_D() * loadings_; }
+    Matrix& components() { ensure_lc_(); return components_; }
+    Matrix components_m() { ensure_lc_(); return Psi_T() * components_; }
 
     // Virtual printer
     virtual void print(std::ostream& os) const {
@@ -334,40 +337,31 @@ public:
         os << "tau = " << tau() << std::endl;
     }
 
-    // Optional: expose a config setter (or pass config from RGCCA Options later)
-    void set_components_gcv_config(const GCVConfig& cfg) { components_gcv_cfg_ = cfg; }
-
 protected:
-
-    // pick λ by GCV given current response/weights already set in components_solver_
-    std::pair<bool, double> select_components_gcv_config_() {
-        GCVEval<ComponentsSolverType> gcv{ &components_solver_, components_gcv_cfg_ };
-        auto [lambda_opt, gcv_opt] = argmin_over_log_grid(
-            [&](double lam){ return gcv(lam); },
-            components_gcv_cfg_.log10_min, components_gcv_cfg_.log10_max, components_gcv_cfg_.grid
-        );
-        return {lambda_opt < std::pow(10.0, components_gcv_cfg_.log10_max) , lambda_opt};
-    }
 
     // Virtual utilities
     virtual Vector l_compute_(const Vector& nu) = 0;
 
     // Components solver
     Vector c_compute_() {
-        Vector z = data()*Psi_D()*a_();
-        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
-            components_solver_.update_response_and_weights(z, I_);
-            // lambda selection if required
-            if(lambda_components_ < 0.0) {
-                auto [success, lambda_opt] = select_components_gcv_config_();
+        const Vector z = data() * Psi_D() * a_();
+
+        // always go through the same solver API
+        components_solver_.update_response_and_weights(z, I_);
+
+        double lambda = 1e-15;
+        if (!lambda_components_.has_value()){
+            if (*lambda_components_ < 0.0) {
+                auto [success, l] = select_lambda_with_gcv(components_solver_, components_gcv_cfg_);
                 if (!success) return Vector::Zero(n_nodes_loadings());
-                lambda_components_ = lambda_opt; // the optimal lambda is saved for subsequent calls
+                *lambda_components_ = l;
             }
-            components_solver_.fit(lambda_components_);
-            return components_solver_.f();
+            lambda = *lambda_components_;
         }
-        return z;
-    };
+        components_solver_.fit(lambda);
+
+        return components_solver_.f();
+    }
 
     // Current loading and component getters
     Vector a_() { ensure_lc_(); return loadings_.col(h());}
@@ -430,7 +424,7 @@ protected:
             loadings_ready_ = true;
         }
         if (!components_ready_) {
-            components_.setZero(n_nodes_components_, n_comp_);
+            components_.setZero(components_solver_.n_dofs(), n_comp_);
             components_ready_ = true;
         }
     }
@@ -483,29 +477,33 @@ protected:
         data_ = data_ * R;
     }
 
-    // Scores solver
+    // Components solver
     ComponentsSolverType components_solver_;
-    double lambda_components_{-1};
 
     // State
     const std::string block_name_;
     Matrix data_; // n_obs x n_covs
     int n_nodes_loadings_ {0};
-    int n_nodes_components_ {0};
     double tau_ {0.0};
     int n_comp_ {1};
     int h_ {0};
 
+    // Parameters
+    GCVConfig components_gcv_cfg_;
+    std::optional<double> lambda_components_;
     std::optional<double> noise_sigma_sqr_;
 
+    // Results
     Matrix loadings_, components_;
-    bool loadings_ready_ {false}, components_ready_ {false};
 
+    // Utilities
     SparseMatrix I_; // n_obs x n_obs identity matrix
     SparseMatrix Sigma_;
     SparseSolver invSigma_;
+
+    // Flags
     bool sigma_ready_ {false};
-    GCVConfig components_gcv_cfg_;
+    bool loadings_ready_ {false}, components_ready_ {false};
 };
 
 // single non-member operator<< visible to all derived classes
@@ -516,7 +514,7 @@ inline std::ostream& operator<<(std::ostream& os, const BaseBlock<SamplingStrate
 }
 
 // ========== MultivariateBlock ==========
-template <typename SamplingStrategy = IndependentSampling>
+template <typename SamplingStrategy>
 class MultivariateBlock final : public BaseBlock<SamplingStrategy> {
 public:
     using Base = BaseBlock<SamplingStrategy>;
@@ -538,27 +536,28 @@ public:
 
     template<typename S = SamplingStrategy>
     requires std::same_as<S, IndependentSampling>
-    MultivariateBlock(const std::string block_name, const Matrix& X, const double tau = 0.0) :
+    MultivariateBlock(const std::string& block_name, const Matrix& X, const double tau = 0.0) :
         Base(block_name, X, static_cast<int>(X.cols()), tau) {
         init_multivariate();
     }
 
     template<typename S = SamplingStrategy>
     requires std::same_as<SamplingStrategy, TimeDependentSampling>
-    MultivariateBlock(const std::string block_name, const Triangulation<1, 1>& T, const Matrix& times, const Matrix& X,  const double tau = 0.0) :
+    MultivariateBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Matrix& times, const Matrix& X,  const double tau = 0.0) :
         Base(block_name, T, times, X, static_cast<int>(X.cols()), tau) {
         init_multivariate();
     }
 
     void init_multivariate() {
-        Psi_.resize(n_nodes_loadings(), n_nodes_loadings());
-        Psi_.setIdentity();
+        Psi_D_.resize(n_covs(), n_nodes_loadings()); // n_covs == n_nodes_loadings in this case
+        Psi_D_.setIdentity();
         init();
     }
 
-    [[nodiscard]] const SparseMatrix& Psi_D() const override { return Psi_; }
+    // Psi_D
+    [[nodiscard]] const SparseMatrix& Psi_D() const override { return Psi_D_; }
 
-    // print override
+    // Print
     void print(std::ostream& os) const override {
         Base::print(os);
         os << "type: MultivariateBlock, n_nodes_loadings = n_covs = " << n_nodes_loadings();
@@ -569,16 +568,15 @@ protected:
     Vector l_compute_(const Vector& nu) override {
         assert(nu.size() == n_obs() && "nu must have size n_obs (rows of X)");
         init();
-
         return invSigma().solve(data().transpose() * nu);
     }
 
 private:
-    SparseMatrix Psi_;   // identity
+    SparseMatrix Psi_D_; // n_covs x n_covs sparse identity matrix
 };
 
 // ========== FunctionalBlock ==========
-template <class LoadingsPenaltyType, typename SamplingStrategy = IndependentSampling>
+template <class LoadingsPenaltyType, typename SamplingStrategy>
 class FunctionalBlock final : public BaseBlock<SamplingStrategy> {
 public:
     using Base = BaseBlock<SamplingStrategy>;
@@ -600,36 +598,37 @@ public:
 
     template <typename GeoFrame>
     requires std::same_as<SamplingStrategy, IndependentSampling>
-    FunctionalBlock(const std::string block_name, GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, const double tau = 0.0) :
+    FunctionalBlock(const std::string& block_name, GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, const double tau = 0.0) :
         Base(block_name, gf[0].template col<double>(block_name).as_matrix().transpose(), gf.template triangulation<0>().n_nodes(), tau) {
-        components_solver_.discretize(loadings_penalty.get());
-        components_solver_.analyze_data(gf, Sigma());
-        init();
+        init_functional(gf, std::forward<LoadingsPenaltyType>(loadings_penalty));
     }
 
     template <typename GeoFrame>
     requires std::same_as<SamplingStrategy, TimeDependentSampling>
-    FunctionalBlock(const std::string block_name, const Triangulation<1, 1>& T, const Matrix& times, GeoFrame& gf,
-                LoadingsPenaltyType&& loadings_penalty, const double tau = 0.0) :
+    FunctionalBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Matrix& times, GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, const double tau = 0.0) :
         Base(block_name, T, times, gf[0].template col<double>(block_name).as_matrix().transpose(), gf.template triangulation<0>().n_nodes(), tau) {
-        components_solver_.discretize(loadings_penalty.get());
-        components_solver_.analyze_data(gf, Sigma());
+        init_functional(gf, std::forward<LoadingsPenaltyType>(loadings_penalty));
+    }
+
+    template <typename GeoFrame>
+    void init_functional(GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty) {
+        loadings_solver_.discretize(loadings_penalty.get());
+        loadings_solver_.analyze_data(gf, Sigma());
         init();
     }
 
-    [[nodiscard]] const SparseMatrix& Psi_D() const override { return components_solver_.Psi(); }
+    // Psi_D
+    [[nodiscard]] const SparseMatrix& Psi_D() const override { return loadings_solver_.Psi(); }
 
-    // The model must set lambda before calling l_compute
+    // Loadings regularization utilities
     void set_lambda_loadings(const double lambda) override { lambda_loadings_ = lambda; }
     [[nodiscard]] double lambda_loadings() const override {
         if (lambda_loadings_ > 0) return lambda_loadings_;
         return std::numeric_limits<double>::quiet_NaN();
     }
-
-    // Optional: expose a config setter (or pass config from RGCCA Options later)
     void set_loadings_gcv_config(const GCVConfig& cfg) { loadings_gcv_cfg_ = cfg; }
 
-    // print override
+    // Print
     void print(std::ostream& os) const override {
         Base::print(os);
         os << "type: FunctionalBlock, n_nodes_loadings = " << n_nodes_loadings();
@@ -637,36 +636,26 @@ public:
         os << "\n";
     }
 protected:
-    // pick λ by GCV given current response/weights already set in components_solver_
-    std::pair<bool, double> select_loadings_gcv_() {
-        GCVEval<CovariatesSolverType> gcv{ &components_solver_, loadings_gcv_cfg_ };
-        auto [lambda_opt, gcv_opt] = argmin_over_log_grid(
-            [&](double lam){ return gcv(lam); },
-            loadings_gcv_cfg_.log10_min, loadings_gcv_cfg_.log10_max, loadings_gcv_cfg_.grid
-        );
-        return {lambda_opt < std::pow(10.0, loadings_gcv_cfg_.log10_max) , lambda_opt};
-    }
-
     Vector l_compute_(const Vector& nu) override {
         assert(nu.size() == n_obs() && "nu must have size n_obs (rows of X)");
         init();
 
         const Vector z = invSigma().solve(data().transpose() * nu);
-        components_solver_.update_response_and_weights(z, Sigma());
+        loadings_solver_.update_response_and_weights(z, Sigma());
 
         // lambda selection if required
         if(lambda_loadings_ < 0.0) {
-            auto [success, lambda_opt] = select_loadings_gcv_();
+            auto [success, lambda_opt] = select_lambda_with_gcv(loadings_solver_, loadings_gcv_cfg_);
             if (!success) return Vector::Zero(n_nodes_loadings());
             lambda_loadings_ = lambda_opt; // the optimal lambda is saved for subsequent calls
         }
 
-        components_solver_.fit(lambda_loadings_);
-        return components_solver_.f();
+        loadings_solver_.fit(lambda_loadings_);
+        return loadings_solver_.f();
     }
 private:
-    CovariatesSolverType components_solver_;
-    double lambda_loadings_ = -1.0;   // < 0 means "use GCV"
+    CovariatesSolverType loadings_solver_;
+    double lambda_loadings_ = -1.0; // < 0 means "use GCV"
     GCVConfig loadings_gcv_cfg_;
 };
 
@@ -753,7 +742,7 @@ std::ostream& operator<<(std::ostream& os, const Result& r);
 std::ostream& operator<<(std::ostream& os, const std::vector<Result>& results);
 
 // ===== RGCCA =====
-template <typename SamplingStrategy = IndependentSampling>
+template <typename SamplingStrategy>
 class RGCCA {
 public:
     using Block = internals::BaseBlock<SamplingStrategy>;
@@ -772,12 +761,13 @@ public:
         LambdaSelection lambda_selection;
         TauSelection tau_selection;
         Deflation deflation_mode;
+        Scheme scheme;
 
         explicit Options(
           const int max_iter_ = 1000, const double tol_ = 1e-8, const unsigned seed_ = 0,
           const Init init_ = Init::SVD, const TauSelection tau_selection_ = TauSelection::Automatic,
           const LambdaSelection lambda_selection_ = LambdaSelection::Automatic,
-          const Deflation deflation_mode_ = Deflation::Scores,
+          const Deflation deflation_mode_ = Deflation::Scores, const Scheme& scheme_ = Scheme::Factorial(),
           const bool verbose_ = false, const bool cache_ = true) :
             max_iter(max_iter_),
             tol(tol_),
@@ -786,19 +776,20 @@ public:
             tau_selection(tau_selection_),
             lambda_selection(lambda_selection_),
             deflation_mode(deflation_mode_),
+            scheme(scheme_),
             verbose(verbose_),
             cache_covariances(cache_) { }
     };
 
     template <typename S = SamplingStrategy>
     requires std::same_as<S, IndependentSampling>
-    explicit RGCCA(const int n_obs, const Scheme& scheme = Scheme::Horst(), const Options& opt = Options(), const int n_comp = 1) :
-        n_obs_(n_obs), scheme_(scheme), opt_(opt), n_comp_(n_comp) {}
+    explicit RGCCA(const int n_obs, const Options& opt = Options(), const int n_comp = 1) :
+        n_obs_(n_obs), opt_(opt), n_comp_(n_comp) {}
 
     template <typename S = SamplingStrategy>
     requires std::same_as<S, TimeDependentSampling>
-    explicit RGCCA(const int n_obs, const Triangulation<1, 1>& T, const Scheme& scheme = Scheme::Horst(), const Options& opt = Options(), const int n_comp = 1) :
-        n_obs_(n_obs), T_(T), scheme_(scheme), opt_(opt), n_comp_(n_comp) {}
+    explicit RGCCA(const int n_obs, const Triangulation<1, 1>& T, const Options& opt = Options(), const int n_comp = 1) :
+        n_obs_(n_obs), T_(T), opt_(opt), n_comp_(n_comp) {}
 
     // ===== Blocks =====
     int add_block(BlockPtr b) {
@@ -983,7 +974,7 @@ public:
                         if (k == l || !res.C(l,k)) continue;   // <— exclude self
                         const Vector eta_k = eta_(*blocks_[k]);
                         const double cov_lk = cov_value_(l, k, eta_l, eta_k);   // uses/saves cache, marks clean
-                        const double w_lk = scheme_.w(cov_lk);
+                        const double w_lk = opt_.scheme.w(cov_lk);
                         nu_l.noalias() += w_lk * eta_k;   // no aliasing with RHS
                     }
                     blocks_[l]->compute(nu_l);   // block handles normalization
@@ -1011,8 +1002,8 @@ public:
     [[nodiscard]] int n_obs() const { return n_obs_; }
     [[nodiscard]] int n_comp() const { return n_comp_; }
     [[nodiscard]] int n_blocks() const { return static_cast<int>(blocks_.size()); }
-    [[nodiscard]] const Scheme& scheme() const { return scheme_; }
     [[nodiscard]] const Options& options() const { return opt_; }
+    [[nodiscard]] const Scheme& scheme() const { return opt_.scheme; }
     [[nodiscard]] const std::vector<BlockPtr>& blocks() const { return blocks_; }
     [[nodiscard]] const Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>& C() const { return C_; }
     [[nodiscard]] bool initialized() const { return initialized_; }
@@ -1068,7 +1059,7 @@ private:
             for (int k = j+1; k < J; ++k){
                 if (C_(j, k)) {
                     const double cjk = cov_value_(j, k, eta_j, eta_(*blocks_[k]));
-                    f += 2 * scheme_.g(cjk);
+                    f += 2 * opt_.scheme.g(cjk);
                 }
             }
         }
@@ -1139,7 +1130,6 @@ private:
     int n_obs_ {0}; // global number of observations
     SamplingDomain T_; // only used by TimeDependentSampling
     int h_ {0};   // current component index
-    Scheme scheme_;
     Options opt_;
     int n_comp_{0};
     bool is_last_comp_{false};

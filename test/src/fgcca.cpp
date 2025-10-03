@@ -106,61 +106,34 @@ TEST(rgcca, test_02) {
     std::string path = "../../../../projects/cca/";
 
     // chose options
-    RGCCA<>::Options options;
-    options.tau_selection = TauSelection::Automatic;
+    RGCCA<IndependentSampling>::Options options;
+    // change defaults if needed ...
 
     // model initialization
     int n_comp = 3;
-    RGCCA rgcca(401, Scheme::Factorial(), options, n_comp);
+    int n_obs = 401;
+    RGCCA<IndependentSampling> rgcca(n_obs, options, n_comp);
+
+    // set empirical noise variance
     rgcca.set_noise_sigma_sqr(0.2);
 
     // add blocks
-    Eigen::Matrix<double, Dynamic, Dynamic> X1 = read_csv<double>(path + "X1.csv").as_matrix();
-    rgcca.add_multivariate_block("X1", X1);
-    Eigen::Matrix<double, Dynamic, Dynamic> X2 = read_csv<double>(path + "X2.csv").as_matrix();
-    rgcca.add_multivariate_block("X2", X2);
-    Eigen::Matrix<double, Dynamic, Dynamic> X3 = read_csv<double>(path + "X3.csv").as_matrix();
-    rgcca.add_multivariate_block("X3", X3);
-    Eigen::Matrix<double, Dynamic, Dynamic> X4 = read_csv<double>(path + "X4.csv").as_matrix();
-    rgcca.add_multivariate_block("X4", X4);
+
+    for (int i = 1; i <=4; ++i) {
+        Eigen::Matrix<double, Dynamic, Dynamic> X = read_csv<double>(path + "X" + std::to_string(i) + ".csv").as_matrix();
+        rgcca.add_multivariate_block("X" + std::to_string(i), X);
+    }
 
     // add connections
     rgcca.connect(0,1);
     rgcca.connect(0,2);
     rgcca.connect(1,3);
 
-    /*
-    // check
-    for (int j = 0; j < rgcca.n_blocks(); ++j) {
-        const auto& X = rgcca.blocks()[j]->data();
-        Eigen::BDCSVD<RGCCA::Matrix> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
-        const double s1 = svd.singularValues()(0);
-        const double n  = double(rgcca.n_obs());
-        const double tau = rgcca.blocks()[j]->tau();
-        const double predicted = 1.0 / std::sqrt(((1.0 - tau)/double(n)) * s1 * s1 + tau);
-        std::cout << "block " << j
-                  << "  s1=" << s1
-                  << "  predicted ||a||=" << predicted
-                  << std::endl;
-    }
-    */
-
     // fit
     const auto results = rgcca.fit();
-
-    /*
-    for (int j = 0; j < rgcca.n_blocks(); ++j) {
-        const auto& a = rgcca.blocks()[j]->loadings().col(rgcca.h());
-        std::cout << "block " << j << "  ||a||=" << a.norm()
-                  << "  a^T Σ a=" << std::sqrt( (a.transpose() * rgcca.blocks()[j]->Sigma() * a)(0) )
-                  << std::endl;
-    }
-    std::cout << std::endl;
-    */
-
     std::cout << results << std::endl;
-    std::cout << std::endl;
 
+    // save results
     for (const auto& block : rgcca.blocks()) {
         write_csv(path + "loadings_"+ block -> name() + ".csv", block -> loadings_m());
         write_csv(path + "components_"+ block -> name() + ".csv", block -> components_m());
@@ -183,22 +156,24 @@ TEST(rgcca, test_03) {
     auto F = integral(I)(u * v);
 
     // chose options
-    RGCCA<>::Options options;
-    options.tau_selection = TauSelection::Automatic;
-    options.lambda_selection = LambdaSelection::Automatic;
-    int n_comp = 3;
+    RGCCA<IndependentSampling>::Options options;
+    // change defaults if needed ...
 
     // model initialization
-    RGCCA rgcca(401, Scheme::Factorial(), options, n_comp);
+    int n_comp = 3;
+    int n_obs = 401;
+    RGCCA<IndependentSampling> rgcca(n_obs, options, n_comp);
+
+    // set empirical noise variance
     rgcca.set_noise_sigma_sqr(0.2);
 
     // add blocks
-    for (int i = 1; i <=4; ++i) {
+    for (int i = 1; i <= 4; ++i) {
         GeoFrame gf(I);
-        Eigen::Matrix<double, Dynamic, Dynamic> X = read_csv<double>(path + "X"+std::to_string(i)+".csv").as_matrix();
-        auto& level = gf.insert_scalar_layer<POINT>("data", path + "locs_"+std::to_string(i)+".csv");
-        level.load_blk("X"+std::to_string(i), X.transpose());
-        rgcca.add_functional_block("X"+std::to_string(i), gf, fe_ls_elliptic(a, F));
+        Eigen::Matrix<double, Dynamic, Dynamic> X = read_csv<double>(path + "X" + std::to_string(i) + ".csv").as_matrix();
+        auto& level = gf.insert_scalar_layer<POINT>("data", path + "locs_" + std::to_string(i) + ".csv");
+        level.load_blk("X" + std::to_string(i), X.transpose());
+        rgcca.add_functional_block("X" + std::to_string(i), gf, fe_ls_elliptic(a, F));
     }
 
     // add connections
@@ -208,7 +183,9 @@ TEST(rgcca, test_03) {
 
     // fit
     const auto results = rgcca.fit();
+    std::cout << results << std::endl;
 
+    // save results
     for (const auto& block : rgcca.blocks()) {
         write_csv(path + "f_loadings_"+ block -> name() + ".csv", block -> loadings_m());
         write_csv(path + "f_components_"+ block -> name() + ".csv", block -> components_m());
@@ -233,22 +210,24 @@ TEST(rgcca, test_04) {
 
     // chose options
     RGCCA<TimeDependentSampling>::Options options;
-    options.tau_selection = TauSelection::Automatic;
-    options.lambda_selection = LambdaSelection::Automatic;
-    int n_comp = 3;
+    // change defaults if needed ...
 
     // model initialization
-    RGCCA<TimeDependentSampling> rgcca(401, T, Scheme::Factorial(), options, n_comp);
+    int n_comp = 3;
+    int n_obs = 401;
+    RGCCA<TimeDependentSampling> rgcca(n_obs, T, options, n_comp);
+
+    // set empirical noise variance
     rgcca.set_noise_sigma_sqr(0.2);
 
     // add blocks
-    for (int i = 1; i <=4; ++i) {
+    for (int i = 1; i <= 4; ++i) {
         GeoFrame gf(I);
-        Eigen::Matrix<double, Dynamic, Dynamic> X = read_csv<double>(path + "X"+std::to_string(i)+".csv").as_matrix();
-        Eigen::Matrix<double, Dynamic, Dynamic> times = read_csv<double>(path + "times_"+std::to_string(i)+".csv").as_matrix();
-        auto& level = gf.insert_scalar_layer<POINT>("data", path + "locs_"+std::to_string(i)+".csv");
-        level.load_blk("X"+std::to_string(i), X.transpose());
-        rgcca.add_functional_block("X"+std::to_string(i), times, gf, fe_ls_elliptic(a_D, F_D));
+        Eigen::Matrix<double, Dynamic, Dynamic> X = read_csv<double>(path + "X" + std::to_string(i) + ".csv").as_matrix();
+        Eigen::Matrix<double, Dynamic, Dynamic> times = read_csv<double>(path + "times_" + std::to_string(i)+".csv").as_matrix();
+        auto& level = gf.insert_scalar_layer<POINT>("data", path + "locs_" + std::to_string(i)+".csv");
+        level.load_blk("X" + std::to_string(i), X.transpose());
+        rgcca.add_functional_block("X" + std::to_string(i), times, gf, fe_ls_elliptic(a_D, F_D));
     }
 
     // add connections
@@ -260,6 +239,7 @@ TEST(rgcca, test_04) {
     const auto results = rgcca.fit();
     std::cout << results << std::endl;
 
+    // save results
     for (const auto& block : rgcca.blocks()) {
         write_csv(path + "tf_loadings_"+ block -> name() + ".csv", block -> loadings_m());
         write_csv(path + "tf_components_"+ block -> name() + ".csv", block -> components_m());
