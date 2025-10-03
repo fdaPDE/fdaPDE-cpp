@@ -78,6 +78,9 @@ struct IndependentSampling {
 };
 struct TimeDependentSampling {
     using solver_t = internals::fe_ls_elliptic;
+    using Matrix = Eigen::MatrixXd;
+    using SparseMatrix = Eigen::SparseMatrix<double>;
+    using PointEvalType = std::function<SparseMatrix(const Matrix&)>;
 
     static void discretize(const Triangulation<1, 1>& T, solver_t& solver_) {
         // define physic in space (same for all the blocks)
@@ -89,6 +92,21 @@ struct TimeDependentSampling {
         auto F_T = integral(T)(u * v_T);
         auto penalty = fdapde::fe_ls_elliptic(a_T, F_T);
         solver_.discretize(penalty.get());
+    }
+
+    static void compute_Psi(const Triangulation<1, 1>& T, const Matrix& times, SparseMatrix& Psi) {
+        // define physic in space (same for all the blocks)
+        FeSpace Vh(T, P1<1>);
+        TrialFunction f_T(Vh);
+        TestFunction  v_T(Vh);
+        auto a_T = integral(T)(dx(f_T) * dx(v_T));
+        ZeroField<1> u;
+        auto F_T = integral(T)(u * v_T);
+        auto penalty = fdapde::fe_ls_elliptic(a_T, F_T);
+        // compute point eval functor
+        using BilinearForm = typename std::decay_t<decltype(penalty.get())>::BilinearForm;
+        const BilinearForm& bilinear_form = penalty.get().bilinear_form();
+        Psi = internals::point_basis_eval(bilinear_form.trial_space(), times);
     }
 
 };
@@ -175,14 +193,14 @@ public:
 
     template<typename S = SamplingStrategy>
     requires std::same_as<SamplingStrategy, TimeDependentSampling>
-    BaseBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Matrix& times, const Matrix& data, const int n_nodes_loadings, const double tau = 0.0) :
-        block_name_(block_name), data_(data), n_nodes_loadings_(n_nodes_loadings), tau_(tau) {
+    BaseBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Vector& times, const Matrix& data, const int n_nodes_loadings, const double tau = 0.0) :
+        block_name_(block_name), times_(times), data_(data), n_nodes_loadings_(n_nodes_loadings), tau_(tau) {
         // Init sparse identity
         I_.resize(n_obs(), n_obs());
         I_.setIdentity();
         // Init components solver
         SamplingStrategy::discretize(T, components_solver_);
-        components_solver_.analyze_data(times, Vector::Zero(n_obs()), I_);
+        components_solver_.analyze_data(Matrix{times}, Vector::Zero(n_obs()), I_);
     }
 
     virtual ~BaseBlock() = default;
@@ -316,6 +334,11 @@ public:
     Matrix loadings_m() { ensure_lc_(); return Psi_D() * loadings_; }
     Matrix& components() { ensure_lc_(); return components_; }
     Matrix components_m() { ensure_lc_(); return Psi_T() * components_; }
+
+    // Times getter (only active with TimeDependentSampling strategy)
+    template <typename S = SamplingStrategy>
+    requires std::same_as<S, TimeDependentSampling>
+    const Vector& times() { return times_; }
 
     // Virtual printer
     virtual void print(std::ostream& os) const {
@@ -481,6 +504,7 @@ protected:
     ComponentsSolverType components_solver_;
 
     // State
+    Vector times_{0};
     const std::string block_name_;
     Matrix data_; // n_obs x n_covs
     int n_nodes_loadings_ {0};
@@ -543,7 +567,7 @@ public:
 
     template<typename S = SamplingStrategy>
     requires std::same_as<SamplingStrategy, TimeDependentSampling>
-    MultivariateBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Matrix& times, const Matrix& X,  const double tau = 0.0) :
+    MultivariateBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Vector& times, const Matrix& X,  const double tau = 0.0) :
         Base(block_name, T, times, X, static_cast<int>(X.cols()), tau) {
         init_multivariate();
     }
@@ -605,7 +629,7 @@ public:
 
     template <typename GeoFrame>
     requires std::same_as<SamplingStrategy, TimeDependentSampling>
-    FunctionalBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Matrix& times, GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, const double tau = 0.0) :
+    FunctionalBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Vector& times, GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, const double tau = 0.0) :
         Base(block_name, T, times, gf[0].template col<double>(block_name).as_matrix().transpose(), gf.template triangulation<0>().n_nodes(), tau) {
         init_functional(gf, std::forward<LoadingsPenaltyType>(loadings_penalty));
     }
@@ -668,10 +692,10 @@ make_multivariate_block(std::string block_name, const Matrix& data, double tau =
     return std::make_unique<internals::MultivariateBlock<SamplingStrategy>>(block_name, data, tau);
 }
 
-template <typename SamplingStrategy, typename Matrix = Eigen::Matrix<double, Dynamic, Dynamic>>
+template <typename SamplingStrategy, typename Matrix = Eigen::Matrix<double, Dynamic, Dynamic>, typename Vector = Eigen::Matrix<double, Dynamic, 1>>
 requires std::same_as<SamplingStrategy, TimeDependentSampling>
 inline std::unique_ptr<internals::BaseBlock<SamplingStrategy>>
-make_multivariate_block(std::string block_name, const Triangulation<1, 1>& T, Matrix& times, const Matrix& data, double tau = 0.0) {
+make_multivariate_block(std::string block_name, const Triangulation<1, 1>& T, const Vector& times, const Matrix& data, double tau = 0.0) {
     return std::make_unique<internals::MultivariateBlock<SamplingStrategy>>(block_name, T, times, data, tau);
 }
 
@@ -683,10 +707,10 @@ make_functional_block(std::string block_name, GeoFrame& gf, LoadingsPenaltyType&
       block_name, gf, std::forward<LoadingsPenaltyType>(loadings_penalty), tau);
 }
 
-template <typename SamplingStrategy, typename GeoFrame, typename LoadingsPenaltyType, typename Matrix = Eigen::Matrix<double, Dynamic, Dynamic>>
+template <typename SamplingStrategy, typename GeoFrame, typename LoadingsPenaltyType, typename Vector = Eigen::Matrix<double, Dynamic, 1>>
 requires std::same_as<SamplingStrategy, TimeDependentSampling>
 std::unique_ptr<internals::BaseBlock<SamplingStrategy>>
-make_functional_block(std::string block_name, const Triangulation<1, 1>& T, const Matrix& times, GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, double tau = 0.0) {
+make_functional_block(std::string block_name, const Triangulation<1, 1>& T, const Vector& times, GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, double tau = 0.0) {
     return std::make_unique<internals::FunctionalBlock<LoadingsPenaltyType, SamplingStrategy>>(
         block_name, T, times, gf, std::forward<LoadingsPenaltyType>(loadings_penalty), tau);
 }
@@ -748,6 +772,7 @@ public:
     using Block = internals::BaseBlock<SamplingStrategy>;
     using BlockPtr = std::unique_ptr<Block>;
     using Matrix = typename Block::Matrix;
+    using SparseMatrix = typename Block::SparseMatrix;
     using Vector = typename Block::Vector;
     using SamplingDomain = std::conditional_t<std::same_as<SamplingStrategy, TimeDependentSampling>, Triangulation<1, 1>, internals::empty_t>;
 
@@ -794,7 +819,9 @@ public:
     // ===== Blocks =====
     int add_block(BlockPtr b) {
         if (!b) throw std::invalid_argument("RGCCA/add_block: null block");
-        if (b->n_obs() != n_obs()) throw std::invalid_argument("RGCCA/add_block: n_obs mismatch");
+        if constexpr (std::same_as<SamplingStrategy, IndependentSampling>){
+            if (b->n_obs() != n_obs()) throw std::invalid_argument("RGCCA/add_block: n_obs mismatch");
+        } else { add_times_(b->times()); }
         b->set_n_comp(n_comp());
         blocks_.emplace_back(std::move(b));
         initialized_ = false;   // topology/caches need a fresh init later
@@ -808,7 +835,7 @@ public:
     }
     template<typename S = SamplingStrategy>
     requires std::same_as<S, TimeDependentSampling>
-    int add_multivariate_block(std::string block_name, const Matrix& times, Matrix& X, const double tau = 0.0) {
+    int add_multivariate_block(std::string block_name, const Vector& times, Matrix& X, const double tau = 0.0) {
         return add_block(internals::make_multivariate_block<SamplingStrategy>(block_name, T_, times, X, tau));
     }
     template <typename GeoFrame, typename LoadingsPenaltyType>
@@ -818,10 +845,9 @@ public:
     }
     template <typename GeoFrame, typename LoadingsPenaltyType>
     requires std::same_as<SamplingStrategy, TimeDependentSampling>
-    int add_functional_block(std::string block_name, const Matrix& times, const GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, const double tau = 0.0) {
+    int add_functional_block(std::string block_name, const Vector& times, const GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, const double tau = 0.0) {
         return add_block(internals::make_functional_block<SamplingStrategy>(block_name, T_, times, gf, std::forward<LoadingsPenaltyType>(loadings_penalty), tau));
     }
-
 
     [[nodiscard]] int n_blocks() { return J_; }
 
@@ -848,6 +874,7 @@ public:
                     if (k != j) C_(j, k) = true;   // diag remains false
         }
         if (noise_sigma_sqr_.has_value()) set_noise_sigma_sqr_all_();
+        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) compute_Psi_();
         initialized_ = true;
         user_defined_design_ = (mode == DesignMode::Empty);   // means user will set edges
     }
@@ -859,7 +886,7 @@ public:
 
     // Noise
     void set_noise_sigma_sqr(double noise_sigma_sqr) { noise_sigma_sqr_ = std::max(0.0, noise_sigma_sqr); }
-    std::optional<double> noise_sigma_sqr() const { return noise_sigma_sqr_; }
+    [[nodiscard]] std::optional<double> noise_sigma_sqr() const { return noise_sigma_sqr_; }
 
     // Parameters setters
     void set_lambda_loadings_all(const double lambda) const {
@@ -968,14 +995,14 @@ public:
             if (opt_.lambda_selection == LambdaSelection::Automatic) { set_lambda_auto_all_(); }
             for (int s = 0; s < opt_.max_iter; ++s) {
                 for (int l = 0; l < J; ++l) {
-                    Vector nu_l = Vector::Zero(n_obs_);
+                    Vector nu_l = Vector::Zero(blocks_[l]->n_obs());
                     const Vector eta_l = eta_(*blocks_[l]);
                     for (int k = 0; k < J; ++k) {
                         if (k == l || !res.C(l,k)) continue;   // <— exclude self
                         const Vector eta_k = eta_(*blocks_[k]);
                         const double cov_lk = cov_value_(l, k, eta_l, eta_k);   // uses/saves cache, marks clean
                         const double w_lk = opt_.scheme.w(cov_lk);
-                        nu_l.noalias() += w_lk * eta_k;   // no aliasing with RHS
+                        nu_l.noalias() += w_lk * eta_(*blocks_[k], *blocks_[l]);   // no aliasing with RHS
                     }
                     blocks_[l]->compute(nu_l);   // block handles normalization
                     mark_cov_rowcol_dirty_(l);     // η_l changed → invalidate its row/col
@@ -1008,8 +1035,26 @@ public:
     [[nodiscard]] const Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>& C() const { return C_; }
     [[nodiscard]] bool initialized() const { return initialized_; }
     [[nodiscard]] bool user_defined_design() const { return user_defined_design_; }
+    template<typename S = SamplingStrategy>
+    requires std::same_as<S, TimeDependentSampling>
+    [[nodiscard]] const SparseMatrix& Psi_T() const { return Psi_T_; };
 
 private:
+
+    template <typename S = SamplingStrategy>
+    requires std::same_as<S, TimeDependentSampling>
+    void add_times_(const Vector& t) {
+        times_.reserve(times_.size() + static_cast<size_t>(t.size()));
+        times_.insert(times_.end(), t.data(), t.data() + t.size());
+    }
+
+    void compute_Psi_() {
+        std::ranges::sort(times_);
+        times_.erase(std::ranges::unique(times_).begin(), times_.end());
+        Eigen::VectorXd times_eig = Eigen::Map<Eigen::VectorXd>(times_.data(), times_.size());
+        TimeDependentSampling::compute_Psi(T_, Matrix{times_eig}, Psi_T_);
+    }
+
     void clear_covariance_cache_() {
         const int J = n_blocks();
         // resize covariance cache + dirty mask
@@ -1042,12 +1087,27 @@ private:
     void set_noise_sigma_sqr_all_() const { for (auto& b : blocks_) b->set_noise_sigma_sqr(*noise_sigma_sqr_); }
 
     // ===== Helpers =====
+
+    // eta using the RGCCA own Psi_T (or components_m for independent)
     Vector eta_(Block& b) const {
-        // TODO: this will not work in general. Define a Psi matrix to a common set of times across blocks and apply it to components() instead of components_m()
-        return b.components_m().col(h()); // η_j = X_j a_mj
+        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
+            return Psi_T() * b.components().col(h());
+        } else {
+            return b.components_m().col(h());
+        }
     }
+    // eta using reference block's Psi_T
+    Vector eta_(Block& b, const Block& ref) const {
+        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
+            return ref.Psi_T() * b.components().col(h());
+        } else {
+            return b.components_m().col(h());
+        }
+    }
+
+    // covariance of two vectors assumed to be ventered
     [[nodiscard]] double cov_(const Vector& u, const Vector& v) const {
-        return (1.0 / static_cast<double>(n_obs_)) * u.dot(v);
+        return (1.0 / static_cast<double>(u.size())) * u.dot(v);
     }
 
     // objective f = Σ_{j,k} C_jk * g( cov(η_j, η_k) )
@@ -1128,7 +1188,9 @@ private:
 private:
     int J_ {0};
     int n_obs_ {0}; // global number of observations
+    std::vector<double> times_;
     SamplingDomain T_; // only used by TimeDependentSampling
+    SparseMatrix Psi_T_;
     int h_ {0};   // current component index
     Options opt_;
     int n_comp_{0};

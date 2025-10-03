@@ -221,7 +221,7 @@ TEST(rgcca, test_04) {
     rgcca.set_noise_sigma_sqr(0.2);
 
     // add blocks
-    for (int i = 1; i <= 4; ++i) {
+    for (int i = 1; i <= 3; ++i) {
         GeoFrame gf(I);
         Eigen::Matrix<double, Dynamic, Dynamic> X = read_csv<double>(path + "X" + std::to_string(i) + ".csv").as_matrix();
         Eigen::Matrix<double, Dynamic, Dynamic> times = read_csv<double>(path + "times_" + std::to_string(i)+".csv").as_matrix();
@@ -229,6 +229,13 @@ TEST(rgcca, test_04) {
         level.load_blk("X" + std::to_string(i), X.transpose());
         rgcca.add_functional_block("X" + std::to_string(i), times, gf, fe_ls_elliptic(a_D, F_D));
     }
+
+    GeoFrame gf(I);
+    Eigen::Matrix<double, Dynamic, Dynamic> X = read_csv<double>(path + "X4_short.csv").as_matrix();
+    Eigen::Matrix<double, Dynamic, Dynamic> times = read_csv<double>(path + "times_4_short.csv").as_matrix();
+    auto& level = gf.insert_scalar_layer<POINT>("data", path + "locs_4.csv");
+    level.load_blk("X4", X.transpose());
+    rgcca.add_functional_block("X4", times, gf, fe_ls_elliptic(a_D, F_D));
 
     // add connections
     rgcca.connect(0,1);
