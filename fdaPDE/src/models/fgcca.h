@@ -314,7 +314,6 @@ public:
     void compute(const Vector& nu) {
         // Compute loadings
         loadings().col(h()) = l_compute_(nu);
-        if (a_().mean() < 0) loadings().col(h()) *= -1.0;
 
         // TODO: add time contribution and mu estimator
 
@@ -322,7 +321,22 @@ public:
         components().col(h()) = c_compute_();
 
         // Normalize
-        scale_to_unit_score_variance_();
+        normalize_();
+    }
+
+    // Scaling method
+    void flip_and_scale_to_unit_score_variance(const SparseMatrix& Psi = Psi_T()) {
+        // Scale factor so that Var(eta_t) = 1 where eta_t has length that depends on Psi
+        const Vector eta_t = Psi*eta_();
+        const double v = (eta_t).squaredNorm() / static_cast<double>(eta_t.size());
+        if (v <= 0.0) return;
+        const double norm = std::sqrt(v);
+        // Sign flip
+        double sign = 1;
+        if (a_().mean() < 0) sign = -1.0;
+        // Apply to loadings and scores
+        components().col(h()) /= sign * norm;
+        loadings().col(h()) /= sign * norm;
     }
 
     // Psi matrices
@@ -362,7 +376,7 @@ public:
 
 protected:
 
-    // Virtual utilities
+    // Loadings solver
     virtual Vector l_compute_(const Vector& nu) = 0;
 
     // Components solver
@@ -384,6 +398,16 @@ protected:
         components_solver_.fit(lambda);
 
         return components_solver_.f();
+    }
+
+    void normalize_() {
+        // Scale factor s so that Var(eta) = 1 where eta has length n_obs()
+        const Vector a_m = (Psi_D()*a_());
+        const double norm_sqr = a_m.dot(Sigma() * a_m);
+        if (norm_sqr <= 0.0) return;
+        const double norm = std::sqrt(norm_sqr);
+        components().col(h()) /= norm;
+        loadings().col(h()) /= norm;
     }
 
     // Current loading and component getters
@@ -450,14 +474,6 @@ protected:
             components_.setZero(components_solver_.n_dofs(), n_comp_);
             components_ready_ = true;
         }
-    }
-    void scale_to_unit_score_variance_() {
-        // Scale factor s so that Var(eta) = 1 where eta has length n_obs()
-        const double v = (Psi_T()*eta_()).squaredNorm() / static_cast<double>(n_obs());
-        if (v <= 0.0) return;
-        const double norm = std::sqrt(v);
-        components().col(h()) /= norm;
-        loadings().col(h()) /= norm;
     }
 
     // Deflation
@@ -556,7 +572,6 @@ public:
     using Base::loadings;
     using Base::components;
     using Base::h;
-    using Base::scale_to_unit_score_variance_;
 
     template<typename S = SamplingStrategy>
     requires std::same_as<S, IndependentSampling>
@@ -618,7 +633,6 @@ public:
     using Base::data;
     using Base::components;
     using Base::h;
-    using Base::scale_to_unit_score_variance_;
 
     template <typename GeoFrame>
     requires std::same_as<SamplingStrategy, IndependentSampling>
@@ -874,7 +888,7 @@ public:
                     if (k != j) C_(j, k) = true;   // diag remains false
         }
         if (noise_sigma_sqr_.has_value()) set_noise_sigma_sqr_all_();
-        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) compute_Psi_();
+        compute_Psi_();
         initialized_ = true;
         user_defined_design_ = (mode == DesignMode::Empty);   // means user will set edges
     }
@@ -987,8 +1001,8 @@ public:
         }
 
         // room for objective function evaluations
-        res.obj_history.reserve(opt_.max_iter + 1);
-        res.obj_history.push_back(objective_());
+        res.obj_history.reserve(opt_.max_iter);
+        res.obj_history.push_back(0.); // objective_());
 
         if ( !no_connections_(res.C) ) {
             // require lambda selection also at the first iteration
@@ -1009,15 +1023,16 @@ public:
                 }
 
                 const double f = objective_();
-                const double prev = res.obj_history.back();
+                const double obj_prev = res.obj_history.back();
                 res.obj_history.push_back(f);
                 res.iters = s + 1;
 
-                if (res.obj_history.back() + 1e-15 < res.obj_history[res.obj_history.size() - 2]) res.monotone = false;
-                const double rel  = std::abs(f - prev) / (std::abs(prev) + 1e-16);
+                if (res.obj_history.back() + 1e-15 < obj_prev) res.monotone = false;
+                const double rel  = std::abs(f - obj_prev) / (std::abs(obj_prev) + 1e-16);
                 if (rel < opt_.tol) break;
             }
         }
+        flip_and_scale_all_to_unit_score_variance_();
         compute_covariance_matrix_(res.covariance_matrix);
         get_tau(res.tau_values);
         get_lambdas(res.lambda_components_values, res.lambda_loadings_values);
@@ -1035,11 +1050,15 @@ public:
     [[nodiscard]] const Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>& C() const { return C_; }
     [[nodiscard]] bool initialized() const { return initialized_; }
     [[nodiscard]] bool user_defined_design() const { return user_defined_design_; }
-    template<typename S = SamplingStrategy>
-    requires std::same_as<S, TimeDependentSampling>
     [[nodiscard]] const SparseMatrix& Psi_T() const { return Psi_T_; };
 
 private:
+
+    void flip_and_scale_all_to_unit_score_variance_() {
+        for (auto& b : blocks_) {
+            b->flip_and_scale_to_unit_score_variance(Psi_T());
+        }
+    }
 
     template <typename S = SamplingStrategy>
     requires std::same_as<S, TimeDependentSampling>
@@ -1049,10 +1068,15 @@ private:
     }
 
     void compute_Psi_() {
-        std::ranges::sort(times_);
-        times_.erase(std::ranges::unique(times_).begin(), times_.end());
-        Eigen::VectorXd times_eig = Eigen::Map<Eigen::VectorXd>(times_.data(), times_.size());
-        TimeDependentSampling::compute_Psi(T_, Matrix{times_eig}, Psi_T_);
+        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
+            std::ranges::sort(times_);
+            times_.erase(std::ranges::unique(times_).begin(), times_.end());
+            Eigen::VectorXd times_eig = Eigen::Map<Eigen::VectorXd>(times_.data(), times_.size());
+            SamplingStrategy::compute_Psi(T_, Matrix{times_eig}, Psi_T_);
+        } else {
+            Psi_T_.resize(n_obs(), n_obs());
+            Psi_T_.setIdentity();
+        }
     }
 
     void clear_covariance_cache_() {
@@ -1236,10 +1260,10 @@ inline std::ostream& operator<<(std::ostream& os, const Result& r) {
     os << "monotone  : " << (r.monotone ? "yes" : "no") << "\n";
     os << std::endl;
     os << "objective :\n";
-    double prev = 0.0;
-    for (size_t i = 0; i < r.obj_history.size(); ++i) {
+    double prev = r.obj_history[0];
+    for (size_t i = 1; i < r.obj_history.size(); ++i) {
         const double val = r.obj_history[i];
-        os << "- iter " << std::setw(3) << (i + 1)
+        os << "- iter " << std::setw(3) << (i)
            << " | fit = " << std::setw(12) << std::setprecision(8) << val
            << " | diff = " << std::setw(12) << (val - prev) << "\n";
         prev = val;
@@ -1254,12 +1278,13 @@ inline std::ostream& operator<<(std::ostream& os, const Result& r) {
 // Pretty printer for a vector of Result (components)
 inline std::ostream& operator<<(std::ostream& os, const std::vector<Result>& results) {
     for (size_t h = 0; h < results.size(); ++h) {
+        os << "\n";
         os << "========================================\n";
         os << "Component " << (h + 1) << "\n";
         os << "----------------------------------------\n";
         os << results[h]; // delegate to the single-result printer
-        os << "\n";
     }
+    os << "\n";
     return os;
 }
 
