@@ -63,6 +63,7 @@ struct identity_ls {
     [[nodiscard]] vector_t fn() const { return f_; }     // fitted values
     [[nodiscard]] const vector_t& f() const { return f_; }
     [[nodiscard]] const sparse_matrix_t& Psi() const { return Psi_; }
+    [[nodiscard]] double ftPf(double) { return 0.; }
 
 private:
     int n_dofs_{0};
@@ -343,6 +344,10 @@ public:
     [[nodiscard]] virtual const SparseMatrix& Psi_D() const = 0; // It depends on the loadings solver
     [[nodiscard]] const SparseMatrix& Psi_T() const { return components_solver_.Psi(); }
 
+    // Penalty evaluation
+    [[nodiscard]] double ntPn() { return components_solver_.ftPf( lambda_components() ); }
+    [[nodiscard]] virtual double atPa() { return 0.; }
+
     // Loadings & Components
     Matrix& loadings() { ensure_lc_(); return loadings_; }
     Matrix loadings_m() { ensure_lc_(); return Psi_D() * loadings_; }
@@ -401,7 +406,6 @@ protected:
     }
 
     void normalize_() {
-        // Scale factor s so that Var(eta) = 1 where eta has length n_obs()
         const Vector a_m = (Psi_D()*a_());
         const double norm_sqr = a_m.dot(Sigma() * a_m);
         if (norm_sqr <= 0.0) return;
@@ -658,8 +662,14 @@ public:
     // Psi_D
     [[nodiscard]] const SparseMatrix& Psi_D() const override { return loadings_solver_.Psi(); }
 
+    // Penalty evaluation
+    [[nodiscard]] double atPa() override {
+        if (success_) return loadings_solver_.ftPf( lambda_loadings());
+        return 0.;
+    }
+
     // Loadings regularization utilities
-    void set_lambda_loadings(const double lambda) override { lambda_loadings_ = lambda; }
+    void set_lambda_loadings(const double lambda) override { lambda_loadings_ = lambda; success_ = true; }
     [[nodiscard]] double lambda_loadings() const override {
         if (lambda_loadings_ > 0) return lambda_loadings_;
         return std::numeric_limits<double>::quiet_NaN();
@@ -683,15 +693,23 @@ protected:
 
         // lambda selection if required
         if(lambda_loadings_ < 0.0) {
-            auto [success, lambda_opt] = select_lambda_with_gcv(loadings_solver_, loadings_gcv_cfg_);
-            if (!success) return Vector::Zero(n_nodes_loadings());
-            lambda_loadings_ = lambda_opt; // the optimal lambda is saved for subsequent calls
+            if (success_){
+                auto [success, lambda_opt] = select_lambda_with_gcv(loadings_solver_, loadings_gcv_cfg_);
+                if (!success) {
+                    success_ = false;
+                    return Vector::Zero(n_nodes_loadings());
+                }
+                lambda_loadings_ = lambda_opt; // the optimal lambda is saved for subsequent calls
+            } else {
+                return Vector::Zero(n_nodes_loadings());
+            }
         }
 
         loadings_solver_.fit(lambda_loadings_);
         return loadings_solver_.f();
     }
 private:
+    bool success_ = true;
     CovariatesSolverType loadings_solver_;
     double lambda_loadings_ = -1.0; // < 0 means "use GCV"
     GCVConfig loadings_gcv_cfg_;
@@ -755,18 +773,19 @@ struct Scheme {
 // ===== Results =====
 struct Result {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+    using BoolMatrix = Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>;
 
     int h = 0;
     int J = 0;
     std::vector<double> obj_history;
     bool monotone = true;
     int iters = 0;
-    Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic> C;
+    BoolMatrix C;
     Matrix covariance_matrix;
     std::vector<double> tau_values;
     std::vector<double> lambda_components_values;
     std::vector<double> lambda_loadings_values;
-    std::vector<double> active_blocks;
+    std::vector<bool> active_blocks;
     std::vector<double> s1_blocks;
     std::vector<double> s1_edge_blocks;
 
@@ -786,6 +805,7 @@ public:
     using Block = internals::BaseBlock<SamplingStrategy>;
     using BlockPtr = std::unique_ptr<Block>;
     using Matrix = typename Block::Matrix;
+    using BoolMatrix = Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>;
     using SparseMatrix = typename Block::SparseMatrix;
     using Vector = typename Block::Vector;
     using SamplingDomain = std::conditional_t<std::same_as<SamplingStrategy, TimeDependentSampling>, Triangulation<1, 1>, internals::empty_t>;
@@ -1002,7 +1022,7 @@ public:
 
         // room for objective function evaluations
         res.obj_history.reserve(opt_.max_iter);
-        res.obj_history.push_back(0.); // objective_());
+        res.obj_history.push_back(0.); // objective_(res.C, res.active_blocks));
 
         if ( !no_connections_(res.C) ) {
             // require lambda selection also at the first iteration
@@ -1022,7 +1042,7 @@ public:
                     mark_cov_rowcol_dirty_(l);     // η_l changed → invalidate its row/col
                 }
 
-                const double f = objective_();
+                const double f = objective_(res.C, res.active_blocks);
                 const double obj_prev = res.obj_history.back();
                 res.obj_history.push_back(f);
                 res.iters = s + 1;
@@ -1135,18 +1155,33 @@ private:
     }
 
     // objective f = Σ_{j,k} C_jk * g( cov(η_j, η_k) )
-    double objective_() {
+    double objective_(const BoolMatrix& C, const std::vector<bool>& active_blocks) {
+       // std::cout << "Computing objective --->"<<  std::endl;
         const int J = n_blocks();
         double f = 0.0;
         for (int j = 0; j < J; ++j) {
             const Vector eta_j = eta_(*blocks_[j]);
             for (int k = j+1; k < J; ++k){
-                if (C_(j, k)) {
+                if (C(j, k)) {
                     const double cjk = cov_value_(j, k, eta_j, eta_(*blocks_[k]));
+                    // std::cout << "j: " << j << ", k: " << k << " -> C_jk:" << cjk << std::endl;
                     f += 2 * opt_.scheme.g(cjk);
                 }
             }
+
         }
+        // std::cout << "without regularization: " << f << std::endl;
+        for (int j = 0; j < J; ++j) {
+            if (active_blocks[j]) {
+                const double ntPn = blocks_[j]->ntPn();
+                // std::cout << "j: "<< j <<" ntPn = " << ntPn << std::endl;
+                const double atPa = blocks_[j]->atPa();
+                // std::cout << "j: "<< j <<" atPa = " << atPa << std::endl;
+                f += ntPn + atPa;
+            }
+        }
+        // std::cout << "with regularization: " << f << std::endl;
+        // std::cout << "<-----------------"<<  std::endl;
         return f;
     }
 
@@ -1227,7 +1262,7 @@ private:
     // topology & caches (sized in init())
     bool initialized_ {false};
     bool user_defined_design_ {false};
-    Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic> C_;
+    BoolMatrix C_;
 
     Matrix Cov_ {0, 0};          // cached covariances between η's (Cov_(j,j)=1)
     Eigen::ArrayXXi dirty_ {0, 0};   // 1=dirty, 0=clean
@@ -1236,26 +1271,29 @@ private:
 
 // Pretty printer for a single Result
 inline std::ostream& operator<<(std::ostream& os, const Result& r) {
-    os << "shrinkage parameters used : " << std::endl;
-    for (size_t i = 0; i < r.tau_values.size(); ++i) {
-        os << "- Block " << i+1  << ": tau = "<< r.tau_values[i] << "\n";
+    const bool minimal = false;
+    if (!minimal) {
+        os << "shrinkage parameters used : " << std::endl;
+        for (size_t i = 0; i < r.tau_values.size(); ++i) {
+            os << "- Block " << i+1  << ": tau = "<< r.tau_values[i] << "\n";
+        }
+        os << std::endl;
+        os << "active blocks :\n";
+        for (size_t i = 0; i < r.active_blocks.size(); ++i) {
+            os << "- Block " << i+1  << ": " << (r.active_blocks[i] ? "active    " : "non-active" )
+               << " ("<< r.s1_blocks[i]<< (r.active_blocks[i] ? " > " : " < ") << r.s1_edge_blocks[i] << ")" << "\n";
+        }
+        os << std::endl;
+        os << "(updated) connections matrix :\n";
+        os << r.C << std::endl;
+        os << std::endl;
+        os << "regularization parameters used : " << std::endl;
+        for (size_t i = 0; i < r.tau_values.size(); ++i) {
+            os << "- Block " << i+1  << ": lambda_c = "<< r.lambda_components_values[i]
+               << ", lambda_l = "<< r.lambda_loadings_values[i] << "\n";
+        }
+        os << std::endl;
     }
-    os << std::endl;
-    os << "active blocks :\n";
-    for (size_t i = 0; i < r.active_blocks.size(); ++i) {
-        os << "- Block " << i+1  << ": " << (r.active_blocks[i] ? "active    " : "non-active" )
-           << " ("<< r.s1_blocks[i]<< (r.active_blocks[i] ? " > " : " < ") << r.s1_edge_blocks[i] << ")" << "\n";
-    }
-    os << std::endl;
-    os << "(updated) connections matrix :\n";
-    os << r.C << std::endl;
-    os << std::endl;
-    os << "regularization parameters used : " << std::endl;
-    for (size_t i = 0; i < r.tau_values.size(); ++i) {
-        os << "- Block " << i+1  << ": lambda_c = "<< r.lambda_components_values[i]
-           << ", lambda_l = "<< r.lambda_loadings_values[i] << "\n";
-    }
-    os << std::endl;
     os << "n_iters   : " << r.iters << "\n";
     os << "monotone  : " << (r.monotone ? "yes" : "no") << "\n";
     os << std::endl;
@@ -1269,8 +1307,10 @@ inline std::ostream& operator<<(std::ostream& os, const Result& r) {
         prev = val;
     }
     os << std::endl;
-    os << "covariance matrix :\n";
-    os << r.covariance_matrix << std::endl;
+    if (!minimal) {
+        os << "covariance matrix :\n";
+        os << r.covariance_matrix << std::endl;
+    }
 
     return os;
 }
