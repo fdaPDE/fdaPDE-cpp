@@ -1238,6 +1238,11 @@ public:
         for (int j = 0; j < J; ++j) if (!res.active_blocks[j]) {
             for (int k = 0; k < J; ++k) { res.C(j,k) = false; res.C(k,j) = false; }
         }
+        for (int j = 0; j < J; ++j) if (res.active_blocks[j]) {
+            bool alone = true;
+            for (int k = 0; k < J; ++k) alone &= !res.C(j,k);
+            if (alone) res.C(j,j) = true;
+        }
 
         // room for objective function evaluations
         res.obj_history.reserve(opt_.max_iter);
@@ -1251,7 +1256,7 @@ public:
                     Vector nu_l = Vector::Zero(blocks_[l]->n_obs());
                     const Vector eta_l = eta_(*blocks_[l]);
                     for (int k = 0; k < J; ++k) {
-                        if (k == l || !res.C(l,k)) continue;   // <— exclude self
+                        if (!res.C(l,k)) continue;
                         const Vector eta_k = eta_(*blocks_[k]);
                         const double cov_lk = cov_value_(l, k, eta_l, eta_k);   // uses/saves cache, marks clean
                         const double w_lk = opt_.scheme.w(cov_lk);
@@ -1391,11 +1396,12 @@ private:
         double f = 0.0;
         for (int j = 0; j < J; ++j) {
             const Vector eta_j = eta_(*blocks_[j]);
-            for (int k = j+1; k < J; ++k){
+            for (int k = j; k < J; ++k){
                 if (C(j, k)) {
                     const double cjk = cov_value_(j, k, eta_j, eta_(*blocks_[k]));
                     // std::cout << "j: " << j << ", k: " << k << " -> C_jk:" << cjk << std::endl;
-                    f += 2 * opt_.scheme.g(cjk);
+                    double mult = j==k ? 1.0 : 2.0;
+                    f += mult * opt_.scheme.g(cjk);
                 }
             }
 
