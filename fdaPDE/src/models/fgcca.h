@@ -302,6 +302,9 @@ public:
         invalidate_sigma_();
     }
 
+    // Bias flag
+    void set_bias(const bool bias) { bias_ = bias; }
+
     // Components regularization utilities
     void set_lambda_components(const double lambda) {
         *lambda_components_ = lambda;
@@ -327,27 +330,30 @@ public:
 
     // Inner-Component initialization
     struct InitInfo { bool active{false}; Vector nu; double s1{0}; double s1_edge{0}; double frac{0}; };
-    InitInfo svd_init(const double epsilon = 0.) const {
-        InitInfo out{false, Vector::Zero(n_obs()), 0.0, 0.0, 0.0};
+    InitInfo svd_init(const bool allow_block_deactivation, const double relaxation = 0.) const {
+        InitInfo out{true, Vector::Zero(n_obs()), 0.0, 0.0, 0.0};
         const Matrix& X = data();
         if (X.size() == 0) return out;
 
         const Eigen::BDCSVD<Matrix> svd(X, Eigen::ComputeThinU);
         if (svd.singularValues().size() == 0) return out;
 
-        out.s1 = svd.singularValues()(0);
-        const double fro2 = X.squaredNorm();
-        out.frac = (fro2 > 0.0) ? (out.s1*out.s1)/fro2 : 0.0;
 
-        // If no σ² set, fall back to your energy test
-        if (!noise_variance_.has_value()) {
-            out.active = (out.frac >= 1e-3);
-        } else {
-            const double sigma = std::sqrt(std::max(0.0, *noise_variance_));
-            const auto n = static_cast<double>(n_obs());
-            const auto p = static_cast<double>(n_covs());
-            out.s1_edge = sigma * (std::sqrt(n) + std::sqrt(p)) * (1.0 - epsilon);
-            out.active = (out.s1 > out.s1_edge);
+        if (allow_block_deactivation){
+            out.s1 = svd.singularValues()(0);
+            const double fro2 = X.squaredNorm();
+            out.frac = (fro2 > 0.0) ? (out.s1*out.s1)/fro2 : 0.0;
+
+            // If no σ² set, fall back to your energy test
+            if (!noise_variance_.has_value()) {
+                out.active = (out.frac >= 1e-3);
+            } else {
+                const double sigma = std::sqrt(std::max(0.0, *noise_variance_));
+                const auto n = static_cast<double>(n_obs());
+                const auto p = static_cast<double>(n_covs());
+                out.s1_edge = sigma * (std::sqrt(n) + std::sqrt(p)) * (1.0 + relaxation);
+                out.active = (out.s1 > out.s1_edge);
+            }
         }
 
         if (out.active) {
@@ -422,12 +428,15 @@ public:
     void flip_and_scale_to_unit_score_variance(const SparseMatrix& Psi) {
         // Scale factor so that Var(eta_t) = 1 where eta_t has length that depends on Psi
         const Vector eta_t = Psi*eta_();
-        const double v = (eta_t).squaredNorm() / static_cast<double>(eta_t.size());
+        const double den = bias_ ? eta_t.size() : std::max(1, static_cast<int>(eta_t.size()) - 1);
+        const double v = (eta_t).squaredNorm() / den;
         if (v <= 0.0) return;
         const double norm = std::sqrt(v);
+
         // Sign flip
         double sign = 1;
         if (a_().mean() < 0) sign = -1.0;
+
         // Apply to loadings and scores
         components().col(h()) /= sign * norm;
         loadings().col(h()) /= sign * norm;
@@ -668,7 +677,8 @@ protected:
     void compute_sigma_() {
         SparseMatrix I(n_covs(), n_covs());
         I.setIdentity();
-        const Matrix dense = ((1.0 - tau_) / static_cast<double>(n_obs())) * (data_.transpose() * data_);
+        const double den = bias_ ? n_obs() : std::max(1, n_obs() - 1);
+        const Matrix dense = ((1.0 - tau_) / den) * (data_.transpose() * data_);
         Sigma_ = dense.sparseView(1e-12);
         if (tau_ != 0.0) Sigma_ += tau_ * I;
         Sigma_.makeCompressed();
@@ -743,6 +753,7 @@ protected:
     double tau_ {0.0};
     int n_comp_ {1};
     int h_ {0};
+    bool bias_ = true;
 
     // Parameters
     GCVConfig components_gcv_cfg_;
@@ -1032,6 +1043,9 @@ public:
         unsigned seed;
         bool verbose;
         bool cache_covariances;
+        bool flip_and_scale;
+        bool allow_blocks_deactivation;
+        bool bias;
         Init init;
         LambdaSelection lambda_selection;
         TauSelection tau_selection;
@@ -1040,6 +1054,9 @@ public:
 
         explicit Options(
           const int max_iter_ = 100, const double tol_ = 1e-8, const unsigned seed_ = 0,
+          const bool flip_and_scale_ = true,
+          const bool allow_blocks_deactivation_ = true,
+          const bool bias_ = true,
           const Init init_ = Init::SVD, const TauSelection tau_selection_ = TauSelection::Automatic,
           const LambdaSelection lambda_selection_ = LambdaSelection::Automatic,
           const Deflation deflation_mode_ = Deflation::Scores, const Scheme& scheme_ = Scheme::Factorial(),
@@ -1047,7 +1064,10 @@ public:
             max_iter(max_iter_),
             tol(tol_),
             seed(seed_),
+            flip_and_scale(flip_and_scale_),
+            allow_blocks_deactivation(allow_blocks_deactivation_),
             init(init_),
+            bias(bias_),
             tau_selection(tau_selection_),
             lambda_selection(lambda_selection_),
             deflation_mode(deflation_mode_),
@@ -1073,6 +1093,7 @@ public:
             if (b->n_obs() != n_obs()) throw std::invalid_argument("RGCCA/add_block: n_obs mismatch");
         } else { add_times_(b->times()); }
         b->set_n_comp(n_comp());
+        b->set_bias(opt_.bias);
         blocks_.emplace_back(std::move(b));
         initialized_ = false;   // topology/caches need a fresh init later
         return ++J_;
@@ -1214,7 +1235,7 @@ public:
             auto& b = blocks_[j];
             b->set_h(h_);
             if (opt_.init == Init::SVD) {
-                const auto info = b->svd_init();
+                const auto info = b->svd_init(opt_.allow_blocks_deactivation);
                 if (!info.active) {
                     res.active_blocks[j] = false;
                     res.s1_blocks[j] = info.s1;
@@ -1246,7 +1267,7 @@ public:
 
         // room for objective function evaluations
         res.obj_history.reserve(opt_.max_iter);
-        res.obj_history.push_back(0.); // objective_(res.C, res.active_blocks));
+        res.obj_history.push_back(objective_(res.C, res.active_blocks));
 
         if ( !no_connections_(res.C) ) {
             // require lambda selection also at the first iteration
@@ -1264,6 +1285,13 @@ public:
                     }
                     blocks_[l]->compute(nu_l);   // block handles normalization
                     mark_cov_rowcol_dirty_(l);     // η_l changed → invalidate its row/col
+
+                    // this is only to emulate the loadings of the R implementation, it could be dropped eventually
+                    bool even_scheme = (opt_.scheme.name == std::string("Centroid") || opt_.scheme.name == std::string("Factorial"));
+                    if (even_scheme && blocks_[l]->loadings().col(h())(0) < 0) {
+                        blocks_[l]->loadings().col(h()) *= -1.0;
+                        blocks_[l]->components().col(h()) *= -1.0;
+                    }
                 }
 
                 const double f = objective_(res.C, res.active_blocks);
@@ -1272,12 +1300,14 @@ public:
                 res.iters = s + 1;
 
                 if (res.obj_history.back() + 1e-15 < obj_prev) res.monotone = false;
-                const double rel  = std::abs(f - obj_prev) / (std::abs(obj_prev) + 1e-16);
+                const double rel  = std::abs(f - obj_prev); // / (std::abs(obj_prev) + 1e-16);
                 if (rel < opt_.tol) break;
             }
         }
+        if (opt_.flip_and_scale) flip_and_scale_all_to_unit_score_variance_();
+
+        // save information about the iteration in the result struct
         res.noise_variance = noise_variance();
-        flip_and_scale_all_to_unit_score_variance_();
         compute_covariance_matrix_(res.covariance_matrix);
         get_tau(res.tau_values);
         get_lambdas(res.lambda_components_values, res.lambda_loadings_values);
@@ -1384,9 +1414,10 @@ private:
         }
     }
 
-    // covariance of two vectors assumed to be ventered
-    [[nodiscard]] double cov_(const Vector& u, const Vector& v) const {
-        return (1.0 / static_cast<double>(u.size())) * u.dot(v);
+    // covariance of two vectors
+    double cov_(const Vector& u, const Vector& v) const {
+        double den = opt_.bias ? u.size() : u.size()-1;
+        return u.dot(v) / den;
     }
 
     // objective f = Σ_{j,k} C_jk * g( cov(η_j, η_k) )

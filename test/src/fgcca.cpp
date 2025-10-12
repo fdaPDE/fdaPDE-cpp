@@ -102,6 +102,64 @@ TEST(rgcca, test_01) {
 }
 */
 
+TEST(rgcca, test_01) {
+    std::string path = "../../../../projects/cca/";
+
+    // chose options
+    RGCCA<IndependentSampling>::Options options;
+    options.scheme = Scheme::Factorial();
+    options.flip_and_scale = false;
+    options.bias = false;
+    // change defaults if needed ...
+
+    // model initialization
+    int n_comp = 3;
+    int n_obs = 401;
+    RGCCA<IndependentSampling> rgcca(n_obs, options, n_comp);
+
+    // add blocks
+
+    for (int i = 1; i <=4; ++i) {
+        Eigen::Matrix<double, Dynamic, Dynamic> X = read_csv<double>(path + "X" + std::to_string(i) + ".csv").as_matrix();
+        rgcca.add_multivariate_block("X" + std::to_string(i), X);
+    }
+
+    // add connections
+    rgcca.connect(0,1);
+    rgcca.connect(0,2);
+    rgcca.connect(1,3);
+
+    // fit
+    const auto results = rgcca.fit();
+    // std::cout << results << std::endl;
+
+    // save results
+    for (const auto& block : rgcca.blocks()) {
+        write_csv(path + "R_loadings_"+ block -> name() + ".csv", block -> loadings_m());
+        write_csv(path + "R_components_"+ block -> name() + ".csv", block -> components_m());
+    }
+
+    // --- Numerical consistency checks against reference .mtx files ---
+
+    std::string test_path = "../data/models/rgcca/";
+    for (const auto& block : rgcca.blocks()) {
+        std::string name = block->name();
+
+        for (int h = 0; h<n_comp; ++h) {
+            // Compare loadings
+            // std::cout << "load " << name + "_comp" + std::to_string(h+1) << std::endl;
+            std::string loadings_path = test_path + "ref_loadings_" + name + "_comp" + std::to_string(h+1) + ".mtx";
+            EXPECT_TRUE(almost_equal<double>(block->loadings_m().col(h), loadings_path));
+
+            // Compare components (scores)
+            // std::cout << "comp " << name + "_comp" + std::to_string(h+1) << std::endl;
+            std::string components_path = test_path + "ref_components_" + name + "_comp" + std::to_string(h+1) + ".mtx";
+            EXPECT_TRUE(almost_equal<double>(block->components_m().col(h), components_path));
+        }
+    }
+}
+
+
 TEST(rgcca, test_02) {
     std::string path = "../../../../projects/cca/";
 
