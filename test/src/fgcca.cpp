@@ -116,7 +116,7 @@ TEST(rgcca, test_02) {
     RGCCA<IndependentSampling> rgcca(n_obs, options, n_comp);
 
     // set empirical noise variance
-    rgcca.set_noise_sigma_sqr(0.2);
+    rgcca.set_noise_variance(0.2*0.2);
 
     // add blocks
 
@@ -140,7 +140,6 @@ TEST(rgcca, test_02) {
         write_csv(path + "components_"+ block -> name() + ".csv", block -> components_m());
     }
 }
-
 
 TEST(rgcca, test_03) {
     std::string path = "../../../../projects/cca/";
@@ -167,7 +166,7 @@ TEST(rgcca, test_03) {
     RGCCA<IndependentSampling> rgcca(n_obs, options, n_comp);
 
     // set empirical noise variance
-    rgcca.set_noise_sigma_sqr(0.2);
+    rgcca.set_noise_variance(0.2*0.2);
 
     // add blocks
     for (int i = 1; i <= 4; ++i) {
@@ -221,7 +220,7 @@ TEST(rgcca, test_04) {
     RGCCA<TimeDependentSampling> rgcca(n_obs, T, options, n_comp);
 
     // set empirical noise variance
-    rgcca.set_noise_sigma_sqr(0.2);
+    rgcca.set_noise_variance(0.2*0.2);
 
     // add blocks
     for (int i = 1; i <= 3; ++i) {
@@ -254,4 +253,39 @@ TEST(rgcca, test_04) {
         write_csv(path + "tf_loadings_"+ block -> name() + ".csv", block -> loadings_m());
         write_csv(path + "tf_components_"+ block -> name() + ".csv", block -> components_m());
     }
+}
+
+TEST(rgcca, test_secanti) {
+
+    // ---- a, b, c (quadratic form of μ inside ρ) ----
+    const double a = 1.;
+    const double b = 1.;
+    const double c = 2.;
+
+    // ---- Covariances ----
+    const double C_DD = 71./31.;
+    const double C_TT = 1.;
+    const double C_DT = 1.00007802919;
+    const double C_ND = 0.874;
+    const double C_NT = 0.816;
+    const double C_NN = 247./310.;
+
+    // ---- Noise ----
+    const double s = 0.33;
+    const double d  = s - C_NN;
+
+    auto f = [&](double mu) -> double {
+        const double rho = std::sqrt(a*mu*mu + 2.0*b*mu + c);
+        if (!std::isfinite(rho)) return std::numeric_limits<double>::infinity();
+
+        const double P = C_TT*mu*mu + 2.0*C_DT*mu + C_DD;
+        const double L = C_NT*mu + C_ND;
+        return (P - d*(a*mu*mu + 2.0*b*mu + c)) - 2.0*L*rho;  // target = 0
+    };
+
+
+    const double mu_star = internals::find_root_secant(f, 0.0, .5, .5);
+
+    std::cout << "mu_star = " << std::setprecision(8) << mu_star << std::endl;
+
 }
