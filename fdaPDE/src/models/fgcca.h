@@ -384,16 +384,16 @@ public:
     }
 
     // Main compute method
-    void compute(const Vector& nu_D) {
+    void compute(const Vector& nu_D, const bool allow_compensation = false) {
 
         // Compute the loading & the multivariate component
         Vector a_D = l_fit_(nu_D);
-        const double rho_star = compute_multipliers_(a_D);
-        Vector a = a_D / rho_star;
+        double rho_star = compute_multipliers_(a_D);
+        Vector a = l_fit_(nu_D/rho_star);
         Vector s = data() * Psi_D() * a;
 
         if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
-            if (noise_variance_.has_value()){ // in this way we are sure that it is set and we can use it
+            if (noise_variance_.has_value() && allow_compensation){ // in this way, we are sure that it is set, and we can use it
                 // Compute time contribution to the loading
                 const Vector nu_T = Psi_T()*eta_();
                 const Vector& eta_t  = nu_T;
@@ -402,18 +402,21 @@ public:
                 // Compute not corrected component to check if the constraint is active or not
                 const Vector& s_D = s; // it coincides with the multivariate one
 
+                // Compute the reconstruction constraint error and edge
+                const double error = (s_D-eta_t).squaredNorm()/n_obs();
                 const double sigma_sqr_l = noise_variance() * (Psi_D() * a_()).squaredNorm();
-                if (const bool constraint_active = (s_D-eta_t).squaredNorm()/n_obs() > sigma_sqr_l; constraint_active) {
-                    // std::cout << "constraint active ... " << std::endl;
-                    if (eta_().norm() != 0 && a_D.norm() != 0 && a_T.norm() != 0) {
-                        const auto [rho_star, mu_star] = compute_multipliers_(a_D, a_T, eta_t);
-                        a = (a_D + mu_star * a_T) / rho_star; // loading updated
-                        s = data() * Psi_D() * a_(); // multivariate component updated
-                    } else {
-                        // std::cout << "but there is something == 0 in " << name() << " comp. " << h()+1  << std::endl;
-                    }
 
+                double mu_star = 0;
+                if (const bool constraint_active = error > sigma_sqr_l; constraint_active) {
+                    if (eta_().norm() != 0 && a_D.norm() != 0 && a_T.norm() != 0) {
+                        const auto [rho, mu] = compute_multipliers_(a_D, a_T, eta_t);
+                        rho_star = rho; mu_star = mu;
+                    }
                 }
+                // update the solver and the scores
+                Vector a_old = a;
+                a = l_fit_((nu_D + mu_star * nu_T) / rho_star); // this call is fundamental! otherwise, the solver stays at l_fit_(nu_T);
+                s = data() * Psi_D() * a;
             }
         }
 
@@ -529,7 +532,7 @@ protected:
         const double norm = std::sqrt(norm_sqr);
         return norm;
     }
-    [[nodiscard]] std::pair<double, double> compute_multipliers_(Vector& a_D, Vector& a_T, const Vector& eta_t) {
+    [[nodiscard]] std::tuple<double, double> compute_multipliers_(Vector a_D, Vector a_T, const Vector& eta_t) {
 
         // helper function
         auto cov = [](const Vector& u, const Vector& v) -> double {
@@ -543,26 +546,31 @@ protected:
 
         // Space contribution to the loading
         Vector a_m_D = Psi_D()*a_D;
-        double norm_D = (a_m_D).norm();
-        if (norm_D <= 0) norm_D = 1.0;
-        a_D /= norm_D;
-        a_m_D /= norm_D;
+        // double norm_D = (a_m_D).norm();
+        // if (norm_D <= 0) norm_D = 1.0;
+        // a_D /= norm_D;
+        // a_m_D /= norm_D;
         Vector s_D = data() * (a_m_D);
-        if (s_D.dot(eta_t) < 0){ a_D = -a_D; a_m_D = -a_m_D; s_D = -s_D;}
+        if (s_D.dot(eta_t) < 0){ a_D *= -1; a_m_D *= -1; s_D *= -1;}
 
         // Time contribution to the loading
         Vector a_m_T = Psi_D()*a_T;
         double norm_T = (a_m_T).norm();
         if (norm_T <= 0 ) norm_T = 1.0;
-        a_T /= norm_T;
-        a_m_T /= norm_T;
+        // a_T /= norm_T;
+        // a_m_T /= norm_T;
         Vector s_T = data() * (a_m_T);
-        if (s_T.dot(eta_t) < 0) { a_T = -a_T; a_m_T = -a_m_T; s_T = -s_T;}
+        if (s_T.dot(eta_t) < 0) { a_T *= -1; a_m_T *= -1; s_T *= -1;}
 
         // Compute a, b, c (quadratic form of μ inside ρ) ----
         const double a = a_m_T.transpose() * Sigma() * a_m_T;
         const double b = a_m_D.transpose() * Sigma() * a_m_T;
         const double c = a_m_D.transpose() * Sigma() * a_m_D;
+
+        auto rho_of_mu = [&](double mu) -> double {
+            const double Q = a*mu*mu + 2.0*b*mu + c;
+            return (Q>=0.0) ? std::sqrt(Q) : std::numeric_limits<double>::quiet_NaN();
+        };
 
         // Compute covariances ----
         const double C_DD = cov(s_D,  s_D);
@@ -576,18 +584,24 @@ protected:
         double s_1 = ((C_NN*C_TT-C_NT*C_NT)/C_TT) + 0.01;
         double s_2 = ((C_TT-2*std::sqrt(a)*C_NT)/a + C_NN) + 0.01;
         double sigma_sqr_l = noise_variance() * (Psi_D() * a_()).squaredNorm();
-        double s = std::max(sigma_sqr_l, s_2);
-        // if (s != sigma_sqr_l)
-        //     std::cout << "noise variance updated in block "<< name() << ", comp. " << h()+1 << " : s = " << sigma_sqr_l << " -> " << s << std::endl;
+
+        /*
+        if (s < s_2) {
+            std::cout << name() << " " << "comp " << h()+1 <<" Noise variance is too small!" << std::endl;
+            mu_star = 0;
+            rho_star = rho_of_mu(mu_star);
+            return {false, rho_star, mu_star};
+        }
+        */
+
+        const double s = std::max(sigma_sqr_l, s_2);
+        if (s != sigma_sqr_l)
+            std::cout << "noise variance updated in block "<< name() << ", comp. " << h()+1 << " : s = " << sigma_sqr_l << " -> " << s << std::endl;
 
         // Compute noise coefficient ----
         const double d  = s - C_NN;
 
         // KKT conditions
-        auto rho_of_mu = [&](double mu) -> double {
-            const double Q = a*mu*mu + 2.0*b*mu + c;
-            return (Q>=0.0) ? std::sqrt(Q) : std::numeric_limits<double>::quiet_NaN();
-        };
         auto f = [&](double mu) -> double {
             const double rho = std::sqrt(a*mu*mu + 2.0*b*mu + c);
             if (!std::isfinite(rho)) return std::numeric_limits<double>::infinity();
@@ -620,17 +634,14 @@ protected:
         */
 
         if (f(0) <= 0) {
-            // std::cout << "The constraint is satisfied after updating the noise_variance" << std::endl;
-            // std::cout << "-------------" << std::endl;
             mu_star = 0;
             rho_star = rho_of_mu(mu_star);
+            std::cout << "The constraint is satisfied after updating the noise_variance" << std::endl;
         } else {
             mu_star = find_root_secant(f, 0.0, 10.0, 10.0);
             rho_star = rho_of_mu(mu_star);
+            std::cout << "Correction: rho_star = " << rho_star << ", mu_star = " << mu_star << std::endl;
         }
-        // std::cout << "mu_star = " << mu_star << std::endl;
-        // std::cout << "rho_star = " << rho_star << std::endl;
-        // std::cout << std::endl;
 
         return {rho_star, mu_star};
     }
@@ -1001,6 +1012,9 @@ struct Result {
     int h = 0;
     int J = 0;
     std::vector<double> obj_history;
+    std::vector<double> loss_history;
+    std::vector<double> space_reg_history;
+    std::vector<double> time_reg_history;
     bool monotone = true;
     int iters = 0;
     BoolMatrix C;
@@ -1245,7 +1259,7 @@ public:
                     res.active_blocks[j] = true;
                     res.s1_blocks[j] = info.s1;
                     res.s1_edge_blocks[j] = info.s1_edge;
-                    b->compute(info.nu);  // block handles normalization
+                    b->compute(info.nu, true);  // block handles normalization
                 }
             } else { // Random
                 std::mt19937_64 rng(opt_.seed);
@@ -1267,7 +1281,16 @@ public:
 
         // room for objective function evaluations
         res.obj_history.reserve(opt_.max_iter);
-        res.obj_history.push_back(objective_(res.C, res.active_blocks));
+        res.loss_history.reserve(opt_.max_iter);
+        res.space_reg_history.reserve(opt_.max_iter);
+        res.time_reg_history.reserve(opt_.max_iter);
+        {
+            const auto [f_obj, f_loss, f_space_reg, f_time_reg]  = objective_(res.C, res.active_blocks);
+            res.obj_history.push_back(f_obj);
+            res.loss_history.push_back(f_loss);
+            res.space_reg_history.push_back(f_space_reg);
+            res.time_reg_history.push_back(f_time_reg);
+        }
 
         if ( !no_connections_(res.C) ) {
             // require lambda selection also at the first iteration
@@ -1283,7 +1306,7 @@ public:
                         const double w_lk = opt_.scheme.w(cov_lk);
                         nu_l.noalias() += w_lk * eta_(*blocks_[k], *blocks_[l]);   // no aliasing with RHS
                     }
-                    blocks_[l]->compute(nu_l);   // block handles normalization
+                    blocks_[l]->compute(nu_l, false);   // block handles normalization
                     mark_cov_rowcol_dirty_(l);     // η_l changed → invalidate its row/col
 
                     // this is only to emulate the loadings of the R implementation, it could be dropped eventually
@@ -1294,13 +1317,16 @@ public:
                     }
                 }
 
-                const double f = objective_(res.C, res.active_blocks);
+                const auto [f_obj, f_loss, f_space_reg, f_time_reg] = objective_(res.C, res.active_blocks);
                 const double obj_prev = res.obj_history.back();
-                res.obj_history.push_back(f);
+                res.obj_history.push_back(f_obj);
+                res.loss_history.push_back(f_loss);
+                res.space_reg_history.push_back(f_space_reg);
+                res.time_reg_history.push_back(f_time_reg);
                 res.iters = s + 1;
 
-                if (res.obj_history.back() + 1e-15 < obj_prev) res.monotone = false;
-                const double rel  = std::abs(f - obj_prev); // / (std::abs(obj_prev) + 1e-16);
+                if (f_obj + 1e-15 < obj_prev) res.monotone = false;
+                const double rel  = std::abs(f_obj - obj_prev); // / (std::abs(obj_prev) + 1e-16);
                 if (rel < opt_.tol) break;
             }
         }
@@ -1421,8 +1447,8 @@ private:
     }
 
     // objective f = Σ_{j,k} C_jk * g( cov(η_j, η_k) )
-    double objective_(const BoolMatrix& C, const std::vector<bool>& active_blocks) {
-       // std::cout << "Computing objective --->"<<  std::endl;
+    std::tuple<double, double, double, double> objective_(const BoolMatrix& C, const std::vector<bool>& active_blocks) {
+        // std::cout << "Computing objective --->"<<  std::endl;
         const int J = n_blocks();
         double f = 0.0;
         for (int j = 0; j < J; ++j) {
@@ -1437,19 +1463,24 @@ private:
             }
 
         }
+        const double f_loss = f;
+        double f_space_reg = 0.;
+        double f_time_reg = 0.;
         // std::cout << "without regularization: " << f << std::endl;
         for (int j = 0; j < J; ++j) {
             if (active_blocks[j]) {
-                // const double ntPn = blocks_[j]->ntPn();
-                // std::cout << "j: "<< j <<" ntPn = " << ntPn << std::endl;
-                // const double atPa = blocks_[j]->atPa();
+                const double atPa = blocks_[j]->atPa();
                 // std::cout << "j: "<< j <<" atPa = " << atPa << std::endl;
-                // f += atPa + ntPn;
+                f_space_reg += atPa;
+                const double ntPn = blocks_[j]->ntPn();
+                f_time_reg += ntPn;
+                // std::cout << "j: "<< j <<" ntPn = " << ntPn << std::endl;
+                f -= atPa + ntPn; //
             }
         }
         // std::cout << "with regularization: " << f << std::endl;
         // std::cout << "<-----------------"<<  std::endl;
-        return f;
+        return {f, f_loss, f_space_reg, f_time_reg};
     }
 
     // Covariance matrix
@@ -1538,7 +1569,7 @@ private:
 
 // Pretty printer for a single Result
 inline std::ostream& operator<<(std::ostream& os, const Result& r) {
-    const bool minimal = false;
+    const bool minimal = true;
     if (!minimal) {
         os << "shrinkage parameters used : " << std::endl;
         for (size_t i = 0; i < r.tau_values.size(); ++i) {
@@ -1554,45 +1585,62 @@ inline std::ostream& operator<<(std::ostream& os, const Result& r) {
         os << "(updated) connections matrix :\n";
         os << r.C << std::endl;
         os << std::endl;
+
         os << "regularization parameters used : " << std::endl;
+        os << std::scientific;
         for (size_t i = 0; i < r.tau_values.size(); ++i) {
             os << "- Block " << i+1  << ": lambda_c = "<< r.lambda_components_values[i]
                << ", lambda_l = "<< r.lambda_loadings_values[i] << "\n";
         }
+        os << std::fixed;
         os << std::endl;
     }
     os << "n_iters   : " << r.iters << "\n";
     os << "monotone  : " << (r.monotone ? "yes" : "no") << "\n";
     os << std::endl;
     os << "objective :\n";
-    double prev = r.obj_history[0];
+    double prev_obj = r.obj_history[0];
+    double prev_loss = r.loss_history[0];
+    double prev_space_reg = r.space_reg_history[0];
+    double prev_time_reg = r.time_reg_history[0];
     for (size_t i = 1; i < r.obj_history.size(); ++i) {
-        const double val = r.obj_history[i];
+        const double obj = r.obj_history[i];
+        const double loss = r.loss_history[i];
+        const double space_reg = r.space_reg_history[i];
+        const double time_reg = r.time_reg_history[i];
         os << "- iter " << std::setw(3) << (i)
-           << " | fit = " << std::setw(12) << std::setprecision(8) << val
-           << " | diff = " << std::setw(12) << (val - prev) << "\n";
-        prev = val;
+           << "   |   fit = " << std::setw(12) << std::setprecision(8) << std::fixed << obj << " = "
+           << std::setw(6) << std::setprecision(4) << std::fixed << loss << " (" << ((loss - prev_loss) >= 0 ? "+" : "-") << std::setprecision(1) << std::scientific << std::abs(loss - prev_loss) << ")" << " - "
+           << std::setw(6) << std::setprecision(4) << std::fixed << space_reg << " (" << ((space_reg - prev_space_reg) > 0 ? "+" : "-") << std::setprecision(1) << std::scientific << std::abs(space_reg - prev_space_reg) << ")" << " - "
+           << std::setw(6) << std::setprecision(4) << std::fixed << time_reg << " (" << ((time_reg - prev_time_reg) > 0 ? "+" : "-") << std::setprecision(1) << std::scientific << std::abs(time_reg - prev_time_reg) << ")"
+           << "   |   overall diff = " << std::setw(7) << (obj - prev_obj) << "\n";
+        os << std::fixed << std::setprecision(8);
+        prev_obj = obj;
+        prev_loss = loss;
+        prev_space_reg = space_reg;
+        prev_time_reg = time_reg;
     }
     os << std::endl;
-    if (!minimal) {
-        os << "reconstruction constraint :\n";
-        for (size_t i = 0; i < r.reconstruction_error.size(); ++i) {
-            if (!r.active_blocks[i] || r.reconstruction_edge[i] == 0) {
-                os << "- Block " << i+1  << ": " << "non-active" << "\n";
-            } else {
-                const bool check = r.reconstruction_error[i] <= r.reconstruction_edge[i];
-                os << "- Block " << i+1  << ": " << (check ? "satisfied    " : "non-satisfied" )
-                   << " ("<< std::setw(11) << r.reconstruction_error[i] << (check ? " ≤ " : " > ") << std::setw(11) << r.reconstruction_edge[i] << ")";
-                os << ", equality for σ_noise = "
-                   << std::sqrt(r.noise_variance) << " -> "
-                   << std::sqrt(r.reconstruction_error[i]/r.reconstruction_edge[i] * r.noise_variance);
-                std::cout << "\n";
-            }
-
+    os << "reconstruction constraint :\n";
+    for (size_t i = 0; i < r.reconstruction_error.size(); ++i) {
+        if (!r.active_blocks[i] || r.reconstruction_edge[i] == 0) {
+            os << "- Block " << i+1  << ": " << "non-active" << "\n";
+        } else {
+            const bool check = r.reconstruction_error[i] <= r.reconstruction_edge[i];
+            os << "- Block " << i+1  << ": " << (check ? "satisfied    " : "not-satisfied" )
+               << " ("<< std::setw(10) << r.reconstruction_error[i] << (check ? " ≤ " : " > ") << std::setw(10) << r.reconstruction_edge[i] << ")";
+            os << ", equality for σ_noise = "
+               << std::sqrt(r.noise_variance) << " -> "
+               << std::sqrt(r.reconstruction_error[i]/r.reconstruction_edge[i] * r.noise_variance);
+            std::cout << "\n";
         }
+    }
+    if (!minimal) {
         os << std::endl;
         os << "covariance matrix :\n";
+        os << std::fixed << std::setprecision(2);
         os << r.covariance_matrix << std::endl;
+        os << std::fixed << std::setprecision(8);
     }
 
     return os;
