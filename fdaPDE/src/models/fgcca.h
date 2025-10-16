@@ -386,44 +386,48 @@ public:
     // Main compute method
     void compute(const Vector& nu_D, const bool allow_compensation = false) {
 
-        // Compute the loading & the multivariate component
-        Vector a_D = l_fit_(nu_D);
+        // Compute the inner-component loading contribution
+        const Vector a_D = l_fit_(nu_D);
         double rho_star = compute_multipliers_(a_D);
+
+        // Normalized the loading and the non-regularized component
         Vector a = l_fit_(nu_D/rho_star);
         Vector s = data() * Psi_D() * a;
 
         if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
             if (noise_variance_.has_value() && allow_compensation){ // in this way, we are sure that it is set, and we can use it
-                // Compute time contribution to the loading
-                const Vector nu_T = Psi_T()*eta_();
-                const Vector& eta_t  = nu_T;
-                Vector a_T = l_fit_(nu_T);
 
-                // Compute not corrected component to check if the constraint is active or not
-                const Vector& s_D = s; // it coincides with the multivariate one
+                // Compute the self-connected inner-component
+                const Vector nu_T = Psi_T()*eta_();
+                const Vector& eta_t = nu_T;
+
+                // Compute the self-connected inner-component contribution
+                const Vector a_T = l_fit_(nu_T); // this call contaminates the solver ...
 
                 // Compute the reconstruction constraint error and edge
-                const double error = (s_D-eta_t).squaredNorm()/n_obs();
+                const double error = (s-eta_t).squaredNorm()/n_obs();
                 const double sigma_sqr_l = noise_variance() * (Psi_D() * a_()).squaredNorm();
 
+                // KKT condition
                 double mu_star = 0;
                 if (const bool constraint_active = error > sigma_sqr_l; constraint_active) {
                     if (eta_().norm() != 0 && a_D.norm() != 0 && a_T.norm() != 0) {
+                        // std::cout << "Correction: rho_star = " << rho_star << ", mu_star = " << mu_star << std::endl;
                         const auto [rho, mu] = compute_multipliers_(a_D, a_T, eta_t);
                         rho_star = rho; mu_star = mu;
                     }
                 }
-                // update the solver and the scores
-                Vector a_old = a;
-                a = l_fit_((nu_D + mu_star * nu_T) / rho_star); // this call is fundamental! otherwise, the solver stays at l_fit_(nu_T);
+
+                // Update the solver and the non-regularized component
+                a = l_fit_((nu_D + mu_star * nu_T) / rho_star); // ... so this call is fundamental!
                 s = data() * Psi_D() * a;
             }
         }
 
-        // Update the loading
+        // Save the loading
         loadings().col(h()) = a;
 
-        // Fit regularized scores (this actually does something only if SamplingStrategy = TimeDependentSampling)
+        // Fit regularized scores and save it (this actually does something only with TimeDependentSampling)
         components().col(h()) = c_fit_(s);
     }
 
@@ -532,12 +536,13 @@ protected:
         const double norm = std::sqrt(norm_sqr);
         return norm;
     }
-    [[nodiscard]] std::tuple<double, double> compute_multipliers_(Vector a_D, Vector a_T, const Vector& eta_t) {
+    [[nodiscard]] std::tuple<double, double> compute_multipliers_(const Vector& a_D, const Vector& a_T, const Vector& eta_t) {
 
         // helper function
-        auto cov = [](const Vector& u, const Vector& v) -> double {
+        auto cov = [&](const Vector& u, const Vector& v) -> double {
             assert(u.size()==v.size());
-            return (u.dot(v)) / static_cast<double>(u.size()); // zero-mean convention used in your notes
+            const double den = bias_ ? n_obs() : std::max(1, n_obs() - 1);
+            return (u.dot(v)) / den;
         };
 
         // room for results
@@ -545,22 +550,12 @@ protected:
         double mu_star = 0;
 
         // Space contribution to the loading
-        Vector a_m_D = Psi_D()*a_D;
-        // double norm_D = (a_m_D).norm();
-        // if (norm_D <= 0) norm_D = 1.0;
-        // a_D /= norm_D;
-        // a_m_D /= norm_D;
-        Vector s_D = data() * (a_m_D);
-        if (s_D.dot(eta_t) < 0){ a_D *= -1; a_m_D *= -1; s_D *= -1;}
+        Vector a_m_D = Psi_D() * a_D;
+        const Vector s_D = data() * a_m_D;
 
         // Time contribution to the loading
-        Vector a_m_T = Psi_D()*a_T;
-        double norm_T = (a_m_T).norm();
-        if (norm_T <= 0 ) norm_T = 1.0;
-        // a_T /= norm_T;
-        // a_m_T /= norm_T;
-        Vector s_T = data() * (a_m_T);
-        if (s_T.dot(eta_t) < 0) { a_T *= -1; a_m_T *= -1; s_T *= -1;}
+        Vector a_m_T = Psi_D() * a_T;
+        const Vector s_T = data() * a_m_T;
 
         // Compute a, b, c (quadratic form of μ inside ρ) ----
         const double a = a_m_T.transpose() * Sigma() * a_m_T;
@@ -585,18 +580,18 @@ protected:
         double s_2 = ((C_TT-2*std::sqrt(a)*C_NT)/a + C_NN) + 0.01;
         double sigma_sqr_l = noise_variance() * (Psi_D() * a_()).squaredNorm();
 
-        /*
-        if (s < s_2) {
-            std::cout << name() << " " << "comp " << h()+1 <<" Noise variance is too small!" << std::endl;
+
+        if (C_ND < 0) {
+            std::cout << "negative C_ND in block "<< name() << ", comp. " << h()+1 << " mu estimation suppressed" << std::endl;
             mu_star = 0;
             rho_star = rho_of_mu(mu_star);
-            return {false, rho_star, mu_star};
+            return {rho_star, mu_star};
         }
-        */
 
         const double s = std::max(sigma_sqr_l, s_2);
-        if (s != sigma_sqr_l)
-            std::cout << "noise variance updated in block "<< name() << ", comp. " << h()+1 << " : s = " << sigma_sqr_l << " -> " << s << std::endl;
+        if (s != sigma_sqr_l) {
+            // std::cout << "noise variance updated in block "<< name() << ", comp. " << h()+1 << " : s = " << sigma_sqr_l << " -> " << s << std::endl;
+        }
 
         // Compute noise coefficient ----
         const double d  = s - C_NN;
@@ -610,6 +605,7 @@ protected:
             const double L = C_NT*mu + C_ND;
             return (P - d*(a*mu*mu + 2.0*b*mu + c)) - 2.0*L*rho;  // target = 0
         };
+
 
         /*
             std::cout << std::endl;
@@ -636,11 +632,11 @@ protected:
         if (f(0) <= 0) {
             mu_star = 0;
             rho_star = rho_of_mu(mu_star);
-            std::cout << "The constraint is satisfied after updating the noise_variance" << std::endl;
+            // std::cout << "The constraint is satisfied after updating the noise_variance" << std::endl;
         } else {
             mu_star = find_root_secant(f, 0.0, 10.0, 10.0);
             rho_star = rho_of_mu(mu_star);
-            std::cout << "Correction: rho_star = " << rho_star << ", mu_star = " << mu_star << std::endl;
+            // std::cout << "Correction: rho_star = " << rho_star << ", mu_star = " << mu_star << std::endl;
         }
 
         return {rho_star, mu_star};
@@ -1060,6 +1056,7 @@ public:
         bool flip_and_scale;
         bool allow_blocks_deactivation;
         bool bias;
+        bool allow_reconstruction_constraint_compensation;
         Init init;
         LambdaSelection lambda_selection;
         TauSelection tau_selection;
@@ -1071,6 +1068,7 @@ public:
           const bool flip_and_scale_ = true,
           const bool allow_blocks_deactivation_ = true,
           const bool bias_ = true,
+          const bool allow_reconstruction_constraint_compensation_ = false,
           const Init init_ = Init::SVD, const TauSelection tau_selection_ = TauSelection::Automatic,
           const LambdaSelection lambda_selection_ = LambdaSelection::Automatic,
           const Deflation deflation_mode_ = Deflation::Scores, const Scheme& scheme_ = Scheme::Factorial(),
@@ -1080,8 +1078,9 @@ public:
             seed(seed_),
             flip_and_scale(flip_and_scale_),
             allow_blocks_deactivation(allow_blocks_deactivation_),
-            init(init_),
             bias(bias_),
+            allow_reconstruction_constraint_compensation(allow_reconstruction_constraint_compensation_),
+            init(init_),
             tau_selection(tau_selection_),
             lambda_selection(lambda_selection_),
             deflation_mode(deflation_mode_),
@@ -1306,7 +1305,7 @@ public:
                         const double w_lk = opt_.scheme.w(cov_lk);
                         nu_l.noalias() += w_lk * eta_(*blocks_[k], *blocks_[l]);   // no aliasing with RHS
                     }
-                    blocks_[l]->compute(nu_l, false);   // block handles normalization
+                    blocks_[l]->compute(nu_l, opt_.allow_reconstruction_constraint_compensation);   // block handles normalization
                     mark_cov_rowcol_dirty_(l);     // η_l changed → invalidate its row/col
 
                     // this is only to emulate the loadings of the R implementation, it could be dropped eventually

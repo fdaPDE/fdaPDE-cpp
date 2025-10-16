@@ -270,6 +270,7 @@ TEST(rgcca, test_04) {
     // chose options
     RGCCA<TimeDependentSampling>::Options options;
     options.scheme = Scheme::Factorial();
+    options.allow_reconstruction_constraint_compensation = true;
     // change defaults if needed ...
 
     // model initialization
