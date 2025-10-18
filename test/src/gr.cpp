@@ -14,35 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __FDAPDE_SOLVERS_MODULE_H__
-#define __FDAPDE_SOLVERS_MODULE_H__
+using namespace fdapde;
+using fdapde::test::almost_equal;
 
-// clang-format off
 
-// include core
-#include <fdaPDE/core.h>
+TEST(gr, test_01) {
 
-#include "src/formula.h"
-#include "src/distributions.h"
-#include "src/solvers/utility.h"
-
-namespace fdapde {
-
-struct ls_solver { };
-struct de_solver { };
-  
-}   // namespace fdapde
-
-// least square solvers
-#include "src/solvers/fe_ls_elliptic.h"
-#include "src/solvers/fe_ls_separable.h"
-#include "src/solvers/fe_ls_parabolic.h"
-#include "src/solvers/ls_graph.h"
-
-// density estimation solvers
-#include "src/solvers/fe_de_elliptic.h"
-#include "src/solvers/fe_de_separable.h"
-
-// clang-format on
-
-#endif   // __FDAPDE_SOLVERS_MODULE_H__
+}
