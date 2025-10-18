@@ -6,7 +6,7 @@
 namespace fdapde {
 namespace internals {
 
-// Spline-only smoother: solves (Psi^T W Psi + lambda * R1) f = Psi^T W y
+// graph smoother: solves (Psi^T W Psi + lambda * R1) f = Psi^T W y
 struct ls_graph {
    private:
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;
@@ -17,49 +17,25 @@ struct ls_graph {
     using sparse_solver_t = eigen_sparse_solver_movable_wrap<Eigen::SparseLU<sparse_matrix_t>>;
     using dense_solver_t  = Eigen::PartialPivLU<matrix_t>;
 
+
     template <typename DataLocs>
     static constexpr bool is_valid_data_locs_descriptor_v =
       std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>;
-    template <typename Penalty> struct is_valid_penalty {
-        static constexpr bool value = requires(Penalty penalty) {
-            penalty.bilinear_form();
-            penalty.linear_form();
+    /*
+        template <typename Penalty> struct is_valid_penalty {
+            static constexpr bool value = requires(Penalty penalty) {
+                penalty.bilinear_form();
+                penalty.linear_form();
+            };
         };
-    };
-    template <typename Penalty> static constexpr bool is_valid_penalty_v = is_valid_penalty<Penalty>::value;
+        template <typename Penalty> static constexpr bool is_valid_penalty_v = is_valid_penalty<Penalty>::value;
+    */
 
-    // evaluate basis at locations (point or areal)
-    template <typename DataLocs>
-        requires(is_valid_data_locs_descriptor_v<DataLocs>)
-    void eval_basis_at_(const DataLocs& locs) {
-        fdapde_assert(n_locs_ == locs.rows());
-        if constexpr (std::is_same_v<DataLocs, matrix_t>) {
-            Psi_ = point_eval_(locs);
-            D_ = vector_t::Ones(n_locs_).asDiagonal();
-        } else {
-            auto pr = areal_eval_(locs);
-            Psi_ = pr.first;
-            D_ = pr.second.asDiagonal();
-        }
-    }
-    // optimized basis evaluation at geoframe
-    template <typename GeoFrame> void eval_basis_at_(const GeoFrame& gf) {
-        switch (gf.category(0)[0]) {
-            case ltype::point: {
-                const auto& spatial_index = geo_index_cast<0, POINT>(gf[0]);
-                Psi_ = point_eval_(spatial_index.coordinates());
-                D_ = vector_t::Ones(n_locs_).asDiagonal();
-                break;
-            }
-            case ltype::areal: {
-                const auto& spatial_index = geo_index_cast<0, POLYGON>(gf[0]);
-                const auto& [psi, measure_vect] = areal_eval_(spatial_index.incidence_matrix());
-                Psi_ = psi;
-                D_ = measure_vect.asDiagonal();
-                break;
-            }
-        }
-        return;
+    // "evaluate" basis
+    void eval_basis_at_() {
+        Psi_.resize(n_locs(), n_dofs());
+        Psi_.setIdentity();
+        D_ = vector_t::Ones(n_locs_).asDiagonal();
     }
 
    public:
@@ -69,7 +45,7 @@ struct ls_graph {
     ls_graph() noexcept = default;
     // construct from formula + geoframe
     template <typename GeoFrame, typename Penalty, typename WeightMatrix>
-        requires(is_valid_penalty_v<Penalty>)
+    //    requires(is_valid_penalty_v<Penalty>)
     ls_graph(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
         fdapde_assert(gf.n_layers() == 1);
@@ -80,12 +56,12 @@ struct ls_graph {
         analyze_data(formula, gf, W);
     }
     template <typename GeoFrame, typename Penalty>
-        requires(is_valid_penalty_v<Penalty>)
+    //    requires(is_valid_penalty_v<Penalty>)
     ls_graph(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) :
         ls_graph(formula, gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
     // construct with no data
     template <typename GeoFrame, typename Penalty, typename WeightMatrix>
-        requires(is_valid_penalty_v<Penalty>)
+    //    requires(is_valid_penalty_v<Penalty>)
     ls_graph(const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
         fdapde_assert(gf.n_layers() == 1);
@@ -93,10 +69,10 @@ struct ls_graph {
         n_locs_ = n_obs_;
 
         discretize(penalty);
-        eval_basis_at_(gf);
+        eval_basis_at_();
     }
     template <typename GeoFrame, typename Penalty>
-        requires(is_valid_penalty_v<Penalty>)
+    //    requires(is_valid_penalty_v<Penalty>)
     ls_graph(const GeoFrame& gf, Penalty&& penalty) :
         ls_graph(gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
 
@@ -104,57 +80,50 @@ struct ls_graph {
     template <typename Penalty> void discretize(Penalty&& penalty) {
         using BilinearForm = typename std::decay_t<Penalty>::BilinearForm;
         using LinearForm = typename std::decay_t<Penalty>::LinearForm;
-        fdapde_static_assert(internals::is_valid_penalty_pair_v<BilinearForm FDAPDE_COMMA LinearForm>, INVALID_PENALTY_DESCRIPTION);
-        using BsSpace      = typename BilinearForm::TrialSpace;
+        // fdapde_static_assert(internals::is_valid_penalty_pair_v<BilinearForm FDAPDE_COMMA LinearForm>, INVALID_PENALTY_DESCRIPTION);
+        using BsSpace = typename BilinearForm::TrialSpace;
+
         // discretization
         const BilinearForm& bilinear_form = penalty.bilinear_form();
         const LinearForm&   linear_form   = penalty.linear_form();
         n_dofs_ = bilinear_form.n_dofs();
+
         // assemble penalty (stiffness) R1 and forcing u (if provided)
         auto& space = bilinear_form.trial_space();
         TrialFunction u(space);
         TestFunction  v(space);
-        R0_ = integral(space.triangulation())(u * v).assemble();
+        R0_ = integral(space.triangulation())(id(u) * id(v)).assemble();
         R1_ = bilinear_form.assemble();
         u_  = linear_form.assemble();
 
-        // store handles to evaluate basis at locations
-        point_eval_ = [bs_space = bilinear_form.trial_space()](const matrix_t& locs) -> decltype(auto) {
-            return internals::point_basis_eval(bs_space, locs);
-        };
-        areal_eval_ = [bs_space = bilinear_form.trial_space()](const binary_t& locs) -> decltype(auto) {
-            return internals::areal_basis_eval(bs_space, locs);
-        };
-        // preallocate
+        // rooom for the solution
         f_.resize(n_dofs_);
         return;
     }
 
     // non-parametric fit
     // \sum_i w_i * (y_i - f(p_i))^2 + \int_D (Lf - u)^2
-    template <typename DataLocs, typename WeightMatrix>
-        requires(is_valid_data_locs_descriptor_v<DataLocs>)
-    void analyze_data(const DataLocs& locs, const matrix_t& y, const WeightMatrix& W) {
-        fdapde_assert(locs.rows() > 0 && y.rows() == locs.rows() && y.cols() == 1);
-        n_obs_ = locs.rows();
+    template <typename WeightMatrix>
+    void analyze_data(const matrix_t& y, const WeightMatrix& W) {
+        fdapde_assert(y.rows() == n_dofs() && y.cols() == 1);
+        n_obs_ = n_dofs();
         n_locs_ = n_obs_;
         n_covs_ = 0;
-        eval_basis_at_(locs);
+        eval_basis_at_();
         update_response_and_weights(y, W);
     }
     // semi-parametric fit
     // \sum_i w_i * (y_i - x_i^\top * \beta - f(p_i))^2 + \int_D (Lf - u)^2
-    template <typename DataLocs, typename WeightMatrix>
-        requires(std::is_same_v<DataLocs, matrix_t> || std::is_same_v<DataLocs, binary_t>)
-    void analyze_data(const DataLocs& locs, const matrix_t& y, const matrix_t& X, const WeightMatrix& W) {
+    template <typename WeightMatrix>
+    void analyze_data(const matrix_t& y, const matrix_t& X, const WeightMatrix& W) {
         fdapde_assert(
-          locs.rows() > 0 && y.rows() == locs.rows() && y.cols() == 1 && X.rows() == locs.rows() &&
-          W.rows() == locs.rows() && W.rows() == W.cols());
-        n_obs_  = locs.rows();
+          y.rows() == n_dofs() && y.cols() == 1 && X.rows() == n_dofs() &&
+          W.rows() == n_dofs() && W.rows() == W.cols());
+        n_obs_  = n_dofs();
         n_locs_ = n_obs_;
         bool require_woodbury_realloc = n_covs_ != X.cols();
         n_covs_ = X.cols();
-        eval_basis_at_(locs);   // update \Psi matrix
+        eval_basis_at_();   // update \Psi matrix
         if (require_woodbury_realloc) { U_ = matrix_t::Zero(n_dofs_, n_covs_); }
         if (require_woodbury_realloc) { V_ = matrix_t::Zero(n_covs_, n_dofs_); }
         update_response_and_weights(y, X, W);
@@ -167,7 +136,7 @@ struct ls_graph {
         fdapde_assert(gf.n_layers() == 1);
         n_obs_  = gf[0].rows();
         n_locs_ = n_obs_;
-        eval_basis_at_(gf);   // update \Psi matrix
+        eval_basis_at_();   // update \Psi matrix
 
         // parse formula, extract response vector and design matrix
         Formula formula_(formula);
@@ -243,7 +212,7 @@ struct ls_graph {
     std::pair<vector_t, vector_t> fit(double lambda) {
         fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
         if ( lambda_saved_.value() != lambda || W_changed_) {
-            // assemble spline system: A = Psi^T W Psi + lambda * R1
+            // assemble graph system: A = Psi^T W Psi + lambda * R1
             sparse_matrix_t A = Psi_.transpose() * W_ * Psi_ + lambda * R1_;
             invA_.compute(A);
             W_changed_ = false;
@@ -368,6 +337,7 @@ struct ls_graph {
     // observers
     int n_dofs() const { return n_dofs_; }
     int n_obs() const { return n_obs_;}
+    int n_locs() const { return n_obs_;}
     const binary_t& nan_pattern() const { return nan_pattern_; }
     const sparse_matrix_t mass() const { return R0_; }
     const sparse_matrix_t& stiff() const { return R1_; }
@@ -396,7 +366,7 @@ struct ls_graph {
     int n_dofs_ = 0, n_locs_ = 0, n_obs_ = 0, n_covs_ = 0;
     sparse_matrix_t R0_;    // n_dofs x n_dofs matrix [R0]_{ij} = \int_D \psi_i * \psi_j
     sparse_matrix_t R1_;    // n_dofs x n_dofs matrix [R1]_{ij} = \int_D a(\psi_i, \psi_j)
-    vector_t u_;            // n_dofs x 1 vector u_i = \int_D u * \psi_i (not used for spline smoother?)
+    vector_t u_;            // n_dofs x 1 vector u_i = \int_D u * \psi_i (not used for graph smoother?)
     sparse_matrix_t Psi_;   // n_obs x n_dofs
     std::optional<sparse_matrix_t> B_; // \Psi matrix corrected for missing observations
     diag_matrix_t D_; // vector of regions' measures (areal sampling)
