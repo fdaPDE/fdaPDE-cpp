@@ -35,7 +35,9 @@ struct ls_graph {
     void eval_basis_at_() {
         Psi_.resize(n_locs(), n_dofs());
         Psi_.setIdentity();
-        D_ = vector_t::Ones(n_locs_).asDiagonal();
+        const vector_t diag = vector_t::Ones(n_locs()) / (n_dofs() * n_dofs());
+        // TODO: understand why this normalization is necessary to keep the value of lambda stable across different numbers of mesh sizes
+        D_ = diag.asDiagonal();
     }
 
    public:
@@ -213,13 +215,13 @@ struct ls_graph {
         fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
         if ( lambda_saved_.value() != lambda || W_changed_) {
             // assemble graph system: A = Psi^T W Psi + lambda * R1
-            sparse_matrix_t A = Psi_.transpose() * W_ * Psi_ + lambda * R1_;
+            sparse_matrix_t A = Psi_.transpose() * D_ * W_ * Psi_ + lambda * R1_; // *** FIX *** add D
             invA_.compute(A);
             W_changed_ = false;
         }
         if (lambda_saved_.value() != lambda) {
             // update linear system rhs
-            b_ = PsiNA().transpose() * (W_ * y_);
+            b_ = PsiNA().transpose() * ( D_ * W_ * y_); // *** FIX *** add D
         }
         lambda_saved_ = lambda;
         vector_t x;
@@ -234,6 +236,8 @@ struct ls_graph {
             f_ = woodbury_system_solve(invA_, U_, XtWX_, V_, b_);
             beta_ = invXtWXXtW_ * (y_ - Psi_ * f_);
         }
+        // *** FIX *** update misfit
+        g_ = y_ - (Psi_ * f_);
         return std::make_pair(f_, beta_);;
     }
     template <typename LambdaT>
@@ -247,23 +251,25 @@ struct ls_graph {
         fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
         if (lambda_saved_.value() != lambda) {
             // assemble and factorize system matrix for nonparameteric part
-            sparse_matrix_t A = Psi_.transpose() * W_ * Psi_ + lambda * R1_;
+            sparse_matrix_t A = Psi_.transpose() * D_ * W_ * Psi_ + lambda * R1_; // *** FIX *** add D
             invA_.compute(A);
         }
         vector_t x;
         if (n_covs_ == 0) {   // equivalent to calling fit(lambda)
             if (lambda_saved_.value() != lambda) {
-                b_ = PsiNA().transpose() * (W_ * y_);
+                b_ = PsiNA().transpose() * (D_ * W_ * y_); // *** FIX *** add D
             }
             x = invA_.solve(b_);
         } else {
             vector_t b(n_dofs_);
             // assemble nonparametric linear system rhs
-            b = -PsiNA().transpose() * D_ * W_ * y_;
+            b = PsiNA().transpose() * D_ * W_ * y_; // *** FIX *** why there was a - sign here?
             x = invA_.solve(b);
         }
         lambda_saved_ = lambda;
         f_ = x;
+        // *** FIX *** update misfit
+        g_ = y_ - (Psi_ * f_);
         return f_;
     }
     // hutchinson approximation for Tr[S]
@@ -273,7 +279,9 @@ struct ls_graph {
             int seed_ = (seed == random_seed) ? std::random_device()() : seed;
             std::mt19937 rng(seed_);
             rademacher_distribution rademacher;
-            Us_->resize(n_locs_, r);
+            // *** FIX *** properly construct Us_
+            Us_.emplace(n_locs_, r);          // allocate
+            Us_->setZero();                   // ensure initialized
             for (int i = 0; i < n_locs_; ++i) {
                 for (int j = 0; j < r; ++j) { Us_->operator()(i, j) = rademacher(rng); }
             }
@@ -302,23 +310,26 @@ struct ls_graph {
             lambda_ = lambda;
         }
         if (lambda_saved_.value() != lambda_) {
-            sparse_matrix_t A = Psi_.transpose() * W_ * Psi_ + lambda_ * R1_;
+            sparse_matrix_t A = Psi_.transpose() * D_ * W_ * Psi_ + lambda * R1_; // *** FIX *** add D
             invA_.compute(A);
             lambda_saved_ = lambda_;
         }
         return edf(r, seed);
     }
     // penalty matrix: \lambda * R1
-    matrix_t P(double lambda) const {
-        return lambda * R1_;
+    // *** FIX *** return sparse; avoid dense copies
+    sparse_matrix_t P(double lambda) const {              // *** FIX ***
+        sparse_matrix_t S = R1_;                          // *** FIX ***
+        S *= lambda;                                      // *** FIX ***
+        return S;                                         // *** FIX ***
     }
     template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
-    matrix_t P(const LambdaT& lambda) const {
+    sparse_matrix_t P(const LambdaT& lambda) const {      // *** FIX ***
         fdapde_assert(lambda.size() == n_lambda);
         return P(lambda[0]);
     }
-    matrix_t P() const { return P(1.0); }
+    sparse_matrix_t P() const { return P(1.0); }          // *** FIX ***
     // efficient evaluation of f^\top * P * f = ...
     double ftPf(double lambda) {
         if (lambda_saved_.value() != lambda || W_changed_) { fit(lambda); }
@@ -337,7 +348,7 @@ struct ls_graph {
     // observers
     int n_dofs() const { return n_dofs_; }
     int n_obs() const { return n_obs_;}
-    int n_locs() const { return n_obs_;}
+    int n_locs() const { return n_locs_; }        // *** FIX ***
     const binary_t& nan_pattern() const { return nan_pattern_; }
     const sparse_matrix_t mass() const { return R0_; }
     const sparse_matrix_t& stiff() const { return R1_; }
@@ -381,7 +392,7 @@ struct ls_graph {
     matrix_t XtWX_;            // n_covs x n_covs matrix X^\top * W * X
     dense_solver_t invXtWX_;   // factorization of n_covs x n_covs matrix X^\top * W * X
     matrix_t invXtWXXtW_;      // n_covs x n_obs matrix (X^\top * X)^{-1} * (X^\top W)
-    bool W_changed_;
+    bool W_changed_ = true;    // *** FIX ***
 
     // basis eval handles
     std::function<sparse_matrix_t(const matrix_t& locs)> point_eval_;
