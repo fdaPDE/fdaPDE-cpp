@@ -31,7 +31,7 @@ TEST(gr, test_01) {
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
 
     // Topology
-    const int n_nodes = 100000;
+    const int n_nodes = 1000;
     Graph G = Graph::Path(n_nodes);
     GraphTriangulation GT = GraphTriangulation<1>::FromGraphRegularLayout(G);
 
@@ -64,11 +64,11 @@ TEST(gr, test_01) {
     const auto F = integral(G)( u * v );
 
     // Solver
-    SRPDE model("z ~ f", data, ls_graph(a, F));
+    SRPDE model("z ~ f", data, gr_ls_elliptic(a, F));
 
     // calibration
     std::vector<double> lambda_grid;
-    for (double e = -6.; e <= 3.; e += 0.2) lambda_grid.push_back(std::pow(10, e));
+    for (double e = -6.; e <= 1.; e += 0.2) lambda_grid.push_back(std::pow(10, e));
     GridSearch<1> optimizer_gcv;
     optimizer_gcv.optimize(model.gcv(100, 476813), lambda_grid);
     const double lambda_gcv = optimizer_gcv.optimum()[0];
@@ -90,7 +90,7 @@ TEST(gr, test_01) {
     std::cout << std::endl;
 
     // Now you can export [lambda_grid, mse_vals, gcv_vals] to CSV
-    std::cout << std::setw(13) << "λ" << std::setw(13) << "MSE" << std::setw(13) << "GCV" << std::endl;
+    std::cout << std::setw(13) << "λ" << std::setw(12) << "MSE" << std::setw(12) << "GCV" << std::endl;
     for (int i = 0; i < lambda_grid.size(); ++i)
         std::cout << std::setw(12) << lambda_grid[i]
                   << std::setw(12) << optimizer_mse.values()[i]

@@ -1,5 +1,5 @@
-#ifndef __FDAPDE_LS_GRAPH_H__
-#define __FDAPDE_LS_GRAPH_H__
+#ifndef __FDAPDE_GR_LS_ELLIPTIC_H__
+#define __FDAPDE_GR_LS_ELLIPTIC_H__
 
 #include "header_check.h"
 
@@ -7,7 +7,7 @@ namespace fdapde {
 namespace internals {
 
 // graph smoother: solves (Psi^T W Psi + lambda * R1) f = Psi^T W y
-struct ls_graph {
+struct gr_ls_elliptic {
    private:
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
@@ -44,11 +44,11 @@ struct ls_graph {
     static constexpr int n_lambda = 1;
     using solver_category = ls_solver;
 
-    ls_graph() noexcept = default;
+    gr_ls_elliptic() noexcept = default;
     // construct from formula + geoframe
     template <typename GeoFrame, typename Penalty, typename WeightMatrix>
     //    requires(is_valid_penalty_v<Penalty>)
-    ls_graph(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
+    gr_ls_elliptic(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
         fdapde_assert(gf.n_layers() == 1);
         n_obs_  = gf[0].rows();
@@ -59,12 +59,12 @@ struct ls_graph {
     }
     template <typename GeoFrame, typename Penalty>
     //    requires(is_valid_penalty_v<Penalty>)
-    ls_graph(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) :
-        ls_graph(formula, gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    gr_ls_elliptic(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) :
+        gr_ls_elliptic(formula, gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
     // construct with no data
     template <typename GeoFrame, typename Penalty, typename WeightMatrix>
     //    requires(is_valid_penalty_v<Penalty>)
-    ls_graph(const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
+    gr_ls_elliptic(const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
         fdapde_assert(gf.n_layers() == 1);
         n_obs_  = gf[0].rows();
@@ -75,8 +75,8 @@ struct ls_graph {
     }
     template <typename GeoFrame, typename Penalty>
     //    requires(is_valid_penalty_v<Penalty>)
-    ls_graph(const GeoFrame& gf, Penalty&& penalty) :
-        ls_graph(gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
+    gr_ls_elliptic(const GeoFrame& gf, Penalty&& penalty) :
+        gr_ls_elliptic(gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
 
     // discretization: assemble R1 and basis evaluation handles
     template <typename Penalty> void discretize(Penalty&& penalty) {
@@ -401,8 +401,8 @@ struct ls_graph {
 } // namespace internals
 
 // solver factory
-template <typename BilinearForm_, typename LinearForm_> struct ls_graph {
-using solver_t = internals::ls_graph;
+template <typename BilinearForm_, typename LinearForm_> struct gr_ls_elliptic {
+using solver_t = internals::gr_ls_elliptic;
 private:
     struct penalty_packet {
         using BilinearForm = std::decay_t<BilinearForm_>;
@@ -418,7 +418,7 @@ private:
         const LinearForm& linear_form() const { return linear_form_; }
     };
 public:
-    ls_graph(const BilinearForm_& bilinear_form, const LinearForm_& linear_form) :
+    gr_ls_elliptic(const BilinearForm_& bilinear_form, const LinearForm_& linear_form) :
         penalty_(bilinear_form, linear_form) { }
     const penalty_packet& get() const { return penalty_; }
 private:
@@ -426,4 +426,4 @@ private:
 };
 } // namespace fdapde
 
-#endif // __FDAPDE_LS_GRAPH_H__
+#endif // __FDAPDE_GR_LS_ELLIPTIC_H__
