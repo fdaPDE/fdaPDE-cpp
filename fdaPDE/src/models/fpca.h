@@ -68,7 +68,7 @@ template <typename VariationalSolver> class fpca_power_iteration_impl {
         int calibration = (flag & 0b11110);   // detect calibration strategy
         for (int i = 0; i < rank; ++i) {
             // select optimal smoothing level for i-th component
-            std::array<double, n_lambda> opt_lambda;
+            Eigen::Matrix<double, n_lambda, 1> opt_lambda;
             switch (calibration) {
             case 0: {   // no calibration
                 fdapde_assert(lambda_grid.size() == n_lambda);
@@ -134,10 +134,12 @@ template <typename VariationalSolver> class fpca_power_iteration_impl {
     double gcv_(const matrix_t& X, const LambdaT lambda, const InitT& f0) {
         const auto& [f, s] = solve_(X, lambda, f0);
         // evaluate GCV index at convergence
-        if (edf_map_.find(lambda) == edf_map_.end()) {   // cache Tr[S]
-            edf_map_[lambda] = smoother_->edf();
+        std::array<double, n_lambda> lambda_vec;
+        std::copy(lambda.data(), lambda.data() + n_lambda, lambda_vec.begin());
+        if (edf_map_.find(lambda_vec) == edf_map_.end()) {   // cache Tr[S]
+            edf_map_[lambda_vec] = smoother_->edf();
         }
-        int dor = n_locs_ - edf_map_.at(lambda);
+        int dor = n_locs_ - edf_map_.at(lambda_vec);
         return (n_locs_ / std::pow(dor, 2)) * ((smoother_->Psi() * f) - smoother_->response()).squaredNorm();
     }
     std::unordered_map<std::array<double, n_lambda>, double, internals::std_array_hash<double, n_lambda>> edf_map_;
@@ -188,7 +190,7 @@ template <typename VariationalSolver> class fpca_subspace_iteration_impl {
         lambda_.resize(rank, n_lambda);
 
         int calibration = (flag & 0b11110);   // detect calibration strategy
-        std::array<double, n_lambda> opt_lambda;
+        Eigen::Matrix<double, n_lambda, 1> opt_lambda;
         switch (calibration) {
         case 0: {   // no calibration
             fdapde_assert(lambda_grid.size() == n_lambda);
@@ -302,7 +304,7 @@ template <typename VariationalSolver> class fpca_direct_impl {
         lambda_.resize(rank, n_lambda);
 	
         int calibration = (flag & 0b11110);   // detect calibration strategy
-        std::array<double, n_lambda> opt_lambda;
+        Eigen::Matrix<double, n_lambda, 1> opt_lambda;
         switch (calibration) {
         case 0: {   // no calibration
             fdapde_assert(lambda_grid.size() == n_lambda);
@@ -523,7 +525,7 @@ template <typename VariationalSolver> class fPCA {
     fPCA() noexcept = default;
     template <typename GeoFrame, typename Penalty>
     fPCA(const std::string& colname, const GeoFrame& gf, Penalty&& penalty) noexcept : smoother_(), data_() {
-        discretize(penalty.get().penalty);
+        discretize(penalty.get());
         analyze_data(colname, gf);
     }
     template <typename... Args> void discretize(Args&&... args) {
