@@ -371,7 +371,7 @@ template <typename VariationalSolver> class fpca_direct_impl {
     double gcv_(const matrix_t& X, int rank, const LambdaT lambda, int flag) {
         const auto& [F, S] = solve_(X, rank, lambda, flag);
         // evaluate GCV index at convergence (note that Tr[S] = \|D^(-1)\|_F^2)
-        int dor = n_locs_ - invD_.squaredNorm();
+        int dor = n_locs_ -  (invD_*smoother_->Psi().transpose()).squaredNorm();
         return (n_locs_ / std::pow(dor, 2)) * (X.transpose() * S - (smoother_->Psi() * F)).squaredNorm();
     }
     int n_locs_ = 0, n_units_ = 0, n_dofs_ = 0;
