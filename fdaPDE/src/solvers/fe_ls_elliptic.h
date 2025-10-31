@@ -17,6 +17,7 @@
 #ifndef __FE_LS_ELLIPTIC_SOLVER_H__
 #define __FE_LS_ELLIPTIC_SOLVER_H__
 
+#include "fdaPDE/src/models/sr.h"
 #include "header_check.h"
 
 namespace fdapde {
@@ -437,6 +438,9 @@ struct fe_ls_elliptic {
     vector_t fn() const { return Psi_ * f_; }
     matrix_t Q() const { return internals::lmbQ(W_, X_, invXtWX_, matrix_t::Identity(n_locs_, n_locs_)); }
 
+    // setters
+    void set_trace_mode(const TraceMode trace_mode) { trace_mode_ = trace_mode; }
+
     // observers
     int n_dofs() const { return n_dofs_; }
     const sparse_matrix_t& mass() const { return R0_; }
@@ -484,6 +488,7 @@ struct fe_ls_elliptic {
     dense_solver_t invXtWX_;   // factorization of n_covs x n_covs matrix X^\top * W * X
     matrix_t invXtWXXtW_;      // n_covs x n_obs matrix (X^\top * X)^{-1} * (X^\top W)
     bool W_changed_;
+    TraceMode trace_mode_ = TraceMode::Hutchinson;
 };
 
 }   // namespace internals

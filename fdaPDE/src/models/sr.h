@@ -21,6 +21,8 @@
 
 namespace fdapde {
 
+enum class TraceMode { Exact, Hutchinson };
+
 template <typename VariationalSolver>
     requires(std::is_same_v<typename VariationalSolver::solver_category, ls_solver>)
 class SRPDE {
@@ -56,6 +58,8 @@ class SRPDE {
     }
     // fitting
     template <typename... Args> auto fit(Args&&... args) { return solver_.fit(std::forward<Args>(args)...); }
+    // setters
+    void set_trace_mode(TraceMode mode) { solver_.set_trace_mode(mode); }
     // observers
     const vector_t& f() const { return solver_.f(); }
     const vector_t& beta() const { return solver_.beta(); }
@@ -342,6 +346,7 @@ class SRPDE {
 
     class speckman_t { };
    private:
+    TraceMode trace_mode_;
     solver_t solver_;
     int n_obs_ = 0, n_covs_ = 0;
     std::vector<ltype> geo_category_;
