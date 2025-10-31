@@ -63,7 +63,7 @@ class GSRPDE {
         Formula formula_(formula);
         n_obs_ = gf[0].rows();
         n_covs_ = 0;
-        for (const std::string& token : formula_.rhs()) {
+        for (const std::string& token : formula_.covs()) {
             if (gf.contains(token)) { n_covs_++; }
         }
         solver_.analyze_data(formula, gf, W);

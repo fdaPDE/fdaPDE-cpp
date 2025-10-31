@@ -17,6 +17,7 @@
 #ifndef __FE_LS_ELLIPTIC_SOLVER_H__
 #define __FE_LS_ELLIPTIC_SOLVER_H__
 
+#include "fdaPDE/src/models/sr.h"
 #include "header_check.h"
 
 namespace fdapde {
@@ -201,7 +202,7 @@ struct fe_ls_elliptic {
         // parse formula, extract response vector and design matrix
         Formula formula_(formula);
         std::vector<std::string> covs;
-        for (const std::string& token : formula_.rhs()) {
+        for (const std::string& token : formula_.covs()) {
             if (gf.contains(token)) { covs.push_back(token); }
         }
 	bool require_woodbury_realloc = std::cmp_not_equal(n_covs_, covs.size());
@@ -361,7 +362,7 @@ struct fe_ls_elliptic {
     // hutchinson approximation for Tr[S]
     double edf(int r = 100, int seed = random_seed) {
         fdapde_assert(lambda_saved_.has_value());
-        if (!Ys_.has_value() || !Bs_.has_value()) {
+        if (!Ys_.has_value() || !Bs_.has_value() || r != Us_->rows()) {   // force reconstruction if r differs from old
             int seed_ = (seed == random_seed) ? std::random_device()() : seed;
             std::mt19937 rng(seed_);
             rademacher_distribution rademacher;
@@ -377,7 +378,7 @@ struct fe_ls_elliptic {
         } else {
             Bs_->topRows(n_dofs_) = -PsiNA().transpose() * D_ * internals::lmbQ(W_, X_, invXtWX_, *Us_);
         }
-	// enforce Dirichlet BCs, if any
+        // enforce Dirichlet BCs, if any
         for (size_t i = 0; i < dirichlet_dofs_.size(); ++i) {
             Bs_->row(dirichlet_dofs_[i]).setConstant(dirichlet_vals_[i]);
         }
@@ -437,6 +438,9 @@ struct fe_ls_elliptic {
     vector_t fn() const { return Psi_ * f_; }
     matrix_t Q() const { return internals::lmbQ(W_, X_, invXtWX_, matrix_t::Identity(n_locs_, n_locs_)); }
 
+    // setters
+    void set_trace_mode(const TraceMode trace_mode) { trace_mode_ = trace_mode; }
+
     // observers
     int n_dofs() const { return n_dofs_; }
     const sparse_matrix_t& mass() const { return R0_; }
@@ -484,6 +488,7 @@ struct fe_ls_elliptic {
     dense_solver_t invXtWX_;   // factorization of n_covs x n_covs matrix X^\top * W * X
     matrix_t invXtWXXtW_;      // n_covs x n_obs matrix (X^\top * X)^{-1} * (X^\top W)
     bool W_changed_;
+    TraceMode trace_mode_ = TraceMode::Hutchinson;
 };
 
 }   // namespace internals
