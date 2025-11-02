@@ -240,7 +240,9 @@ template <typename VariationalSolver> class MSRPDE {
 
     // observers
     const vector_t& f() const { return solver_.f(); }
+    vector_t fn() const { return solver_.fn(); }   // no const because the solver's getter is not const 
     const vector_t& beta() const { return solver_.beta(); }
+    const std::vector<vector_t>& b_hat() const { return b_hat_; }
     const vector_t& misfit() const { return solver_.misfit(); }   // M: senza i random effects
     int n_covs() const { return n_covs_; }
     int n_random_covs() const { return n_random_covs_; }
@@ -249,7 +251,7 @@ template <typename VariationalSolver> class MSRPDE {
     const vector_t& response() const { return solver_.response(); }
     double sigma_sq_hat() const {return sigma_sq_hat_;}
     const vector_t& Sigma_b() const {return Sigma_b_;}
-    vector_t fitted() const {     // M: senza i random effects. Nota: qui non devono esserci gli zeri in corrispondenza dei NA! 
+    vector_t fitted() const {     // M: senza i random effects. Nota: qui NON devono esserci gli zeri in corrispondenza dei NA! 
         vector_t fitted_ = solver_.Psi() * f();
         if (n_covs_ != 0) { fitted_ += solver_.design_matrix() * beta(); }
         return fitted_;
@@ -262,12 +264,23 @@ template <typename VariationalSolver> class MSRPDE {
         return random_effects;
     }
     const BinaryMatrix<-1, 1>& na_pattern() const {return na_pattern_;}
+    unsigned int n_iter() const {return n_iter_;}
 
     // modifiers
     void set_fpirls_max_iter(int max_iter) { 
         std::cout << "setting max_iter fpirls to " << max_iter << std::endl; 
         max_iter_ = max_iter; 
     }    
+
+    void set_likelihood_dataloss_type(bool type) {
+        std::cout << "setting likelihood_dataloss_type to " << type << std::endl;
+        likelihood_dataloss_type_ = type;
+    }
+
+    void set_compute_sigma_with_edf(bool type) {
+        std::cout << "setting compute_sigma_with_edf to " << type << std::endl;
+        compute_sigma_with_edf_ = type;
+    }
 
 
     // Generalized Cross Validation index
@@ -371,6 +384,10 @@ template <typename VariationalSolver> class MSRPDE {
         solver_t solver_;
         int n_obs_ = 0, n_covs_ = 0, n_random_covs_ = 0; 
         int n_iter_ = 0;
+
+        bool likelihood_dataloss_type_ = false;   // default: loss "stile FPIRLS" (sempre positiva)
+        bool compute_sigma_with_edf_ = true;      // default: calcolo sigma_sq_hat_ CON edf anche nelle fpirls iterations
+        // nota: la scelta dei default è basato su quanto osservato in test 6 
 
     private:
 
@@ -523,37 +540,54 @@ template <typename VariationalSolver> class MSRPDE {
         // returns the data loss (J_parametric)
         double data_loss_() const { 
             
-            // J_parametric = -0.5*(n_groups*p-n)log(sigma^2) - 0.5*(|| Delta*b_i ||/ sigma)^2 + n_groups_*log(det(Delta))
-            std::cout << "!!! --versione MELCHIONDA data loss-- !!!" << std::endl;
-            
-            double data_loss_value = 0.;
+            if(likelihood_dataloss_type_){
 
-            // cast to int to avoid overflow
-            int signed_int = n_groups_*n_random_covs_ - n_obs();  
-            
-            data_loss_value -= signed_int * std::log(sigma_sq_hat_);
-            
-            for(auto i=0; i < n_groups_; ++i){
-                // log-likelihood of random effects	(completed outside the for cycle)
-                vector_t Deltab_i = Delta_.asDiagonal() * b_hat_[i];
-                data_loss_value -= ( Deltab_i ).dot( Deltab_i ) / sigma_sq_hat_;
+                // J_parametric = -0.5*(n_groups*p-n)log(sigma^2) - 0.5*(|| Delta*b_i ||/ sigma)^2 + n_groups_*log(det(Delta))
+                std::cout << "!!! --versione MELCHIONDA data loss-- !!!" << std::endl;
+                
+                double data_loss_value = 0.;
+
+                // cast to int to avoid overflow
+                int signed_int = n_groups_*n_random_covs_ - n_obs();  
+                
+                data_loss_value -= signed_int * std::log(sigma_sq_hat_);
+                
+                for(auto i=0; i < n_groups_; ++i){
+                    // log-likelihood of random effects	(completed outside the for cycle)
+                    vector_t Deltab_i = Delta_.asDiagonal() * b_hat_[i];
+                    data_loss_value -= ( Deltab_i ).dot( Deltab_i ) / sigma_sq_hat_;
+                }
+                
+                // Compute the determinant of Delta (NOTE: Delta is a diagonal matrix stored in a vector!)
+                double detDelta = 1.;
+                for(auto k=0; k < n_random_covs_; ++k){
+                    detDelta *= Delta_(k);
+                }
+                data_loss_value += 2 * n_groups_ * std::log(detDelta);
+
+                return data_loss_value/2;  
+
+            } else{
+
+                std::cout << "!!! --versione FPIRLS data loss-- !!!" << std::endl;
+                double data_loss_value = 0.;
+                // Compute the square root of the weights matrix with Cholosky
+                Eigen::SimplicialLLT<Eigen::SparseMatrix<double>> chol(sparse_mat_weights_);
+                Eigen::SparseMatrix<double> sqrtW = chol.matrixL();                
+                vector_t data_loss_vector = sqrtW * (py_ - (mu_ + random_effects()) ); 
+                
+                for(int i = 0; i < data_loss_vector.size(); ++i) {
+                    if(!na_pattern_[i]) data_loss_value += (data_loss_vector.coeff(i, 0))*(data_loss_vector.coeff(i, 0));
+                }
+
+                return data_loss_value / n_obs_;
+
+
             }
-            
-            // Compute the determinant of Delta (NOTE: Delta is a diagonal matrix stored in a vector!)
-            double detDelta = 1.;
-            for(auto k=0; k < n_random_covs_; ++k){
-                detDelta *= Delta_(k);
-            }
-            data_loss_value += 2 * n_groups_ * std::log(detDelta);
-
-            return data_loss_value/2;    
+  
 
 
-            // std::cout << "!!! --versione FPIRLS data loss-- !!!" << std::endl;
-            // // Compute the square root of the weights matrix with Cholosky
-            // Eigen::SimplicialLLT<Eigen::SparseMatrix<double>> chol(sparse_mat_weights_);
-            // Eigen::SparseMatrix<double> sqrtW = chol.matrixL();
-            // return (sqrtW * (py_ - mu_)).squaredNorm() / n_obs_;
+
 
         }
 
@@ -640,31 +674,35 @@ template <typename VariationalSolver> class MSRPDE {
                 sigma_sq_hat_ += res_i.dot(res_i);
             }
 
-            // // Versione Pigani (per test 1-tris)
-            // std::cout << "ATT: RUNNING PIGANI sigma2 computaiton!!" << std::endl;
-            // double edf = edf(); 
-            // if(n_covs_ != 0){
-            //     edf += n_covs_;   // n_random_covs_? Pigani non lo mette  
-            // }
-            // sigma_sq_hat_ /= (n_obs()-edf); 
 
-        
-            // Versione Melchionda 
-            if(edf_flag){   
-
-                double edf_ = edf(100, seed);   // here we set a seed for the edf stochastic computation for reproducibility
+            if(compute_sigma_with_edf_){
+                // Versione Pigani 
+                std::cout << "--sigma2 computation with edf at each iteration--" << std::endl;
+                double edf_value = edf(100, seed);   // here we set a seed for the edf stochastic computation for reproducibility
                 if(n_covs_ != 0){
-                    edf_ += n_covs_;   // +m*n_random_covs_?
+                    edf_value += n_covs_;   // n_random_covs_? Pigani non lo mette  
                 }
-                sigma_sq_hat_ /= (n_obs()-edf_); 
-
-                std::cout << "edf = " << std::setprecision(16) << edf_ << std::endl;
-
+                sigma_sq_hat_ /= (n_obs()-edf_value); 
             } else{
-                sigma_sq_hat_ /= n_obs();  
-            }
+                // Versione Melchionda 
+                std::cout << "--sigma2 computation with edf only at convergence--" << std::endl;
+                if(edf_flag){   
+
+                    double edf_ = edf(100, seed);   // here we set a seed for the edf stochastic computation for reproducibility
+                    if(n_covs_ != 0){
+                        edf_ += n_covs_;   // +m*n_random_covs_?
+                    }
+                    sigma_sq_hat_ /= (n_obs()-edf_); 
+
+                    std::cout << "edf = " << std::setprecision(16) << edf_ << std::endl;
+
+                } else{
+                    sigma_sq_hat_ /= n_obs();  
+                }
     
-            
+
+            }
+  
         }
 
         // compute LTL_ 

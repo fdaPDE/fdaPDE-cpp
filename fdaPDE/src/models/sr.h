@@ -63,6 +63,7 @@ class SRPDE {
     template <typename... Args> auto fit(Args&&... args) { return solver_.fit(std::forward<Args>(args)...); }
     // observers
     const vector_t& f() const { return solver_.f(); }
+    vector_t fn() const { return solver_.fn(); }   // M: no const because the solver's getter is not const 
     const vector_t& beta() const { return solver_.beta(); }
     const vector_t& misfit() const { return solver_.misfit(); }
     int n_covs() const { return n_covs_; }
