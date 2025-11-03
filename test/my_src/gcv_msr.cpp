@@ -107,7 +107,7 @@ int test_06() {
     std::vector<double> lambdas_d; std::vector<double> lambdas_t; 
     std::vector<Eigen::Matrix<double, Dynamic, 1>> lambdas_d_t;
     if(trial_number == "12" || trial_number == "13" || trial_number == "14"){
-        for(double xs = -6.5-3.0; xs <= -1.0-3.0; xs += 0.25)   // traslato di 3 ordini (n*m = 1100) rispetto alla lib vecchia
+        for(double xs = -4.0-3.0; xs <= -2.0-3.0; xs += 0.25)   // traslato di 3 ordini (n*m = 1100) rispetto alla lib vecchia  -> inoltre, accorciata sequenza
         lambdas_d.push_back(std::pow(10,xs));
 
         for(double xt = -4.0-3.0; xt <= -4.0-3.0; xt += 2.0)    // traslato di 3 ordini (n*m = 1100) rispetto alla lib vecchia
