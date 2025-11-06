@@ -116,7 +116,7 @@ template <typename VariationalSolver> class MSRPDE {
         solver_.analyze_data(formula, gf, W);   // M qui avviene la normalizzazione di W_ del solver e vengono corrette per i NA la Psi e la y del solver 
         y_ = solver_.response();                // M corretta per NA
         
-        n_obs_ = solver_.n_obs(); // M added
+        n_obs_ = solver_.n_obs();                // M added! n_obs nei modelli va aggiornato con l'n_obs dei solver (che invece è corretto per i missing)
         std::cout << "n_obs_ = " << n_obs_ << std::endl;
         std::cout << "number of data = " << gf[0].rows() << std::endl;
     }
@@ -538,7 +538,7 @@ template <typename VariationalSolver> class MSRPDE {
         }
 
         // returns the data loss (J_parametric)
-        double data_loss_() const { 
+        double data_loss_() const{ 
             
             if(likelihood_dataloss_type_){
 
@@ -571,14 +571,46 @@ template <typename VariationalSolver> class MSRPDE {
 
                 std::cout << "!!! --versione FPIRLS data loss-- !!!" << std::endl;
                 double data_loss_value = 0.;
-                // Compute the square root of the weights matrix with Cholosky
-                Eigen::SimplicialLLT<Eigen::SparseMatrix<double>> chol(sparse_mat_weights_);
-                Eigen::SparseMatrix<double> sqrtW = chol.matrixL();                
-                vector_t data_loss_vector = sqrtW * (py_ - (mu_ + random_effects()) ); 
-                
+
+                std::cout << "dimensions sparse_mat_weights_: " << sparse_mat_weights_.rows() << " x " << sparse_mat_weights_.cols() << std::endl;
+                std::cout << "dimension of py_: " << py_.size() << std::endl;
+                std::cout << "dimension of mu_: " << mu_.size() << std::endl;
+                std::cout << "dimension of random_effects_: " << random_effects().size() << std::endl;
+
+                // // Compute the square root of the weights matrix with Cholosky
+                // Eigen::SimplicialLLT<Eigen::SparseMatrix<double>> chol(sparse_mat_weights_);
+                // std::cout << "here 1" << std::endl;
+                // Eigen::SparseMatrix<double> sqrtW = chol.matrixL();     
+                // std::cout << "here 2" << std::endl;           
+                // vector_t data_loss_vector = sqrtW * ( py_ - (mu_ + random_effects()) ); 
+                // std::cout << "here 3" << std::endl;
+
+                // //compute data loss
+                // for(int i = 0; i < data_loss_vector.size(); ++i) {
+                //     if(!na_pattern_[i]) data_loss_value += (data_loss_vector.coeff(i, 0))*(data_loss_vector.coeff(i, 0));
+                // }
+                // std::cout << "here 4" << std::endl;
+
+                // ---> con i missing crusha Cholesky => evito di definire la radice dei pesi
+
+                vector_t data_loss_vector = py_ - (mu_ + random_effects());  // here data_loss_vector does NOT contain the weights
+                for(int k = 0; k < n_groups_; ++k){
+                    vector_t data_loss_vector_k(group_sizes_[k]);
+                    for(int j = 0; j < group_sizes_[k]; ++j){
+                        data_loss_vector_k(j) = data_loss_vector.coeff(loc_to_glob_map_[k][j], 0);
+                    }
+                    vector_t data_loss_vector_k_withweights = pW_(k)*data_loss_vector_k;
+                    for(int j = 0; j < group_sizes_[k]; ++j){
+                        data_loss_vector(loc_to_glob_map_[k][j]) = data_loss_vector_k_withweights(j);
+                    }
+                }
+                // now data_loss_vector contains the weights
+
+                // compute data loss 
                 for(int i = 0; i < data_loss_vector.size(); ++i) {
                     if(!na_pattern_[i]) data_loss_value += (data_loss_vector.coeff(i, 0))*(data_loss_vector.coeff(i, 0));
                 }
+                std::cout << "end data loss" << std::endl;
 
                 return data_loss_value / n_obs_;
 
