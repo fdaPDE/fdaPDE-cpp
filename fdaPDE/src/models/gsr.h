@@ -72,6 +72,8 @@ class GSRPDE {
     
         solver_.analyze_data(formula, gf, W);
         y_ = solver_.response();
+
+        n_obs_ = solver_.n_obs();                // M added! n_obs nei modelli va aggiornato con l'n_obs dei solver (che invece è corretto per i missing)
     }
     template <typename GeoFrame> void analyze_data(const std::string& formula, const GeoFrame& gf) {
         analyze_data(formula, gf, vector_t::Ones(gf[0].rows()).asDiagonal());
