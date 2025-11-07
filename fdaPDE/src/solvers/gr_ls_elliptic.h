@@ -1,6 +1,7 @@
 #ifndef __FDAPDE_GR_LS_ELLIPTIC_H__
 #define __FDAPDE_GR_LS_ELLIPTIC_H__
 
+#include "fdaPDE/src/models/sr.h"
 #include "header_check.h"
 
 namespace fdapde {
@@ -143,7 +144,7 @@ struct gr_ls_elliptic {
         // parse formula, extract response vector and design matrix
         Formula formula_(formula);
         std::vector<std::string> covs;
-        for (const std::string& token : formula_.rhs()) {
+        for (const std::string& token : formula_.covs()) {
             if (gf.contains(token)) { covs.push_back(token); }
         }
         bool require_woodbury_realloc = n_covs_ != covs.size();
@@ -345,6 +346,9 @@ struct gr_ls_elliptic {
     vector_t lmbPsi(const vector_t& rhs) const { return Psi_ * rhs; }
     vector_t fn() const { return Psi_ * f_; }
 
+    // setters
+    void set_trace_mode(const TraceMode trace_mode) { trace_mode_ = trace_mode; }
+
     // observers
     int n_dofs() const { return n_dofs_; }
     int n_obs() const { return n_obs_;}
@@ -393,6 +397,7 @@ struct gr_ls_elliptic {
     dense_solver_t invXtWX_;   // factorization of n_covs x n_covs matrix X^\top * W * X
     matrix_t invXtWXXtW_;      // n_covs x n_obs matrix (X^\top * X)^{-1} * (X^\top W)
     bool W_changed_ = true;    // *** FIX ***
+    TraceMode trace_mode_ = TraceMode::Hutchinson;
 
     // basis eval handles
     std::function<sparse_matrix_t(const matrix_t& locs)> point_eval_;
