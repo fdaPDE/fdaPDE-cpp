@@ -105,8 +105,18 @@ template <typename VariationalSolver> class QSRPDE {
 	    solver_.update_response_and_weights(py_, pW_.asDiagonal());
             solver_.fit(std::forward<Args>(args)...);
             mu_ = fitted();
+            
             // prepare for next iteration
-            double data_loss = (pW_.cwiseSqrt().matrix().asDiagonal() * (py_ - mu_)).squaredNorm() / n_obs_;
+            // double data_loss = (pW_.cwiseSqrt().matrix().asDiagonal() * (py_ - mu_)).squaredNorm() / n_obs_;  M: this version is not accounting for missing data
+            
+            // M: compute data loss accounting for missing data
+            double data_loss = 0.0;
+            vector_t data_loss_vector = pW_.matrix().asDiagonal()*(py_ - mu_);  
+            for(int i = 0; i < data_loss_vector.size(); ++i) {
+                if(!na_pattern_[i]) data_loss += (data_loss_vector.coeff(i, 0))*(data_loss_vector.coeff(i, 0)); 
+            }
+            data_loss = data_loss / n_obs_; 
+            
             Jold = Jnew;
             Jnew = data_loss + solver_.ftPf(lambda);
             n_iter_++;

@@ -460,16 +460,16 @@ int test_06() {
 //    missing:      yes 
 int test_07() {
 
-    const std::string schema = "a"; 
+    const std::string schema = "b"; 
 
     const unsigned int sim_start = 1; 
     const unsigned int n_sim = 30; 
 
     // run SRPDE and/or MSRPDE ? 
-    const bool run_srpde = true;      // stprde
-    const bool run_msrpde = false;     // mixed-effects anisotropic
+    const bool run_srpde = false;      // stprde
+    const bool run_msrpde = true;     // mixed-effects anisotropic
     const bool run_msr_iso = false;    // mixed-effects isotropic
-    const bool run_srpde_d = true;    // strpde con dummies
+    const bool run_srpde_d = false;    // strpde con dummies
 
     bool likelihood_dataloss_type;    // false = fpirls data loss, true = likelihood
     bool sigma_edf_type;              // false = sigma senza edf nelle iterazioni, true = sigma con edf
@@ -477,16 +477,19 @@ int test_07() {
     const std::string trial_number = "1"; 
     const std::string R_path = "../../../OneDrive - Politecnico di Milano/Corsi/PhD/Codice/models/MSRPDE/Tests/space-time/Test_7/trial_" + trial_number + "/miss_" + schema + "/";
 
-    if(trial_number == "1"){
+    if(trial_number == "1" || trial_number == "2"){
         likelihood_dataloss_type = false;
     }
-    if(trial_number == "1"){
+    if(trial_number == "1" || trial_number == "2"){
         sigma_edf_type = true;
     } 
 
     unsigned int M; 
     if(trial_number == "1"){
         M = 8; 
+    }
+    if(trial_number == "2"){
+        M = 16; 
     }
     
     Triangulation<1, 1> T = Triangulation<1, 1>::Interval(0, 1, M);  // ATT qui non bisogna fare più M-1 come nella vecchia lib!! Vuole direttamente il numero di nodi, cioè M!!! 
@@ -496,7 +499,7 @@ int test_07() {
 
     
     std::string N_string; 
-    if(trial_number == "1"){
+    if(trial_number == "1" || trial_number == "2"){
         N_string = "476"; 
     }
     Eigen::Matrix<double, Dynamic, Dynamic> points = read_csv<double>("my_data/mesh/unit_square_reduced_censoring_" + N_string + "/points.csv").as_matrix();
@@ -507,7 +510,8 @@ int test_07() {
     
     Triangulation<2, 2> D(points, elements, boundary);
 
-    const unsigned int max_fpirls_iter = 15;
+    unsigned int max_fpirls_iter = 15; 
+
 
     // time penalty 
     BsSpace Bh(T, 3);   // cubic B-splines in time
@@ -521,9 +525,9 @@ int test_07() {
     std::vector<double> lambdas_d; std::vector<double> lambdas_t; 
     std::vector<Eigen::Matrix<double, Dynamic, 1>> lambdas_d_t;
     
-    if(trial_number == "1"){  
+    if(trial_number == "1" || trial_number == "2"){  
         
-        for(double xs = -7.0; xs <= -5.0; xs += 0.25)   
+        for(double xs = -7.5; xs <= -5.5; xs += 0.25)   
             lambdas_d.push_back(std::pow(10,xs));
 
         for(double xt = -7.0; xt <= -7.0; xt += 2.0)   
@@ -542,6 +546,8 @@ int test_07() {
             lambdas_mat(i * lambdas_t.size() + j, 1) = lambdas_t[j];
         }
     }
+
+    std::cout << "R_path: " << R_path << std::endl;
 
 
     // Simulations MSRPDE  
