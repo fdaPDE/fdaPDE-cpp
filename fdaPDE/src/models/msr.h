@@ -149,8 +149,15 @@ template <typename VariationalSolver> class MSRPDE {
         // nota: no scale lambda here (only for quantile regression)
         // mu_ = solver_.Psi() * solver_.f();   // M: no need of mu_ since does not enter in the abs residuals computation.... 
 
+
         double Jold = std::numeric_limits<double>::max(), Jnew = 0;
         n_iter_ = 0;
+
+        // debug: compute Delta_debug_ at each iteration (inital guess here)
+        Delta_debug_.conservativeResize(n_random_covs_, 1);  
+        Delta_debug_.col(0) = Delta_;
+
+
         std::cout << "Start FPIRLS with max_iter_=" << max_iter_ << " and tolerance=" << tol_ << std::endl;
         while (n_iter_ < max_iter_ && std::abs(Jnew - Jold) > tol_) {
             
@@ -197,32 +204,64 @@ template <typename VariationalSolver> class MSRPDE {
             mu_ = fitted();   // fn + X%*%beta (no random part here!) 
 
             compute_bhat_();          // mu_ is needed here
-            compute_sigma_sq_hat_();  // note: default value is false => metodo Melchionda (calcolo senza edf nelle fpirls iterations)  --> so this value is not stochastic since there are no stochastic edf
+            compute_sigma_sq_hat_();  // note: default value for edf_flag_ is false, but if compute_sigma_sq_hat_ was set to true, edf are used anyway       
             build_LTL_();
             compute_C_();
 
-            // update Delta_
-            for(auto k=0; k<n_random_covs_; ++k){
-                Delta_(k) = C_(k,k) * std::sqrt(n_groups_);
-            }           
+
+
+            // ATT: commentato 
+            std::cout << "#### ----- ATT: provo diverso calcolo di Delta ----- ####" << std::endl;
+            // // update Delta_
+            // for(auto k=0; k<n_random_covs_; ++k){
+            //     Delta_(k) = C_(k,k) * std::sqrt(n_groups_);   // ATT: vale sotto INDIPENDENZA tra i random effects 
+            // }
+            
+            // ATT: M: uso esplicitamente LTL, a differenza della modalita' Melchionda che usa il Cholesky factor C. 
+            // Perche'? Nel caso di >=2 RE, non e' piu' vero che (L^T*L)^{-1}_kk = C(k,k)^2, ma ci sono termini extra off-diagonal di C =>
+            // conviene considerare direttamente la diagonale di L^T*L.      
+            matrix_t LTL_temp = matrix_t::Zero(n_random_covs_, n_random_covs_);
+            for(auto i=0; i < n_groups_; ++i){
+                LTL_temp += b_hat_[i] * (b_hat_[i]).transpose() / sigma_sq_hat_;
+                LTL_temp += ZtildeTZtilde_(i).solve(matrix_t::Identity(n_random_covs_, n_random_covs_));
+            }
+            for(auto k=0; k < n_random_covs_; ++k){
+                // The EM update for variance is: D = (1/n_groups_) * LTL_temp(k,k) 
+                // => Delta = 1/sqrt(D) 
+                double Dk = LTL_temp(k,k) / n_groups_; 
+                Delta_(k) = 1.0 / std::sqrt(Dk);              // ATT: vale sotto INDIPENDENZA tra i random effects 
+            }            
+
 
             // prepare for next iteration
             double data_loss = data_loss_();
             Jold = Jnew;
             Jnew = data_loss + solver_.ftPf(lambda);
+
+            // debug: compute Delta_debug_ at each iteration
+            std::cout << "Debug: storing Delta matrix at iteration " << n_iter_ << "..." << std::endl;
+            Delta_debug_.conservativeResize(n_random_covs_, n_iter_+2); // n_iter+1 + 1 di initial guess 
+            Delta_debug_.col(n_iter_+1) = Delta_;
+ 
+
+            // Update iteration counter
             n_iter_++;
 
             std::cout << "data_loss=" << data_loss << std::endl; 
             std::cout << "penalty=" << solver_.ftPf(lambda) << std::endl; 
 
             std::cout << "|DeltaJ| at iter" << n_iter_ << " =" << std::abs(Jnew - Jold) << std::endl;
+
+            // debug 
+            Jold_debug_ = Jold; Jnew_debug_ = Jnew;
+
         }
 
         std::cout << "FPIRLS terminated after " << n_iter_ << " iterations with |DeltaJ|=" << std::abs(Jnew - Jold) << std::endl;
         std::cout << "Computing variance estimates at convergence..." << std::endl; 
 
         // compute sigma_sq_hat (with edf) at convergence 
-        compute_sigma_sq_hat_(true);   
+        compute_sigma_sq_hat_(true);     // qui usiamo sempre gli edf 
         // compute Sigma_b_ matrix at convergence 
         Sigma_b_ = Delta_;
         for(auto k=0; k < n_random_covs_; ++k){
@@ -265,6 +304,12 @@ template <typename VariationalSolver> class MSRPDE {
     }
     const BinaryMatrix<-1, 1>& na_pattern() const {return na_pattern_;}
     unsigned int n_iter() const {return n_iter_;}
+
+    // debug 
+    double Jold_debug() const {return Jold_debug_;}
+    double Jnew_debug() const {return Jnew_debug_;}
+    const matrix_t& Delta_debug() const {return Delta_debug_;}   // p x n_iter_: containts the values of Delta at each iteration
+
 
     // modifiers
     void set_fpirls_max_iter(int max_iter) { 
@@ -389,6 +434,10 @@ template <typename VariationalSolver> class MSRPDE {
         bool compute_sigma_with_edf_ = true;      // default: calcolo sigma_sq_hat_ CON edf anche nelle fpirls iterations
         // nota: la scelta dei default è basato su quanto osservato in test 6 
 
+
+        double Jold_debug_ = std::numeric_limits<double>::max(); double Jnew_debug_ = 0;
+        matrix_t Delta_debug_;   // p x n_iter_: containts the values of Delta_ at each iteration
+
     private:
 
         // Smart Delta initialization
@@ -436,9 +485,10 @@ template <typename VariationalSolver> class MSRPDE {
                         Delta_(k) += Z_by_group_(i)(j,k) * Z_by_group_(i)(j,k); 
                     }
                 }
-                Delta_(k) = std::sqrt( Delta_(k)/n_groups_ ) * 3 / 8;  // ATT 3/8 fa zero (o metti il punto o metti 3/8 dopo)
-            }
+                Delta_(k) = std::sqrt( Delta_(k)/n_groups_ ) * 3.0 / 8.0;  // ATT 3/8 sarebbe una integer division
         
+            }
+
         }
 
         // Update sparse_mat_weights_ with current pW_
@@ -666,9 +716,9 @@ template <typename VariationalSolver> class MSRPDE {
                         res_i(j) = 0.; 
                     }
                 }
-
                 
                 b_hat_[i] = ZtildeTZtilde_(i).solve( Z_by_group_(i).transpose() * res_i );
+
             }
         }
 
