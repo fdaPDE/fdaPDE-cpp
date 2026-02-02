@@ -24,18 +24,19 @@
 using namespace fdapde;
 using namespace std::chrono;  // to measure computational times 
 
+
 // int test_06(); 
-// int test_07(); 
-int test_08();  
+int test_06_scalability(); 
+// int test_07();
+// int test_08();  
 
 int main(){
     // test_06();
+    test_06_scalability();
     // test_07();
-    test_08();
+    // test_08();
     return 0; 
 }
-
-
 
 
 // test 6
@@ -487,6 +488,356 @@ int test_06() {
 
         }
     
+
+    }
+
+
+
+    return 0;
+}
+
+
+// test 6 scalability (for cluster)
+//    mesh:         unit square
+//    sampling:     locations != nodes
+//    penalization: anisotropic diffusion
+//    time penalization: separable
+//    covariates:   yes
+//    BC:           no
+//    order FE:     1
+//    missing:      no
+int test_06_scalability() {
+
+    const bool scale_n = true; 
+    std::vector<unsigned int> nn_vec; 
+    if(scale_n){
+        nn_vec = {100, 200, 400, 800, 1600, 3200}; 
+    }
+
+    const unsigned int sim_start = 1; 
+    const unsigned int n_sim = 50; 
+
+    const bool run_msrpde = true;   // mixed-effects anisotropic
+    const bool run_msr_iso = true;  // mixed-effects isotropic
+
+    bool likelihood_dataloss_type; // false = fpirls data loss, true = likelihood
+    bool sigma_edf_type;           // false = sigma senza edf nelle iterazioni, true = sigma con edf
+
+    const std::string trial_number = "14"; 
+    std::string R_path = "/u/desanctis/R_scripts/Test_6_scalability/trial_" + trial_number + "/";
+    if(scale_n){
+        R_path += "scale_n/";
+    }
+
+
+    likelihood_dataloss_type = false;   // false: FPIRLS data loss; true: likelihood data loss 
+    sigma_edf_type = true;
+  
+
+    unsigned int M; 
+    M = 8; 
+    
+    
+    Triangulation<1, 1> T = Triangulation<1, 1>::Interval(0, 1, M);  // ATT qui non bisogna fare più M-1 come nella vecchia lib!! Vuole direttamente il numero di nodi, cioè M!!! 
+    
+    
+    // geometry 
+    using PointT = Eigen::Matrix<double, 2, 1>;
+
+    
+    std::string N_string; 
+    N_string = "476"; 
+    
+    Eigen::Matrix<double, Dynamic, Dynamic> points = read_csv<double>("my_data/mesh/unit_square_reduced_censoring_" + N_string + "/points.csv").as_matrix();
+    Eigen::Matrix<int, Dynamic, Dynamic> elements = read_csv<int>("my_data/mesh/unit_square_reduced_censoring_" + N_string + "/elements.csv").as_matrix();
+    Eigen::Matrix<int, Dynamic, Dynamic> boundary = read_csv<int>("my_data/mesh/unit_square_reduced_censoring_" + N_string + "/boundary.csv").as_matrix();
+
+    elements.array() -= 1; // non necessario
+    
+    Triangulation<2, 2> D(points, elements, boundary);
+
+    const unsigned int max_fpirls_iter = 15;
+
+    // time penalty 
+    BsSpace Bh(T, 3);   // cubic B-splines in time
+    TrialFunction g(Bh);
+    TestFunction  w(Bh);
+    auto a_T = integral(T)(dxx(g) * dxx(w));
+    ZeroField<1> u_T;
+    auto F_T = integral(T)(u_T * w);    
+
+
+    // // Read true solutions for later RMSE computation
+    // std::string true_path = "/u/desanctis/R_scripts/Test_6_scalability/trial_" + trial_number + "/true"; 
+    // std::string X_eval_path = "/u/desanctis/R_scripts/Test_6_scalability/trial_" + trial_number; 
+    
+    // vector_t betas_true;  
+    // std::ifstream file_betas_true(true_path + "/betas.csv");
+    // if(file_betas_true.is_open()){
+    //     file_betas_true >> betas_true; 
+    //     file_betas_true.close();
+    // }
+
+    // vector_t f_true_eval;  
+    // std::ifstream file_f_true_eval(true_path + "/spate.sim/f_grf.csv");
+    // if(file_f_true_eval.is_open()){
+    //     file_f_true_eval >> f_true_eval; 
+    //     file_f_true_eval.close();
+    // }
+
+    // matrix_t X_eval; 
+    // std::ifstream file_X_eval(X_eval_path + "/X_eval.csv");
+    // if(file_X_eval.is_open()){
+    //     file_X_eval >> X_eval; 
+    //     file_X_eval.close();
+    // }
+
+    // vector_t mu_true_eval = f_true_eval + X_eval * betas_true;
+
+
+    // Simulations MSRPDE  
+    if(run_msrpde){
+
+
+        if(scale_n){
+
+            for(unsigned int nn : nn_vec){
+
+                std::string path_nn = R_path + "n_" + std::to_string(nn) + "/";
+                std::cout << "======== Runnig n = " << nn << " =========" << std::endl;
+
+                for(auto sim = sim_start; sim <= n_sim; ++sim){
+
+                    std::cout << "Simulation RUN MSRPDE #" << std::to_string(sim) << std::endl; 
+            
+                    // data 
+                    GeoFrame data_msrpde(D, T);
+                    auto& l_msrpde = data_msrpde.insert_scalar_layer<POINT, POINT>("layer", std::pair{path_nn + "space_locs.csv", R_path + "time_locs.csv"});
+                    // NOTA: nel caso scale_n = true, le space_locs.csv sono in /n_***, mentre le time_locs.csv sono sempre quelle in R_path
+                    
+                    l_msrpde.load_csv<double>(path_nn + "X.csv");
+                    l_msrpde.load_csv<double>(path_nn + "ids_groups.csv");
+
+                    // load data from .csv files
+                    l_msrpde.load_csv<double>(path_nn + "simulations/sim_" + std::to_string(sim) + "/y_cpp.csv");
+                            
+                    std::string solutions_path_gcv = path_nn + "simulations/sim_" + std::to_string(sim) + "/fit_newlib/"; 
+                    std::string solution_path = path_nn + "simulations/sim_" + std::to_string(sim) + "/fit_newlib/"; 
+            
+                    // physics 
+                    FeSpace Vh(D, P1<1>);   // functional space definition
+                    Eigen::Matrix<double, 2, 2> K = read_csv<double>(path_nn + "simulations/sim_" + std::to_string(sim) + "/K.csv").as_matrix(); 
+                    std::cout << "K = " << K << std::endl;
+                    
+                    TrialFunction f(Vh);
+                    TestFunction v(Vh);
+                    auto a_D = integral(D)(dot(K * grad(f), grad(v)));
+                    // homogeneous forcing linear form
+                    ZeroField<2> u_D;
+                    auto F_D = integral(D)(u_D * v);
+
+                    // read lambdas
+                    double lambda_D;  
+                    double lambda_T;  
+            
+                    std::ifstream fileLambdaS_gcv(solution_path + "/lambda_s_opt.csv");
+                    if(fileLambdaS_gcv.is_open()){
+                        fileLambdaS_gcv >> lambda_D; 
+                        fileLambdaS_gcv.close();
+                    }
+                    std::ifstream fileLambdaT(solution_path + "/lambda_t_opt.csv");
+                    if(fileLambdaT.is_open()){
+                        fileLambdaT >> lambda_T; 
+                        fileLambdaT.close();
+                    }
+
+                    // std::cout << "Optimal lambda_D: " << std::setprecision(16) << lambda_D << std::endl;
+                    // std::cout << "Optimal lambda_T: " << std::setprecision(16) << lambda_T << std::endl;
+
+                    // Start measuring time
+                    auto start_time_run = high_resolution_clock::now();
+            
+                    // modeling
+                    MSRPDE m("y ~ x1 + x2 + 1|g + f", data_msrpde, fe_ls_separable_mono(std::pair {a_D, F_D}, std::pair {a_T, F_T}));  
+
+                    m.set_fpirls_max_iter(max_fpirls_iter);
+                    m.set_likelihood_dataloss_type(likelihood_dataloss_type);
+                    m.set_compute_sigma_with_edf(sigma_edf_type);
+
+                    // fit at optimal smoothing level
+                    m.fit(lambda_D, lambda_T);
+
+                    // Stop measuring time
+                    auto stop_time_run = high_resolution_clock::now();
+                    auto duration_run = duration_cast<milliseconds>(stop_time_run - start_time_run).count();
+                    std::cout << "Execution time RUN: " << duration_run << " ms" << std::endl;
+
+                    // Save results 
+                    write_csv(solution_path + "f.csv", m.f());    
+                    write_csv(solution_path + "beta.csv", m.beta());
+
+                    // Eigen::Matrix<double, Dynamic, Dynamic> computed_b;
+                    // computed_b.resize(m.b_hat().size(), m.n_random_covs());  
+                    // for(int i=0; i<m.b_hat().size(); ++i){
+                    //     computed_b.row(i) = m.b_hat()[i].transpose();   // NOTE: .transpose() is important to have the correct shape and save all the values in the case with >1 RE; 
+                    // }
+                    // write_csv(solution_path + "b_random.csv", computed_b);
+            
+                    double computedsigmahat = std::sqrt(m.sigma_sq_hat());
+                    std::ofstream filesigmahat(solution_path + "/sigma_hat.csv");
+                    if(filesigmahat.is_open()){
+                        filesigmahat << std::setprecision(16) << computedsigmahat << "\n"; 
+                        filesigmahat.close();
+                    }
+            
+                    write_csv(solution_path + "Sigma_b_hat.csv", m.Sigma_b());
+
+            
+                    std::ofstream file_time_run(solution_path + "/time_run.csv"); 
+                    if(file_time_run.is_open()){
+                        file_time_run << duration_run << "\n"; 
+                        file_time_run.close();
+                    }
+
+                    std::ofstream filen_iter(solution_path + "/n_iter.csv");
+                    if(filen_iter.is_open()){
+                        filen_iter << m.n_iter() << "\n"; 
+                        filen_iter.close();
+                    }
+
+
+                }
+    
+            }
+
+        }
+
+
+
+    }
+
+    // Simulations MSR-ISO  
+    if(run_msr_iso){
+
+
+        if(scale_n){
+
+            for(unsigned int nn : nn_vec){
+
+                std::string path_nn = R_path + "n_" + std::to_string(nn) + "/";
+                std::cout << "======== Runnig n = " << nn << " =========" << std::endl;
+
+
+                for(auto sim = sim_start; sim <= n_sim; ++sim){
+
+                    std::cout << "--------------------Simulation RUN MSR-ISO #" << std::to_string(sim) << "-------------" << std::endl;
+
+                    // data 
+                    GeoFrame data_msr_iso(D, T);
+                    auto& l_msr_iso = data_msr_iso.insert_scalar_layer<POINT, POINT>("layer", std::pair{path_nn + "space_locs.csv", R_path + "time_locs.csv"});
+                    // NOTA: nel caso scale_n = true, le space_locs.csv sono in /n_***, mentre le time_locs.csv sono sempre quelle in R_path
+                    
+                    l_msr_iso.load_csv<double>(path_nn + "X.csv");
+                    l_msr_iso.load_csv<double>(path_nn + "ids_groups.csv");
+
+                    // load data from .csv files
+                    l_msr_iso.load_csv<double>(path_nn + "simulations/sim_" + std::to_string(sim) + "/y_cpp.csv");
+                            
+                    std::string solutions_path_gcv = path_nn + "simulations/sim_" + std::to_string(sim) + "/fit_newlib_iso/"; 
+                    std::string solution_path = path_nn + "simulations/sim_" + std::to_string(sim) + "/fit_newlib_iso/"; 
+            
+                    // physics 
+                    FeSpace Vh(D, P1<1>);   // functional space definition
+                    Eigen::Matrix<double, 2, 2> K; 
+                    K << 1, 0, 0, 1;        // isotropic case 
+                    // std::cout << "K = " << K << std::endl;
+                    
+                    TrialFunction f(Vh);
+                    TestFunction v(Vh);
+                    auto a_D = integral(D)(dot(K * grad(f), grad(v)));
+                    // homogeneous forcing linear form
+                    ZeroField<2> u_D;
+                    auto F_D = integral(D)(u_D * v);
+
+                    // read lambdas
+                    double lambda_D;  
+                    double lambda_T;  
+            
+                    std::ifstream fileLambdaS_gcv(solution_path + "/lambda_s_opt.csv");
+                    if(fileLambdaS_gcv.is_open()){
+                        fileLambdaS_gcv >> lambda_D; 
+                        fileLambdaS_gcv.close();
+                    }
+                    std::ifstream fileLambdaT(solution_path + "/lambda_t_opt.csv");
+                    if(fileLambdaT.is_open()){
+                        fileLambdaT >> lambda_T; 
+                        fileLambdaT.close();
+                    }
+
+                    // std::cout << "Optimal lambda_D: " << std::setprecision(16) << lambda_D << std::endl;
+                    // std::cout << "Optimal lambda_T: " << std::setprecision(16) << lambda_T << std::endl;
+
+                    // Start measuring time
+                    auto start_time_run = high_resolution_clock::now();
+            
+                    // modeling
+                    MSRPDE m("y ~ x1 + x2 + 1|g + f", data_msr_iso, fe_ls_separable_mono(std::pair {a_D, F_D}, std::pair {a_T, F_T}));  
+
+                    m.set_fpirls_max_iter(max_fpirls_iter);
+                    m.set_likelihood_dataloss_type(likelihood_dataloss_type);
+                    m.set_compute_sigma_with_edf(sigma_edf_type);
+
+                    // fit at optimal smoothing level
+                    m.fit(lambda_D, lambda_T);
+
+                    // Stop measuring time
+                    auto stop_time_run = high_resolution_clock::now();
+                    auto duration_run = duration_cast<milliseconds>(stop_time_run - start_time_run).count();
+                    std::cout << "Execution time RUN: " << duration_run << " ms" << std::endl;
+
+                    // Save results 
+                    write_csv(solution_path + "f.csv", m.f());
+                    write_csv(solution_path + "beta.csv", m.beta());
+
+                    // Eigen::Matrix<double, Dynamic, Dynamic> computed_b;
+                    // computed_b.resize(m.b_hat().size(), m.n_random_covs());  
+                    // for(int i=0; i<m.b_hat().size(); ++i){
+                    //     computed_b.row(i) = m.b_hat()[i].transpose();   // NOTE: .transpose() is important to have the correct shape and save all the values in the case with >1 RE; 
+                    // }
+                    // write_csv(solution_path + "b_random.csv", computed_b);
+            
+
+                    double computedsigmahat = std::sqrt(m.sigma_sq_hat());
+                    std::ofstream filesigmahat(solution_path + "/sigma_hat.csv");
+                    if(filesigmahat.is_open()){
+                        filesigmahat << std::setprecision(16) << computedsigmahat << "\n"; 
+                        filesigmahat.close();
+                    }
+            
+                    write_csv(solution_path + "Sigma_b_hat.csv", m.Sigma_b());
+
+            
+                    std::ofstream file_time_run(solution_path + "/time_run.csv"); 
+                    if(file_time_run.is_open()){
+                        file_time_run << duration_run << "\n"; 
+                        file_time_run.close();
+                    }
+
+                    std::ofstream filen_iter(solution_path + "/n_iter.csv");
+                    if(filen_iter.is_open()){
+                        filen_iter << m.n_iter() << "\n"; 
+                        filen_iter.close();
+                    }
+
+
+
+                }
+    
+
+            }
+
+        }
+
 
     }
 

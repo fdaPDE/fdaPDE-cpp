@@ -25,17 +25,17 @@ using namespace fdapde;
 using namespace std::chrono;  // to measure computational times 
 
 // int test_06(); 
+int test_06_scalability(); 
 // int test_07();
-int test_08();  
+// int test_08();  
 
 int main(){
     // test_06();
+    test_06_scalability();
     // test_07();
-    test_08();
+    // test_08();
     return 0; 
 }
-
-
 
 
 // test 6
@@ -110,7 +110,7 @@ int test_06() {
     auto F_T = integral(T)(u_T * w);    
 
     std::vector<double> lambdas_d; std::vector<double> lambdas_t; 
-    std::vector<Eigen::Matrix<double, Dynamic, 1>> lambdas_d_t;
+    // std::vector<Eigen::Matrix<double, Dynamic, 1>> lambdas_d_t;
     if(trial_number == "12" || trial_number == "13" || trial_number == "14"){
         for(double xs = -4.0-3.0; xs <= -2.0-3.0; xs += 0.25)   // traslato di 3 ordini (n*m = 1100) rispetto alla lib vecchia  -> inoltre, accorciata sequenza
         lambdas_d.push_back(std::pow(10,xs));
@@ -119,9 +119,9 @@ int test_06() {
             lambdas_t.push_back(std::pow(10,xt));
     } 
 
-    for(auto i = 0; i < lambdas_d.size(); ++i)
-        for(auto j = 0; j < lambdas_t.size(); ++j) 
-            lambdas_d_t.push_back(Eigen::Matrix<double, 2, 1>(lambdas_d[i], lambdas_t[j]));
+    // for(auto i = 0; i < lambdas_d.size(); ++i)
+    //     for(auto j = 0; j < lambdas_t.size(); ++j) 
+    //         lambdas_d_t.push_back(Eigen::Matrix<double, 2, 1>(lambdas_d[i], lambdas_t[j]));
 
     Eigen::Matrix<double, Dynamic, 2> lambdas_mat(lambdas_d.size()*lambdas_t.size(), 2);
     for(int i = 0; i < lambdas_d.size(); ++i) { 
@@ -451,6 +451,300 @@ int test_06() {
 }
 
 
+// test 6 scalability (for cluster)
+//    mesh:         unit square
+//    sampling:     locations != nodes
+//    penalization: anisotropic diffusion
+//    time penalization: separable
+//    covariates:   yes
+//    BC:           no
+//    order FE:     1
+//    missing:      no
+int test_06_scalability() {
+
+    const bool scale_n = true; 
+    std::vector<unsigned int> nn_vec; 
+    if(scale_n){
+        nn_vec = {100, 200, 400, 800, 1600, 3200}; 
+    }
+
+    const unsigned int sim_start = 1; 
+    const unsigned int n_sim = 50; 
+
+    const bool run_msrpde = true;     // mixed-effects anisotropic
+    const bool run_msr_iso = true;   // mixed-effects isotropic
+
+    bool likelihood_dataloss_type; // false = fpirls data loss, true = likelihood
+    bool sigma_edf_type;           // false = sigma senza edf nelle iterazioni, true = sigma con edf
+
+    const std::string trial_number = "14"; 
+    std::string R_path = "/u/desanctis/R_scripts/Test_6_scalability/trial_" + trial_number + "/";
+    if(scale_n){
+        R_path += "scale_n/";
+    }
+
+
+    likelihood_dataloss_type = false;   // false: FPIRLS data loss; true: likelihood data loss 
+    sigma_edf_type = true;
+
+
+    unsigned int M; 
+    M = 8; 
+    
+    
+    Triangulation<1, 1> T = Triangulation<1, 1>::Interval(0, 1, M);  // ATT qui non bisogna fare più M-1 come nella vecchia lib!! Vuole direttamente il numero di nodi, cioè M!!! 
+    
+    // geometry 
+    using PointT = Eigen::Matrix<double, 2, 1>;
+
+    std::string N_string; 
+    N_string = "476"; 
+
+    Eigen::Matrix<double, Dynamic, Dynamic> points = read_csv<double>("my_data/mesh/unit_square_reduced_censoring_" + N_string + "/points.csv").as_matrix();
+    Eigen::Matrix<int, Dynamic, Dynamic> elements = read_csv<int>("my_data/mesh/unit_square_reduced_censoring_" + N_string + "/elements.csv").as_matrix();
+    Eigen::Matrix<int, Dynamic, Dynamic> boundary = read_csv<int>("my_data/mesh/unit_square_reduced_censoring_" + N_string + "/boundary.csv").as_matrix();
+
+    elements.array() -= 1; // non necessario
+    
+    Triangulation<2, 2> D(points, elements, boundary);
+
+    const unsigned int max_fpirls_iter = 15;
+
+    // time penalty 
+    BsSpace Bh(T, 3);   // cubic B-splines in time
+    TrialFunction g(Bh);
+    TestFunction  w(Bh);
+    auto a_T = integral(T)(dxx(g) * dxx(w));
+    ZeroField<1> u_T;
+    auto F_T = integral(T)(u_T * w);    
+
+    // choose lambda sequence
+    std::vector<double> lambdas_d; std::vector<double> lambdas_t; 
+    // std::vector<Eigen::Matrix<double, Dynamic, 1>> lambdas_d_t;
+    for(double xs = -4.0-3.0; xs <= -2.0-3.0; xs += 0.25)   // traslato di 3 ordini (n*m = 1100) rispetto alla lib vecchia  -> inoltre, accorciata sequenza
+    lambdas_d.push_back(std::pow(10,xs));
+
+    for(double xt = -4.0-3.0; xt <= -4.0-3.0; xt += 2.0)    // traslato di 3 ordini (n*m = 1100) rispetto alla lib vecchia
+        lambdas_t.push_back(std::pow(10,xt));
+
+
+    // for(auto i = 0; i < lambdas_d.size(); ++i)
+    //     for(auto j = 0; j < lambdas_t.size(); ++j) 
+    //         lambdas_d_t.push_back(Eigen::Matrix<double, 2, 1>(lambdas_d[i], lambdas_t[j]));
+
+    Eigen::Matrix<double, Dynamic, 2> lambdas_mat(lambdas_d.size()*lambdas_t.size(), 2);
+    for(int i = 0; i < lambdas_d.size(); ++i) { 
+        for (int j = 0; j < lambdas_t.size(); ++j) {
+            lambdas_mat(i * lambdas_t.size() + j, 0) = lambdas_d[i];
+            lambdas_mat(i * lambdas_t.size() + j, 1) = lambdas_t[j];
+        }
+    }
+
+    // Simulations MSRPDE  
+    if(run_msrpde){
+
+
+        if(scale_n){
+
+            for(unsigned int nn : nn_vec){
+
+                std::string path_nn = R_path + "n_" + std::to_string(nn) + "/";
+                std::cout << "===== Runnig n = " << nn << " =====" << std::endl;
+
+
+                for(auto sim = sim_start; sim <= n_sim; ++sim){
+
+                    std::cout << "Simulation GCV MSRPDE #" << std::to_string(sim) << std::endl; 
+
+                    // data 
+                    GeoFrame data_msrpde(D, T);
+                    auto& l_msrpde = data_msrpde.insert_scalar_layer<POINT, POINT>("layer", std::pair{path_nn + "space_locs.csv", R_path + "time_locs.csv"});
+                    // NOTA: nel caso scale_n = true, le space_locs.csv sono in /n_***, mentre le time_locs.csv sono sempre quelle in R_path
+                    
+                    l_msrpde.load_csv<double>(path_nn + "X.csv");
+                    l_msrpde.load_csv<double>(path_nn + "ids_groups.csv"); 
+
+                    // load data from .csv files
+                    l_msrpde.load_csv<double>(path_nn + "simulations/sim_" + std::to_string(sim) + "/y_cpp.csv");
+                            
+                    std::string solutions_path_gcv = path_nn + "simulations/sim_" + std::to_string(sim) + "/fit_newlib/"; 
+                    std::string solution_path = path_nn + "simulations/sim_" + std::to_string(sim) + "/fit_newlib/"; 
+            
+                    // physics 
+                    FeSpace Vh(D, P1<1>);   // functional space definition
+                    Eigen::Matrix<double, 2, 2> K = read_csv<double>(path_nn + "simulations/sim_" + std::to_string(sim) + "/K.csv").as_matrix(); 
+                    TrialFunction f(Vh);
+                    TestFunction v(Vh);
+                    auto a_D = integral(D)(dot(K * grad(f), grad(v)));
+                    // homogeneous forcing linear form
+                    ZeroField<2> u_D;
+                    auto F_D = integral(D)(u_D * v);
+            
+                    // Start measuring time
+                    auto start_time_gcv = high_resolution_clock::now();
+            
+                    // modeling
+                    MSRPDE m("y ~ x1 + x2 + 1|g + f", data_msrpde, fe_ls_separable_mono(std::pair {a_D, F_D}, std::pair {a_T, F_T}));  
+
+                    m.set_fpirls_max_iter(max_fpirls_iter);
+                    m.set_likelihood_dataloss_type(likelihood_dataloss_type);
+                    m.set_compute_sigma_with_edf(sigma_edf_type); 
+
+                    // calibration
+                    GridSearch<2> opt;   // dimension 2 for space-time problems 
+                    opt.optimize(m.gcv(100, 1234), lambdas_mat);  // stochastic GCV 
+
+                    // Stop measuring time
+                    auto stop_time_gcv = high_resolution_clock::now();
+                    auto duration_gcv = duration_cast<milliseconds>(stop_time_gcv - start_time_gcv).count();
+                    std::cout << "Execution time GCV: " << duration_gcv << " ms" << std::endl;
+
+                    Eigen::Matrix<double, Dynamic, 1> best_lambda = opt.optimum();
+                    std::cout << "Best lambdas are: " << std::setprecision(16) << best_lambda << std::endl; 
+            
+                    // Save lambda sequence 
+                    write_csv(solutions_path_gcv + "lambdas_seq_S.csv", lambdas_d);
+                    write_csv(solutions_path_gcv + "lambdas_seq_T.csv", lambdas_t);
+
+                    std::ofstream fileLambdaoptS(solutions_path_gcv + "lambda_s_opt.csv");
+                    if(fileLambdaoptS.is_open()){
+                        fileLambdaoptS << std::setprecision(16) << best_lambda(0,0);
+                        fileLambdaoptS.close();
+                    }
+                    std::ofstream fileLambdaoptT(solutions_path_gcv + "lambda_t_opt.csv");
+                    if(fileLambdaoptT.is_open()){
+                        fileLambdaoptT << std::setprecision(16) << best_lambda(1,0);
+                        fileLambdaoptT.close();
+                    }
+            
+                    // write_csv(solutions_path_gcv + "score.csv", opt.values());
+
+                    std::ofstream file_time_gcv(solutions_path_gcv + "time_gcv.csv"); 
+                    if(file_time_gcv.is_open()){
+                        file_time_gcv << duration_gcv << "\n";
+                        file_time_gcv.close();
+                    }
+
+
+                    std::cout << "End GCV MSRPDE" << std::endl; 
+                
+        
+                }
+        
+
+            }
+
+
+        }
+
+
+
+    }
+
+    // Simulations MSR-ISO  
+    if(run_msr_iso){
+
+        if(scale_n){
+
+            for(unsigned int nn : nn_vec){
+
+                std::string path_nn = R_path + "n_" + std::to_string(nn) + "/";
+                std::cout << "============ Runnig n = " << nn << " =====" << std::endl;
+
+
+                for(auto sim = sim_start; sim <= n_sim; ++sim){
+
+                    std::cout << "Simulation GCV MSR-ISO #" << std::to_string(sim) << std::endl; 
+        
+                    // data 
+                    GeoFrame data_msr_iso(D, T);
+                    auto& l_msr_iso = data_msr_iso.insert_scalar_layer<POINT, POINT>("layer", std::pair{path_nn + "space_locs.csv", R_path + "time_locs.csv"});
+                    l_msr_iso.load_csv<double>(path_nn + "X.csv");
+                    l_msr_iso.load_csv<double>(path_nn + "ids_groups.csv");              
+
+                    // load data from .csv files
+                    l_msr_iso.load_csv<double>(path_nn + "simulations/sim_" + std::to_string(sim) + "/y_cpp.csv");
+                            
+                    std::string solutions_path_gcv = path_nn + "simulations/sim_" + std::to_string(sim) + "/fit_newlib_iso/"; 
+                    std::string solution_path = path_nn + "simulations/sim_" + std::to_string(sim) + "/fit_newlib_iso/"; 
+            
+                    // physics 
+                    FeSpace Vh(D, P1<1>);   // functional space definition
+                    Eigen::Matrix<double, 2, 2> K; 
+                    K << 1, 0, 0, 1; 
+                    TrialFunction f(Vh);
+                    TestFunction v(Vh);
+                    auto a_D = integral(D)(dot(K * grad(f), grad(v)));
+                    // homogeneous forcing linear form
+                    ZeroField<2> u_D;
+                    auto F_D = integral(D)(u_D * v);
+            
+                    // Start measuring time
+                    auto start_time_gcv = high_resolution_clock::now();
+            
+                    // modeling
+                    MSRPDE m("y ~ x1 + x2 + 1|g + f", data_msr_iso, fe_ls_separable_mono(std::pair {a_D, F_D}, std::pair {a_T, F_T}));  
+
+                    m.set_fpirls_max_iter(max_fpirls_iter);
+                    m.set_likelihood_dataloss_type(likelihood_dataloss_type);
+                    m.set_compute_sigma_with_edf(sigma_edf_type);
+
+                    // calibration
+                    GridSearch<2> opt;   // dimension 2 for space-time problems 
+                    opt.optimize(m.gcv(100, 1234), lambdas_mat);  // stochastic GCV 
+
+                    // Stop measuring time
+                    auto stop_time_gcv = high_resolution_clock::now();
+                    auto duration_gcv = duration_cast<milliseconds>(stop_time_gcv - start_time_gcv).count();
+                    std::cout << "Execution time GCV: " << duration_gcv << " ms" << std::endl;
+
+                    Eigen::Matrix<double, Dynamic, 1> best_lambda = opt.optimum();
+                    std::cout << "Best lambdas are: " << std::setprecision(16) << best_lambda << std::endl; 
+            
+                    // Save lambda sequence 
+                    write_csv(solutions_path_gcv + "lambdas_seq_S.csv", lambdas_d);
+                    write_csv(solutions_path_gcv + "lambdas_seq_T.csv", lambdas_t);
+
+                    std::ofstream fileLambdaoptS(solutions_path_gcv + "lambda_s_opt.csv");
+                    if(fileLambdaoptS.is_open()){
+                        fileLambdaoptS << std::setprecision(16) << best_lambda(0,0);
+                        fileLambdaoptS.close();
+                    }
+                    std::ofstream fileLambdaoptT(solutions_path_gcv + "lambda_t_opt.csv");
+                    if(fileLambdaoptT.is_open()){
+                        fileLambdaoptT << std::setprecision(16) << best_lambda(1,0);
+                        fileLambdaoptT.close();
+                    }
+            
+                    // write_csv(solutions_path_gcv + "score.csv", opt.values());
+
+                    std::ofstream file_time_gcv(solutions_path_gcv + "time_gcv.csv"); 
+                    if(file_time_gcv.is_open()){
+                        file_time_gcv << duration_gcv << "\n";
+                        file_time_gcv.close();
+                    }
+                    
+            
+                }
+            
+
+
+            }
+
+
+
+
+
+        }
+
+
+    }
+   
+
+    return 0;
+}
+
+
 // test 7
 //    mesh:         unit square
 //    sampling:     locations != nodes
@@ -538,7 +832,7 @@ int test_07() {
 
 
     std::vector<double> lambdas_d; std::vector<double> lambdas_t; 
-    std::vector<Eigen::Matrix<double, Dynamic, 1>> lambdas_d_t;
+    // std::vector<Eigen::Matrix<double, Dynamic, 1>> lambdas_d_t;
     
     if(trial_number == "1" || trial_number == "2" || trial_number == "3" || trial_number == "4" || trial_number == "5"){  
         
@@ -550,9 +844,9 @@ int test_07() {
 
     } 
 
-    for(auto i = 0; i < lambdas_d.size(); ++i)
-        for(auto j = 0; j < lambdas_t.size(); ++j) 
-            lambdas_d_t.push_back(Eigen::Matrix<double, 2, 1>(lambdas_d[i], lambdas_t[j]));
+    // for(auto i = 0; i < lambdas_d.size(); ++i)
+    //     for(auto j = 0; j < lambdas_t.size(); ++j) 
+    //         lambdas_d_t.push_back(Eigen::Matrix<double, 2, 1>(lambdas_d[i], lambdas_t[j]));
 
     Eigen::Matrix<double, Dynamic, 2> lambdas_mat(lambdas_d.size()*lambdas_t.size(), 2);
     for(int i = 0; i < lambdas_d.size(); ++i) { 
@@ -963,7 +1257,7 @@ int test_08() {
     auto F_T = integral(T)(u_T * w);    
 
     std::vector<double> lambdas_d; std::vector<double> lambdas_t; 
-    std::vector<Eigen::Matrix<double, Dynamic, 1>> lambdas_d_t;
+    // std::vector<Eigen::Matrix<double, Dynamic, 1>> lambdas_d_t;
     if(trial_number == "1" || trial_number == "2" || trial_number == "3" || trial_number == "4" || trial_number == "5"){
         for(double xs = -7.0; xs <= -5.0; xs += 0.25)   // traslato di 3 ordini (n*m = 1100) rispetto alla lib vecchia  -> inoltre, accorciata sequenza
         lambdas_d.push_back(std::pow(10,xs));
@@ -972,9 +1266,9 @@ int test_08() {
             lambdas_t.push_back(std::pow(10,xt));
     } 
 
-    for(auto i = 0; i < lambdas_d.size(); ++i)
-        for(auto j = 0; j < lambdas_t.size(); ++j) 
-            lambdas_d_t.push_back(Eigen::Matrix<double, 2, 1>(lambdas_d[i], lambdas_t[j]));
+    // for(auto i = 0; i < lambdas_d.size(); ++i)
+    //     for(auto j = 0; j < lambdas_t.size(); ++j) 
+    //         lambdas_d_t.push_back(Eigen::Matrix<double, 2, 1>(lambdas_d[i], lambdas_t[j]));
 
     Eigen::Matrix<double, Dynamic, 2> lambdas_mat(lambdas_d.size()*lambdas_t.size(), 2);
     for(int i = 0; i < lambdas_d.size(); ++i) { 
