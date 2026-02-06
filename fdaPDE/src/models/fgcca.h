@@ -308,11 +308,11 @@ public:
     // Components regularization utilities
     void set_lambda_components(const double lambda) {
         *lambda_components_ = lambda;
-        if (lambda < 0) lambda_components_selection_ = true;
+        if (lambda < 0.0) lambda_components_selection_ = true;
     }
     [[nodiscard]] double lambda_components() const {
         if constexpr (std::same_as<SamplingStrategy, IndependentSampling>) return std::numeric_limits<double>::quiet_NaN();
-        if (!lambda_components_.has_value() && *lambda_components_ > 0) return *lambda_components_;
+        if (!lambda_components_.has_value() && *lambda_components_ > 0.0) return *lambda_components_;
         return std::numeric_limits<double>::quiet_NaN();
     }
     void set_components_gcv_config(const GCVConfig& cfg) { components_gcv_cfg_ = cfg; }
@@ -350,8 +350,8 @@ public:
             } else {
                 const double sigma = std::sqrt(std::max(0.0, *noise_variance_));
                 const auto n = static_cast<double>(n_obs());
-                const auto p = static_cast<double>(n_covs());
-                out.s1_edge = sigma * (std::sqrt(n) + std::sqrt(p)) * (1.0 + relaxation);
+                const auto m = static_cast<double>(n_covs());
+                out.s1_edge = sigma * (std::sqrt(n) + std::sqrt(m)) * (1.0 + relaxation);
                 out.active = (out.s1 > out.s1_edge);
             }
         }
@@ -517,7 +517,7 @@ protected:
         if (!lambda_components_.has_value()){
             if (lambda_components_selection_) {
                 auto [success, l] = select_lambda_with_gcv(components_solver_, components_gcv_cfg_);
-                if (!success) return Vector::Zero(n_nodes_loadings());
+                // if (!success) return Vector::Zero(n_nodes_loadings());
                 *lambda_components_ = l;
                 lambda_components_selection_ = false;
             }
@@ -648,15 +648,15 @@ protected:
 
     // tau estimate using Schäfer–Strimmer analytic shrinkage from correlation
     void select_tau_auto_() {
-        const int n = n_obs(), p = n_covs();
-        if (n < 2 || p < 1) throw std::runtime_error("tau_auto: need n>=2 and p>=1");
+        const int n = n_obs(), m = n_covs();
+        if (n < 2 || m < 1) throw std::runtime_error("tau_auto: need n>=2 and m>=1");
 
         // xs <- scale(x, center=TRUE, scale=TRUE)  [sample sd with (n-1)]
         Eigen::RowVectorXd mu  = data_.colwise().mean();
         Matrix xs = data_.rowwise() - mu;                                   // center
         Eigen::RowVectorXd var = (xs.array().square().colwise().sum() / static_cast<double>(n - 1)).matrix();
         Eigen::RowVectorXd sd  = var.array().sqrt().matrix();
-        for (int j = 0; j < p; ++j) if (!(sd[j] > 0.0) || !std::isfinite(sd[j])) sd[j] = 1.0;
+        for (int j = 0; j < m; ++j) if (!(sd[j] > 0.0) || !std::isfinite(sd[j])) sd[j] = 1.0;
         xs.array().rowwise() /= sd.array();                                 // scale
 
         // XtX = crossprod(xs) = t(xs) %*% xs
@@ -737,10 +737,10 @@ protected:
 
         ensure_lc_(); // make sure loadings() is sized so loadings_m() is OK
         const Vector a_m = Psi_D()*a_();   // effective loading (length n_covs)
-        const int p = n_covs();
+        const int m = n_covs();
 
         // Assemble projection matrix
-        Matrix R = Matrix::Identity(p, p);
+        Matrix R = Matrix::Identity(m, m);
         const double norm = a_m.squaredNorm();
         if (norm <= 0.0) return;
         R.noalias() -= (a_m * a_m.transpose()) / norm;
@@ -1258,7 +1258,7 @@ public:
                     res.active_blocks[j] = true;
                     res.s1_blocks[j] = info.s1;
                     res.s1_edge_blocks[j] = info.s1_edge;
-                    b->compute(info.nu, true);  // block handles normalization
+                    b->compute(info.nu);  // block handles normalization
                 }
             } else { // Random
                 std::mt19937_64 rng(opt_.seed);
@@ -1309,11 +1309,11 @@ public:
                     mark_cov_rowcol_dirty_(l);     // η_l changed → invalidate its row/col
 
                     // this is only to emulate the loadings of the R implementation, it could be dropped eventually
-                    bool even_scheme = (opt_.scheme.name == std::string("Centroid") || opt_.scheme.name == std::string("Factorial"));
-                    if (even_scheme && blocks_[l]->loadings().col(h())(0) < 0) {
-                        blocks_[l]->loadings().col(h()) *= -1.0;
-                        blocks_[l]->components().col(h()) *= -1.0;
-                    }
+                    // bool even_scheme = (opt_.scheme.name == std::string("Centroid") || opt_.scheme.name == std::string("Factorial"));
+                    // if (even_scheme && blocks_[l]->loadings().col(h())(0) < 0) {
+                    //     blocks_[l]->loadings().col(h()) *= -1.0;
+                    //     blocks_[l]->components().col(h()) *= -1.0;
+                    // }
                 }
 
                 const auto [f_obj, f_loss, f_space_reg, f_time_reg] = objective_(res.C, res.active_blocks);
@@ -1568,7 +1568,7 @@ private:
 
 // Pretty printer for a single Result
 inline std::ostream& operator<<(std::ostream& os, const Result& r) {
-    const bool minimal = true;
+    const bool minimal = false;
     if (!minimal) {
         os << "shrinkage parameters used : " << std::endl;
         for (size_t i = 0; i < r.tau_values.size(); ++i) {
