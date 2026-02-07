@@ -412,6 +412,7 @@ struct bs_ls_elliptic {
     // observers
     int n_dofs() const { return n_dofs_; }
     int n_obs() const { return n_obs_;}
+    int n_covs() const { return n_covs_; }
     const binary_t& nan_pattern() const { return nan_pattern_; }
     const sparse_matrix_t mass() const { return R0_; }
     const sparse_matrix_t& stiff() const { return R1_; }
