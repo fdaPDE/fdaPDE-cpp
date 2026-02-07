@@ -1064,7 +1064,7 @@ public:
         Scheme scheme;
 
         explicit Options(
-          const int max_iter_ = 100, const double tol_ = 1e-8, const unsigned seed_ = 0,
+          const int max_iter_ = 1000, const double tol_ = 1e-8, const unsigned seed_ = 0,
           const bool flip_and_scale_ = true,
           const bool allow_blocks_deactivation_ = true,
           const bool bias_ = true,
@@ -1294,6 +1294,7 @@ public:
         if ( !no_connections_(res.C) ) {
             // require lambda selection also at the first iteration
             if (opt_.lambda_selection == LambdaSelection::Automatic) { set_lambda_auto_all_(); }
+            auto a_prev = snapshot_loadings_();
             for (int s = 0; s < opt_.max_iter; ++s) {
                 for (int l = 0; l < J; ++l) {
                     Vector nu_l = Vector::Zero(blocks_[l]->n_obs());
@@ -1324,9 +1325,16 @@ public:
                 res.time_reg_history.push_back(f_time_reg);
                 res.iters = s + 1;
 
+                // check monotonicity
                 if (f_obj + 1e-15 < obj_prev) res.monotone = false;
-                const double rel  = std::abs(f_obj - obj_prev); // / (std::abs(obj_prev) + 1e-16);
-                if (rel < opt_.tol) break;
+
+                // check convergence
+                const double delta_obj = std::abs(f_obj - obj_prev);
+                const double delta_a2  = loadings_delta2_(a_prev);
+                if (delta_obj < opt_.tol || delta_a2 < opt_.tol) break;
+
+                // update snapshot for next iter
+                a_prev = snapshot_loadings_();
             }
         }
         if (opt_.flip_and_scale) flip_and_scale_all_to_unit_score_variance_();
@@ -1354,6 +1362,26 @@ public:
     [[nodiscard]] const SparseMatrix& Psi_T() const { return Psi_T_; };
 
 private:
+
+    double loadings_delta2_(const std::vector<typename Block::Vector>& a_prev) const {
+        const int J = n_blocks();
+        double acc = 0.0;
+        for (int j = 0; j < J; ++j) {
+            // skip inactive blocks if you want exact R behavior after deactivation
+            const auto aj = blocks_[j]->loadings().col(h_);
+            const auto dj = aj - a_prev[j];
+            acc += dj.squaredNorm();
+        }
+        return acc;
+    }
+
+    std::vector<typename Block::Vector> snapshot_loadings_() const {
+        const int J = n_blocks();
+        std::vector<typename Block::Vector> out;
+        out.reserve(J);
+        for (int j = 0; j < J; ++j) out.push_back(blocks_[j]->loadings().col(h_));
+        return out;
+    }
 
     void flip_and_scale_all_to_unit_score_variance_() {
         for (auto& b : blocks_) {
@@ -1568,7 +1596,7 @@ private:
 
 // Pretty printer for a single Result
 inline std::ostream& operator<<(std::ostream& os, const Result& r) {
-    const bool minimal = false;
+    const bool minimal = true;
     if (!minimal) {
         os << "shrinkage parameters used : " << std::endl;
         for (size_t i = 0; i < r.tau_values.size(); ++i) {
@@ -1620,21 +1648,21 @@ inline std::ostream& operator<<(std::ostream& os, const Result& r) {
         prev_time_reg = time_reg;
     }
     os << std::endl;
-    os << "reconstruction constraint :\n";
-    for (size_t i = 0; i < r.reconstruction_error.size(); ++i) {
-        if (!r.active_blocks[i] || r.reconstruction_edge[i] == 0) {
-            os << "- Block " << i+1  << ": " << "non-active" << "\n";
-        } else {
-            const bool check = r.reconstruction_error[i] <= r.reconstruction_edge[i];
-            os << "- Block " << i+1  << ": " << (check ? "satisfied    " : "not-satisfied" )
-               << " ("<< std::setw(10) << r.reconstruction_error[i] << (check ? " ≤ " : " > ") << std::setw(10) << r.reconstruction_edge[i] << ")";
-            os << ", equality for σ_noise = "
-               << std::sqrt(r.noise_variance) << " -> "
-               << std::sqrt(r.reconstruction_error[i]/r.reconstruction_edge[i] * r.noise_variance);
-            std::cout << "\n";
-        }
-    }
     if (!minimal) {
+        os << "reconstruction constraint :\n";
+        for (size_t i = 0; i < r.reconstruction_error.size(); ++i) {
+            if (!r.active_blocks[i] || r.reconstruction_edge[i] == 0) {
+                os << "- Block " << i+1  << ": " << "non-active" << "\n";
+            } else {
+                const bool check = r.reconstruction_error[i] <= r.reconstruction_edge[i];
+                os << "- Block " << i+1  << ": " << (check ? "satisfied    " : "not-satisfied" )
+                   << " ("<< std::setw(10) << r.reconstruction_error[i] << (check ? " ≤ " : " > ") << std::setw(10) << r.reconstruction_edge[i] << ")";
+                os << ", equality for σ_noise = "
+                   << std::sqrt(r.noise_variance) << " -> "
+                   << std::sqrt(r.reconstruction_error[i]/r.reconstruction_edge[i] * r.noise_variance);
+                std::cout << "\n";
+            }
+        }
         os << std::endl;
         os << "covariance matrix :\n";
         os << std::fixed << std::setprecision(2);
