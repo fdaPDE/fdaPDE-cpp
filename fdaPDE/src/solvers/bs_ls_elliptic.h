@@ -339,7 +339,7 @@ struct bs_ls_elliptic {
                 int seed_ = (seed == random_seed) ? std::random_device()() : seed;
                 std::mt19937 rng(seed_);
                 rademacher_distribution rademacher;
-                Us_->resize(n_locs_, r);
+                Us_ = matrix_t(n_locs_, r);
                 for (int i = 0; i < n_locs_; ++i) {
                     for (int j = 0; j < r; ++j) { Us_->operator()(i, j) = rademacher(rng); }
                 }

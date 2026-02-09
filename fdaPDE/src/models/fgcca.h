@@ -246,16 +246,16 @@ public:
 
     template<typename S = SamplingStrategy>
     requires std::same_as<S, IndependentSampling>
-    BaseBlock(const std::string& block_name, const Matrix& data, const int n_nodes_loadings, const double tau = 0.0) :
-        block_name_(block_name), data_(data), components_solver_(data.rows()), n_nodes_loadings_(n_nodes_loadings), tau_(tau) {
+    BaseBlock(const std::string& block_name, const Matrix& data, const int n_dofs_loadings, const double tau = 0.0) :
+        block_name_(block_name), data_(data), components_solver_(data.rows()), n_dofs_loadings_(n_dofs_loadings), tau_(tau) {
         // Init components solver
         components_solver_.analyze_data();
     }
 
     template<typename S = SamplingStrategy>
     requires std::same_as<SamplingStrategy, TimeDependentSampling>
-    BaseBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Vector& times, const Matrix& data, const int n_nodes_loadings, const double tau = 0.0) :
-        block_name_(block_name), times_(times), data_(data), n_nodes_loadings_(n_nodes_loadings), tau_(tau) {
+    BaseBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Vector& times, const Matrix& data, const int n_dofs_loadings, const double tau = 0.0) :
+        block_name_(block_name), times_(times), data_(data), n_dofs_loadings_(n_dofs_loadings), tau_(tau) {
         // Init sparse identity
         I_.resize(n_obs(), n_obs());
         I_.setIdentity();
@@ -282,7 +282,7 @@ public:
     // Dimensions
     [[nodiscard]] int n_obs() const { return static_cast<int>(data_.rows()); }
     [[nodiscard]] int n_covs() const { return static_cast<int>(data_.cols()); }
-    [[nodiscard]] int n_nodes_loadings() const { return n_nodes_loadings_; }
+    [[nodiscard]] int n_dofs_loadings() const { return n_dofs_loadings_; }
 
     // Components
     [[nodiscard]] int n_comp() const { return n_comp_; }
@@ -517,7 +517,7 @@ protected:
         if (!lambda_components_.has_value()){
             if (lambda_components_selection_) {
                 auto [success, l] = select_lambda_with_gcv(components_solver_, components_gcv_cfg_);
-                // if (!success) return Vector::Zero(n_nodes_loadings());
+                // if (!success) return Vector::Zero(n_dofs_loadings());
                 *lambda_components_ = l;
                 lambda_components_selection_ = false;
             }
@@ -700,7 +700,7 @@ protected:
     // Loadings and Components
     void ensure_lc_() {
         if (!loadings_ready_) {
-            loadings_.setZero(n_nodes_loadings_, n_comp_);
+            loadings_.setZero(n_dofs_loadings_, n_comp_);
             loadings_ready_ = true;
         }
         if (!components_ready_) {
@@ -756,7 +756,7 @@ protected:
     Vector times_{0};
     const std::string block_name_;
     Matrix data_; // n_obs x n_covs
-    int n_nodes_loadings_ {0};
+    int n_dofs_loadings_ {0};
     double tau_ {0.0};
     int n_comp_ {1};
     int h_ {0};
@@ -802,7 +802,7 @@ public:
     using Base::invSigma;
     using Base::n_obs;
     using Base::n_covs;
-    using Base::n_nodes_loadings;
+    using Base::n_dofs_loadings;
     using Base::data;
     using Base::loadings;
     using Base::components;
@@ -823,7 +823,7 @@ public:
     }
 
     void init_multivariate() {
-        Psi_D_.resize(n_covs(), n_nodes_loadings()); // n_covs == n_nodes_loadings in this case
+        Psi_D_.resize(n_covs(), n_dofs_loadings()); // n_covs == n_dofs_loadings in this case
         Psi_D_.setIdentity();
         init();
     }
@@ -834,7 +834,7 @@ public:
     // Print
     void print(std::ostream& os) const override {
         Base::print(os);
-        os << "type: MultivariateBlock, n_nodes_loadings = n_covs = " << n_nodes_loadings();
+        os << "type: MultivariateBlock, n_dofs_loadings = n_covs = " << n_dofs_loadings();
         os << "\n";
     }
 
@@ -864,7 +864,7 @@ public:
     using Base::invSigma;
     using Base::n_obs;
     using Base::n_covs;
-    using Base::n_nodes_loadings;
+    using Base::n_dofs_loadings;
     using Base::data;
     using Base::components;
     using Base::h;
@@ -872,14 +872,14 @@ public:
     template <typename GeoFrame>
     requires std::same_as<SamplingStrategy, IndependentSampling>
     FunctionalBlock(const std::string& block_name, GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, const double tau = 0.0) :
-        Base(block_name, gf[0].template col<double>(block_name).as_matrix().transpose(), gf.template triangulation<0>().n_nodes(), tau) {
+        Base(block_name, gf[0].template col<double>(block_name).as_matrix().transpose(), loadings_penalty.get().bilinear_form().n_dofs(), tau) { // TODO get the correct number of dofs
         init_functional(gf, std::forward<LoadingsPenaltyType>(loadings_penalty));
     }
 
     template <typename GeoFrame>
     requires std::same_as<SamplingStrategy, TimeDependentSampling>
     FunctionalBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Vector& times, GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, const double tau = 0.0) :
-        Base(block_name, T, times, gf[0].template col<double>(block_name).as_matrix().transpose(), gf.template triangulation<0>().n_nodes(), tau) {
+        Base(block_name, T, times, gf[0].template col<double>(block_name).as_matrix().transpose(), loadings_penalty.get().bilinear_form().n_dofs(), tau) { // TODO get the correct number of dofs
         init_functional(gf, std::forward<LoadingsPenaltyType>(loadings_penalty));
     }
 
@@ -910,7 +910,7 @@ public:
     // Print
     void print(std::ostream& os) const override {
         Base::print(os);
-        os << "type: FunctionalBlock, n_nodes_loadings = " << n_nodes_loadings();
+        os << "type: FunctionalBlock, n_dofs_loadings = " << n_dofs_loadings();
         os << ", lambda = " << lambda_loadings_;
         os << "\n";
     }
@@ -928,11 +928,11 @@ protected:
                 auto [success, lambda_opt] = select_lambda_with_gcv(loadings_solver_, loadings_gcv_cfg_);
                 if (!success) {
                     success_ = false;
-                    return Vector::Zero(n_nodes_loadings());
+                    return Vector::Zero(n_dofs_loadings());
                 }
                 lambda_loadings_ = lambda_opt; // the optimal lambda is saved for subsequent calls
             } else {
-                return Vector::Zero(n_nodes_loadings());
+                return Vector::Zero(n_dofs_loadings());
             }
         }
         loadings_solver_.fit(lambda_loadings_);
