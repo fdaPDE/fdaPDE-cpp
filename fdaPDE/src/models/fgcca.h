@@ -197,7 +197,7 @@ template<class Fun> inline std::pair<double,double> argmin_over_log_grid(Fun&& f
 struct GCVConfig {
     // log10 λ range (broad defaults; adjust if you know scale)
     double log10_min = -12.0;
-    double log10_max = 4.0;
+    double log10_max = 0.0;
     int grid = 100;
 
     // edf() stochastic trace settings (if your solver uses Hutch++ etc.)
@@ -270,14 +270,14 @@ public:
 
     // Initialization
     void init() {
-        ensure_sigma_();
+        ensure_M_();
         ensure_lc_();
     }
 
     // Data
     [[nodiscard]] const std::string& name() const { return block_name_; }
     [[nodiscard]] const Matrix& data() const { return data_; }
-    Matrix& data() { invalidate_sigma_(); return data_; }
+    Matrix& data() { invalidate_M_(); return data_; }
 
     // Dimensions
     [[nodiscard]] int n_obs() const { return static_cast<int>(data_.rows()); }
@@ -299,8 +299,11 @@ public:
     void set_tau(const double tau) {
         if (tau > 0) tau_ = tau;
         else select_tau_auto_();
-        invalidate_sigma_();
+        invalidate_M_();
     }
+
+    // Normalization parameter
+    [[nodiscard]] double rho() const { return rho_; }
 
     // Bias flag
     void set_bias(const bool bias) { bias_ = bias; }
@@ -338,7 +341,6 @@ public:
         const Eigen::BDCSVD<Matrix> svd(X, Eigen::ComputeThinU);
         if (svd.singularValues().size() == 0) return out;
 
-
         if (allow_block_deactivation){
             out.s1 = svd.singularValues()(0);
             const double fro2 = X.squaredNorm();
@@ -364,9 +366,9 @@ public:
         return out;
     }
 
-    // Sigma
-    [[nodiscard]] const SparseMatrix& Sigma() const { ensure_sigma_(); return Sigma_; }
-    SparseSolver& invSigma() { ensure_sigma_(); return invSigma_; }
+    // M: normalization matrix
+    [[nodiscard]] const SparseMatrix& M() const { ensure_M_(); return M_; }
+    SparseSolver& invM() { ensure_M_(); return invM_; }
 
     // Current component index & Deflation
     [[nodiscard]] int h() const { return h_; }
@@ -379,55 +381,25 @@ public:
         case Deflation::Loadings: deflate_loadings_(); break;
         case Deflation::None: default: break;
         }
-        // data_ changed -> Σ invalid; cached scores/loadings are now stale
-        invalidate_sigma_();
+        // data_ changed -> M invalid; cached scores/loadings are now stale
+        invalidate_M_();
     }
 
     // Main compute method
-    void compute(const Vector& nu_D, const bool allow_compensation = false) {
+    void compute(const Vector& nu_D) {
 
-        // Compute the inner-component loading contribution
-        const Vector a_D = l_fit_(nu_D);
-        double rho_star = compute_multipliers_(a_D);
+        // Compute the loading
+        const Vector a_tilde = l_fit_(nu_D);
+        rho_ = compute_multipliers_(a_tilde);
 
-        // Normalized the loading and the non-regularized component
-        Vector a = l_fit_(nu_D/rho_star);
+        // Normalize the loading and the non-regularized component
+        Vector a = a_tilde / rho_;
         Vector s = data() * Psi_D() * a;
-
-        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
-            if (noise_variance_.has_value() && allow_compensation){ // in this way, we are sure that it is set, and we can use it
-
-                // Compute the self-connected inner-component
-                const Vector nu_T = Psi_T()*eta_();
-                const Vector& eta_t = nu_T;
-
-                // Compute the self-connected inner-component contribution
-                const Vector a_T = l_fit_(nu_T); // this call contaminates the solver ...
-
-                // Compute the reconstruction constraint error and edge
-                const double error = (s-eta_t).squaredNorm()/n_obs();
-                const double sigma_sqr_l = noise_variance() * (Psi_D() * a_()).squaredNorm();
-
-                // KKT condition
-                double mu_star = 0;
-                if (const bool constraint_active = error > sigma_sqr_l; constraint_active) {
-                    if (eta_().norm() != 0 && a_D.norm() != 0 && a_T.norm() != 0) {
-                        // std::cout << "Correction: rho_star = " << rho_star << ", mu_star = " << mu_star << std::endl;
-                        const auto [rho, mu] = compute_multipliers_(a_D, a_T, eta_t);
-                        rho_star = rho; mu_star = mu;
-                    }
-                }
-
-                // Update the solver and the non-regularized component
-                a = l_fit_((nu_D + mu_star * nu_T) / rho_star); // ... so this call is fundamental!
-                s = data() * Psi_D() * a;
-            }
-        }
 
         // Save the loading
         loadings().col(h()) = a;
 
-        // Fit regularized scores and save it (this actually does something only with TimeDependentSampling)
+        // Fit regularized scores and save it
         components().col(h()) = c_fit_(s);
     }
 
@@ -468,6 +440,11 @@ public:
     [[nodiscard]] const SparseMatrix& Psi_T() const { return components_solver_.Psi(); }
 
     // Penalty evaluation
+    [[nodiscard]] double evaluate(const Vector& nu) {
+        double a = 1./n_obs() * nu.transpose() * components_m().col(h());
+        double b = atPa();
+        return a; // - b;
+    }
     [[nodiscard]] double ntPn() { return components_solver_.ftPf( lambda_components() ); }
     [[nodiscard]] virtual double atPa() { return 0.; }
 
@@ -531,115 +508,11 @@ protected:
     // Lagrange Multipliers utilities
     [[nodiscard]] double compute_multipliers_(const Vector& a_D) const {
         const Vector a_m_D = Psi_D()*a_D;
-        const double norm_sqr = a_m_D.dot(Sigma() * a_m_D);
+        // rho_ = 1.;
+        const double norm_sqr = a_m_D.dot(M() * a_m_D) + atPa();
         if (norm_sqr <= 0.0) return 1;
         const double norm = std::sqrt(norm_sqr);
         return norm;
-    }
-    [[nodiscard]] std::tuple<double, double> compute_multipliers_(const Vector& a_D, const Vector& a_T, const Vector& eta_t) {
-
-        // helper function
-        auto cov = [&](const Vector& u, const Vector& v) -> double {
-            assert(u.size()==v.size());
-            const double den = bias_ ? n_obs() : std::max(1, n_obs() - 1);
-            return (u.dot(v)) / den;
-        };
-
-        // room for results
-        double rho_star = 1;
-        double mu_star = 0;
-
-        // Space contribution to the loading
-        Vector a_m_D = Psi_D() * a_D;
-        const Vector s_D = data() * a_m_D;
-
-        // Time contribution to the loading
-        Vector a_m_T = Psi_D() * a_T;
-        const Vector s_T = data() * a_m_T;
-
-        // Compute a, b, c (quadratic form of μ inside ρ) ----
-        const double a = a_m_T.transpose() * Sigma() * a_m_T;
-        const double b = a_m_D.transpose() * Sigma() * a_m_T;
-        const double c = a_m_D.transpose() * Sigma() * a_m_D;
-
-        auto rho_of_mu = [&](double mu) -> double {
-            const double Q = a*mu*mu + 2.0*b*mu + c;
-            return (Q>=0.0) ? std::sqrt(Q) : std::numeric_limits<double>::quiet_NaN();
-        };
-
-        // Compute covariances ----
-        const double C_DD = cov(s_D,  s_D);
-        const double C_TT = cov(s_T,  s_T);
-        const double C_DT = cov(s_D,  s_T);
-        const double C_ND = cov(eta_t, s_D);
-        const double C_NT = cov(eta_t, s_T);
-        const double C_NN = cov(eta_t, eta_t);
-
-        // Compute noise-variance lower-bounds
-        double s_1 = ((C_NN*C_TT-C_NT*C_NT)/C_TT) + 0.01;
-        double s_2 = ((C_TT-2*std::sqrt(a)*C_NT)/a + C_NN) + 0.01;
-        double sigma_sqr_l = noise_variance() * (Psi_D() * a_()).squaredNorm();
-
-
-        if (C_ND < 0) {
-            std::cout << "negative C_ND in block "<< name() << ", comp. " << h()+1 << " mu estimation suppressed" << std::endl;
-            mu_star = 0;
-            rho_star = rho_of_mu(mu_star);
-            return {rho_star, mu_star};
-        }
-
-        const double s = std::max(sigma_sqr_l, s_2);
-        if (s != sigma_sqr_l) {
-            // std::cout << "noise variance updated in block "<< name() << ", comp. " << h()+1 << " : s = " << sigma_sqr_l << " -> " << s << std::endl;
-        }
-
-        // Compute noise coefficient ----
-        const double d  = s - C_NN;
-
-        // KKT conditions
-        auto f = [&](double mu) -> double {
-            const double rho = std::sqrt(a*mu*mu + 2.0*b*mu + c);
-            if (!std::isfinite(rho)) return std::numeric_limits<double>::infinity();
-
-            const double P = C_TT*mu*mu + 2.0*C_DT*mu + C_DD;
-            const double L = C_NT*mu + C_ND;
-            return (P - d*(a*mu*mu + 2.0*b*mu + c)) - 2.0*L*rho;  // target = 0
-        };
-
-
-        /*
-            std::cout << std::endl;
-            std::cout << "Inspection: " << std::endl;
-            std::cout << "n_a: " << (Psi_D()*a_()).squaredNorm() << std::endl;
-            std::cout << "t: " << tau() << std::endl;
-            std::cout << "a: " << a << std::endl;
-            std::cout << "b: " << b << std::endl;
-            std::cout << "c: " << c << std::endl;
-            std::cout << "w: " << a_m_D.dot(a_m_T) << std::endl;
-            std::cout << "C_ND: " << C_ND << std::endl;
-            std::cout << "C_NT: " << C_NT << std::endl;
-            std::cout << "-------------" << std::endl;
-            std::cout << "d: " << d << std::endl;
-            std::cout << "C_TT: " << C_TT << std::endl;
-            std::cout << "C_DT: " << C_DT << std::endl;
-            std::cout << "C_DD: " << C_DD << std::endl;
-            std::cout << "C_NN: " << C_NN << std::endl;
-            std::cout << "s1 = " << s_1 << std::endl;
-            std::cout << "s2 = " << s_2 << std::endl;
-            std::cout << "-------------" << std::endl;
-        */
-
-        if (f(0) <= 0) {
-            mu_star = 0;
-            rho_star = rho_of_mu(mu_star);
-            // std::cout << "The constraint is satisfied after updating the noise_variance" << std::endl;
-        } else {
-            mu_star = find_root_secant(f, 0.0, 10.0, 10.0);
-            rho_star = rho_of_mu(mu_star);
-            // std::cout << "Correction: rho_star = " << rho_star << ", mu_star = " << mu_star << std::endl;
-        }
-
-        return {rho_star, mu_star};
     }
 
     // Current loading and component getters
@@ -677,25 +550,27 @@ protected:
         const double den = D.squaredNorm();
 
         const double tau_hat = (den > 0.0) ? std::clamp(num / den, 0.0, 1.0) : 0.0;
-        set_tau(tau_hat);  // invalidates Sigma_; recomputed lazily
+        set_tau(tau_hat);  // invalidates M_; recomputed lazily
     }
 
-    // Sigma
-    void compute_sigma_() {
+    // M
+    void compute_M_() {
         SparseMatrix I(n_covs(), n_covs());
         I.setIdentity();
-        const double den = bias_ ? n_obs() : std::max(1, n_obs() - 1);
-        const Matrix dense = ((1.0 - tau_) / den) * (data_.transpose() * data_);
-        Sigma_ = dense.sparseView(1e-12);
-        if (tau_ != 0.0) Sigma_ += tau_ * I;
-        Sigma_.makeCompressed();
-        invSigma_.compute(Sigma_);
-        sigma_ready_ = true;
+        M_ = tau_ * I;
+        if (tau_ < 0.999) {
+            const double den = bias_ ? n_obs() : std::max(1, n_obs() - 1);
+            const Matrix dense = ((1.0 - tau_) / den) * (data_.transpose() * data_);
+            M_ += dense.sparseView(1e-12);
+        }
+        M_.makeCompressed();
+        invM_.compute(M_);
+        M_ready_ = true;
     }
-    void ensure_sigma_() const {
-        if (!sigma_ready_) const_cast<BaseBlock*>(this)->compute_sigma_();
+    void ensure_M_() const {
+        if (!M_ready_) const_cast<BaseBlock*>(this)->compute_M_();
     }
-    void invalidate_sigma_() { sigma_ready_ = false; }
+    void invalidate_M_() { M_ready_ = false; }
 
     // Loadings and Components
     void ensure_lc_() {
@@ -761,6 +636,7 @@ protected:
     int n_comp_ {1};
     int h_ {0};
     bool bias_ = true;
+    double rho_ {1.0};
 
     // Parameters
     GCVConfig components_gcv_cfg_;
@@ -773,11 +649,11 @@ protected:
 
     // Utilities
     SparseMatrix I_; // n_obs x n_obs identity matrix
-    SparseMatrix Sigma_;
-    SparseSolver invSigma_;
+    SparseMatrix M_;
+    SparseSolver invM_;
 
     // Flags
-    bool sigma_ready_ {false};
+    bool M_ready_ {false};
     bool loadings_ready_ {false}, components_ready_ {false};
 };
 
@@ -798,8 +674,8 @@ public:
     using SparseMatrix = typename Base::SparseMatrix;
 
     using Base::init;
-    using Base::Sigma;
-    using Base::invSigma;
+    using Base::M;
+    using Base::invM;
     using Base::n_obs;
     using Base::n_covs;
     using Base::n_dofs_loadings;
@@ -842,7 +718,7 @@ protected:
     Vector l_fit_(const Vector& nu) override {
         assert(nu.size() == n_obs() && "nu must have size n_obs (rows of X)");
         init();
-        return invSigma().solve(data().transpose() * nu);
+        return invM().solve(data().transpose() * nu);
     }
 
 private:
@@ -860,14 +736,15 @@ public:
     using CovariatesSolverType = typename std::decay_t<LoadingsPenaltyType>::solver_t;
 
     using Base::init;
-    using Base::Sigma;
-    using Base::invSigma;
+    using Base::M;
+    using Base::invM;
     using Base::n_obs;
     using Base::n_covs;
     using Base::n_dofs_loadings;
     using Base::data;
     using Base::components;
     using Base::h;
+    using Base::rho;
 
     template <typename GeoFrame>
     requires std::same_as<SamplingStrategy, IndependentSampling>
@@ -886,7 +763,7 @@ public:
     template <typename GeoFrame>
     void init_functional(GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty) {
         loadings_solver_.discretize(loadings_penalty.get());
-        loadings_solver_.analyze_data(gf, Sigma());
+        loadings_solver_.analyze_data(gf, M());
         init();
     }
 
@@ -895,7 +772,7 @@ public:
 
     // Penalty evaluation
     [[nodiscard]] double atPa() override {
-        if (success_) return loadings_solver_.ftPf( lambda_loadings());
+        if (success_) return loadings_solver_.ftPf(lambda_loadings()); //  * 0.5 / (rho()*rho());
         return 0.;
     }
 
@@ -919,8 +796,8 @@ protected:
         assert(nu.size() == n_obs() && "nu must have size n_obs (rows of X)");
         init();
 
-        const Vector z = invSigma().solve(data().transpose() * nu);
-        loadings_solver_.update_response_and_weights(z, Sigma());
+        const Vector z = invM().solve(data().transpose() * nu);
+        loadings_solver_.update_response_and_weights(z, M()*z.size()); // M()*z.size() because the solver normalizes inside
 
         // lambda selection if required
         if(lambda_loadings_ < 0.0) {
@@ -1290,7 +1167,6 @@ public:
             res.space_reg_history.push_back(f_space_reg);
             res.time_reg_history.push_back(f_time_reg);
         }
-
         if ( !no_connections_(res.C) ) {
             // require lambda selection also at the first iteration
             if (opt_.lambda_selection == LambdaSelection::Automatic) { set_lambda_auto_all_(); }
@@ -1306,7 +1182,18 @@ public:
                         const double w_lk = opt_.scheme.w(cov_lk);
                         nu_l.noalias() += w_lk * eta_(*blocks_[k], *blocks_[l]);   // no aliasing with RHS
                     }
-                    blocks_[l]->compute(nu_l, opt_.allow_reconstruction_constraint_compensation);   // block handles normalization
+                    /*double ev_prev = 0;
+                    if (s>0) {
+                        std::cout << "iter = " << s << ", j = " << l+1 << " : f(a_j^s  ) = ";
+                        ev_prev = blocks_[l]->evaluate(nu_l);
+                        std::cout << ev_prev << std::endl;
+                    }*/
+                    blocks_[l]->compute(nu_l);   // block handles normalization
+                    /*if (s>0) {
+                        std::cout << "                  f(a_j^s+1) = ";
+                        double ev_post = blocks_[l]->evaluate(nu_l);
+                        std::cout << ev_post << " improv = " << ev_post -  ev_prev << std::endl;
+                    }*/
                     mark_cov_rowcol_dirty_(l);     // η_l changed → invalidate its row/col
 
                     // this is only to emulate the loadings of the R implementation, it could be dropped eventually
@@ -1481,11 +1368,11 @@ private:
         for (int j = 0; j < J; ++j) {
             const Vector eta_j = eta_(*blocks_[j]);
             for (int k = j; k < J; ++k){
-                if (C(j, k)) {
-                    const double cjk = cov_value_(j, k, eta_j, eta_(*blocks_[k]));
+                if (C(j, k)) { // c_jk *
+                    const double cov_jk = cov_value_(j, k, eta_j, eta_(*blocks_[k]));
                     // std::cout << "j: " << j << ", k: " << k << " -> C_jk:" << cjk << std::endl;
                     double mult = j==k ? 1.0 : 2.0;
-                    f += mult * opt_.scheme.g(cjk);
+                    f += mult * opt_.scheme.g(cov_jk);
                 }
             }
 
@@ -1493,20 +1380,17 @@ private:
         const double f_loss = f;
         double f_space_reg = 0.;
         double f_time_reg = 0.;
-        // std::cout << "without regularization: " << f << std::endl;
-        for (int j = 0; j < J; ++j) {
+        /* for (int j = 0; j < J; ++j) {
             if (active_blocks[j]) {
                 const double atPa = blocks_[j]->atPa();
                 // std::cout << "j: "<< j <<" atPa = " << atPa << std::endl;
                 f_space_reg += atPa;
                 const double ntPn = blocks_[j]->ntPn();
-                f_time_reg += ntPn;
+                // f_time_reg += ntPn;
                 // std::cout << "j: "<< j <<" ntPn = " << ntPn << std::endl;
                 f -= atPa + ntPn; //
             }
-        }
-        // std::cout << "with regularization: " << f << std::endl;
-        // std::cout << "<-----------------"<<  std::endl;
+        } */
         return {f, f_loss, f_space_reg, f_time_reg};
     }
 
@@ -1596,7 +1480,7 @@ private:
 
 // Pretty printer for a single Result
 inline std::ostream& operator<<(std::ostream& os, const Result& r) {
-    const bool minimal = true;
+    const bool minimal = false;
     if (!minimal) {
         os << "shrinkage parameters used : " << std::endl;
         for (size_t i = 0; i < r.tau_values.size(); ++i) {
@@ -1630,6 +1514,15 @@ inline std::ostream& operator<<(std::ostream& os, const Result& r) {
     double prev_loss = r.loss_history[0];
     double prev_space_reg = r.space_reg_history[0];
     double prev_time_reg = r.time_reg_history[0];
+    /*
+    os << "- iter " << std::setw(3) << (0)
+   << "   |   fit = " << std::setw(12) << std::setprecision(8) << std::fixed << prev_obj << " = "
+   << std::setw(6) << std::setprecision(4) << std::fixed << prev_loss << " (" <<  ")" << " - "
+   << std::setw(6) << std::setprecision(4) << std::fixed << prev_space_reg << " (" << ")" << " - "
+   << std::setw(6) << std::setprecision(4) << std::fixed << prev_time_reg << " (" << ")"
+   << "   |   overall diff = " << std::setw(7) << "\n";
+    os << std::fixed << std::setprecision(8);
+    */
     for (size_t i = 1; i < r.obj_history.size(); ++i) {
         const double obj = r.obj_history[i];
         const double loss = r.loss_history[i];
