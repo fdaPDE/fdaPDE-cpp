@@ -29,6 +29,38 @@ enum class Deflation { None, Scores, Loadings };
 
 namespace internals {
 
+void ginv(const Eigen::MatrixXd& X,
+                     Eigen::MatrixXd& ginvX,
+                     double tol = std::sqrt(std::numeric_limits<double>::epsilon())){
+    // SVD
+    Eigen::BDCSVD<Eigen::MatrixXd> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
+
+    const auto& d = svd.singularValues();
+
+    const double d1 = d(0);
+    const double thresh = std::max(tol * d1, 0.0);
+
+    // Identify Positive singular values
+    std::vector<int> idx;
+    idx.reserve(d.size());
+    for (int i = 0; i < d.size(); ++i) {
+        if (d(i) > thresh) idx.push_back(i);
+    }
+
+    // Compute V_pos * diag(1/d_pos) * U_pos^T * z without forming full matrices
+    Eigen::MatrixXd Upos(X.rows(), (int)idx.size());
+    Eigen::MatrixXd Vpos(X.cols(), (int)idx.size());
+    Eigen::VectorXd invd((int)idx.size());
+
+    for (int k = 0; k < (int)idx.size(); ++k) {
+        Upos.col(k) = svd.matrixU().col(idx[k]);
+        Vpos.col(k) = svd.matrixV().col(idx[k]);
+        invd(k) = 1.0 / d(idx[k]);
+    }
+
+    ginvX = Vpos * (invd.asDiagonal() * (Upos.transpose()));
+}
+
 // Generic secant root finder for a scalar function f(mu)
 double find_root_secant(std::function<double(double)> f,
                         double xL = 0.0,          // left starting point
@@ -277,7 +309,7 @@ public:
     // Data
     [[nodiscard]] const std::string& name() const { return block_name_; }
     [[nodiscard]] const Matrix& data() const { return data_; }
-    Matrix& data() { invalidate_M_(); return data_; }
+    // Matrix& data() { invalidate_M_(); return data_; }
 
     // Dimensions
     [[nodiscard]] int n_obs() const { return static_cast<int>(data_.rows()); }
@@ -297,7 +329,7 @@ public:
     // Shrinkage parameter
     [[nodiscard]] double tau() const { return tau_; }
     void set_tau(const double tau) {
-        if (tau > 0) tau_ = tau;
+        if (tau >= 0) tau_ = tau;
         else select_tau_auto_();
         invalidate_M_();
     }
@@ -338,7 +370,7 @@ public:
         const Matrix& X = data();
         if (X.size() == 0) return out;
 
-        const Eigen::BDCSVD<Matrix> svd(X, Eigen::ComputeThinU);
+        const Eigen::BDCSVD<Matrix> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
         if (svd.singularValues().size() == 0) return out;
 
         if (allow_block_deactivation){
@@ -359,7 +391,8 @@ public:
         }
 
         if (out.active) {
-            out.nu = svd.matrixU().col(0);
+            if (X.rows() >= X.cols()) out.nu = X * svd.matrixV().col(0);
+            else out.nu = svd.matrixU().col(0);
         } else {
             out.nu.setZero();
         }
@@ -368,7 +401,8 @@ public:
 
     // M: normalization matrix
     [[nodiscard]] const SparseMatrix& M() const { ensure_M_(); return M_; }
-    SparseSolver& invM() { ensure_M_(); return invM_; }
+    [[nodiscard]] const Matrix& ginvM() const { ensure_ginvM_(); return ginvM_; }
+    // SparseSolver& invM() { ensure_M_(); return invM_; }
 
     // Current component index & Deflation
     [[nodiscard]] int h() const { return h_; }
@@ -506,7 +540,7 @@ protected:
     }
 
     // Lagrange Multipliers utilities
-    [[nodiscard]] double compute_multipliers_(const Vector& a_D) const {
+    [[nodiscard]] double compute_multipliers_(const Vector& a_D) {
         const Vector a_m_D = Psi_D()*a_D;
         // rho_ = 1.;
         const double norm_sqr = a_m_D.dot(M() * a_m_D) + atPa();
@@ -558,19 +592,28 @@ protected:
         SparseMatrix I(n_covs(), n_covs());
         I.setIdentity();
         M_ = tau_ * I;
-        if (tau_ < 0.999) {
-            const double den = bias_ ? n_obs() : std::max(1, n_obs() - 1);
-            const Matrix dense = ((1.0 - tau_) / den) * (data_.transpose() * data_);
-            M_ += dense.sparseView(1e-12);
-        }
+        const double den = bias_ ? n_obs() : std::max(1, n_obs() - 1);
+        const Matrix Sigma = ((1.0 - tau_) / den) * (data_.transpose() * data_);
+        M_ += Sigma.sparseView();
         M_.makeCompressed();
-        invM_.compute(M_);
+        // invM_.compute(M_);
         M_ready_ = true;
+        ginvM_ready_ = false;
+    }
+    void compute_ginvM_() {
+        ginvM_.resize(n_covs(), n_covs());
+        Eigen::MatrixXd M_dense = Eigen::MatrixXd(M());
+        ginv(M_dense, ginvM_);
+        ginvM_ready_ = true;
     }
     void ensure_M_() const {
         if (!M_ready_) const_cast<BaseBlock*>(this)->compute_M_();
     }
-    void invalidate_M_() { M_ready_ = false; }
+    void ensure_ginvM_() const {
+        ensure_M_(); // sets ginvM_ready = false
+        if (!ginvM_ready_) const_cast<BaseBlock*>(this)->compute_ginvM_();
+    }
+    void invalidate_M_() { M_ready_ = false; } // this is enough to invalitade also ginvM
 
     // Loadings and Components
     void ensure_lc_() {
@@ -592,17 +635,14 @@ protected:
         // Then X <- R X
 
         ensure_lc_(); // make sure components() is sized
-        const Vector eta_m = Psi_T()*eta_();   // effective components (length n_obs)
-        const int n = n_obs();
+        const Vector y = Psi_T()*eta_();   // effective components (length n_obs)
 
-        // Assemble projection matrix
-        Matrix R = Matrix::Identity(n, n);
-        const double norm = eta_m.squaredNorm();
-        if (norm <= 0.0) return;
-        R.noalias() -= (eta_m * eta_m.transpose()) / norm;
-
-        // Apply left projection in scores space
-        data_ = R * data_;
+        // y = eta_m
+        double yy = y.squaredNorm();
+        if (yy > 0) {
+            Vector p = data_.transpose() * y / yy;     // p = X' y / (y'y)
+            data_.noalias() -= y * p.transpose();      // X <- X - y p^T
+        }
     }
     void deflate_loadings_() {
 
@@ -650,10 +690,11 @@ protected:
     // Utilities
     SparseMatrix I_; // n_obs x n_obs identity matrix
     SparseMatrix M_;
-    SparseSolver invM_;
+    Matrix ginvM_;
+    // SparseSolver invM_;
 
     // Flags
-    bool M_ready_ {false};
+    bool M_ready_ {false}, ginvM_ready_ {false};
     bool loadings_ready_ {false}, components_ready_ {false};
 };
 
@@ -675,7 +716,8 @@ public:
 
     using Base::init;
     using Base::M;
-    using Base::invM;
+    using Base::ginvM;
+    // using Base::invM;
     using Base::n_obs;
     using Base::n_covs;
     using Base::n_dofs_loadings;
@@ -718,7 +760,8 @@ protected:
     Vector l_fit_(const Vector& nu) override {
         assert(nu.size() == n_obs() && "nu must have size n_obs (rows of X)");
         init();
-        return invM().solve(data().transpose() * nu);
+        Vector z = data().transpose() * nu;
+        return ginvM() * z;
     }
 
 private:
@@ -737,7 +780,7 @@ public:
 
     using Base::init;
     using Base::M;
-    using Base::invM;
+    // using Base::invM;
     using Base::n_obs;
     using Base::n_covs;
     using Base::n_dofs_loadings;
@@ -1197,11 +1240,14 @@ public:
                     mark_cov_rowcol_dirty_(l);     // η_l changed → invalidate its row/col
 
                     // this is only to emulate the loadings of the R implementation, it could be dropped eventually
-                    // bool even_scheme = (opt_.scheme.name == std::string("Centroid") || opt_.scheme.name == std::string("Factorial"));
-                    // if (even_scheme && blocks_[l]->loadings().col(h())(0) < 0) {
-                    //     blocks_[l]->loadings().col(h()) *= -1.0;
-                    //     blocks_[l]->components().col(h()) *= -1.0;
-                    // }
+                    bool even_scheme = (opt_.scheme.name == std::string("Centroid") || opt_.scheme.name == std::string("Factorial"));
+                    Eigen::Index imax;
+                    auto a = blocks_[l]->loadings().col(h());
+                    a.cwiseAbs().maxCoeff(&imax);
+                    if (even_scheme && a(imax) < 0) {
+                        blocks_[l]->loadings().col(h()) *= -1.0;
+                        blocks_[l]->components().col(h()) *= -1.0;
+                    }
                 }
 
                 const auto [f_obj, f_loss, f_space_reg, f_time_reg] = objective_(res.C, res.active_blocks);
