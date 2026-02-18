@@ -402,7 +402,7 @@ public:
     // M: normalization matrix
     [[nodiscard]] const SparseMatrix& M() const { ensure_M_(); return M_; }
     [[nodiscard]] const Matrix& ginvM() const { ensure_ginvM_(); return ginvM_; }
-    // SparseSolver& invM() { ensure_M_(); return invM_; }
+    [[nodiscard]] SparseSolver& invM() { ensure_invM_(); return invM_; }
 
     // Current component index & Deflation
     [[nodiscard]] int h() const { return h_; }
@@ -596,9 +596,13 @@ protected:
         const Matrix Sigma = ((1.0 - tau_) / den) * (data_.transpose() * data_);
         M_ += Sigma.sparseView();
         M_.makeCompressed();
-        // invM_.compute(M_);
         M_ready_ = true;
         ginvM_ready_ = false;
+        invM_ready_ = false;
+    }
+    void compute_invM_() {
+        invM_.compute(M_);
+        invM_ready_ = true;
     }
     void compute_ginvM_() {
         ginvM_.resize(n_covs(), n_covs());
@@ -608,6 +612,10 @@ protected:
     }
     void ensure_M_() const {
         if (!M_ready_) const_cast<BaseBlock*>(this)->compute_M_();
+    }
+    void ensure_invM_() const {
+        ensure_M_(); // sets ginvM_ready = false
+        if (!ginvM_ready_) const_cast<BaseBlock*>(this)->compute_invM_();
     }
     void ensure_ginvM_() const {
         ensure_M_(); // sets ginvM_ready = false
@@ -691,10 +699,10 @@ protected:
     SparseMatrix I_; // n_obs x n_obs identity matrix
     SparseMatrix M_;
     Matrix ginvM_;
-    // SparseSolver invM_;
+    SparseSolver invM_;
 
     // Flags
-    bool M_ready_ {false}, ginvM_ready_ {false};
+    bool M_ready_ {false}, invM_ready_ {false}, ginvM_ready_ {false};
     bool loadings_ready_ {false}, components_ready_ {false};
 };
 
@@ -780,7 +788,9 @@ public:
 
     using Base::init;
     using Base::M;
-    // using Base::invM;
+    using Base::tau;
+    using Base::ginvM;
+    using Base::invM;
     using Base::n_obs;
     using Base::n_covs;
     using Base::n_dofs_loadings;
@@ -839,8 +849,12 @@ protected:
         assert(nu.size() == n_obs() && "nu must have size n_obs (rows of X)");
         init();
 
-        const Vector z = invM().solve(data().transpose() * nu);
-        loadings_solver_.update_response_and_weights(z, M()*z.size()); // M()*z.size() because the solver normalizes inside
+        Vector z;
+        z.resize(n_covs());
+        if (tau()>0) z = invM().solve(data().transpose() * nu);
+        else z = ginvM() * data().transpose() * nu;
+        double n = z.size();
+        loadings_solver_.update_response_and_weights(z, M()*n); // M()*n because the solver normalizes inside
 
         // lambda selection if required
         if(lambda_loadings_ < 0.0) {
