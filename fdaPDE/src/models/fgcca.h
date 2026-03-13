@@ -170,32 +170,32 @@ struct IndependentSampling {
     using solver_t = internals::identity_ls;
 };
 struct TimeDependentSampling {
-    using solver_t = internals::fe_ls_elliptic;
+    using solver_t = internals::bs_ls_elliptic;
     using Matrix = Eigen::MatrixXd;
     using SparseMatrix = Eigen::SparseMatrix<double>;
     using PointEvalType = std::function<SparseMatrix(const Matrix&)>;
 
     static void discretize(const Triangulation<1, 1>& T, solver_t& solver_) {
         // define physic in space (same for all the blocks)
-        FeSpace Vh(T, P1<1>);
-        TrialFunction f_T(Vh);
-        TestFunction  v_T(Vh);
-        auto a_T = integral(T)(dx(f_T) * dx(v_T));
-        ZeroField<1> u;
-        auto F_T = integral(T)(u * v_T);
-        auto penalty = fdapde::fe_ls_elliptic(a_T, F_T);
+        BsSpace Bh(T, 3);
+        TrialFunction f_T(Bh);
+        TestFunction  v_T(Bh);
+        auto a_T = integral(T)(dxx(f_T) * dxx(v_T));
+        ZeroField<1> u_T;
+        auto F_T = integral(T)(u_T * v_T);
+        auto penalty = fdapde::bs_ls_elliptic(a_T, F_T);
         solver_.discretize(penalty.get());
     }
 
     static void compute_Psi(const Triangulation<1, 1>& T, const Matrix& times, SparseMatrix& Psi) {
         // define physic in space (same for all the blocks)
-        FeSpace Vh(T, P1<1>);
-        TrialFunction f_T(Vh);
-        TestFunction  v_T(Vh);
+        BsSpace Bh(T, 3);
+        TrialFunction f_T(Bh);
+        TestFunction  v_T(Bh);
         auto a_T = integral(T)(dx(f_T) * dx(v_T));
-        ZeroField<1> u;
-        auto F_T = integral(T)(u * v_T);
-        auto penalty = fdapde::fe_ls_elliptic(a_T, F_T);
+        ZeroField<1> u_T;
+        auto F_T = integral(T)(u_T * v_T);
+        auto penalty = fdapde::bs_ls_elliptic(a_T, F_T);
         // compute point eval functor
         using BilinearForm = typename std::decay_t<decltype(penalty.get())>::BilinearForm;
         const BilinearForm& bilinear_form = penalty.get().bilinear_form();
@@ -255,7 +255,8 @@ template <class Smoother> struct GCVEval {
         const double rss = (yhat - y).squaredNorm();
 
         const double dor = std::max( cfg.eps_dof, static_cast<double>(n) - (static_cast<double>(q) + trS) ); // residual dof
-        return (static_cast<double>(n) / (dor * dor)) * rss;
+        double gcv_index = (static_cast<double>(n) / (dor * dor)) * rss;
+        return gcv_index;
     }
 };
 template <typename SolverType> std::pair<bool, double> select_lambda_with_gcv(SolverType& solver, const GCVConfig& gcv_cfg) {
