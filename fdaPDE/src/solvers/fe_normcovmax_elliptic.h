@@ -251,50 +251,6 @@ struct fe_normcovmax_elliptic {
         return fit(lambda[0]);
     }
 
-    // hutchinson approximation for Tr[S]
-    double edf(int r = 100, int seed = random_seed) {
-        fdapde_assert(lambda_saved_.has_value());
-        if (!Ys_.has_value() || !Bs_.has_value() || r != Us_->rows()) {   // force reconstruction if r differs from old
-            int seed_ = (seed == random_seed) ? std::random_device()() : seed;
-            std::mt19937 rng(seed_);
-            rademacher_distribution rademacher;
-            Us_ = matrix_t(n_locs_, r);
-            for (int i = 0; i < n_locs_; ++i) {
-                for (int j = 0; j < r; ++j) { Us_->operator()(i, j) = rademacher(rng); }
-            }
-            Ys_ = Us_->transpose() * Psi_;
-            Bs_ = matrix_t::Zero(2 * n_dofs_, r);   // implicitly enforce homogeneous forcing
-        }
-        Bs_->topRows(n_dofs_) = -PsiNA().transpose() * (*Us_);
-        // enforce Dirichlet BCs, if any
-        for (size_t i = 0; i < dirichlet_dofs_.size(); ++i) {
-            Bs_->row(dirichlet_dofs_[i]).setConstant(dirichlet_vals_[i]);
-        }
-        matrix_t x = invA_.solve(*Bs_);
-        double trS = 0;   // monte carlo Tr[S] approximation
-        for (int i = 0; i < r; ++i) { trS += Ys_->row(i).dot(x.col(i).head(n_dofs_)); }
-        return trS / r;
-    }
-    template <typename LambdaT>
-    requires(internals::is_vector_like_v<LambdaT> || std::is_floating_point_v<LambdaT>)
-    double edf(const LambdaT& lambda, int r = 100, int seed = random_seed) {
-        double lambda_;
-        if constexpr (internals::is_vector_like_v<LambdaT>) {
-            fdapde_assert(lambda.size() == n_lambda && lambda[0] > 0);
-            lambda_ = lambda[0];
-        } else {
-            fdapde_assert(lambda > 0);
-            lambda_ = lambda;
-        }
-        if (lambda_saved_.value() != lambda_) {
-            SparseBlockMatrix<double, 2, 2> A(-PsiNA().transpose() * D_ * W_ * PsiNA(), lambda_ * R1_.transpose(), lambda_ * R1_, lambda_ * R0_);
-	        enforce_lhs_dirichlet_bc_(A);
-            invA_.compute(A);
-            lambda_saved_ = lambda_;
-        }
-        return edf(r, seed);
-    }
-
     // penalty matrix: \lambda * R1^\top * (R0)^{-1} * R1
     matrix_t P(double lambda) const {
         if (!invR0_.has_value()) { invR0_.compute(R0_); }
@@ -339,15 +295,11 @@ struct fe_normcovmax_elliptic {
     const vector_t& response() const { return z_; }
     const sparse_matrix_t& weights() const { return W_; }
     double lambda() const { return *lambda_saved_; }
-  
-    const matrix_t& U() const { return U_; }
-    const matrix_t& V() const { return V_; }
+
    protected:
     std::optional<double> lambda_saved_ = -1;
     sparse_solver_t invA_;
     matrix_t b_;
-    // matrices for Hutchinson stochastic estimation of Tr[S]
-    std::optional<matrix_t> Ys_, Bs_, Us_;
   
     int n_dofs_ = 0, n_locs_ = 0, n_obs_ = 0, n_covs_ = 0;
     sparse_matrix_t R0_;    // n_dofs x n_dofs matrix [R0]_{ij} = \int_D \psi_i * \psi_j
@@ -358,6 +310,7 @@ struct fe_normcovmax_elliptic {
     mutable sparse_solver_t invR0_;
     std::optional<sparse_matrix_t> B_;   // \Psi matrix corrected for missing observations
     vector_t f_, g_;
+
     // basis system evaluation handles
     std::function<sparse_matrix_t(const matrix_t& locs)> point_eval_;
     std::function<std::pair<sparse_matrix_t, vector_t>(const binarz_t& locs)> areal_eval_;
@@ -366,7 +319,6 @@ struct fe_normcovmax_elliptic {
 
     vector_t z_;               // n_obs x 1 observation vector
     sparse_matrix_t W_;        // n_obs x n_obs matrix of observation weights
-    matrix_t U_, V_;           // (2 * n_dofs) x n_covs matrices [\Psi^\top * D * W * z, 0] and [X^\top * W * \Psi, 0]
     bool W_changed_;
 };
 

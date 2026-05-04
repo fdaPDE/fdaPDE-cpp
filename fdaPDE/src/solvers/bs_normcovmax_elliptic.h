@@ -86,22 +86,6 @@ struct bs_normcovmax_elliptic {
     using solver_category = ls_solver;
 
     bs_normcovmax_elliptic() noexcept = default;
-    // construct from formula + geoframe
-    template <typename GeoFrame, typename Penalty, typename WeightMatrix>
-        requires(is_valid_penalty_v<Penalty>)
-    bs_normcovmax_elliptic(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
-        fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
-        // fdapde_assert(gf.n_layers() == 1);
-        // n_obs_  = gf[0].rows();
-        // n_locs_ = n_obs_;
-        discretize(penalty);
-        analyze_data(formula, gf, W);
-    }
-    template <typename GeoFrame, typename Penalty>
-        requires(is_valid_penalty_v<Penalty>)
-    bs_normcovmax_elliptic(const std::string& formula, const GeoFrame& gf, Penalty&& penalty) :
-        bs_normcovmax_elliptic(formula, gf, penalty, vector_t::Ones(gf[0].rows()).asDiagonal()) { }
-    // construct with no data
     template <typename GeoFrame, typename Penalty, typename WeightMatrix>
         requires(is_valid_penalty_v<Penalty>)
     bs_normcovmax_elliptic(const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
@@ -241,47 +225,6 @@ struct bs_normcovmax_elliptic {
         return fit(lambda[0]);
     }
 
-    // hutchinson approximation for Tr[S]
-    double edf(int r = 100, int seed = random_seed) {
-        fdapde_assert(lambda_saved_.has_value());
-
-        if (!Ys_.has_value() || !Bs_.has_value()) {
-            int seed_ = (seed == random_seed) ? std::random_device()() : seed;
-            std::mt19937 rng(seed_);
-            rademacher_distribution rademacher;
-            Us_ = matrix_t(n_locs_, r);
-            for (int i = 0; i < n_locs_; ++i) {
-                for (int j = 0; j < r; ++j) { Us_->operator()(i, j) = rademacher(rng); }
-            }
-            Ys_ = Us_->transpose() * Psi_;
-            Bs_ = matrix_t::Zero(n_dofs_, r);   // implicitly enforce homogeneous forcing
-        }
-        Bs_ = PsiNA().transpose() * (*Us_);
-        matrix_t x = invA_.solve(*Bs_);
-        double trS = 0;   // monte carlo Tr[S] approximation
-        for (int i = 0; i < r; ++i) { trS += Ys_->row(i).dot(x.col(i)); }
-        return trS / r;
-
-    }
-    template <typename LambdaT>
-        requires(internals::is_vector_like_v<LambdaT> || std::is_floating_point_v<LambdaT>)
-    double edf(const LambdaT& lambda, int r = 100, int seed = random_seed) {
-        double lambda_;
-        if constexpr (internals::is_vector_like_v<LambdaT>) {
-            fdapde_assert(lambda.size() == n_lambda && lambda[0] > 0);
-            lambda_ = lambda[0];
-        } else {
-            fdapde_assert(lambda > 0);
-            lambda_ = lambda;
-        }
-        if (lambda_saved_.value() != lambda_) {
-            sparse_matrix_t A = PsiNA().transpose() * D_ * W_ * PsiNA() + lambda_ * R1_;
-            // TODO: Dirichlet boundary conditions
-            invA_.compute(A);
-            lambda_saved_ = lambda_;
-        }
-        return edf(r, seed);
-    }
     // penalty matrix: \lambda * R1
     sparse_matrix_t P(double lambda) const {
         return lambda * R1_;
@@ -323,16 +266,11 @@ struct bs_normcovmax_elliptic {
     const sparse_matrix_t& weights() const { return W_; }
     double lambda() const { return *lambda_saved_; }
 
-    const matrix_t& U() const { return U_; }
-    const matrix_t& V() const { return V_; }
-
    protected:
     std::optional<double> lambda_saved_ = -1;
     sparse_solver_t invA_;
     sparse_matrix_t A_;
     matrix_t b_;
-    // matrices for Hutchinson stochastic estimation of Tr[S]
-    std::optional<matrix_t> Ys_, Bs_, Us_;
 
     int n_dofs_ = 0, n_locs_ = 0, n_obs_ = 0, n_covs_ = 0;
     sparse_matrix_t R0_;    // n_dofs x n_dofs matrix [R0]_{ij} = \int_D \psi_i * \psi_j
@@ -348,7 +286,6 @@ struct bs_normcovmax_elliptic {
     vector_t z_;               // n_obs x 1 observation vector
     binary_t nan_pattern_;     // n_obs x 1 indicator vector for NaNs
     sparse_matrix_t W_;        // n_obs x n_obs matrix of observation weights
-    matrix_t U_, V_;           // (2 * n_dofs) x n_covs matrices [\Psi^\top * D * W * z, 0] and [X^\top * W * \Psi, 0]
     bool W_changed_;
 
     // basis eval handles

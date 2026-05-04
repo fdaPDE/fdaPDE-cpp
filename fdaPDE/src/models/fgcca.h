@@ -748,7 +748,6 @@ public:
         if (lambda_weights_ > 0) return lambda_weights_;
         return std::numeric_limits<double>::quiet_NaN();
     }
-    void set_weights_gcv_config(const GCVConfig& cfg) { weights_gcv_cfg_ = cfg; }
 
     // Print
     void print(std::ostream& os) const override {
@@ -765,20 +764,13 @@ protected:
         Vector z = data().transpose() * nu;
         weights_solver_.update_z_and_weights(z, M());
 
-        // lambda selection if required
-        if(lambda_weights_ < 0.0) {
-            auto [success, lambda_opt] = select_lambda_with_gcv(weights_solver_, weights_gcv_cfg_);
-            lambda_weights_ = lambda_opt; // the optimal lambda is saved for subsequent calls
-        }
-
         // fit
         weights_solver_.fit(lambda_weights_);
         return weights_solver_.f();
     }
 private:
     WeightsSolverType weights_solver_;
-    double lambda_weights_ = -1.0; // < 0 means "use GCV"
-    GCVConfig weights_gcv_cfg_;
+    double lambda_weights_ = 1e-15;
 };
 
 
@@ -1249,7 +1241,7 @@ private:
     }
 
     void set_tau_auto_all_() const { for (auto& b : blocks_) b->select_tau_auto(); }
-    void set_lambda_auto_all_() const { set_lambda_components_all(-1); set_lambda_weights_all(-1); }
+    void set_lambda_auto_all_() const { set_lambda_components_all(-1); }
 
     void set_noise_variance_all_() const { for (auto& b : blocks_) b->set_noise_variance(*noise_variance_); }
 
