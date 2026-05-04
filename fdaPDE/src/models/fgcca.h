@@ -24,19 +24,15 @@ namespace fdapde {
 enum class Init { Random, SVD };
 enum class DesignMode {Empty, FullyConnected};
 enum class LambdaSelection {Manual, Automatic};
-enum class TauSelection {Manual, Automatic};
-enum class Deflation { None, Scores, Loadings };
+enum class Mode { CorMax, Regularized, CovMax };
+enum class Deflation { None, Scores };
 
 namespace internals {
 
-void ginv(const Eigen::MatrixXd& X,
-                     Eigen::MatrixXd& ginvX,
-                     double tol = std::sqrt(std::numeric_limits<double>::epsilon())){
+void ginv(const Eigen::MatrixXd& X, Eigen::MatrixXd& ginvX, double tol = std::sqrt(std::numeric_limits<double>::epsilon())){
     // SVD
     Eigen::BDCSVD<Eigen::MatrixXd> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
-
     const auto& d = svd.singularValues();
-
     const double d1 = d(0);
     const double thresh = std::max(tol * d1, 0.0);
 
@@ -59,66 +55,6 @@ void ginv(const Eigen::MatrixXd& X,
     }
 
     ginvX = Vpos * (invd.asDiagonal() * (Upos.transpose()));
-}
-
-// Generic secant root finder for a scalar function f(mu)
-double find_root_secant(std::function<double(double)> f,
-                        double xL = 0.0,          // left starting point
-                        double xR_init = 10.0,    // initial right point
-                        double step = 10.0,        // how much to increase xR until sign changes
-                        int max_expand = 100,      // max expansions to avoid infinite loop
-                        double tol = 1e-8,
-                        int max_iter = 100) {
-
-    double fL = f(xL);
-    if (!std::isfinite(fL))
-        throw std::runtime_error("f(xL) not finite.");
-    if (fL < 0)
-        throw std::runtime_error("f(xL) < 0.");
-
-    // Expand xR until we get fR < 0 (opposite sign)
-    double xR = xR_init;
-    double fR = f(xR);
-    int expand_count = 0;
-    while ((fL * fR > 0.0 || !std::isfinite(fR)) && expand_count < max_expand) {
-        xR += step;
-        fR = f(xR);
-        expand_count++;
-    }
-
-    if (expand_count == max_expand)
-        throw std::runtime_error("Unable to find a sign change: f(x) stays same sign.");
-
-    // --- Secant iterations ---
-    double x_prev = xL;
-    double f_prev = fL;
-    double x_curr = xR;
-    double f_curr = fR;
-
-    for (int iter = 0; iter < max_iter; ++iter) {
-        if (std::fabs(f_curr - f_prev) < 1e-15)
-            break; // avoid division by zero
-
-        // Secant update
-        const double x_next = x_curr - f_curr * (x_curr - x_prev) / (f_curr - f_prev);
-        const double f_next = f(x_next);
-
-        if (!std::isfinite(f_next))
-            break; // probably diverged
-
-        // Convergence check
-        if (std::fabs(f_next) < tol || std::fabs(x_next - x_curr) < tol)
-            return x_next;
-
-        // Shift
-        x_prev = x_curr;
-        f_prev = f_curr;
-        x_curr = x_next;
-        f_curr = f_next;
-    }
-
-    // Return best current estimate
-    return x_curr;
 }
 
 struct empty_t {
@@ -147,7 +83,7 @@ struct identity_ls {
 
     void update_response_and_weights(const vector_t& y, const sparse_matrix_t& /*W*/) { y_ = y; }
 
-    // Identity: fitted values equal response
+    // Identity: fitted values equal z
     void fit(double /*lambda*/) { f_ = y_; }
 
     // Outputs
@@ -279,27 +215,25 @@ public:
 
     template<typename S = SamplingStrategy>
     requires std::same_as<S, IndependentSampling>
-    BaseBlock(const std::string& block_name, const Matrix& data, const int n_dofs_loadings, const double tau = 0.0) :
-        block_name_(block_name), data_(data), components_solver_(data.rows()), n_dofs_loadings_(n_dofs_loadings), tau_(tau) {
+    BaseBlock(const std::string& block_name, const Matrix& data, const int n_dofs_weights) :
+        block_name_(block_name), data_(data), components_solver_(data.rows()), n_dofs_weights_(n_dofs_weights) {
         // Init components solver
         components_solver_.analyze_data();
     }
 
     template<typename S = SamplingStrategy>
     requires std::same_as<SamplingStrategy, TimeDependentSampling>
-    BaseBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Vector& times, const Matrix& data, const int n_dofs_loadings, const double tau = 0.0) :
-        block_name_(block_name), times_(times), data_(data), n_dofs_loadings_(n_dofs_loadings), tau_(tau) {
+    BaseBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Vector& times, const Matrix& data, const int n_dofs_weights) :
+        block_name_(block_name), times_(times), data_(data), n_dofs_weights_(n_dofs_weights) {
         // Init sparse identity
-        I_.resize(n_obs(), n_obs());
+        I_.resize(n(), n());
         I_.setIdentity();
         // Init components solver
         SamplingStrategy::discretize(T, components_solver_);
-        components_solver_.analyze_data(Matrix{times}, Vector::Zero(n_obs()), I_);
+        components_solver_.analyze_data(Matrix{times}, Vector::Zero(n()), I_);
     }
 
     virtual ~BaseBlock() = default;
-
-    // ---- Uniform public API ----
 
     // Initialization
     void init() {
@@ -310,12 +244,11 @@ public:
     // Data
     [[nodiscard]] const std::string& name() const { return block_name_; }
     [[nodiscard]] const Matrix& data() const { return data_; }
-    // Matrix& data() { invalidate_M_(); return data_; }
 
     // Dimensions
-    [[nodiscard]] int n_obs() const { return static_cast<int>(data_.rows()); }
-    [[nodiscard]] int n_covs() const { return static_cast<int>(data_.cols()); }
-    [[nodiscard]] int n_dofs_loadings() const { return n_dofs_loadings_; }
+    [[nodiscard]] int n() const { return static_cast<int>(data_.rows()); }
+    [[nodiscard]] int m() const { return static_cast<int>(data_.cols()); }
+    [[nodiscard]] int n_dofs_weights() const { return n_dofs_weights_; }
 
     // Components
     [[nodiscard]] int n_comp() const { return n_comp_; }
@@ -323,20 +256,21 @@ public:
         if (n_comp <= 0) throw std::invalid_argument("n_comp must be > 0");
         n_comp_ = n_comp;
         // force resize on next access
-        loadings_ready_ = false;
+        weights_ready_ = false;
         components_ready_ = false;
     }
 
-    // Shrinkage parameter
+    // Mode & Shrinkage parameter
     [[nodiscard]] double tau() const { return tau_; }
-    void set_tau(const double tau) {
-        if (tau >= 0) tau_ = tau;
-        else select_tau_auto_();
+    void select_tau_auto() { select_tau_auto_(); }
+    void set_mode(const Mode mode) {
+        mode_ = mode;
+        if (mode_ == Mode::CorMax) tau_ = 0.0;
+        if (mode_ == Mode::CovMax) tau_ = 1.0;
+        if (mode_ == Mode::Regularized) select_tau_auto_();
         invalidate_M_();
     }
-
-    // Normalization parameter
-    [[nodiscard]] double rho() const { return rho_; }
+    [[nodiscard]] Mode mode() const { return mode_; }
 
     // Bias flag
     void set_bias(const bool bias) { bias_ = bias; }
@@ -348,14 +282,14 @@ public:
     }
     [[nodiscard]] double lambda_components() const {
         if constexpr (std::same_as<SamplingStrategy, IndependentSampling>) return std::numeric_limits<double>::quiet_NaN();
-        if (!lambda_components_.has_value() && *lambda_components_ > 0.0) return *lambda_components_;
+        if (lambda_components_.has_value() && *lambda_components_ > 0.0) return *lambda_components_;
         return std::numeric_limits<double>::quiet_NaN();
     }
     void set_components_gcv_config(const GCVConfig& cfg) { components_gcv_cfg_ = cfg; }
 
-    // Loadings regularization utilities
-    virtual void set_lambda_loadings(const double) {};
-    [[nodiscard]] virtual double lambda_loadings() const { return std::numeric_limits<double>::quiet_NaN(); }
+    // Weights regularization utilities
+    virtual void set_lambda_weights(const double) {};
+    [[nodiscard]] virtual double lambda_weights() const { return std::numeric_limits<double>::quiet_NaN(); }
 
     // Noise variance
     void set_noise_variance(const double noise_variance) { noise_variance_ = std::max(0.0, noise_variance); }
@@ -367,7 +301,7 @@ public:
     // Inner-Component initialization
     struct InitInfo { bool active{false}; Vector nu; double s1{0}; double s1_edge{0}; double frac{0}; };
     InitInfo svd_init(const bool allow_block_deactivation, const double relaxation = 0.) const {
-        InitInfo out{true, Vector::Zero(n_obs()), 0.0, 0.0, 0.0};
+        InitInfo out{true, Vector::Zero(n()), 0.0, 0.0, 0.0};
         const Matrix& X = data();
         if (X.size() == 0) return out;
 
@@ -379,14 +313,14 @@ public:
             const double fro2 = X.squaredNorm();
             out.frac = (fro2 > 0.0) ? (out.s1*out.s1)/fro2 : 0.0;
 
-            // If no σ² set, fall back to your energy test
+            // If noise_variance_ is not set, fall back to energy test
             if (!noise_variance_.has_value()) {
                 out.active = (out.frac >= 1e-3);
             } else {
                 const double sigma = std::sqrt(std::max(0.0, *noise_variance_));
-                const auto n = static_cast<double>(n_obs());
-                const auto m = static_cast<double>(n_covs());
-                out.s1_edge = sigma * (std::sqrt(n) + std::sqrt(m)) * (1.0 + relaxation);
+                const auto n_obs = static_cast<double>(n());
+                const auto n_covs = static_cast<double>(m());
+                out.s1_edge = sigma * (std::sqrt(n_obs) + std::sqrt(n_covs)) * (1.0 + relaxation);
                 out.active = (out.s1 > out.s1_edge);
             }
         }
@@ -405,62 +339,54 @@ public:
     [[nodiscard]] const Matrix& ginvM() const { ensure_ginvM_(); return ginvM_; }
     [[nodiscard]] SparseSolver& invM() { ensure_invM_(); return invM_; }
 
-    // Current component index & Deflation
+    // Current component index
     [[nodiscard]] int h() const { return h_; }
     void set_h(const int idx) { if (idx < 0 || idx >= n_comp_) throw std::out_of_range("h"); h_ = idx; }
     void next_component() { set_h(h_ + 1); }
-    void deflate(const Deflation mode) {
-        if (h() == n_comp()) throw std::out_of_range("h");
-        switch (mode) {
-        case Deflation::Scores:   deflate_scores_(); break;
-        case Deflation::Loadings: deflate_loadings_(); break;
-        case Deflation::None: default: break;
-        }
-        // data_ changed -> M invalid; cached scores/loadings are now stale
-        invalidate_M_();
-    }
 
     // Main compute method
     void compute(const Vector& nu_D) {
 
-        // Compute the loading
-        const Vector a_tilde = l_fit_(nu_D);
-        rho_ = compute_multipliers_(a_tilde);
+        // Compute the weight
+        const Vector a = w_fit_(nu_D);
+        weights().col(h()) = a;
 
-        // Normalize the loading and the non-regularized component
-        Vector a = a_tilde / rho_;
-        Vector s = data() * Psi_D() * a;
-
-        // Save the loading
-        loadings().col(h()) = a;
-
-        // Fit regularized scores and save it
+        // Compute the component and regularize it (the regularization acts only in the TimeDependent sampling scenrio)
+        const Vector s = data() * Psi_D() * a;
         components().col(h()) = c_fit_(s);
     }
 
-    // Scaling method
-    void flip_and_scale_to_unit_score_variance(const SparseMatrix& Psi) {
-        // Scale factor so that Var(eta_t) = 1 where eta_t has length that depends on Psi
-        const Vector eta_t = Psi*eta_();
-        const double den = bias_ ? eta_t.size() : std::max(1, static_cast<int>(eta_t.size()) - 1);
-        const double v = (eta_t).squaredNorm() / den;
-        if (v <= 0.0) return;
-        const double norm = std::sqrt(v);
+    // Deflation
+    void deflate(const Deflation mode) {
+        if (h() == n_comp()) throw std::out_of_range("h");
+        switch (mode) {
+            case Deflation::Scores: deflate_scores_(); break;
+            case Deflation::None: default: break;
+        }
+        invalidate_M_();
+    }
 
-        // Sign flip
-        double sign = 1;
-        if (a_().mean() < 0) sign = -1.0;
-
-        // Apply to loadings and scores
-        components().col(h()) /= sign * norm;
-        loadings().col(h()) /= sign * norm;
+    // Post-processing weights
+    void compute_weights_star() {
+        ensure_lc_();
+        weights_star_.setZero(weights_.rows(), weights_.cols());
+        for (int h = 0; h < n_comp_; ++h) {
+            Vector a_star = weights_.col(h);
+            if (h > 0) {
+                const Matrix A_prev = weights_star_.leftCols(h);
+                const Matrix P_prev = deflation_projections_.leftCols(h);
+                const Vector coeff = P_prev.transpose() * (Psi_D() * weights_.col(h));
+                a_star.noalias() -= A_prev * coeff;
+            }
+            weights_star_.col(h) = a_star;
+        }
     }
 
     std::pair<double, double> reconstruction_constraint_info() {
         const Vector a_m = Psi_D() * a_();
         const Vector eta_t = Psi_T() * eta_();
         const Vector r = data() * a_m - eta_t;
-        const double den = n_obs();
+        const double den = n();
         const double mse = r.squaredNorm() / den;
 
         if (noise_variance_.has_value()) {
@@ -471,21 +397,14 @@ public:
     }
 
     // Psi matrices
-    [[nodiscard]] virtual const SparseMatrix& Psi_D() const = 0; // It depends on the loadings solver
+    [[nodiscard]] virtual const SparseMatrix& Psi_D() const = 0; // It depends on the weights' solver
     [[nodiscard]] const SparseMatrix& Psi_T() const { return components_solver_.Psi(); }
 
-    // Penalty evaluation
-    [[nodiscard]] double evaluate(const Vector& nu) {
-        double a = 1./n_obs() * nu.transpose() * components_m().col(h());
-        double b = atPa();
-        return a; // - b;
-    }
-    [[nodiscard]] double ntPn() { return components_solver_.ftPf( lambda_components() ); }
-    [[nodiscard]] virtual double atPa() { return 0.; }
-
-    // Loadings & Components
-    Matrix& loadings() { ensure_lc_(); return loadings_; }
-    Matrix loadings_m() { ensure_lc_(); return Psi_D() * loadings_; }
+    // Weights & Components
+    Matrix& weights() { ensure_lc_(); return weights_; }
+    Matrix weights_m() { ensure_lc_(); return Psi_D() * weights_; }
+    Matrix& weights_star() { ensure_lc_(); return weights_star_; }
+    Matrix weights_star_m() { ensure_lc_(); return Psi_D() * weights_star_; }
     Matrix& components() { ensure_lc_(); return components_; }
     Matrix components_m() { ensure_lc_(); return Psi_T() * components_; }
 
@@ -516,23 +435,21 @@ public:
 
 protected:
 
-    // Loadings solver
-    virtual Vector l_fit_(const Vector& nu) = 0;
+    // Weights solver
+    virtual Vector w_fit_(const Vector& nu) = 0;
 
     // Component solver
     Vector c_fit_(const Vector& s) {
 
-        // always go through the same solver API
         components_solver_.update_response_and_weights(s, I_);
 
         double lambda = 1e-15;
-        if (!lambda_components_.has_value()){
-            if (lambda_components_selection_) {
-                auto [success, l] = select_lambda_with_gcv(components_solver_, components_gcv_cfg_);
-                // if (!success) return Vector::Zero(n_dofs_loadings());
-                *lambda_components_ = l;
-                lambda_components_selection_ = false;
-            }
+        if (lambda_components_selection_) {
+            auto [success, l] = select_lambda_with_gcv(components_solver_, components_gcv_cfg_);
+            lambda_components_ = l;
+            lambda_components_selection_ = false;
+        }
+        if (lambda_components_.has_value()) {
             lambda = *lambda_components_;
         }
         components_solver_.fit(lambda);
@@ -540,62 +457,69 @@ protected:
         return components_solver_.f();
     }
 
-    // Lagrange Multipliers utilities
-    [[nodiscard]] double compute_multipliers_(const Vector& a_D) {
-        const Vector a_m_D = Psi_D()*a_D;
-        // rho_ = 1.;
-        const double norm_sqr = a_m_D.dot(M() * a_m_D) + atPa();
-        if (norm_sqr <= 0.0) return 1;
-        const double norm = std::sqrt(norm_sqr);
-        return norm;
-    }
-
-    // Current loading and component getters
-    [[nodiscard]] Vector a_() { ensure_lc_(); return loadings_.col(h());}
+    // Current weight and component getters
+    [[nodiscard]] Vector a_() { ensure_lc_(); return weights_.col(h());}
     [[nodiscard]] Vector eta_() { ensure_lc_(); return components_.col(h());}
 
     // tau estimate using Schäfer–Strimmer analytic shrinkage from correlation
     void select_tau_auto_() {
-        const int n = n_obs(), m = n_covs();
-        if (n < 2 || m < 1) throw std::runtime_error("tau_auto: need n>=2 and m>=1");
+        const int n_obs  = n();
+        const int n_vars = m();
 
-        // xs <- scale(x, center=TRUE, scale=TRUE)  [sample sd with (n-1)]
-        Eigen::RowVectorXd mu  = data_.colwise().mean();
-        Matrix xs = data_.rowwise() - mu;                                   // center
-        Eigen::RowVectorXd var = (xs.array().square().colwise().sum() / static_cast<double>(n - 1)).matrix();
-        Eigen::RowVectorXd sd  = var.array().sqrt().matrix();
-        for (int j = 0; j < m; ++j) if (!(sd[j] > 0.0) || !std::isfinite(sd[j])) sd[j] = 1.0;
-        xs.array().rowwise() /= sd.array();                                 // scale
+        if (n_obs < 2 || n_vars < 1) throw std::runtime_error("tau_auto: need n >= 2 and m >= 1");
 
-        // XtX = crossprod(xs) = t(xs) %*% xs
-        Matrix XtX = xs.transpose() * xs;                                    // p x p
+        Eigen::RowVectorXd mu = data_.colwise().mean();
+        Matrix xs = data_.rowwise() - mu;
+        Eigen::RowVectorXd var = (xs.array().square().colwise().sum() / static_cast<double>(n_obs - 1)).matrix();
+        Eigen::RowVectorXd sd = var.array().sqrt().matrix();
 
-        // xs2 = xs^2 ; V = (n/(n-1)^3) * (crossprod(xs2) - (1/n)*(crossprod(xs))^2)
-        const double c = static_cast<double>(n) / std::pow(static_cast<double>(n - 1), 3.0);
-        const Matrix xs2T_xs2 = (xs.array().square().matrix()).transpose()
-                           * (xs.array().square().matrix());                 // p x p
-        Matrix V = c * (xs2T_xs2 - (1.0 / static_cast<double>(n)) * XtX.array().square().matrix());
+        for (int j = 0; j < n_vars; ++j) {
+            if (!(sd[j] > 0.0) || !std::isfinite(sd[j])) sd[j] = 1.0;
+        }
+
+        xs.array().rowwise() /= sd.array();
+        const Matrix XtX = xs.transpose() * xs;
+        const Matrix xs2 = xs.array().square().matrix();
+        const Matrix xs2T_xs2 = xs2.transpose() * xs2;
+
+        const double n_d = static_cast<double>(n_obs);
+        const double c = n_d / std::pow(n_d - 1.0, 3.0);
+
+        Matrix V = c * (xs2T_xs2 - (1.0 / n_d) * XtX.array().square().matrix());
         V.diagonal().setZero();
+
         const double num = V.sum();
 
-        // corm = cor(x) = (1/(n-1)) * crossprod(xs)
-        Matrix Corm = XtX / static_cast<double>(n - 1);
+        Matrix Corm = XtX / (n_d - 1.0);
         Matrix D = Corm;
         D.diagonal().array() -= 1.0;
+
         const double den = D.squaredNorm();
 
-        const double tau_hat = (den > 0.0) ? std::clamp(num / den, 0.0, 1.0) : 0.0;
-        set_tau(tau_hat);  // invalidates M_; recomputed lazily
+        tau_ = (den > 0.0) ? std::clamp(num / den, 0.0, 1.0) : 0.0;
+        invalidate_M_();
     }
 
     // M
     void compute_M_() {
-        SparseMatrix I(n_covs(), n_covs());
-        I.setIdentity();
-        M_ = tau_ * I;
-        const double den = bias_ ? n_obs() : std::max(1, n_obs() - 1);
-        const Matrix Sigma = ((1.0 - tau_) / den) * (data_.transpose() * data_);
-        M_ += Sigma.sparseView();
+        M_.resize(m(), m());
+
+        if (mode_ == Mode::CovMax) {
+            M_.setIdentity();
+        } else if (mode_ == Mode::CorMax) {
+            const double den = bias_ ? n() : std::max(1, n() - 1);
+            M_ = (data_.transpose() * data_ / den).sparseView();
+        } else {
+            SparseMatrix I(m(), m());
+            I.setIdentity();
+
+            const double den = bias_ ? n() : std::max(1, n() - 1);
+            const Matrix Sigma = ((1.0 - tau_) / den) * (data_.transpose() * data_);
+
+            M_ = tau_ * I;
+            M_ += Sigma.sparseView();
+        }
+
         M_.makeCompressed();
         M_ready_ = true;
         ginvM_ready_ = false;
@@ -606,9 +530,13 @@ protected:
         invM_ready_ = true;
     }
     void compute_ginvM_() {
-        ginvM_.resize(n_covs(), n_covs());
-        Eigen::MatrixXd M_dense = Eigen::MatrixXd(M());
-        ginv(M_dense, ginvM_);
+        if (mode_ == Mode::CovMax) {
+            ginvM_.setIdentity(m(), m());
+        } else {
+            ginvM_.resize(m(), m());
+            Eigen::MatrixXd M_dense = Eigen::MatrixXd(M());
+            ginv(M_dense, ginvM_);
+        }
         ginvM_ready_ = true;
     }
     void ensure_M_() const {
@@ -616,19 +544,21 @@ protected:
     }
     void ensure_invM_() const {
         ensure_M_(); // sets ginvM_ready = false
-        if (!ginvM_ready_) const_cast<BaseBlock*>(this)->compute_invM_();
+        if (!invM_ready_) const_cast<BaseBlock*>(this)->compute_invM_();
     }
     void ensure_ginvM_() const {
         ensure_M_(); // sets ginvM_ready = false
         if (!ginvM_ready_) const_cast<BaseBlock*>(this)->compute_ginvM_();
     }
-    void invalidate_M_() { M_ready_ = false; } // this is enough to invalitade also ginvM
+    void invalidate_M_() { M_ready_ = false; } // this is enough to invalidate also ginvM and invM
 
-    // Loadings and Components
+    // Weights and Components
     void ensure_lc_() {
-        if (!loadings_ready_) {
-            loadings_.setZero(n_dofs_loadings_, n_comp_);
-            loadings_ready_ = true;
+        if (!weights_ready_) {
+            weights_.setZero(n_dofs_weights_, n_comp_);
+            weights_star_.setZero(n_dofs_weights_, n_comp_);
+            deflation_projections_.setZero(m(), n_comp_);
+            weights_ready_ = true;
         }
         if (!components_ready_) {
             components_.setZero(components_solver_.n_dofs(), n_comp_);
@@ -638,73 +568,58 @@ protected:
 
     // Deflation
     void deflate_scores_() {
+        ensure_lc_();
 
-        // --- Scores deflation (uncorrelated scores next)
-        // R = I - η η^T / (η^T η)
-        // Then X <- R X
+        const Vector y = Psi_T() * eta_();
+        const double yy = y.squaredNorm();
 
-        ensure_lc_(); // make sure components() is sized
-        const Vector y = Psi_T()*eta_();   // effective components (length n_obs)
-
-        // y = eta_m
-        double yy = y.squaredNorm();
         if (yy > 0) {
-            Vector p = data_.transpose() * y / yy;     // p = X' y / (y'y)
-            data_.noalias() -= y * p.transpose();      // X <- X - y p^T
+            Vector p = data_.transpose() * y / yy;
+
+            // Store p_h for post-processing
+            deflation_projections_.col(h()) = p;
+
+            data_.noalias() -= y * p.transpose();
         }
     }
-    void deflate_loadings_() {
 
-        // --- Loadings deflation (orthogonal loadings next)
-        // R = I - a a^T / (a^T a)
-        // Then X <- X R
-
-        ensure_lc_(); // make sure loadings() is sized so loadings_m() is OK
-        const Vector a_m = Psi_D()*a_();   // effective loading (length n_covs)
-        const int m = n_covs();
-
-        // Assemble projection matrix
-        Matrix R = Matrix::Identity(m, m);
-        const double norm = a_m.squaredNorm();
-        if (norm <= 0.0) return;
-        R.noalias() -= (a_m * a_m.transpose()) / norm;
-
-        // Apply right projection in variable space
-        data_ = data_ * R;
-    }
-
-    // Components solver
+    // Components' solver
     ComponentsSolverType components_solver_;
+
+    // Dimensions
+    int n_dofs_weights_ {0};
+    int n_comp_ {1};
 
     // State
     Vector times_{0};
     const std::string block_name_;
-    Matrix data_; // n_obs x n_covs
-    int n_dofs_loadings_ {0};
-    double tau_ {0.0};
-    int n_comp_ {1};
+    Matrix data_;
     int h_ {0};
+
+    // Options
+    double tau_ {0.0};
+    Mode mode_ = Mode::CorMax;
     bool bias_ = true;
-    double rho_ {1.0};
 
     // Parameters
     GCVConfig components_gcv_cfg_;
     std::optional<double> lambda_components_;
-    bool lambda_components_selection_ {false};
     std::optional<double> noise_variance_;
 
     // Results
-    Matrix loadings_, components_;
+    Matrix weights_, weights_star_, components_;
+    Matrix deflation_projections_;
 
     // Utilities
-    SparseMatrix I_; // n_obs x n_obs identity matrix
+    SparseMatrix I_; // n x n identity matrix
     SparseMatrix M_;
     Matrix ginvM_;
     SparseSolver invM_;
 
     // Flags
     bool M_ready_ {false}, invM_ready_ {false}, ginvM_ready_ {false};
-    bool loadings_ready_ {false}, components_ready_ {false};
+    bool lambda_components_selection_ {false};
+    bool weights_ready_ {false}, components_ready_ {false};
 };
 
 // single non-member operator<< visible to all derived classes
@@ -726,31 +641,30 @@ public:
     using Base::init;
     using Base::M;
     using Base::ginvM;
-    // using Base::invM;
-    using Base::n_obs;
-    using Base::n_covs;
-    using Base::n_dofs_loadings;
+    using Base::n;
+    using Base::m;
+    using Base::n_dofs_weights;
     using Base::data;
-    using Base::loadings;
+    using Base::weights;
     using Base::components;
     using Base::h;
 
     template<typename S = SamplingStrategy>
     requires std::same_as<S, IndependentSampling>
-    MultivariateBlock(const std::string& block_name, const Matrix& X, const double tau = 0.0) :
-        Base(block_name, X, static_cast<int>(X.cols()), tau) {
+    MultivariateBlock(const std::string& block_name, const Matrix& X) :
+        Base(block_name, X, static_cast<int>(X.cols())) {
         init_multivariate();
     }
 
     template<typename S = SamplingStrategy>
     requires std::same_as<SamplingStrategy, TimeDependentSampling>
-    MultivariateBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Vector& times, const Matrix& X,  const double tau = 0.0) :
-        Base(block_name, T, times, X, static_cast<int>(X.cols()), tau) {
+    MultivariateBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Vector& times, const Matrix& X) :
+        Base(block_name, T, times, X, static_cast<int>(X.cols())) {
         init_multivariate();
     }
 
     void init_multivariate() {
-        Psi_D_.resize(n_covs(), n_dofs_loadings()); // n_covs == n_dofs_loadings in this case
+        Psi_D_.resize(m(), n_dofs_weights()); // m == n_dofs_weights in this case
         Psi_D_.setIdentity();
         init();
     }
@@ -761,123 +675,110 @@ public:
     // Print
     void print(std::ostream& os) const override {
         Base::print(os);
-        os << "type: MultivariateBlock, n_dofs_loadings = n_covs = " << n_dofs_loadings();
+        os << "type: MultivariateBlock, n_dofs_weights = m = " << n_dofs_weights();
         os << "\n";
     }
 
 protected:
-    Vector l_fit_(const Vector& nu) override {
-        assert(nu.size() == n_obs() && "nu must have size n_obs (rows of X)");
+    Vector w_fit_(const Vector& nu) override {
+        assert(nu.size() == n() && "nu must have size n (rows of X)");
         init();
-        Vector z = data().transpose() * nu;
-        return ginvM() * z;
+        const Vector z = data().transpose() * nu;
+        const Vector a_tilde = ginvM() * z; // If mode == Mode::CovMax, ginvM = I
+
+        // Normalization
+        double rho = a_tilde.dot(M() * a_tilde);
+        if (rho <= 0.0) rho = 1.;
+        rho = std::sqrt(rho);
+
+        return a_tilde / rho;
     }
 
 private:
-    SparseMatrix Psi_D_; // n_covs x n_covs sparse identity matrix
+    SparseMatrix Psi_D_; // m x m sparse identity matrix
 };
 
 // ========== FunctionalBlock ==========
-template <class LoadingsPenaltyType, typename SamplingStrategy>
+template <class WeightsPenaltyType, typename SamplingStrategy>
 class FunctionalBlock final : public BaseBlock<SamplingStrategy> {
 public:
     using Base = BaseBlock<SamplingStrategy>;
     using Vector = typename Base::Vector;
     using Matrix = typename Base::Matrix;
     using SparseMatrix = typename Base::SparseMatrix;
-    using CovariatesSolverType = typename std::decay_t<LoadingsPenaltyType>::solver_t;
+    using WeightsSolverType = typename std::decay_t<WeightsPenaltyType>::solver_t;
 
     using Base::init;
     using Base::M;
     using Base::tau;
-    using Base::ginvM;
-    using Base::invM;
-    using Base::n_obs;
-    using Base::n_covs;
-    using Base::n_dofs_loadings;
+    using Base::n;
+    using Base::m;
+    using Base::n_dofs_weights;
     using Base::data;
     using Base::components;
     using Base::h;
-    using Base::rho;
 
     template <typename GeoFrame>
     requires std::same_as<SamplingStrategy, IndependentSampling>
-    FunctionalBlock(const std::string& block_name, GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, const double tau = 0.0) :
-        Base(block_name, gf[0].template col<double>(block_name).as_matrix().transpose(), loadings_penalty.get().bilinear_form().n_dofs(), tau) { // TODO get the correct number of dofs
-        init_functional(gf, std::forward<LoadingsPenaltyType>(loadings_penalty));
+    FunctionalBlock(const std::string& block_name, GeoFrame& gf, WeightsPenaltyType&& weights_penalty) :
+        Base(block_name, gf[0].template col<double>(block_name).as_matrix().transpose(), weights_penalty.get().bilinear_form().n_dofs()) {
+        init_functional(gf, std::forward<WeightsPenaltyType>(weights_penalty));
     }
 
     template <typename GeoFrame>
     requires std::same_as<SamplingStrategy, TimeDependentSampling>
-    FunctionalBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Vector& times, GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, const double tau = 0.0) :
-        Base(block_name, T, times, gf[0].template col<double>(block_name).as_matrix().transpose(), loadings_penalty.get().bilinear_form().n_dofs(), tau) { // TODO get the correct number of dofs
-        init_functional(gf, std::forward<LoadingsPenaltyType>(loadings_penalty));
+    FunctionalBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Vector& times, GeoFrame& gf, WeightsPenaltyType&& weights_penalty) :
+        Base(block_name, T, times, gf[0].template col<double>(block_name).as_matrix().transpose(), weights_penalty.get().bilinear_form().n_dofs()) {
+        init_functional(gf, std::forward<WeightsPenaltyType>(weights_penalty));
     }
 
     template <typename GeoFrame>
-    void init_functional(GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty) {
-        loadings_solver_.discretize(loadings_penalty.get());
-        loadings_solver_.analyze_data(gf, M());
+    void init_functional(GeoFrame& gf, WeightsPenaltyType&& weights_penalty) {
+        weights_solver_.discretize(weights_penalty.get());
+        weights_solver_.analyze_data(gf, M());
         init();
     }
 
     // Psi_D
-    [[nodiscard]] const SparseMatrix& Psi_D() const override { return loadings_solver_.Psi(); }
+    [[nodiscard]] const SparseMatrix& Psi_D() const override { return weights_solver_.Psi(); }
 
-    // Penalty evaluation
-    [[nodiscard]] double atPa() override {
-        if (success_) return loadings_solver_.ftPf(lambda_loadings()); //  * 0.5 / (rho()*rho());
-        return 0.;
-    }
-
-    // Loadings regularization utilities
-    void set_lambda_loadings(const double lambda) override { lambda_loadings_ = lambda; success_ = true; }
-    [[nodiscard]] double lambda_loadings() const override {
-        if (lambda_loadings_ > 0) return lambda_loadings_;
+    // Weights regularization utilities
+    void set_lambda_weights(const double lambda) override { lambda_weights_ = lambda; }
+    [[nodiscard]] double lambda_weights() const override {
+        if (lambda_weights_ > 0) return lambda_weights_;
         return std::numeric_limits<double>::quiet_NaN();
     }
-    void set_loadings_gcv_config(const GCVConfig& cfg) { loadings_gcv_cfg_ = cfg; }
+    void set_weights_gcv_config(const GCVConfig& cfg) { weights_gcv_cfg_ = cfg; }
 
     // Print
     void print(std::ostream& os) const override {
         Base::print(os);
-        os << "type: FunctionalBlock, n_dofs_loadings = " << n_dofs_loadings();
-        os << ", lambda = " << lambda_loadings_;
+        os << "type: FunctionalBlock, n_dofs_weights = " << n_dofs_weights();
+        os << ", lambda = " << lambda_weights_;
         os << "\n";
     }
 protected:
-    Vector l_fit_(const Vector& nu) override {
-        assert(nu.size() == n_obs() && "nu must have size n_obs (rows of X)");
+    Vector w_fit_(const Vector& nu) override {
+        assert(nu.size() == n() && "nu must have size n (rows of X)");
         init();
 
-        Vector z;
-        z.resize(n_covs());
-        if (tau()>0) z = invM().solve(data().transpose() * nu);
-        else z = ginvM() * data().transpose() * nu;
-        double n = z.size();
-        loadings_solver_.update_response_and_weights(z, M()*n); // M()*n because the solver normalizes inside
+        Vector z = data().transpose() * nu;
+        weights_solver_.update_z_and_weights(z, M());
 
         // lambda selection if required
-        if(lambda_loadings_ < 0.0) {
-            if (success_){
-                auto [success, lambda_opt] = select_lambda_with_gcv(loadings_solver_, loadings_gcv_cfg_);
-                if (!success) {
-                    success_ = false;
-                    return Vector::Zero(n_dofs_loadings());
-                }
-                lambda_loadings_ = lambda_opt; // the optimal lambda is saved for subsequent calls
-            } else {
-                return Vector::Zero(n_dofs_loadings());
-            }
+        if(lambda_weights_ < 0.0) {
+            auto [success, lambda_opt] = select_lambda_with_gcv(weights_solver_, weights_gcv_cfg_);
+            lambda_weights_ = lambda_opt; // the optimal lambda is saved for subsequent calls
         }
-        loadings_solver_.fit(lambda_loadings_);
-        return loadings_solver_.f();
+
+        // fit
+        weights_solver_.fit(lambda_weights_);
+        return weights_solver_.f();
     }
 private:
-    bool success_ = true;
-    CovariatesSolverType loadings_solver_;
-    double lambda_loadings_ = -1.0; // < 0 means "use GCV"
-    GCVConfig loadings_gcv_cfg_;
+    WeightsSolverType weights_solver_;
+    double lambda_weights_ = -1.0; // < 0 means "use GCV"
+    GCVConfig weights_gcv_cfg_;
 };
 
 
@@ -885,31 +786,31 @@ private:
 template <typename SamplingStrategy, typename Matrix = Eigen::Matrix<double, Dynamic, Dynamic>>
 requires std::same_as<SamplingStrategy, IndependentSampling>
 inline std::unique_ptr<internals::BaseBlock<SamplingStrategy>>
-make_multivariate_block(std::string block_name, const Matrix& data, double tau = 0.0) {
-    return std::make_unique<internals::MultivariateBlock<SamplingStrategy>>(block_name, data, tau);
+make_multivariate_block(std::string block_name, const Matrix& data) {
+    return std::make_unique<internals::MultivariateBlock<SamplingStrategy>>(block_name, data);
 }
 
 template <typename SamplingStrategy, typename Matrix = Eigen::Matrix<double, Dynamic, Dynamic>, typename Vector = Eigen::Matrix<double, Dynamic, 1>>
 requires std::same_as<SamplingStrategy, TimeDependentSampling>
 inline std::unique_ptr<internals::BaseBlock<SamplingStrategy>>
-make_multivariate_block(std::string block_name, const Triangulation<1, 1>& T, const Vector& times, const Matrix& data, double tau = 0.0) {
-    return std::make_unique<internals::MultivariateBlock<SamplingStrategy>>(block_name, T, times, data, tau);
+make_multivariate_block(std::string block_name, const Triangulation<1, 1>& T, const Vector& times, const Matrix& data) {
+    return std::make_unique<internals::MultivariateBlock<SamplingStrategy>>(block_name, T, times, data);
 }
 
-template <typename SamplingStrategy, typename GeoFrame, typename LoadingsPenaltyType>
+template <typename SamplingStrategy, typename GeoFrame, typename WeightsPenaltyType>
 requires std::same_as<SamplingStrategy, IndependentSampling>
 std::unique_ptr<internals::BaseBlock<SamplingStrategy>>
-make_functional_block(std::string block_name, GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, double tau = 0.0) {
-    return std::make_unique<internals::FunctionalBlock<LoadingsPenaltyType, SamplingStrategy>>(
-      block_name, gf, std::forward<LoadingsPenaltyType>(loadings_penalty), tau);
+make_functional_block(std::string block_name, GeoFrame& gf, WeightsPenaltyType&& weights_penalty) {
+    return std::make_unique<internals::FunctionalBlock<WeightsPenaltyType, SamplingStrategy>>(
+      block_name, gf, std::forward<WeightsPenaltyType>(weights_penalty));
 }
 
-template <typename SamplingStrategy, typename GeoFrame, typename LoadingsPenaltyType, typename Vector = Eigen::Matrix<double, Dynamic, 1>>
+template <typename SamplingStrategy, typename GeoFrame, typename WeightsPenaltyType, typename Vector = Eigen::Matrix<double, Dynamic, 1>>
 requires std::same_as<SamplingStrategy, TimeDependentSampling>
 std::unique_ptr<internals::BaseBlock<SamplingStrategy>>
-make_functional_block(std::string block_name, const Triangulation<1, 1>& T, const Vector& times, GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, double tau = 0.0) {
-    return std::make_unique<internals::FunctionalBlock<LoadingsPenaltyType, SamplingStrategy>>(
-        block_name, T, times, gf, std::forward<LoadingsPenaltyType>(loadings_penalty), tau);
+make_functional_block(std::string block_name, const Triangulation<1, 1>& T, const Vector& times, GeoFrame& gf, WeightsPenaltyType&& weights_penalty) {
+    return std::make_unique<internals::FunctionalBlock<WeightsPenaltyType, SamplingStrategy>>(
+        block_name, T, times, gf, std::forward<WeightsPenaltyType>(weights_penalty));
 }
 
 
@@ -943,9 +844,6 @@ struct Result {
     int h = 0;
     int J = 0;
     std::vector<double> obj_history;
-    std::vector<double> loss_history;
-    std::vector<double> space_reg_history;
-    std::vector<double> time_reg_history;
     bool monotone = true;
     int iters = 0;
     BoolMatrix C;
@@ -953,7 +851,7 @@ struct Result {
     double noise_variance = 0.0;
     std::vector<double> tau_values;
     std::vector<double> lambda_components_values;
-    std::vector<double> lambda_loadings_values;
+    std::vector<double> lambda_weights_values;
     std::vector<bool> active_blocks;
     std::vector<double> s1_blocks;
     std::vector<double> s1_edge_blocks;
@@ -961,9 +859,8 @@ struct Result {
     std::vector<double> reconstruction_edge;
 
     explicit Result(const int n_blocks) : J(n_blocks), C(J, J), covariance_matrix(J,J),
-    tau_values(J), lambda_components_values(J), lambda_loadings_values(J), active_blocks(J), s1_blocks(J), s1_edge_blocks(J),
+    tau_values(J), lambda_components_values(J), lambda_weights_values(J), active_blocks(J), s1_blocks(J), s1_edge_blocks(J),
     reconstruction_error(J), reconstruction_edge(J) {}
-
 };
 
 // forward declaration of pretty printers
@@ -988,35 +885,32 @@ public:
         unsigned seed;
         bool verbose;
         bool cache_covariances;
-        bool flip_and_scale;
         bool allow_blocks_deactivation;
         bool bias;
         bool allow_reconstruction_constraint_compensation;
         Init init;
         LambdaSelection lambda_selection;
-        TauSelection tau_selection;
+        Mode mode;
         Deflation deflation_mode;
         Scheme scheme;
 
         explicit Options(
           const int max_iter_ = 1000, const double tol_ = 1e-8, const unsigned seed_ = 0,
-          const bool flip_and_scale_ = true,
           const bool allow_blocks_deactivation_ = true,
           const bool bias_ = true,
           const bool allow_reconstruction_constraint_compensation_ = false,
-          const Init init_ = Init::SVD, const TauSelection tau_selection_ = TauSelection::Automatic,
+          const Init init_ = Init::SVD, const Mode mode_ = Mode::CorMax,
           const LambdaSelection lambda_selection_ = LambdaSelection::Automatic,
           const Deflation deflation_mode_ = Deflation::Scores, const Scheme& scheme_ = Scheme::Factorial(),
           const bool verbose_ = false, const bool cache_ = true) :
             max_iter(max_iter_),
             tol(tol_),
             seed(seed_),
-            flip_and_scale(flip_and_scale_),
             allow_blocks_deactivation(allow_blocks_deactivation_),
             bias(bias_),
             allow_reconstruction_constraint_compensation(allow_reconstruction_constraint_compensation_),
             init(init_),
-            tau_selection(tau_selection_),
+            mode(mode_),
             lambda_selection(lambda_selection_),
             deflation_mode(deflation_mode_),
             scheme(scheme_),
@@ -1026,22 +920,23 @@ public:
 
     template <typename S = SamplingStrategy>
     requires std::same_as<S, IndependentSampling>
-    explicit RGCCA(const int n_obs, const Options& opt = Options(), const int n_comp = 1) :
-        n_obs_(n_obs), opt_(opt), n_comp_(n_comp) {}
+    explicit RGCCA(const int n, const Options& opt = Options(), const int n_comp = 1) :
+        n_(n), opt_(opt), n_comp_(n_comp) {}
 
     template <typename S = SamplingStrategy>
     requires std::same_as<S, TimeDependentSampling>
-    explicit RGCCA(const int n_obs, const Triangulation<1, 1>& T, const Options& opt = Options(), const int n_comp = 1) :
-        n_obs_(n_obs), T_(T), opt_(opt), n_comp_(n_comp) {}
+    explicit RGCCA(const int n, const Triangulation<1, 1>& T, const Options& opt = Options(), const int n_comp = 1) :
+        n_(n), T_(T), opt_(opt), n_comp_(n_comp) {}
 
     // ===== Blocks =====
     int add_block(BlockPtr b) {
         if (!b) throw std::invalid_argument("RGCCA/add_block: null block");
         if constexpr (std::same_as<SamplingStrategy, IndependentSampling>){
-            if (b->n_obs() != n_obs()) throw std::invalid_argument("RGCCA/add_block: n_obs mismatch");
+            if (b->n() != n()) throw std::invalid_argument("RGCCA/add_block: n mismatch");
         } else { add_times_(b->times()); }
-        b->set_n_comp(n_comp());
         b->set_bias(opt_.bias);
+        b->set_mode(opt_.mode);
+        b->set_n_comp(n_comp());
         blocks_.emplace_back(std::move(b));
         initialized_ = false;   // topology/caches need a fresh init later
         return ++J_;
@@ -1049,23 +944,23 @@ public:
 
     template<typename S = SamplingStrategy>
     requires std::same_as<S, IndependentSampling>
-    int add_multivariate_block(std::string block_name, Matrix& X, const double tau = 0.0) {
-        return add_block(internals::make_multivariate_block<SamplingStrategy>(block_name, X, tau));
+    int add_multivariate_block(std::string block_name, Matrix& X) {
+        return add_block(internals::make_multivariate_block<SamplingStrategy>(block_name, X));
     }
     template<typename S = SamplingStrategy>
     requires std::same_as<S, TimeDependentSampling>
-    int add_multivariate_block(std::string block_name, const Vector& times, Matrix& X, const double tau = 0.0) {
-        return add_block(internals::make_multivariate_block<SamplingStrategy>(block_name, T_, times, X, tau));
+    int add_multivariate_block(std::string block_name, const Vector& times, Matrix& X) {
+        return add_block(internals::make_multivariate_block<SamplingStrategy>(block_name, T_, times, X));
     }
-    template <typename GeoFrame, typename LoadingsPenaltyType>
+    template <typename GeoFrame, typename WeightsPenaltyType>
     requires std::same_as<SamplingStrategy, IndependentSampling>
-    int add_functional_block(std::string block_name, const GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, const double tau = 0.0) {
-        return add_block(internals::make_functional_block<SamplingStrategy>(block_name, gf, std::forward<LoadingsPenaltyType>(loadings_penalty), tau));
+    int add_functional_block(std::string block_name, const GeoFrame& gf, WeightsPenaltyType&& weights_penalty) {
+        return add_block(internals::make_functional_block<SamplingStrategy>(block_name, gf, std::forward<WeightsPenaltyType>(weights_penalty)));
     }
-    template <typename GeoFrame, typename LoadingsPenaltyType>
+    template <typename GeoFrame, typename WeightsPenaltyType>
     requires std::same_as<SamplingStrategy, TimeDependentSampling>
-    int add_functional_block(std::string block_name, const Vector& times, const GeoFrame& gf, LoadingsPenaltyType&& loadings_penalty, const double tau = 0.0) {
-        return add_block(internals::make_functional_block<SamplingStrategy>(block_name, T_, times, gf, std::forward<LoadingsPenaltyType>(loadings_penalty), tau));
+    int add_functional_block(std::string block_name, const Vector& times, const GeoFrame& gf, WeightsPenaltyType&& weights_penalty) {
+        return add_block(internals::make_functional_block<SamplingStrategy>(block_name, T_, times, gf, std::forward<WeightsPenaltyType>(weights_penalty)));
     }
 
     [[nodiscard]] int n_blocks() { return J_; }
@@ -1098,7 +993,7 @@ public:
         user_defined_design_ = (mode == DesignMode::Empty);   // means user will set edges
     }
     void init_comp() {
-        if (opt_.tau_selection == TauSelection::Automatic) { set_tau_auto_all_(); }
+        if (opt_.mode == Mode::Regularized) { set_tau_auto_all_(); }
         if (opt_.lambda_selection == LambdaSelection::Automatic) { set_lambda_auto_all_(); }
         clear_covariance_cache_();
     }
@@ -1111,8 +1006,8 @@ public:
     }
 
     // Parameters setters
-    void set_lambda_loadings_all(const double lambda) const {
-        for (auto& b : blocks_) b->set_lambda_loadings(lambda);
+    void set_lambda_weights_all(const double lambda) const {
+        for (auto& b : blocks_) b->set_lambda_weights(lambda);
     }
     void set_lambda_components_all(const double lambda) const {
         for (auto& b : blocks_) b->set_lambda_components(lambda);
@@ -1131,16 +1026,6 @@ public:
         h_ = h;
         for (auto& b : blocks_) b->set_h(h_);
     }
-    void next_comp() {
-        if (!is_last_comp()) set_h(h() + 1);
-    }
-    bool is_last_comp() {
-        if (!is_last_comp_) {
-            if (h() + 1 == n_comp()) is_last_comp_ = true;
-            return false;
-        }
-        return true;
-    }
 
     // Deflation
     void deflate_all() const {
@@ -1150,7 +1035,7 @@ public:
     // Fit
     std::vector<Result> fit() {
         if (!initialized_) {
-            // user didn't call init ⇒ assume fully connected (off-diagonal true)
+            // user didn't call init -> assume fully connected (off-diagonal true)
             init(DesignMode::FullyConnected);
         }
 
@@ -1159,10 +1044,19 @@ public:
         results.reserve(n_comp());
 
         // components loop
-        for (set_h(0); !is_last_comp(); next_comp()) {
+        for (int hh = 0; hh < n_comp(); ++hh) {
+            set_h(hh);
             init_comp();
             results.push_back(fit_component());
-            deflate_all();
+
+            if (hh + 1 < n_comp()) {
+                deflate_all();
+            }
+        }
+
+        // post-processing weights
+        for (auto& b : blocks_) {
+            b->compute_weights_star();
         }
 
         return results;
@@ -1188,7 +1082,7 @@ public:
                     res.active_blocks[j] = false;
                     res.s1_blocks[j] = info.s1;
                     res.s1_edge_blocks[j] = info.s1_edge;
-                    // nothing to be done loadings and components are already initialized at 0
+                    // nothing to be done weights and components are already initialized at 0
                 } else {
                     res.active_blocks[j] = true;
                     res.s1_blocks[j] = info.s1;
@@ -1198,7 +1092,7 @@ public:
             } else { // Random
                 std::mt19937_64 rng(opt_.seed);
                 std::uniform_real_distribution<double> U(-1.0, 1.0);
-                const Vector nu = Vector::NullaryExpr(n_obs_, [&]{ return U(rng); });
+                const Vector nu = Vector::NullaryExpr(n_, [&]{ return U(rng); });
                 b->compute(nu);  // block handles normalization
             }
         }
@@ -1215,23 +1109,17 @@ public:
 
         // room for objective function evaluations
         res.obj_history.reserve(opt_.max_iter);
-        res.loss_history.reserve(opt_.max_iter);
-        res.space_reg_history.reserve(opt_.max_iter);
-        res.time_reg_history.reserve(opt_.max_iter);
         {
-            const auto [f_obj, f_loss, f_space_reg, f_time_reg]  = objective_(res.C, res.active_blocks);
+            const double f_obj = objective_(res.C, res.active_blocks);
             res.obj_history.push_back(f_obj);
-            res.loss_history.push_back(f_loss);
-            res.space_reg_history.push_back(f_space_reg);
-            res.time_reg_history.push_back(f_time_reg);
         }
         if ( !no_connections_(res.C) ) {
             // require lambda selection also at the first iteration
             if (opt_.lambda_selection == LambdaSelection::Automatic) { set_lambda_auto_all_(); }
-            auto a_prev = snapshot_loadings_();
+            auto a_prev = snapshot_weights_();
             for (int s = 0; s < opt_.max_iter; ++s) {
                 for (int l = 0; l < J; ++l) {
-                    Vector nu_l = Vector::Zero(blocks_[l]->n_obs());
+                    Vector nu_l = Vector::Zero(blocks_[l]->n());
                     const Vector eta_l = eta_(*blocks_[l]);
                     for (int k = 0; k < J; ++k) {
                         if (!res.C(l,k)) continue;
@@ -1240,37 +1128,13 @@ public:
                         const double w_lk = opt_.scheme.w(cov_lk);
                         nu_l.noalias() += w_lk * eta_(*blocks_[k], *blocks_[l]);   // no aliasing with RHS
                     }
-                    /*double ev_prev = 0;
-                    if (s>0) {
-                        std::cout << "iter = " << s << ", j = " << l+1 << " : f(a_j^s  ) = ";
-                        ev_prev = blocks_[l]->evaluate(nu_l);
-                        std::cout << ev_prev << std::endl;
-                    }*/
                     blocks_[l]->compute(nu_l);   // block handles normalization
-                    /*if (s>0) {
-                        std::cout << "                  f(a_j^s+1) = ";
-                        double ev_post = blocks_[l]->evaluate(nu_l);
-                        std::cout << ev_post << " improv = " << ev_post -  ev_prev << std::endl;
-                    }*/
-                    mark_cov_rowcol_dirty_(l);     // η_l changed → invalidate its row/col
-
-                    // this is only to emulate the loadings of the R implementation, it could be dropped eventually
-                    bool even_scheme = (opt_.scheme.name == std::string("Centroid") || opt_.scheme.name == std::string("Factorial"));
-                    Eigen::Index imax;
-                    auto a = blocks_[l]->loadings().col(h());
-                    a.cwiseAbs().maxCoeff(&imax);
-                    if (even_scheme && a(imax) < 0) {
-                        blocks_[l]->loadings().col(h()) *= -1.0;
-                        blocks_[l]->components().col(h()) *= -1.0;
-                    }
+                    mark_cov_rowcol_dirty_(l);   // η_l changed → invalidate its row/col
                 }
 
-                const auto [f_obj, f_loss, f_space_reg, f_time_reg] = objective_(res.C, res.active_blocks);
+                const double f_obj = objective_(res.C, res.active_blocks);
                 const double obj_prev = res.obj_history.back();
                 res.obj_history.push_back(f_obj);
-                res.loss_history.push_back(f_loss);
-                res.space_reg_history.push_back(f_space_reg);
-                res.time_reg_history.push_back(f_time_reg);
                 res.iters = s + 1;
 
                 // check monotonicity
@@ -1278,27 +1142,26 @@ public:
 
                 // check convergence
                 const double delta_obj = std::abs(f_obj - obj_prev);
-                const double delta_a2  = loadings_delta2_(a_prev);
-                if (delta_obj < opt_.tol || delta_a2 < opt_.tol) break;
+                const double delta_a  = weights_variation_(a_prev);
+                if (delta_obj < opt_.tol || delta_a < opt_.tol) break;
 
                 // update snapshot for next iter
-                a_prev = snapshot_loadings_();
+                a_prev = snapshot_weights_();
             }
         }
-        if (opt_.flip_and_scale) flip_and_scale_all_to_unit_score_variance_();
 
         // save information about the iteration in the result struct
         res.noise_variance = noise_variance();
         compute_covariance_matrix_(res.covariance_matrix);
         get_tau(res.tau_values);
-        get_lambdas(res.lambda_components_values, res.lambda_loadings_values);
+        get_lambdas(res.lambda_components_values, res.lambda_weights_values);
         get_reconstruction_constraint_info(res.reconstruction_error, res.reconstruction_edge);
 
         return res;
     }
 
     // ===== Accessors =====
-    [[nodiscard]] int n_obs() const { return n_obs_; }
+    [[nodiscard]] int n() const { return n_; }
     [[nodiscard]] int n_comp() const { return n_comp_; }
     [[nodiscard]] int n_blocks() const { return static_cast<int>(blocks_.size()); }
     [[nodiscard]] const Options& options() const { return opt_; }
@@ -1311,30 +1174,24 @@ public:
 
 private:
 
-    double loadings_delta2_(const std::vector<typename Block::Vector>& a_prev) const {
+    std::vector<typename Block::Vector> snapshot_weights_() const {
+        const int J = n_blocks();
+        std::vector<typename Block::Vector> out;
+        out.reserve(J);
+        for (int j = 0; j < J; ++j) out.push_back(blocks_[j]->weights().col(h_));
+        return out;
+    }
+
+    double weights_variation_(const std::vector<typename Block::Vector>& a_prev) const {
         const int J = n_blocks();
         double acc = 0.0;
         for (int j = 0; j < J; ++j) {
             // skip inactive blocks if you want exact R behavior after deactivation
-            const auto aj = blocks_[j]->loadings().col(h_);
+            const auto aj = blocks_[j]->weights().col(h_);
             const auto dj = aj - a_prev[j];
             acc += dj.squaredNorm();
         }
         return acc;
-    }
-
-    std::vector<typename Block::Vector> snapshot_loadings_() const {
-        const int J = n_blocks();
-        std::vector<typename Block::Vector> out;
-        out.reserve(J);
-        for (int j = 0; j < J; ++j) out.push_back(blocks_[j]->loadings().col(h_));
-        return out;
-    }
-
-    void flip_and_scale_all_to_unit_score_variance_() {
-        for (auto& b : blocks_) {
-            b->flip_and_scale_to_unit_score_variance(Psi_T());
-        }
     }
 
     template <typename S = SamplingStrategy>
@@ -1351,7 +1208,7 @@ private:
             Eigen::VectorXd times_eig = Eigen::Map<Eigen::VectorXd>(times_.data(), times_.size());
             SamplingStrategy::compute_Psi(T_, Matrix{times_eig}, Psi_T_);
         } else {
-            Psi_T_.resize(n_obs(), n_obs());
+            Psi_T_.resize(n(), n());
             Psi_T_.setIdentity();
         }
     }
@@ -1374,11 +1231,11 @@ private:
         }
     }
 
-    void get_lambdas(std::vector<double> & lambda_components_values, std::vector<double> & lambda_loadings_values) const {
+    void get_lambdas(std::vector<double> & lambda_components_values, std::vector<double> & lambda_weights_values) const {
         const int J = n_blocks();
         for (std::size_t j = 0; j < J; ++j) {
             lambda_components_values[j] = blocks_[j]->lambda_components();
-            lambda_loadings_values[j] = blocks_[j]->lambda_loadings();
+            lambda_weights_values[j] = blocks_[j]->lambda_weights();
         }
     }
 
@@ -1391,8 +1248,8 @@ private:
         }
     }
 
-    void set_tau_auto_all_() const { for (auto& b : blocks_) b->set_tau(-1); }
-    void set_lambda_auto_all_() const { set_lambda_components_all(-1); set_lambda_loadings_all(-1); }
+    void set_tau_auto_all_() const { for (auto& b : blocks_) b->select_tau_auto(); }
+    void set_lambda_auto_all_() const { set_lambda_components_all(-1); set_lambda_weights_all(-1); }
 
     void set_noise_variance_all_() const { for (auto& b : blocks_) b->set_noise_variance(*noise_variance_); }
 
@@ -1422,7 +1279,7 @@ private:
     }
 
     // objective f = Σ_{j,k} C_jk * g( cov(η_j, η_k) )
-    std::tuple<double, double, double, double> objective_(const BoolMatrix& C, const std::vector<bool>& active_blocks) {
+    double objective_(const BoolMatrix& C, const std::vector<bool>& active_blocks) {
         // std::cout << "Computing objective --->"<<  std::endl;
         const int J = n_blocks();
         double f = 0.0;
@@ -1436,23 +1293,8 @@ private:
                     f += mult * opt_.scheme.g(cov_jk);
                 }
             }
-
         }
-        const double f_loss = f;
-        double f_space_reg = 0.;
-        double f_time_reg = 0.;
-        /* for (int j = 0; j < J; ++j) {
-            if (active_blocks[j]) {
-                const double atPa = blocks_[j]->atPa();
-                // std::cout << "j: "<< j <<" atPa = " << atPa << std::endl;
-                f_space_reg += atPa;
-                const double ntPn = blocks_[j]->ntPn();
-                // f_time_reg += ntPn;
-                // std::cout << "j: "<< j <<" ntPn = " << ntPn << std::endl;
-                f -= atPa + ntPn; //
-            }
-        } */
-        return {f, f_loss, f_space_reg, f_time_reg};
+        return f;
     }
 
     // Covariance matrix
@@ -1516,14 +1358,13 @@ private:
 
 private:
     int J_ {0};
-    int n_obs_ {0}; // global number of observations
+    int n_ {0}; // global number of observations
     std::vector<double> times_;
     SamplingDomain T_; // only used by TimeDependentSampling
     SparseMatrix Psi_T_;
     int h_ {0};   // current component index
     Options opt_;
     int n_comp_{0};
-    bool is_last_comp_{false};
 
     std::optional<double> noise_variance_;
 
@@ -1562,7 +1403,7 @@ inline std::ostream& operator<<(std::ostream& os, const Result& r) {
         os << std::scientific;
         for (size_t i = 0; i < r.tau_values.size(); ++i) {
             os << "- Block " << i+1  << ": lambda_c = "<< r.lambda_components_values[i]
-               << ", lambda_l = "<< r.lambda_loadings_values[i] << "\n";
+               << ", lambda_l = "<< r.lambda_weights_values[i] << "\n";
         }
         os << std::fixed;
         os << std::endl;
@@ -1572,34 +1413,13 @@ inline std::ostream& operator<<(std::ostream& os, const Result& r) {
     os << std::endl;
     os << "objective :\n";
     double prev_obj = r.obj_history[0];
-    double prev_loss = r.loss_history[0];
-    double prev_space_reg = r.space_reg_history[0];
-    double prev_time_reg = r.time_reg_history[0];
-    /*
-    os << "- iter " << std::setw(3) << (0)
-   << "   |   fit = " << std::setw(12) << std::setprecision(8) << std::fixed << prev_obj << " = "
-   << std::setw(6) << std::setprecision(4) << std::fixed << prev_loss << " (" <<  ")" << " - "
-   << std::setw(6) << std::setprecision(4) << std::fixed << prev_space_reg << " (" << ")" << " - "
-   << std::setw(6) << std::setprecision(4) << std::fixed << prev_time_reg << " (" << ")"
-   << "   |   overall diff = " << std::setw(7) << "\n";
-    os << std::fixed << std::setprecision(8);
-    */
     for (size_t i = 1; i < r.obj_history.size(); ++i) {
         const double obj = r.obj_history[i];
-        const double loss = r.loss_history[i];
-        const double space_reg = r.space_reg_history[i];
-        const double time_reg = r.time_reg_history[i];
         os << "- iter " << std::setw(3) << (i)
-           << "   |   fit = " << std::setw(12) << std::setprecision(8) << std::fixed << obj << " = "
-           << std::setw(6) << std::setprecision(4) << std::fixed << loss << " (" << ((loss - prev_loss) >= 0 ? "+" : "-") << std::setprecision(1) << std::scientific << std::abs(loss - prev_loss) << ")" << " - "
-           << std::setw(6) << std::setprecision(4) << std::fixed << space_reg << " (" << ((space_reg - prev_space_reg) > 0 ? "+" : "-") << std::setprecision(1) << std::scientific << std::abs(space_reg - prev_space_reg) << ")" << " - "
-           << std::setw(6) << std::setprecision(4) << std::fixed << time_reg << " (" << ((time_reg - prev_time_reg) > 0 ? "+" : "-") << std::setprecision(1) << std::scientific << std::abs(time_reg - prev_time_reg) << ")"
+           << "   |   fit = " << std::setw(12) << std::setprecision(8) << std::fixed << obj
            << "   |   overall diff = " << std::setw(7) << (obj - prev_obj) << "\n";
         os << std::fixed << std::setprecision(8);
         prev_obj = obj;
-        prev_loss = loss;
-        prev_space_reg = space_reg;
-        prev_time_reg = time_reg;
     }
     os << std::endl;
     if (!minimal) {

@@ -30,6 +30,7 @@ namespace fdapde {
 
 struct ls_solver { };
 struct de_solver { };
+struct normcovmax_solver { };
   
 }   // namespace fdapde
 
@@ -43,6 +44,10 @@ struct de_solver { };
 // density estimation solvers
 #include "src/solvers/fe_de_elliptic.h"
 #include "src/solvers/fe_de_separable.h"
+
+// normalizaed covariance maximization solvers
+#include "src/solvers/fe_normcovmax_elliptic.h"
+#include "src/solvers/bs_normcovmax_elliptic.h"
 
 // clang-format on
 
