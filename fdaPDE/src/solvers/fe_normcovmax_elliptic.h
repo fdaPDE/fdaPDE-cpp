@@ -141,6 +141,8 @@ struct fe_normcovmax_elliptic {
 	    auto& dof_handler = bilinear_form.trial_space().dof_handler();
 	    dirichlet_dofs_ = dof_handler.dirichlet_dofs();
 	    dirichlet_vals_ = dof_handler.dirichlet_values();
+        // store boundary dofs
+        boundary_dofs_ = bilinear_form.trial_space().triangulation().boundary_nodes().which(true);
         return;
     }
     // non-parametric fit
@@ -180,7 +182,7 @@ struct fe_normcovmax_elliptic {
             B_ = (~nan_pattern).repeat(1, n_dofs_).select(Psi_, 0);
             z_ = (~nan_pattern).select(z_, 0);
         }
-        if (old_n_obs != n_obs_) { W_ *= (double)old_n_obs / n_obs_; }
+        // if (old_n_obs != n_obs_) { W_ *= (double)old_n_obs / n_obs_; }
         b_.block(0, 0, n_dofs_, 1) = -PsiNA().transpose() * z_;
 	    // enforce dirichlet bc, if any
         for (size_t i = 0; i < dirichlet_dofs_.size(); ++i) {
@@ -191,7 +193,7 @@ struct fe_normcovmax_elliptic {
     template <typename WeightMatrix> void update_weights(const WeightMatrix& W) {
         fdapde_assert(Psi_.rows() > 0 && W.rows() == n_locs_ && W.rows() == W.cols());
         W_ = W;
-	    W_ /= n_obs_;
+	    // W_ /= n_obs_;
         b_.block(0, 0, n_dofs_, 1) = -PsiNA().transpose() * z_;
         // enforce dirichlet bc, if any
         for (size_t i = 0; i < dirichlet_dofs_.size(); ++i) {
@@ -295,6 +297,8 @@ struct fe_normcovmax_elliptic {
     const vector_t& response() const { return z_; }
     const sparse_matrix_t& weights() const { return W_; }
     double lambda() const { return *lambda_saved_; }
+    const std::vector<int>& dirichlet_dofs() const  { return dirichlet_dofs_; }
+    const std::vector<int>& boundary_dofs() const  { return boundary_dofs_; }
 
    protected:
     std::optional<double> lambda_saved_ = -1;
@@ -316,10 +320,11 @@ struct fe_normcovmax_elliptic {
     std::function<std::pair<sparse_matrix_t, vector_t>(const binarz_t& locs)> areal_eval_;
     std::vector<int> dirichlet_dofs_;      // dofs where Dirichlet boundary conditions are imposed
     std::vector<double> dirichlet_vals_;   // values imposed at Dirichlet dofs
+    std::vector<int> boundary_dofs_;
 
     vector_t z_;               // n_obs x 1 observation vector
     sparse_matrix_t W_;        // n_obs x n_obs matrix of observation weights
-    bool W_changed_;
+    bool W_changed_ {true};
 };
 
 }   // namespace internals

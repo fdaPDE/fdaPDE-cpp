@@ -130,6 +130,8 @@ struct bs_normcovmax_elliptic {
         b_.resize(n_dofs_, 1);
         f_.resize(n_dofs_);
         // TODO: Store Dirichlet BC
+        // store boundary dofs
+        boundary_dofs_ = bilinear_form.trial_space().triangulation().boundary_nodes().which(true);
         return;
     }
 
@@ -169,14 +171,14 @@ struct bs_normcovmax_elliptic {
             B_ = (~nan_pattern_).repeat(1, n_dofs_).select(Psi_, 0);
             z_ = (~nan_pattern_).select(z_, 0);
         }
-        if (old_n_obs != n_obs_) { W_ *= (double)old_n_obs / n_obs_; }
+        // if (old_n_obs != n_obs_) { W_ *= (double)old_n_obs / n_obs_; }
         b_ = PsiNA().transpose() * z_;
         return;
     }
     template <typename WeightMatrix> void update_weights(const WeightMatrix& W) {
         fdapde_assert(Psi_.rows() > 0 && W.rows() == n_locs_ && W.rows() == W.cols());
         W_ = W;
-        W_ /= n_obs_;
+        // W_ /= n_obs_;
         b_ = PsiNA().transpose() * z_;
         W_changed_ = true;
         return;
@@ -200,7 +202,7 @@ struct bs_normcovmax_elliptic {
         fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
         if ( lambda_saved_.value() != lambda || W_changed_) {
             // assemble spline system: A = Psi^T W Psi + lambda * R1
-            const sparse_matrix_t A = PsiNA().transpose() * D_ * W_ * PsiNA() + lambda * R1_;
+            const sparse_matrix_t A = PsiNA().transpose() * D_ * W_ * PsiNA() + lambda * (R1_ + R0_);
             // TODO: Dirichlet boundary conditions
             invA_.compute(A);
             W_changed_ = false;
@@ -265,6 +267,8 @@ struct bs_normcovmax_elliptic {
     const vector_t& response() const { return z_; }
     const sparse_matrix_t& weights() const { return W_; }
     double lambda() const { return *lambda_saved_; }
+    const std::vector<int>& dirichlet_dofs() const  { return dirichlet_dofs_; }
+    const std::vector<int>& boundary_dofs() const  { return boundary_dofs_; }
 
    protected:
     std::optional<double> lambda_saved_ = -1;
@@ -286,7 +290,9 @@ struct bs_normcovmax_elliptic {
     vector_t z_;               // n_obs x 1 observation vector
     binary_t nan_pattern_;     // n_obs x 1 indicator vector for NaNs
     sparse_matrix_t W_;        // n_obs x n_obs matrix of observation weights
-    bool W_changed_;
+    std::vector<int> dirichlet_dofs_;      // dofs where Dirichlet boundary conditions are imposed
+    std::vector<int> boundary_dofs_;
+    bool W_changed_ {true};
 
     // basis eval handles
     std::function<sparse_matrix_t(const matrix_t& locs)> point_eval_;

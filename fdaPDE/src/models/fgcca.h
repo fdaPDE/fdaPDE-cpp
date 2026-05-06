@@ -17,6 +17,7 @@
 #ifndef __FGCCA_H__
 #define __FGCCA_H__
 
+#include "fdaPDE/src/solvers/nonnegative_ipopt.h"
 #include "header_check.h"
 
 namespace fdapde {
@@ -26,6 +27,7 @@ enum class DesignMode {Empty, FullyConnected};
 enum class LambdaSelection {Manual, Automatic};
 enum class Mode { CorMax, Regularized, CovMax };
 enum class Deflation { None, Scores };
+enum class WeightSignConstraint { None, NonNegative };
 
 namespace internals {
 
@@ -274,6 +276,12 @@ public:
 
     // Bias flag
     void set_bias(const bool bias) { bias_ = bias; }
+
+    // Weights sign constraint
+    void set_weight_sign_constraint(const WeightSignConstraint weight_sign_constraint = WeightSignConstraint::None) {
+        weight_sign_constraint_ = weight_sign_constraint;
+    }
+    [[nodiscard]] WeightSignConstraint weight_sign_constraint() const { return weight_sign_constraint_; }
 
     // Components regularization utilities
     void set_lambda_components(const double lambda) {
@@ -583,6 +591,30 @@ protected:
         }
     }
 
+    Vector solve_nonnegative_weight_ipopt_(
+        const SparseMatrix& Psi,
+        const SparseMatrix& Omega,
+        const Vector& z,
+        const std::vector<int>& dirichlet_dofs = {}
+    ) const {
+        const int n_weights = static_cast<int>(Psi.cols());
+
+        Vector a0 = Vector::Ones(n_weights); // normalization happens inside
+
+        auto* raw_problem = new NonNegativeWeightProblem(Psi, Omega, z, a0, dirichlet_dofs);
+        Ipopt::SmartPtr<Ipopt::TNLP> problem = raw_problem;
+        Ipopt::SmartPtr<Ipopt::IpoptApplication> app = IpoptApplicationFactory();
+        Ipopt::ApplicationReturnStatus status = app->Initialize();
+
+        if (status != Ipopt::Solve_Succeeded) {
+            std::cerr << "Ipopt initialization failed.\n";
+        }
+
+        status = app->OptimizeTNLP(problem);
+        const Vector a = raw_problem->solution();
+        return a;
+    }
+
     // Components' solver
     ComponentsSolverType components_solver_;
 
@@ -599,6 +631,7 @@ protected:
     // Options
     double tau_ {0.0};
     Mode mode_ = Mode::CorMax;
+    WeightSignConstraint weight_sign_constraint_ = WeightSignConstraint::None;
     bool bias_ = true;
 
     // Parameters
@@ -648,6 +681,8 @@ public:
     using Base::weights;
     using Base::components;
     using Base::h;
+    using Base::weight_sign_constraint;
+    using Base::solve_nonnegative_weight_ipopt_;
 
     template<typename S = SamplingStrategy>
     requires std::same_as<S, IndependentSampling>
@@ -683,14 +718,18 @@ protected:
     Vector w_fit_(const Vector& nu) override {
         assert(nu.size() == n() && "nu must have size n (rows of X)");
         init();
-        const Vector z = data().transpose() * nu;
-        const Vector a_tilde = ginvM() * z; // If mode == Mode::CovMax, ginvM = I
 
+        const Vector z = data().transpose() * nu;
+
+        if (weight_sign_constraint() == WeightSignConstraint::NonNegative) {
+            return solve_nonnegative_weight_ipopt_(Psi_D(), M(), z);
+        }
+
+        const Vector a_tilde = ginvM() * z; // If mode == Mode::CovMax, ginvM = I
         // Normalization
         double rho = a_tilde.dot(M() * a_tilde);
         if (rho <= 0.0) rho = 1.;
         rho = std::sqrt(rho);
-
         return a_tilde / rho;
     }
 
@@ -717,6 +756,8 @@ public:
     using Base::data;
     using Base::components;
     using Base::h;
+    using Base::weight_sign_constraint;
+    using Base::solve_nonnegative_weight_ipopt_;
 
     template <typename GeoFrame>
     requires std::same_as<SamplingStrategy, IndependentSampling>
@@ -762,6 +803,12 @@ protected:
         init();
 
         Vector z = data().transpose() * nu;
+
+        if (weight_sign_constraint() == WeightSignConstraint::NonNegative) {
+            SparseMatrix Omega = Psi_D().transpose() * M() * Psi_D() + lambda_weights_ * weights_solver_.P();
+            return solve_nonnegative_weight_ipopt_(Psi_D(), Omega, z, weights_solver_.boundary_dofs());
+        }
+
         weights_solver_.update_z_and_weights(z, M());
 
         // fit
@@ -883,16 +930,17 @@ public:
         Init init;
         LambdaSelection lambda_selection;
         Mode mode;
+        WeightSignConstraint weight_sign_constraint;
         Deflation deflation_mode;
         Scheme scheme;
 
         explicit Options(
           const int max_iter_ = 1000, const double tol_ = 1e-8, const unsigned seed_ = 0,
-          const bool allow_blocks_deactivation_ = true,
+          const bool allow_blocks_deactivation_ = false,
           const bool bias_ = true,
-          const bool allow_reconstruction_constraint_compensation_ = false,
-          const Init init_ = Init::SVD, const Mode mode_ = Mode::CorMax,
-          const LambdaSelection lambda_selection_ = LambdaSelection::Automatic,
+          const Init init_ = Init::SVD, const Mode mode_ = Mode::CovMax,
+          const WeightSignConstraint weight_sign_constraint_ = WeightSignConstraint::None,
+          const LambdaSelection lambda_selection_ = LambdaSelection::Manual,
           const Deflation deflation_mode_ = Deflation::Scores, const Scheme& scheme_ = Scheme::Factorial(),
           const bool verbose_ = false, const bool cache_ = true) :
             max_iter(max_iter_),
@@ -900,9 +948,9 @@ public:
             seed(seed_),
             allow_blocks_deactivation(allow_blocks_deactivation_),
             bias(bias_),
-            allow_reconstruction_constraint_compensation(allow_reconstruction_constraint_compensation_),
             init(init_),
             mode(mode_),
+            weight_sign_constraint(weight_sign_constraint_),
             lambda_selection(lambda_selection_),
             deflation_mode(deflation_mode_),
             scheme(scheme_),
@@ -928,6 +976,7 @@ public:
         } else { add_times_(b->times()); }
         b->set_bias(opt_.bias);
         b->set_mode(opt_.mode);
+        b->set_weight_sign_constraint(opt_.weight_sign_constraint);
         b->set_n_comp(n_comp());
         blocks_.emplace_back(std::move(b));
         initialized_ = false;   // topology/caches need a fresh init later
