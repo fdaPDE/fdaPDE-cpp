@@ -558,7 +558,11 @@ protected:
         ensure_M_(); // sets ginvM_ready = false
         if (!ginvM_ready_) const_cast<BaseBlock*>(this)->compute_ginvM_();
     }
-    void invalidate_M_() { M_ready_ = false; } // this is enough to invalidate also ginvM and invM
+    void invalidate_M_() {
+        M_ready_ = false;
+        invalidate_derived_caches_();
+    } // this is enough to invalidate also ginvM and invM
+    virtual void invalidate_derived_caches_() {}
 
     // Weights and Components
     void ensure_lc_() {
@@ -595,13 +599,23 @@ protected:
         const SparseMatrix& Psi,
         const SparseMatrix& Omega,
         const Vector& z,
+        const Vector& a0,
         const std::vector<int>& dirichlet_dofs = {}
     ) const {
         const int n_weights = static_cast<int>(Psi.cols());
 
-        Vector a0 = Vector::Ones(n_weights); // normalization happens inside
+        Vector x0;
+        if (
+            a0.size() != n_weights ||
+            (a0.array() < 0.0).any() ||
+            !(a0.squaredNorm() > 0.0)
+        ) {
+            x0 = Vector::Ones(n_weights);
+        } else {
+            x0 = a0;
+        }
 
-        auto* raw_problem = new NonNegativeWeightProblem(Psi, Omega, z, a0, dirichlet_dofs);
+        auto* raw_problem = new NonNegativeWeightProblem(Psi, Omega, z, x0, dirichlet_dofs);
         Ipopt::SmartPtr<Ipopt::TNLP> problem = raw_problem;
         Ipopt::SmartPtr<Ipopt::IpoptApplication> app = IpoptApplicationFactory();
         Ipopt::ApplicationReturnStatus status = app->Initialize();
@@ -722,7 +736,7 @@ protected:
         const Vector z = data().transpose() * nu;
 
         if (weight_sign_constraint() == WeightSignConstraint::NonNegative) {
-            return solve_nonnegative_weight_ipopt_(Psi_D(), M(), z);
+            return solve_nonnegative_weight_ipopt_(Psi_D(), M(), z, weights().col(h()));
         }
 
         const Vector a_tilde = ginvM() * z; // If mode == Mode::CovMax, ginvM = I
@@ -755,6 +769,7 @@ public:
     using Base::n_dofs_weights;
     using Base::data;
     using Base::components;
+    using Base::weights;
     using Base::h;
     using Base::weight_sign_constraint;
     using Base::solve_nonnegative_weight_ipopt_;
@@ -784,10 +799,25 @@ public:
     [[nodiscard]] const SparseMatrix& Psi_D() const override { return weights_solver_.Psi(); }
 
     // Weights regularization utilities
-    void set_lambda_weights(const double lambda) override { lambda_weights_ = lambda; }
+    void set_lambda_weights(const double lambda) override {
+        lambda_weights_ = lambda;
+        Omega_ready_ = false;
+    }
     [[nodiscard]] double lambda_weights() const override {
         if (lambda_weights_ > 0) return lambda_weights_;
         return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    // Omega matrix
+    const SparseMatrix& Omega() {
+        if (!Omega_ready_) {
+            Omega_ = Psi_D().transpose() * M() * Psi_D();
+            Omega_ += lambda_weights_ * weights_solver_.P();
+            Omega_.makeCompressed();
+            Omega_ready_ = true;
+        }
+
+        return Omega_;
     }
 
     // Print
@@ -805,8 +835,7 @@ protected:
         Vector z = data().transpose() * nu;
 
         if (weight_sign_constraint() == WeightSignConstraint::NonNegative) {
-            SparseMatrix Omega = Psi_D().transpose() * M() * Psi_D() + lambda_weights_ * weights_solver_.P();
-            return solve_nonnegative_weight_ipopt_(Psi_D(), Omega, z, weights_solver_.boundary_dofs());
+            return solve_nonnegative_weight_ipopt_(Psi_D(), Omega(), z, weights().col(h()), weights_solver_.boundary_dofs());
         }
 
         weights_solver_.update_z_and_weights(z, M());
@@ -815,7 +844,12 @@ protected:
         weights_solver_.fit(lambda_weights_);
         return weights_solver_.f();
     }
+    void invalidate_derived_caches_() override {
+        Omega_ready_ = false;
+    }
 private:
+    SparseMatrix Omega_;
+    bool Omega_ready_ {false};
     WeightsSolverType weights_solver_;
     double lambda_weights_ = 1e-15;
 };
@@ -926,7 +960,6 @@ public:
         bool cache_covariances;
         bool allow_blocks_deactivation;
         bool bias;
-        bool allow_reconstruction_constraint_compensation;
         Init init;
         LambdaSelection lambda_selection;
         Mode mode;
