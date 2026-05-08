@@ -597,25 +597,14 @@ protected:
 
     Vector solve_nonnegative_weight_ipopt_(
         const SparseMatrix& Psi,
-        const SparseMatrix& Omega,
+        const Matrix& Omega,
         const Vector& z,
-        const Vector& a0,
         const std::vector<int>& dirichlet_dofs = {}
     ) const {
+
         const int n_weights = static_cast<int>(Psi.cols());
 
-        Vector x0;
-        if (
-            a0.size() != n_weights ||
-            (a0.array() < 0.0).any() ||
-            !(a0.squaredNorm() > 0.0)
-        ) {
-            x0 = Vector::Ones(n_weights);
-        } else {
-            x0 = a0;
-        }
-
-        auto* raw_problem = new NonNegativeWeightProblem(Psi, Omega, z, x0, dirichlet_dofs);
+        auto* raw_problem = new NonNegativeWeightProblem(Psi, Omega, z,  dirichlet_dofs);
         Ipopt::SmartPtr<Ipopt::TNLP> problem = raw_problem;
         Ipopt::SmartPtr<Ipopt::IpoptApplication> app = IpoptApplicationFactory();
         Ipopt::ApplicationReturnStatus status = app->Initialize();
@@ -625,8 +614,8 @@ protected:
         }
 
         status = app->OptimizeTNLP(problem);
-        const Vector a = raw_problem->solution();
-        return a;
+
+        return raw_problem->solution();
     }
 
     // Components' solver
@@ -733,10 +722,12 @@ protected:
         assert(nu.size() == n() && "nu must have size n (rows of X)");
         init();
 
-        const Vector z = data().transpose() * nu;
+        Vector z = data().transpose();
 
         if (weight_sign_constraint() == WeightSignConstraint::NonNegative) {
-            return solve_nonnegative_weight_ipopt_(Psi_D(), M(), z, weights().col(h()));
+            const double s = z.transpose() * weights().col(h());
+            if (s*s > 0) z /= s;
+            return solve_nonnegative_weight_ipopt_(Psi_D(), M(), z);
         }
 
         const Vector a_tilde = ginvM() * z; // If mode == Mode::CovMax, ginvM = I
@@ -809,11 +800,10 @@ public:
     }
 
     // Omega matrix
-    const SparseMatrix& Omega() {
+    const Matrix& Omega() {
         if (!Omega_ready_) {
             Omega_ = Psi_D().transpose() * M() * Psi_D();
             Omega_ += lambda_weights_ * weights_solver_.P();
-            Omega_.makeCompressed();
             Omega_ready_ = true;
         }
 
@@ -835,7 +825,9 @@ protected:
         Vector z = data().transpose() * nu;
 
         if (weight_sign_constraint() == WeightSignConstraint::NonNegative) {
-            return solve_nonnegative_weight_ipopt_(Psi_D(), Omega(), z, weights().col(h()), weights_solver_.boundary_dofs());
+            const double s = z.transpose() * Psi_D() * weights().col(h());
+            if (s*s > 0) z /= s;
+            return solve_nonnegative_weight_ipopt_(Psi_D(), Omega(), z);
         }
 
         weights_solver_.update_z_and_weights(z, M());
@@ -848,7 +840,7 @@ protected:
         Omega_ready_ = false;
     }
 private:
-    SparseMatrix Omega_;
+    Matrix Omega_;
     bool Omega_ready_ {false};
     WeightsSolverType weights_solver_;
     double lambda_weights_ = 1e-15;
