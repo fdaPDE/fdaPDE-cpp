@@ -703,7 +703,7 @@ protected:
         assert(nu.size() == n() && "nu must have size n (rows of X)");
         init();
 
-        Vector z = data().transpose();
+        Vector z = data().transpose() * nu;
 
         if (weight_sign_constraint() == WeightSignConstraint::NonNegative) {
             const double s = z.transpose() * weights().col(h());
