@@ -307,38 +307,19 @@ public:
     }
 
     // Inner-Component initialization
-    struct InitInfo { bool active{false}; Vector nu; double s1{0}; double s1_edge{0}; double frac{0}; };
-    InitInfo svd_init(const bool allow_block_deactivation, const double relaxation = 0.) const {
-        InitInfo out{true, Vector::Zero(n()), 0.0, 0.0, 0.0};
+    struct InitInfo { bool active{false}; Vector nu; };
+    InitInfo svd_init() const {
+        InitInfo out{true, Vector::Zero(n()) };
         const Matrix& X = data();
         if (X.size() == 0) return out;
 
         const Eigen::BDCSVD<Matrix> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
+
         if (svd.singularValues().size() == 0) return out;
 
-        if (allow_block_deactivation){
-            out.s1 = svd.singularValues()(0);
-            const double fro2 = X.squaredNorm();
-            out.frac = (fro2 > 0.0) ? (out.s1*out.s1)/fro2 : 0.0;
+        if (X.rows() >= X.cols()) out.nu = X * svd.matrixV().col(0);
+        else out.nu = svd.matrixU().col(0);
 
-            // If noise_variance_ is not set, fall back to energy test
-            if (!noise_variance_.has_value()) {
-                out.active = (out.frac >= 1e-3);
-            } else {
-                const double sigma = std::sqrt(std::max(0.0, *noise_variance_));
-                const auto n_obs = static_cast<double>(n());
-                const auto n_covs = static_cast<double>(m());
-                out.s1_edge = sigma * (std::sqrt(n_obs) + std::sqrt(n_covs)) * (1.0 + relaxation);
-                out.active = (out.s1 > out.s1_edge);
-            }
-        }
-
-        if (out.active) {
-            if (X.rows() >= X.cols()) out.nu = X * svd.matrixV().col(0);
-            else out.nu = svd.matrixU().col(0);
-        } else {
-            out.nu.setZero();
-        }
         return out;
     }
 
@@ -950,7 +931,6 @@ public:
         unsigned seed;
         bool verbose;
         bool cache_covariances;
-        bool allow_blocks_deactivation;
         bool bias;
         Init init;
         LambdaSelection lambda_selection;
@@ -961,7 +941,6 @@ public:
 
         explicit Options(
           const int max_iter_ = 1000, const double tol_ = 1e-8, const unsigned seed_ = 0,
-          const bool allow_blocks_deactivation_ = false,
           const bool bias_ = true,
           const Init init_ = Init::SVD, const Mode mode_ = Mode::CovMax,
           const WeightSignConstraint weight_sign_constraint_ = WeightSignConstraint::None,
@@ -971,7 +950,6 @@ public:
             max_iter(max_iter_),
             tol(tol_),
             seed(seed_),
-            allow_blocks_deactivation(allow_blocks_deactivation_),
             bias(bias_),
             init(init_),
             mode(mode_),
@@ -1134,86 +1112,68 @@ public:
 
         // room for results
         Result res(n_blocks());
+        res.obj_history.reserve(opt_.max_iter);
 
         // make a component local copy of the connection matrix C
         res.C = C_;
 
-        // random or SVD init for ν_l
+        // weights initialization
         for (int j = 0; j < J; ++j) {
+
             auto& b = blocks_[j];
             b->set_h(h_);
+
             if (opt_.init == Init::SVD) {
-                const auto info = b->svd_init(opt_.allow_blocks_deactivation);
-                if (!info.active) {
-                    res.active_blocks[j] = false;
-                    res.s1_blocks[j] = info.s1;
-                    res.s1_edge_blocks[j] = info.s1_edge;
-                    // nothing to be done weights and components are already initialized at 0
-                } else {
-                    res.active_blocks[j] = true;
-                    res.s1_blocks[j] = info.s1;
-                    res.s1_edge_blocks[j] = info.s1_edge;
-                    b->compute(info.nu);  // block handles normalization
-                }
-            } else { // Random
+                const auto info = b->svd_init();
+                res.active_blocks[j] = true;
+                b->compute(info.nu);
+            }
+
+            if (opt_.init == Init::Random) {
                 std::mt19937_64 rng(opt_.seed);
                 std::uniform_real_distribution<double> U(-1.0, 1.0);
                 const Vector nu = Vector::NullaryExpr(n_, [&]{ return U(rng); });
-                b->compute(nu);  // block handles normalization
+                b->compute(nu);
             }
-        }
-
-        // disconnect blocks that are not active
-        for (int j = 0; j < J; ++j) if (!res.active_blocks[j]) {
-            for (int k = 0; k < J; ++k) { res.C(j,k) = false; res.C(k,j) = false; }
-        }
-        for (int j = 0; j < J; ++j) if (res.active_blocks[j]) {
-            bool alone = true;
-            for (int k = 0; k < J; ++k) alone &= !res.C(j,k);
-            if (alone) res.C(j,j) = true;
         }
 
         // room for objective function evaluations
-        res.obj_history.reserve(opt_.max_iter);
-        {
-            const double f_obj = objective_(res.C, res.active_blocks);
-            res.obj_history.push_back(f_obj);
-        }
-        if ( !no_connections_(res.C) ) {
-            // require lambda selection also at the first iteration
-            if (opt_.lambda_selection == LambdaSelection::Automatic) { set_lambda_auto_all_(); }
-            auto a_prev = snapshot_weights_();
-            for (int s = 0; s < opt_.max_iter; ++s) {
-                for (int l = 0; l < J; ++l) {
-                    Vector nu_l = Vector::Zero(blocks_[l]->n());
-                    const Vector eta_l = eta_(*blocks_[l]);
-                    for (int k = 0; k < J; ++k) {
-                        if (!res.C(l,k)) continue;
-                        const Vector eta_k = eta_(*blocks_[k]);
-                        const double cov_lk = cov_value_(l, k, eta_l, eta_k);   // uses/saves cache, marks clean
-                        const double w_lk = opt_.scheme.w(cov_lk);
-                        nu_l.noalias() += w_lk * eta_(*blocks_[k], *blocks_[l]);   // no aliasing with RHS
-                    }
-                    blocks_[l]->compute(nu_l);   // block handles normalization
-                    mark_cov_rowcol_dirty_(l);   // η_l changed → invalidate its row/col
+        res.obj_history.push_back(objective_(res.C));
+        auto a_prev = snapshot_weights_();
+
+        // require lambda selection also at the first iteration
+        if (opt_.lambda_selection == LambdaSelection::Automatic) { set_lambda_auto_all_(); }
+
+        for (int s = 0; s < opt_.max_iter; ++s) {
+            for (int l = 0; l < J; ++l) {
+                Vector nu_l = Vector::Zero(blocks_[l]->n());
+                const Vector eta_l = eta_(*blocks_[l]);
+                for (int k = 0; k < J; ++k) {
+                    if (!res.C(l,k)) continue;
+                    const Vector eta_k = eta_(*blocks_[k]);
+                    const double cov_lk = cov_value_(l, k, eta_l, eta_k);
+                    const double w_lk = opt_.scheme.w(cov_lk);
+                    nu_l.noalias() += w_lk * eta_(*blocks_[k], *blocks_[l]);
                 }
-
-                const double f_obj = objective_(res.C, res.active_blocks);
-                const double obj_prev = res.obj_history.back();
-                res.obj_history.push_back(f_obj);
-                res.iters = s + 1;
-
-                // check monotonicity
-                if (f_obj + 1e-15 < obj_prev) res.monotone = false;
-
-                // check convergence
-                const double delta_obj = std::abs(f_obj - obj_prev);
-                const double delta_a  = weights_variation_(a_prev);
-                if (delta_obj < opt_.tol || delta_a < opt_.tol) break;
-
-                // update snapshot for next iter
-                a_prev = snapshot_weights_();
+                blocks_[l]->compute(nu_l);   // block handles normalization
+                mark_cov_rowcol_dirty_(l);   // η_l changed → invalidate its row/col
             }
+
+            const double f_obj = objective_(res.C);
+            const double obj_prev = res.obj_history.back();
+            res.obj_history.push_back(f_obj);
+            res.iters = s + 1;
+
+            // check monotonicity
+            if (f_obj + 1e-15 < obj_prev) res.monotone = false;
+
+            // check convergence
+            const double delta_obj = std::abs(f_obj - obj_prev);
+            const double delta_a  = weights_variation_(a_prev);
+            if (delta_obj < opt_.tol || delta_a < opt_.tol) break;
+
+            // update snapshot for next iter
+            a_prev = snapshot_weights_();
         }
 
         // save information about the iteration in the result struct
@@ -1345,7 +1305,7 @@ private:
     }
 
     // objective f = Σ_{j,k} C_jk * g( cov(η_j, η_k) )
-    double objective_(const BoolMatrix& C, const std::vector<bool>& active_blocks) {
+    double objective_(const BoolMatrix& C) {
         // std::cout << "Computing objective --->"<<  std::endl;
         const int J = n_blocks();
         double f = 0.0;
