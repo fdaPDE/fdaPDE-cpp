@@ -591,7 +591,7 @@ protected:
         Ipopt::ApplicationReturnStatus status = app->Initialize();
 
         if (status != Ipopt::Solve_Succeeded) {
-            std::cerr << "Ipopt initialization failed.\n";
+            throw std::runtime_error("Ipopt initialization failed.");
         }
 
         status = app->OptimizeTNLP(problem);
@@ -662,11 +662,10 @@ public:
     using Base::m;
     using Base::n_dofs_weights;
     using Base::data;
+    using Base::h;
     using Base::weights;
     using Base::components;
-    using Base::h;
     using Base::weight_sign_constraint;
-    using Base::solve_nonnegative_weight_ipopt_;
 
     template<typename S = SamplingStrategy>
     requires std::same_as<S, IndependentSampling>
@@ -699,6 +698,8 @@ public:
     }
 
 protected:
+    using Base::solve_nonnegative_weight_ipopt_;
+
     Vector w_fit_(const Vector& nu) override {
         assert(nu.size() == n() && "nu must have size n (rows of X)");
         init();
@@ -735,16 +736,14 @@ public:
 
     using Base::init;
     using Base::M;
-    using Base::tau;
     using Base::n;
     using Base::m;
     using Base::n_dofs_weights;
     using Base::data;
-    using Base::components;
-    using Base::weights;
     using Base::h;
+    using Base::weights;
+    using Base::components;
     using Base::weight_sign_constraint;
-    using Base::solve_nonnegative_weight_ipopt_;
 
     template <typename GeoFrame>
     requires std::same_as<SamplingStrategy, IndependentSampling>
@@ -799,6 +798,8 @@ public:
         os << "\n";
     }
 protected:
+    using Base::solve_nonnegative_weight_ipopt_;
+
     Vector w_fit_(const Vector& nu) override {
         assert(nu.size() == n() && "nu must have size n (rows of X)");
         init();

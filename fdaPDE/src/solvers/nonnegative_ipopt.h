@@ -24,7 +24,7 @@ public:
         c_ = Psi_.transpose() * z_;
 
         // enforce symmetry once
-        // Omega_ = 0.5 * (Omega_ + Omega_.transpose());
+         Omega_ = 0.5 * (Omega_ + Omega_.transpose());
 
         // precompute constant Hessian pieces
         hess_obj_ = -2.0 * (c_ * c_.transpose());
@@ -33,9 +33,10 @@ public:
         // build mask for boundary dofs
         is_boundary_.assign(n_, false);
         for (int idx : boundary_dofs_) {
-            if (idx >= 0 && idx < n_) {
-                is_boundary_[idx] = true;
+            if (idx < 0 || idx >= n_) {
+                throw std::out_of_range("NonNegativeWeightProblem: boundary dof out of range");
             }
+            is_boundary_[idx] = true;
         }
 
         // starting point
@@ -44,9 +45,8 @@ public:
             if (is_boundary_[i]) x0_[i] = 0.0;
         }
         const double norm2 = x0_.dot(Omega_ * x0_);
-        if (norm2 > 0.0) {
-            x0_ /= std::sqrt(norm2);
-        }
+        if (norm2 > 0.0) x0_ /= std::sqrt(norm2);
+        else throw std::runtime_error("NonNegativeWeightProblem: invalid starting point");
 
     }
 
@@ -255,7 +255,7 @@ public:
         obj_value_ = obj_value;
 
         // clean numerical negativity
-        // if (status == Ipopt::SolverReturn::SUCCESS) {
+        if ( status == Ipopt::SUCCESS || status == Ipopt::STOP_AT_ACCEPTABLE_POINT ) {
 
             // clip negatives
             solution_ = solution_.cwiseMax(0.0);
@@ -266,7 +266,8 @@ public:
             if (norm2 > 0.0) {
                 solution_ /= std::sqrt(norm2);
             }
-        // }
+
+        }
     }
 
 
@@ -282,7 +283,7 @@ private:
     Matrix Omega_;
     Vector z_;
     Vector x0_;
-    const std::vector<int>& boundary_dofs_;
+    std::vector<int> boundary_dofs_;
 
     // dimensions
     Ipopt::Index n_;
