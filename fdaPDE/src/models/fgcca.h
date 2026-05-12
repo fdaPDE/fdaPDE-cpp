@@ -22,7 +22,7 @@
 
 namespace fdapde {
 
-enum class Init { Random, SVD };
+enum class Init { Random, SVD, Uniform };
 enum class DesignMode {Empty, FullyConnected};
 enum class LambdaSelection {Manual, Automatic};
 enum class Mode { CorMax, Regularized, CovMax };
@@ -306,8 +306,25 @@ public:
         return *noise_variance_;
     }
 
+    // Weights initialization
+    void init_weight_uniform() {
+        ensure_lc_();
+
+        Vector a = Vector::Ones(n_dofs_weights_);
+        double norm2 = a.dot(Omega() * a);
+        if (norm2 <= 0) norm2 = 1.0;
+        weights_.col(h()) = a / std::sqrt(norm2);
+    }
+
     // Inner-Component initialization
     struct InitInfo { bool active{false}; Vector nu; };
+    InitInfo uniform_init() const {
+        InitInfo out{true, Vector::Ones(n()) };
+        const Matrix& X = data();
+        out.nu = X * Psi_D() * Vector::Ones(n_dofs_weights());
+
+        return out;
+    }
     InitInfo svd_init() const {
         InitInfo out{true, Vector::Zero(n()) };
         const Matrix& X = data();
@@ -324,6 +341,7 @@ public:
     }
 
     // M: normalization matrix
+    [[nodiscard]] virtual const Matrix& Omega() = 0;
     [[nodiscard]] const SparseMatrix& M() const { ensure_M_(); return M_; }
     [[nodiscard]] const Matrix& ginvM() const { ensure_ginvM_(); return ginvM_; }
     [[nodiscard]] SparseSolver& invM() { ensure_invM_(); return invM_; }
@@ -580,12 +598,13 @@ protected:
         const SparseMatrix& Psi,
         const Matrix& Omega,
         const Vector& z,
+        const Vector& x0,
         const std::vector<int>& dirichlet_dofs = {}
     ) const {
 
         const int n_weights = static_cast<int>(Psi.cols());
 
-        auto* raw_problem = new NonNegativeWeightProblem(Psi, Omega, z,  dirichlet_dofs);
+        auto* raw_problem = new NonNegativeWeightProblem(Psi, Omega, z, x0, dirichlet_dofs);
         Ipopt::SmartPtr<Ipopt::TNLP> problem = raw_problem;
         Ipopt::SmartPtr<Ipopt::IpoptApplication> app = IpoptApplicationFactory();
         Ipopt::ApplicationReturnStatus status = app->Initialize();
@@ -687,6 +706,15 @@ public:
         init();
     }
 
+    // Omega
+    [[nodiscard]] const Matrix& Omega() override {
+        if (!Omega_ready_) {
+            Omega_ = Matrix(M());
+            Omega_ready_ = true;
+        }
+        return Omega_;
+    };
+
     // Psi_D
     [[nodiscard]] const SparseMatrix& Psi_D() const override { return Psi_D_; }
 
@@ -709,7 +737,7 @@ protected:
         if (weight_sign_constraint() == WeightSignConstraint::NonNegative) {
             const double s = z.transpose() * weights().col(h());
             if (s*s > 0) z /= s;
-            return solve_nonnegative_weight_ipopt_(Psi_D(), M(), z);
+            return solve_nonnegative_weight_ipopt_(Psi_D(), Omega(), z, weights().col(h()));
         }
 
         const Vector a_tilde = ginvM() * z; // If mode == Mode::CovMax, ginvM = I
@@ -720,7 +748,13 @@ protected:
         return a_tilde / rho;
     }
 
+    void invalidate_derived_caches_() override {
+        Omega_ready_ = false;
+    }
+
 private:
+    Matrix Omega_;
+    bool Omega_ready_ {false};
     SparseMatrix Psi_D_; // m x m sparse identity matrix
 };
 
@@ -780,7 +814,8 @@ public:
     }
 
     // Omega matrix
-    const Matrix& Omega() {
+    [[nodiscard]] const Matrix& Omega() override {
+
         if (!Omega_ready_) {
             Omega_ = Psi_D().transpose() * M() * Psi_D();
             Omega_ += lambda_weights_ * weights_solver_.P();
@@ -809,7 +844,7 @@ protected:
         if (weight_sign_constraint() == WeightSignConstraint::NonNegative) {
             const double s = z.transpose() * Psi_D() * weights().col(h());
             if (s*s > 0) z /= s;
-            return solve_nonnegative_weight_ipopt_(Psi_D(), Omega(), z);
+            return solve_nonnegative_weight_ipopt_(Psi_D(), Omega(), z, weights().col(h()));
         }
 
         weights_solver_.update_z_and_weights(z, M());
@@ -1123,10 +1158,15 @@ public:
 
             auto& b = blocks_[j];
             b->set_h(h_);
+            b->init_weight_uniform();
+
+            if (opt_.init == Init::Uniform) {
+                const auto info = b->uniform_init();
+                b->compute(info.nu);
+            }
 
             if (opt_.init == Init::SVD) {
                 const auto info = b->svd_init();
-                res.active_blocks[j] = true;
                 b->compute(info.nu);
             }
 

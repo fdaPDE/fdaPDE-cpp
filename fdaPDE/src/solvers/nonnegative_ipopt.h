@@ -15,8 +15,9 @@ public:
         const Matrix& Psi,
         const Matrix& Omega,
         const Vector& z,
+        const Vector& x0,
         const std::vector<int>& boundary_dofs = {}
-    ) : Psi_(Psi), Omega_(Omega), z_(z), boundary_dofs_(boundary_dofs) {
+    ) : Psi_(Psi), Omega_(Omega), z_(z), x0_(x0), boundary_dofs_(boundary_dofs) {
 
         n_ = static_cast<Ipopt::Index>(Psi_.cols());
 
@@ -40,7 +41,7 @@ public:
         }
 
         // starting point
-        x0_ = Vector::Ones(n_);
+        x0_ = x0; // Vector::Ones(n_);
         for (Ipopt::Index i = 0; i < n_; ++i) {
             if (is_boundary_[i]) x0_[i] = 0.0;
         }
@@ -165,7 +166,6 @@ public:
     ) override {
 
         Eigen::Map<const Vector> a(x, n);
-
         g[0] = a.dot(Omega_ * a);
 
         return true;
@@ -267,6 +267,8 @@ public:
                 solution_ /= std::sqrt(norm2);
             }
 
+        } else {
+            std::cerr << "Solution is not convergible." << std::endl;
         }
     }
 
