@@ -268,6 +268,18 @@ struct fe_normcovmax_elliptic {
     template <typename MassFactorization> matrix_t P(double lambda, const MassFactorization& invR0) const {
         return lambda * R1_.transpose() * invR0.solve(R1_);
     }
+    sparse_matrix_t P_lumped(const double lambda = 1.) const {
+        sparse_matrix_t R0_lumped = lump(R0_);
+        vector_t d = R0_lumped.diagonal().eval();
+        vector_t inv_d = d.cwiseInverse();
+        sparse_matrix_t invR0_R1 = R1_;
+        for (int k = 0; k < invR0_R1.outerSize(); ++k) {
+            for (typename sparse_matrix_t::InnerIterator it(invR0_R1, k); it; ++it) {
+                it.valueRef() *= inv_d[it.row()];
+            }
+        }
+        return lambda * R1_.transpose() * invR0_R1;
+    }
     // efficient evaluation of f^\top * P * f = g^\top * R0 * g
     double ftPf(double lambda) {
         if (lambda_saved_.value() != lambda || W_changed_) { fit(lambda); }

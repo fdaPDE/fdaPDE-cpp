@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cmath>
+#include <optional>
 
 #include <Eigen/Dense>
 
@@ -8,30 +9,33 @@
 
 using Vector = Eigen::VectorXd;
 using Matrix = Eigen::MatrixXd;
+using SparseMatrix = Eigen::SparseMatrix<double, Eigen::ColMajor, int>;
 
 class NonNegativeWeightProblem : public Ipopt::TNLP {
 public:
     NonNegativeWeightProblem(
-        const Matrix& Psi,
-        const Matrix& Omega,
+        const SparseMatrix& Psi,
+        const SparseMatrix& Omega,
         const Vector& z,
-        const Vector& x0,
         const std::vector<int>& boundary_dofs = {}
-    ) : Psi_(Psi), Omega_(Omega), z_(z), x0_(x0), boundary_dofs_(boundary_dofs) {
+    ) : Psi_(Psi), Omega_(Omega), z_(z),  boundary_dofs_(boundary_dofs) {
 
+        // dimensions
         n_ = static_cast<Ipopt::Index>(Psi_.cols());
 
-        // cache constant quantities
-        c_ = Psi_.transpose() * z_;
+        // hessian sparsity structure
+        for (int k = 0; k < Omega_.outerSize(); ++k) {
+            for (SparseMatrix::InnerIterator it(Omega_, k); it; ++it) {
+                const Ipopt::Index i = it.row();
+                const Ipopt::Index j = it.col();
 
-        // enforce symmetry once
-         Omega_ = 0.5 * (Omega_ + Omega_.transpose());
+                if (i >= j) {
+                    hess_pos_.emplace_back(i, j);
+                }
+            }
+        }
 
-        // precompute constant Hessian pieces
-        hess_obj_ = -2.0 * (c_ * c_.transpose());
-        hess_con_ =  2.0 * Omega_;
-
-        // build mask for boundary dofs
+        // boundary conditions
         is_boundary_.assign(n_, false);
         for (int idx : boundary_dofs_) {
             if (idx < 0 || idx >= n_) {
@@ -41,14 +45,21 @@ public:
         }
 
         // starting point
-        x0_ = x0; // Vector::Ones(n_);
+        x0_ = Vector::Ones(n_);
         for (Ipopt::Index i = 0; i < n_; ++i) {
             if (is_boundary_[i]) x0_[i] = 0.0;
         }
+
         const double norm2 = x0_.dot(Omega_ * x0_);
         if (norm2 > 0.0) x0_ /= std::sqrt(norm2);
         else throw std::runtime_error("NonNegativeWeightProblem: invalid starting point");
 
+        // scaling
+        double s = z.dot(Psi_ * x0_);
+        if (s * s <= 0.0) s = 1.0;
+
+        // cache constant quantities
+        c_ = Psi_.transpose() * z_ / s;
     }
 
     // returns the size of the problem
@@ -64,7 +75,7 @@ public:
         m = 1;
 
         nnz_jac_g = n_;
-        nnz_h_lag = n_ * (n_ + 1) / 2;
+        nnz_h_lag = static_cast<Ipopt::Index>(hess_pos_.size());
 
         index_style = Ipopt::TNLP::C_STYLE; // 0-based
 
@@ -131,10 +142,8 @@ public:
         Ipopt::Number& obj_value        // (out) storage for the value of the objective function f(x)
     ) override {
 
-        Eigen::Map<const Vector> a(x, n);
-        const double s = c_.dot(a);
-
-        obj_value = -s * s;
+        const Eigen::Map<const Vector> a(x, n);
+        obj_value = - c_.dot(a);
 
         return true;
     }
@@ -147,11 +156,8 @@ public:
         Ipopt::Number* grad_f           // (out) array to store values of the gradient of the objective function grad_{x} f(x)
     ) override {
 
-        Eigen::Map<const Vector> a(x, n);
         Eigen::Map<Vector> grad(grad_f, n);
-        const double s = c_.dot(a);
-
-        grad.noalias() = -2.0 * s * c_;
+        grad.noalias() = - c_;
 
         return true;
     }
@@ -214,22 +220,15 @@ public:
 
         if (values == nullptr) {
             // return the structure. this is a symmetric matrix, fill the lower left triangle only
-            Ipopt::Index idx = 0;
-            for (Ipopt::Index i = 0; i < n; ++i) {
-                for (Ipopt::Index j = 0; j <= i; ++j) {
-                    iRow[idx] = i;
-                    jCol[idx] = j;
-                    ++idx;
-                }
+            for (Ipopt::Index k = 0; k < static_cast<Ipopt::Index>(hess_pos_.size()); ++k) {
+                iRow[k] = hess_pos_[k].first;
+                jCol[k] = hess_pos_[k].second;
             }
         } else {
             // return the values. this is a symmetric matrix, fill the lower left triangle only
-            Ipopt::Index idx = 0;
-            for (Ipopt::Index i = 0; i < n; ++i) {
-                for (Ipopt::Index j = 0; j <= i; ++j) {
-                    values[idx] = obj_factor * hess_obj_(i, j) + lambda[0] * hess_con_(i, j);
-                    ++idx;
-                }
+            for (Ipopt::Index k = 0; k < static_cast<Ipopt::Index>(hess_pos_.size()); ++k) {
+                const auto [i, j] = hess_pos_[k];
+                values[k] = 2.0 * lambda[0] * Omega_.coeff(i, j);
             }
         }
 
@@ -249,26 +248,17 @@ public:
         const Ipopt::IpoptData* ip_data,
         Ipopt::IpoptCalculatedQuantities* ip_cq
     ) override {
-
         solution_ = Eigen::Map<const Vector>(x, n);
         status_ = status;
         obj_value_ = obj_value;
 
         // clean numerical negativity
-        if ( status == Ipopt::SUCCESS || status == Ipopt::STOP_AT_ACCEPTABLE_POINT ) {
-
-            // clip negatives
+        if (status == Ipopt::SUCCESS || status == Ipopt::STOP_AT_ACCEPTABLE_POINT) {
             solution_ = solution_.cwiseMax(0.0);
-
-            // renormalize
             const double norm2 = solution_.dot(Omega_ * solution_);
-
-            if (norm2 > 0.0) {
-                solution_ /= std::sqrt(norm2);
-            }
-
+            if (norm2 > 0.0) solution_ /= std::sqrt(norm2);
         } else {
-            std::cerr << "Solution is not convergible." << std::endl;
+            std::cerr << "Ipopt did not converge to a successful solution." << std::endl;
         }
     }
 
@@ -281,8 +271,8 @@ public:
 private:
 
     // inputs
-    Matrix Psi_;
-    Matrix Omega_;
+    SparseMatrix Psi_;
+    SparseMatrix Omega_;
     Vector z_;
     Vector x0_;
     std::vector<int> boundary_dofs_;
@@ -291,14 +281,47 @@ private:
     Ipopt::Index n_;
 
     // cache for constant quantities
-    Vector c_;                          // \Psi^\top * z;
-    Matrix hess_obj_;                   // - 2 * (c * c^\top)
-    Matrix hess_con_;                   //   2 * \Omega;
-    std::vector<bool> is_boundary_;     // dofs indexes of the boundary elements
+    std::vector<std::pair<Ipopt::Index, Ipopt::Index>> hess_pos_;
+    Vector c_;
+    std::vector<bool> is_boundary_;
 
     // results
     Vector solution_;
     Ipopt::SolverReturn status_ = Ipopt::SolverReturn::SUCCESS;
     double obj_value_ = 0.0;
+};
 
+
+class NonNegativeWeightSolver {
+public:
+    NonNegativeWeightSolver(
+        const SparseMatrix& Psi,
+        const SparseMatrix& Omega,
+        const std::vector<int>& boundary_dofs = {}
+    ) : Psi_(Psi), Omega_(Omega), boundary_dofs_(boundary_dofs) {
+
+        app_ = IpoptApplicationFactory();
+
+        const auto status = app_->Initialize();
+        if (status != Ipopt::Solve_Succeeded) {
+            throw std::runtime_error("Ipopt initialization failed.");
+        }
+    }
+
+    Vector solve(const Vector& z) {
+
+        auto* raw = new NonNegativeWeightProblem(Psi_, Omega_, z, boundary_dofs_);
+
+        Ipopt::SmartPtr<Ipopt::TNLP> problem = raw;
+        app_->OptimizeTNLP(problem);
+
+        return raw->solution();
+    }
+
+private:
+    SparseMatrix Psi_;
+    SparseMatrix Omega_;
+    std::vector<int> boundary_dofs_;
+
+    Ipopt::SmartPtr<Ipopt::IpoptApplication> app_;
 };

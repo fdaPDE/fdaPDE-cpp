@@ -341,7 +341,7 @@ public:
     }
 
     // M: normalization matrix
-    [[nodiscard]] virtual const Matrix& Omega() = 0;
+    [[nodiscard]] virtual const SparseMatrix& Omega() = 0;
     [[nodiscard]] const SparseMatrix& M() const { ensure_M_(); return M_; }
     [[nodiscard]] const Matrix& ginvM() const { ensure_ginvM_(); return ginvM_; }
     [[nodiscard]] SparseSolver& invM() { ensure_invM_(); return invM_; }
@@ -594,32 +594,26 @@ protected:
         }
     }
 
-    Vector solve_nonnegative_weight_ipopt_(
-        const SparseMatrix& Psi,
-        const Matrix& Omega,
-        const Vector& z,
-        const Vector& x0,
-        const std::vector<int>& dirichlet_dofs = {}
-    ) const {
+    Vector solve_nonnegative_weight_ipopt_(const Vector& z, const std::vector<int>& dirichlet_dofs = {}) {
 
-        const int n_weights = static_cast<int>(Psi.cols());
-
-        auto* raw_problem = new NonNegativeWeightProblem(Psi, Omega, z, x0, dirichlet_dofs);
-        Ipopt::SmartPtr<Ipopt::TNLP> problem = raw_problem;
-        Ipopt::SmartPtr<Ipopt::IpoptApplication> app = IpoptApplicationFactory();
-        Ipopt::ApplicationReturnStatus status = app->Initialize();
-
-        if (status != Ipopt::Solve_Succeeded) {
-            throw std::runtime_error("Ipopt initialization failed.");
+        if (!nn_solver_) {
+            nn_solver_ = std::make_unique<NonNegativeWeightSolver>(
+                Psi_D(),
+                Omega(),
+                dirichlet_dofs
+            );
         }
 
-        status = app->OptimizeTNLP(problem);
-
-        return raw_problem->solution();
+        return nn_solver_->solve(z);
     }
 
-    // Components' solver
+    void reset_nonnegative_weight_solver_() {
+        nn_solver_.reset();
+    }
+
+    // Solvers
     ComponentsSolverType components_solver_;
+    std::unique_ptr<NonNegativeWeightSolver> nn_solver_;
 
     // Dimensions
     int n_dofs_weights_ {0};
@@ -707,9 +701,9 @@ public:
     }
 
     // Omega
-    [[nodiscard]] const Matrix& Omega() override {
+    [[nodiscard]] const SparseMatrix& Omega() override {
         if (!Omega_ready_) {
-            Omega_ = Matrix(M());
+            Omega_ = M();
             Omega_ready_ = true;
         }
         return Omega_;
@@ -727,6 +721,7 @@ public:
 
 protected:
     using Base::solve_nonnegative_weight_ipopt_;
+    using Base::reset_nonnegative_weight_solver_;
 
     Vector w_fit_(const Vector& nu) override {
         assert(nu.size() == n() && "nu must have size n (rows of X)");
@@ -735,9 +730,7 @@ protected:
         Vector z = data().transpose() * nu;
 
         if (weight_sign_constraint() == WeightSignConstraint::NonNegative) {
-            const double s = z.transpose() * weights().col(h());
-            if (s*s > 0) z /= s;
-            return solve_nonnegative_weight_ipopt_(Psi_D(), Omega(), z, weights().col(h()));
+            return solve_nonnegative_weight_ipopt_(z);
         }
 
         const Vector a_tilde = ginvM() * z; // If mode == Mode::CovMax, ginvM = I
@@ -750,10 +743,11 @@ protected:
 
     void invalidate_derived_caches_() override {
         Omega_ready_ = false;
+        reset_nonnegative_weight_solver_();
     }
 
 private:
-    Matrix Omega_;
+    SparseMatrix Omega_;
     bool Omega_ready_ {false};
     SparseMatrix Psi_D_; // m x m sparse identity matrix
 };
@@ -807,6 +801,7 @@ public:
     void set_lambda_weights(const double lambda) override {
         lambda_weights_ = lambda;
         Omega_ready_ = false;
+        reset_nonnegative_weight_solver_();
     }
     [[nodiscard]] double lambda_weights() const override {
         if (lambda_weights_ > 0) return lambda_weights_;
@@ -814,11 +809,11 @@ public:
     }
 
     // Omega matrix
-    [[nodiscard]] const Matrix& Omega() override {
+    [[nodiscard]] const SparseMatrix& Omega() override {
 
         if (!Omega_ready_) {
             Omega_ = Psi_D().transpose() * M() * Psi_D();
-            Omega_ += lambda_weights_ * weights_solver_.P();
+            Omega_ += lambda_weights_ * weights_solver_.P_lumped();
             Omega_ready_ = true;
         }
 
@@ -834,6 +829,7 @@ public:
     }
 protected:
     using Base::solve_nonnegative_weight_ipopt_;
+    using Base::reset_nonnegative_weight_solver_;
 
     Vector w_fit_(const Vector& nu) override {
         assert(nu.size() == n() && "nu must have size n (rows of X)");
@@ -842,9 +838,7 @@ protected:
         Vector z = data().transpose() * nu;
 
         if (weight_sign_constraint() == WeightSignConstraint::NonNegative) {
-            const double s = z.transpose() * Psi_D() * weights().col(h());
-            if (s*s > 0) z /= s;
-            return solve_nonnegative_weight_ipopt_(Psi_D(), Omega(), z, weights().col(h()));
+            return solve_nonnegative_weight_ipopt_(z);
         }
 
         weights_solver_.update_z_and_weights(z, M());
@@ -855,9 +849,10 @@ protected:
     }
     void invalidate_derived_caches_() override {
         Omega_ready_ = false;
+        reset_nonnegative_weight_solver_();
     }
 private:
-    Matrix Omega_;
+    SparseMatrix Omega_;
     bool Omega_ready_ {false};
     WeightsSolverType weights_solver_;
     double lambda_weights_ = 1e-15;

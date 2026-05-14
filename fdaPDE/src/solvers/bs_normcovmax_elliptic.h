@@ -243,6 +243,7 @@ struct bs_normcovmax_elliptic {
         if (lambda_saved_.value() != lambda || W_changed_) { fit(lambda); }
         return lambda * f_.dot(R1_ * f_);
     }
+    sparse_matrix_t P_lumped(const double lambda) const { return P(lambda); }
     template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
     double ftPf(const LambdaT& lambda) {
