@@ -16,12 +16,13 @@ public:
     NonNegativeWeightProblem(
         const SparseMatrix& Psi,
         const SparseMatrix& Omega,
-        const Vector& z,
-        const std::vector<int>& boundary_dofs = {}
-    ) : Psi_(Psi), Omega_(Omega), z_(z),  boundary_dofs_(boundary_dofs) {
+        const Vector& c,
+        const Vector& x0,
+        const std::vector<bool>& is_boundary = {}
+    ) : Omega_(Omega), c_(c), x0_(x0), is_boundary_(is_boundary) {
 
         // dimensions
-        n_ = static_cast<Ipopt::Index>(Psi_.cols());
+        n_ = static_cast<Ipopt::Index>(x0_.size());
 
         // hessian sparsity structure
         for (int k = 0; k < Omega_.outerSize(); ++k) {
@@ -35,31 +36,6 @@ public:
             }
         }
 
-        // boundary conditions
-        is_boundary_.assign(n_, false);
-        for (int idx : boundary_dofs_) {
-            if (idx < 0 || idx >= n_) {
-                throw std::out_of_range("NonNegativeWeightProblem: boundary dof out of range");
-            }
-            is_boundary_[idx] = true;
-        }
-
-        // starting point
-        x0_ = Vector::Ones(n_);
-        for (Ipopt::Index i = 0; i < n_; ++i) {
-            if (is_boundary_[i]) x0_[i] = 0.0;
-        }
-
-        const double norm2 = x0_.dot(Omega_ * x0_);
-        if (norm2 > 0.0) x0_ /= std::sqrt(norm2);
-        else throw std::runtime_error("NonNegativeWeightProblem: invalid starting point");
-
-        // scaling
-        double s = z.dot(Psi_ * x0_);
-        if (s * s <= 0.0) s = 1.0;
-
-        // cache constant quantities
-        c_ = Psi_.transpose() * z_ / s;
     }
 
     // returns the size of the problem
@@ -271,18 +247,15 @@ public:
 private:
 
     // inputs
-    SparseMatrix Psi_;
     SparseMatrix Omega_;
-    Vector z_;
+    Vector c_;
     Vector x0_;
-    std::vector<int> boundary_dofs_;
 
     // dimensions
     Ipopt::Index n_;
 
     // cache for constant quantities
     std::vector<std::pair<Ipopt::Index, Ipopt::Index>> hess_pos_;
-    Vector c_;
     std::vector<bool> is_boundary_;
 
     // results
@@ -298,9 +271,31 @@ public:
         const SparseMatrix& Psi,
         const SparseMatrix& Omega,
         const std::vector<int>& boundary_dofs = {}
-    ) : Psi_(Psi), Omega_(Omega), boundary_dofs_(boundary_dofs) {
+    ) : Psi_(Psi), Omega_(Omega) {
 
         app_ = IpoptApplicationFactory();
+
+        // dimensions
+        const int n = static_cast<Ipopt::Index>(Psi_.cols());
+
+        // boundary conditions
+        is_boundary_.assign(n, false);
+        for (const int idx : boundary_dofs) {
+            if (idx < 0 || idx >= n) {
+                throw std::out_of_range("NonNegativeWeightProblem: boundary dof out of range");
+            }
+            is_boundary_[idx] = true;
+        }
+
+        // starting point
+        x0_ = Vector::Ones(n);
+        for (Ipopt::Index i = 0; i < n; ++i) {
+            if (is_boundary_[i]) x0_[i] = 0.0;
+        }
+
+        const double norm2 = x0_.dot(Omega_ * x0_);
+        if (norm2 > 0.0) x0_ /= std::sqrt(norm2);
+        else throw std::runtime_error("NonNegativeWeightProblem: invalid starting point");
 
         const auto status = app_->Initialize();
         if (status != Ipopt::Solve_Succeeded) {
@@ -310,18 +305,42 @@ public:
 
     Vector solve(const Vector& z) {
 
-        auto* raw = new NonNegativeWeightProblem(Psi_, Omega_, z, boundary_dofs_);
+        // scaling
+        double s = z.dot(Psi_ * x0_);
+        if (s * s <= 0.0) s = 1.0;
+        const Vector c = Psi_.transpose() * z / s;
 
-        Ipopt::SmartPtr<Ipopt::TNLP> problem = raw;
-        app_->OptimizeTNLP(problem);
+        auto* raw_pos = new NonNegativeWeightProblem(Psi_, Omega_, c, x0_, is_boundary_);
+        auto* raw_neg = new NonNegativeWeightProblem(Psi_, Omega_, -c, x0_, is_boundary_);
 
-        return raw->solution();
+        Ipopt::SmartPtr<Ipopt::TNLP> problem_pos = raw_pos;
+        Ipopt::SmartPtr<Ipopt::TNLP> problem_neg = raw_neg;
+
+        app_->OptimizeTNLP(problem_pos);
+        app_->OptimizeTNLP(problem_neg);
+
+        const bool pos_ok = raw_pos->status() == Ipopt::SUCCESS || raw_pos->status() == Ipopt::STOP_AT_ACCEPTABLE_POINT;
+        const bool neg_ok = raw_neg->status() == Ipopt::SUCCESS || raw_neg->status() == Ipopt::STOP_AT_ACCEPTABLE_POINT;
+        const bool pos_is_better = raw_pos->obj_value() <= raw_neg->obj_value();
+
+        if (pos_ok && neg_ok) {
+            if (pos_is_better && s < 0) { std::cout << "!!! POS is BETTER thanks to s !!!" << std::endl; }
+            if (!pos_is_better) { std::cout << "!!! NEG is BETTER !!!" << std::endl; }
+            return (pos_is_better) ? raw_pos->solution() : raw_neg->solution();
+        }
+
+        if (pos_ok) return raw_pos->solution();
+        if (neg_ok) return raw_neg->solution();
+
+        throw std::runtime_error("NonNegativeWeightSolver: both optimizations failed.");
     }
 
 private:
     SparseMatrix Psi_;
     SparseMatrix Omega_;
-    std::vector<int> boundary_dofs_;
+
+    std::vector<bool> is_boundary_;
+    Vector x0_;
 
     Ipopt::SmartPtr<Ipopt::IpoptApplication> app_;
 };

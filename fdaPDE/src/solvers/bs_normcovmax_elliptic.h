@@ -202,7 +202,7 @@ struct bs_normcovmax_elliptic {
         fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
         if ( lambda_saved_.value() != lambda || W_changed_) {
             // assemble spline system: A = Psi^T W Psi + lambda * R1
-            const sparse_matrix_t A = PsiNA().transpose() * D_ * W_ * PsiNA() + lambda * (R1_ + R0_);
+            const sparse_matrix_t A = PsiNA().transpose() * D_ * W_ * PsiNA() + lambda * R1_;
             // TODO: Dirichlet boundary conditions
             invA_.compute(A);
             W_changed_ = false;
@@ -243,7 +243,7 @@ struct bs_normcovmax_elliptic {
         if (lambda_saved_.value() != lambda || W_changed_) { fit(lambda); }
         return lambda * f_.dot(R1_ * f_);
     }
-    sparse_matrix_t P_lumped(const double lambda) const { return P(lambda); }
+    sparse_matrix_t P_lumped(const double lambda = 1.0) const { return P(lambda); }
     template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
     double ftPf(const LambdaT& lambda) {

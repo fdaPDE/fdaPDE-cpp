@@ -166,9 +166,9 @@ template<class Fun> inline std::pair<double,double> argmin_over_log_grid(Fun&& f
 }
 struct GCVConfig {
     // log10 λ range (broad defaults; adjust if you know scale)
-    double log10_min = -12.0;
+    double log10_min = -9.0;
     double log10_max = 0.0;
-    int grid = 100;
+    int grid = 20;
 
     // edf() stochastic trace settings (if your solver uses Hutch++ etc.)
     int edf_r = 100;
@@ -277,7 +277,10 @@ public:
     // Bias flag
     void set_bias(const bool bias) { bias_ = bias; }
 
-    // Weights sign constraint
+    // Boundary conditions
+    virtual void set_homogeneous_dirichlet_bc(bool homogeneous_dirichlet_bc) = 0;
+
+    // Weight sign constraint
     void set_weight_sign_constraint(const WeightSignConstraint weight_sign_constraint = WeightSignConstraint::None) {
         weight_sign_constraint_ = weight_sign_constraint;
     }
@@ -712,6 +715,9 @@ public:
     // Psi_D
     [[nodiscard]] const SparseMatrix& Psi_D() const override { return Psi_D_; }
 
+    // Boundary conditions
+    void set_homogeneous_dirichlet_bc(bool homogeneous_dirichlet_bc) override {}
+
     // Print
     void print(std::ostream& os) const override {
         Base::print(os);
@@ -797,6 +803,9 @@ public:
     // Psi_D
     [[nodiscard]] const SparseMatrix& Psi_D() const override { return weights_solver_.Psi(); }
 
+    // Boundary conditions
+    void set_homogeneous_dirichlet_bc(const bool homogeneous_dirichlet_bc) override { homogeneous_dirichlet_bc_ = homogeneous_dirichlet_bc; }
+
     // Weights regularization utilities
     void set_lambda_weights(const double lambda) override {
         lambda_weights_ = lambda;
@@ -838,12 +847,11 @@ protected:
         Vector z = data().transpose() * nu;
 
         if (weight_sign_constraint() == WeightSignConstraint::NonNegative) {
-            return solve_nonnegative_weight_ipopt_(z);
+            if (!homogeneous_dirichlet_bc_) return solve_nonnegative_weight_ipopt_(z);
+            return solve_nonnegative_weight_ipopt_(z, weights_solver_.boundary_dofs());
         }
 
         weights_solver_.update_z_and_weights(z, M());
-
-        // fit
         weights_solver_.fit(lambda_weights_);
         return weights_solver_.f();
     }
@@ -854,6 +862,7 @@ protected:
 private:
     SparseMatrix Omega_;
     bool Omega_ready_ {false};
+    bool homogeneous_dirichlet_bc_ {false};
     WeightsSolverType weights_solver_;
     double lambda_weights_ = 1e-15;
 };
@@ -963,8 +972,10 @@ public:
         bool verbose;
         bool cache_covariances;
         bool bias;
+        bool homogeneous_dirichlet_bc;
         Init init;
-        LambdaSelection lambda_selection;
+        LambdaSelection lambda_selection_weights;
+        LambdaSelection lambda_selection_components;
         Mode mode;
         WeightSignConstraint weight_sign_constraint;
         Deflation deflation_mode;
@@ -972,20 +983,23 @@ public:
 
         explicit Options(
           const int max_iter_ = 1000, const double tol_ = 1e-8, const unsigned seed_ = 0,
-          const bool bias_ = true,
+          const bool bias_ = true, bool homogeneous_dirichlet_bc = false,
           const Init init_ = Init::SVD, const Mode mode_ = Mode::CovMax,
           const WeightSignConstraint weight_sign_constraint_ = WeightSignConstraint::None,
-          const LambdaSelection lambda_selection_ = LambdaSelection::Manual,
+          const LambdaSelection lambda_selection_weights_ = LambdaSelection::Manual,
+          const LambdaSelection lambda_selection_components_ = LambdaSelection::Automatic,
           const Deflation deflation_mode_ = Deflation::Scores, const Scheme& scheme_ = Scheme::Factorial(),
           const bool verbose_ = false, const bool cache_ = true) :
             max_iter(max_iter_),
             tol(tol_),
             seed(seed_),
             bias(bias_),
+            homogeneous_dirichlet_bc(homogeneous_dirichlet_bc),
             init(init_),
             mode(mode_),
             weight_sign_constraint(weight_sign_constraint_),
-            lambda_selection(lambda_selection_),
+            lambda_selection_weights(lambda_selection_weights_),
+            lambda_selection_components(lambda_selection_components_),
             deflation_mode(deflation_mode_),
             scheme(scheme_),
             verbose(verbose_),
@@ -1009,6 +1023,7 @@ public:
             if (b->n() != n()) throw std::invalid_argument("RGCCA/add_block: n mismatch");
         } else { add_times_(b->times()); }
         b->set_bias(opt_.bias);
+        b->set_homogeneous_dirichlet_bc(opt_.homogeneous_dirichlet_bc);
         b->set_mode(opt_.mode);
         b->set_weight_sign_constraint(opt_.weight_sign_constraint);
         b->set_n_comp(n_comp());
@@ -1069,7 +1084,8 @@ public:
     }
     void init_comp() {
         if (opt_.mode == Mode::Regularized) { set_tau_auto_all_(); }
-        if (opt_.lambda_selection == LambdaSelection::Automatic) { set_lambda_auto_all_(); }
+        if (opt_.lambda_selection_weights == LambdaSelection::Automatic) { set_lambda_weights_auto_all_(); }
+        if (opt_.lambda_selection_components == LambdaSelection::Automatic) { set_lambda_components_auto_all_(); }
         clear_covariance_cache_();
     }
 
@@ -1178,7 +1194,8 @@ public:
         auto a_prev = snapshot_weights_();
 
         // require lambda selection also at the first iteration
-        if (opt_.lambda_selection == LambdaSelection::Automatic) { set_lambda_auto_all_(); }
+        if (opt_.lambda_selection_weights == LambdaSelection::Automatic) { set_lambda_weights_auto_all_(); }
+        if (opt_.lambda_selection_components == LambdaSelection::Automatic) { set_lambda_components_auto_all_(); }
 
         for (int s = 0; s < opt_.max_iter; ++s) {
             for (int l = 0; l < J; ++l) {
@@ -1311,7 +1328,8 @@ private:
     }
 
     void set_tau_auto_all_() const { for (auto& b : blocks_) b->select_tau_auto(); }
-    void set_lambda_auto_all_() const { set_lambda_components_all(-1); }
+    void set_lambda_weights_auto_all_() const { set_lambda_weights_all(-1); }
+    void set_lambda_components_auto_all_() const { set_lambda_components_all(-1); }
 
     void set_noise_variance_all_() const { for (auto& b : blocks_) b->set_noise_variance(*noise_variance_); }
 
