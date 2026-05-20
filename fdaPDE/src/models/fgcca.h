@@ -328,8 +328,8 @@ public:
 
     // Components regularization utilities
     void set_lambda_components(const double lambda) {
-        *lambda_components_ = lambda;
-        if (lambda < 0.0) lambda_components_selection_ = true;
+        lambda_components_ = lambda;
+        lambda_components_selection_ = lambda < 0.0;
     }
     [[nodiscard]] double lambda_components() const {
         if constexpr (std::same_as<SamplingStrategy, IndependentSampling>) return std::numeric_limits<double>::quiet_NaN();
