@@ -431,6 +431,19 @@ public:
             weights_star_.col(h) = a_star;
         }
     }
+    Vector normalized_component_for_evaluation(const int hh) {
+        if (hh != h()) {
+            throw std::logic_error(
+                "normalized_component_for_evaluation: requested component differs from current h; M may refer to current deflated data."
+            );
+        }
+
+        const Vector am = Psi_D() * weights().col(hh);
+        double nrm2 = am.dot(M() * am);
+        if (nrm2 <= 0.0 || !std::isfinite(nrm2)) nrm2 = 1.0;
+
+        return components().col(hh) / std::sqrt(nrm2);
+    }
 
     std::pair<double, double> reconstruction_constraint_info() {
         const Vector a_m = Psi_D() * a_();
@@ -876,7 +889,12 @@ public:
 
     // Weights regularization utilities
     void set_lambda_weights(const double lambda) override {
-        lambda_weights_ = lambda;
+        if (lambda < 0.0) {
+            lambda_weights_selection_ = true;
+        } else {
+            lambda_weights_ = lambda;
+            lambda_weights_selection_ = false;
+        }
         Omega_ready_ = false;
         reset_nonnegative_weight_solver_();
     }
@@ -929,6 +947,7 @@ protected:
     }
 private:
     SparseMatrix Omega_;
+    bool lambda_weights_selection_ {false};
     bool Omega_ready_ {false};
     bool homogeneous_dirichlet_bc_ {false};
     WeightsSolverType weights_solver_;
