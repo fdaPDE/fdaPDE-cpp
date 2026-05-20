@@ -233,8 +233,6 @@ public:
             solution_ = solution_.cwiseMax(0.0);
             const double norm2 = solution_.dot(Omega_ * solution_);
             if (norm2 > 0.0) solution_ /= std::sqrt(norm2);
-        } else {
-            std::cerr << "Ipopt did not converge to a successful solution." << std::endl;
         }
     }
 
@@ -297,6 +295,8 @@ public:
         if (norm2 > 0.0) x0_ /= std::sqrt(norm2);
         else throw std::runtime_error("NonNegativeWeightProblem: invalid starting point");
 
+        xopt_ = x0_;
+
         const auto status = app_->Initialize();
         if (status != Ipopt::Solve_Succeeded) {
             throw std::runtime_error("Ipopt initialization failed.");
@@ -306,7 +306,7 @@ public:
     Vector solve(const Vector& z) {
 
         // scaling
-        double s = z.dot(Psi_ * x0_);
+        double s = abs(z.dot(Psi_ * x0_));
         if (s * s <= 0.0) s = 1.0;
         const Vector c = Psi_.transpose() * z / s;
 
@@ -321,18 +321,17 @@ public:
 
         const bool pos_ok = raw_pos->status() == Ipopt::SUCCESS || raw_pos->status() == Ipopt::STOP_AT_ACCEPTABLE_POINT;
         const bool neg_ok = raw_neg->status() == Ipopt::SUCCESS || raw_neg->status() == Ipopt::STOP_AT_ACCEPTABLE_POINT;
-        const bool pos_is_better = raw_pos->obj_value() <= raw_neg->obj_value();
+        const bool pos_is_better = raw_pos->obj_value() <= raw_neg->obj_value(); // minimization problem
 
-        if (pos_ok && neg_ok) {
-            if (pos_is_better && s < 0) { std::cout << "!!! POS is BETTER thanks to s !!!" << std::endl; }
-            if (!pos_is_better) { std::cout << "!!! NEG is BETTER !!!" << std::endl; }
-            return (pos_is_better) ? raw_pos->solution() : raw_neg->solution();
+        if (pos_ok && neg_ok) xopt_ = (pos_is_better) ? raw_pos->solution() : raw_neg->solution();
+        else if (pos_ok || neg_ok) {
+            if (pos_ok) xopt_ =  raw_pos->solution();
+            if (neg_ok) xopt_ =  raw_neg->solution();
+        } else {
+            std::cerr << "NonNegativeWeightSolver: optimization failed, returning the last admissible solution" << std::endl;
         }
 
-        if (pos_ok) return raw_pos->solution();
-        if (neg_ok) return raw_neg->solution();
-
-        throw std::runtime_error("NonNegativeWeightSolver: both optimizations failed.");
+        return xopt_;
     }
 
 private:
@@ -341,6 +340,7 @@ private:
 
     std::vector<bool> is_boundary_;
     Vector x0_;
+    Vector xopt_;
 
     Ipopt::SmartPtr<Ipopt::IpoptApplication> app_;
 };
