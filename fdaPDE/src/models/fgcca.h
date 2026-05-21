@@ -22,12 +22,13 @@
 
 namespace fdapde {
 
-enum class Init { Random, SVD, Uniform };
+enum class InitStrategy { None, Random, SVD, Uniform, WarmStart };
 enum class DesignMode {Empty, FullyConnected};
 enum class LambdaSelection {Manual, Automatic};
 enum class Mode { CorMax, Regularized, CovMax };
 enum class Deflation { None, Scores };
 enum class WeightSignConstraint { None, NonNegative };
+enum class ResamplingStrategy {Ordinary};
 
 namespace internals {
 
@@ -238,6 +239,42 @@ public:
         components_solver_.analyze_data(Matrix{times}, Vector::Zero(n()), I_);
     }
 
+    BaseBlock(const BaseBlock& other) :
+    n_dofs_weights_(other.n_dofs_weights_),
+    n_comp_(other.n_comp_),
+    times_(other.times_),
+    block_name_(other.block_name_),
+    h_(other.h_),
+    data_ptr_(other.data_ptr_),
+    row_index_(other.row_index_),
+    components_solver_(other.components_solver_),
+    tau_(other.tau_),
+    mode_(other.mode_),
+    weight_sign_constraint_(other.weight_sign_constraint_),
+    bias_(other.bias_),
+    components_gcv_cfg_(other.components_gcv_cfg_),
+    lambda_components_(other.lambda_components_),
+    noise_variance_(other.noise_variance_),
+    weights_(other.weights_),
+    weights_star_(other.weights_star_),
+    components_(other.components_),
+    deflation_projections_(other.deflation_projections_),
+    I_(other.I_),
+    allow_raw_mutation_(false),
+    lambda_components_selection_(other.lambda_components_selection_),
+    weights_ready_(other.weights_ready_),
+    components_ready_(other.components_ready_) {
+
+        M_ready_ = false;
+        invM_ready_ = false;
+        ginvM_ready_ = false;
+
+        // Do not copy nn_solver_.
+        nn_solver_.reset();
+    }
+
+    virtual std::unique_ptr<BaseBlock<SamplingStrategy>> clone() const = 0;
+
     virtual ~BaseBlock() = default;
 
     // Initialization
@@ -406,6 +443,12 @@ public:
         components().col(h()) = c_fit_(s);
     }
 
+    void refresh_component() {
+        ensure_lc_();
+        const Vector s = data() * Psi_D() * weights_.col(h());
+        components_.col(h()) = c_fit_(s);
+    }
+
     // Deflation
     void deflate(const Deflation mode) {
         if (h() == n_comp()) throw std::out_of_range("h");
@@ -431,18 +474,20 @@ public:
             weights_star_.col(h) = a_star;
         }
     }
-    Vector normalized_component_for_evaluation(const int hh) {
+    [[nodiscard]] Vector normalized_component_for_evaluation(const Vector& a, const int hh) {
         if (hh != h()) {
             throw std::logic_error(
                 "normalized_component_for_evaluation: requested component differs from current h; M may refer to current deflated data."
             );
         }
 
-        const Vector am = Psi_D() * weights().col(hh);
+        const Vector am = Psi_D() * a;
         double nrm2 = am.dot(M() * am);
         if (nrm2 <= 0.0 || !std::isfinite(nrm2)) nrm2 = 1.0;
 
-        return components().col(hh) / std::sqrt(nrm2);
+        const Vector s = data() * am / std::sqrt(nrm2);
+
+        return c_fit_(s);
     }
 
     std::pair<double, double> reconstruction_constraint_info() {
@@ -778,6 +823,14 @@ public:
         init_multivariate();
     }
 
+    MultivariateBlock(const MultivariateBlock& other) : Base(other), Psi_D_(other.Psi_D_) {
+        Omega_ready_ = false;
+    }
+
+    std::unique_ptr<Base> clone() const override {
+        return std::make_unique<MultivariateBlock>(*this);
+    }
+
     void init_multivariate() {
         Psi_D_.resize(m(), n_dofs_weights()); // m == n_dofs_weights in this case
         Psi_D_.setIdentity();
@@ -874,6 +927,18 @@ public:
         init_functional(gf, std::forward<WeightsPenaltyType>(weights_penalty));
     }
 
+    FunctionalBlock(const FunctionalBlock& other) :
+    Base(other),
+    homogeneous_dirichlet_bc_(other.homogeneous_dirichlet_bc_),
+    weights_solver_(other.weights_solver_),
+    lambda_weights_(other.lambda_weights_) {
+        Omega_ready_ = false;
+    }
+
+    std::unique_ptr<Base> clone() const override {
+        return std::make_unique<FunctionalBlock>(*this);
+    }
+
     template <typename GeoFrame>
     void init_functional(GeoFrame& gf, WeightsPenaltyType&& weights_penalty) {
         weights_solver_.discretize(weights_penalty.get());
@@ -889,18 +954,12 @@ public:
 
     // Weights regularization utilities
     void set_lambda_weights(const double lambda) override {
-        if (lambda < 0.0) {
-            lambda_weights_selection_ = true;
-        } else {
-            lambda_weights_ = lambda;
-            lambda_weights_selection_ = false;
-        }
+        lambda_weights_ = lambda;
         Omega_ready_ = false;
         reset_nonnegative_weight_solver_();
     }
     [[nodiscard]] double lambda_weights() const override {
-        if (lambda_weights_ > 0) return lambda_weights_;
-        return std::numeric_limits<double>::quiet_NaN();
+        return lambda_weights_;
     }
 
     // Omega matrix
@@ -947,7 +1006,6 @@ protected:
     }
 private:
     SparseMatrix Omega_;
-    bool lambda_weights_selection_ {false};
     bool Omega_ready_ {false};
     bool homogeneous_dirichlet_bc_ {false};
     WeightsSolverType weights_solver_;
@@ -1046,6 +1104,7 @@ public:
     using BlockPtr = std::unique_ptr<Block>;
     using BlockList = std::vector<BlockPtr>;
     using BlockRefList = std::vector<Block*>;
+    using BlockOwnerList = std::vector<std::unique_ptr<Block>>;
     using Matrix = typename Block::Matrix;
     using BoolMatrix = Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>;
     using SparseMatrix = typename Block::SparseMatrix;
@@ -1060,7 +1119,7 @@ public:
         bool cache_covariances;
         bool bias;
         bool homogeneous_dirichlet_bc;
-        Init init;
+        InitStrategy init_strategy;
         LambdaSelection lambda_selection_weights;
         LambdaSelection lambda_selection_components;
         Mode mode;
@@ -1071,7 +1130,7 @@ public:
         explicit Options(
           const int max_iter_ = 1000, const double tol_ = 1e-8, const unsigned seed_ = 0,
           const bool bias_ = true, bool homogeneous_dirichlet_bc = false,
-          const Init init_ = Init::SVD, const Mode mode_ = Mode::CovMax,
+          const InitStrategy init_strategy_ = InitStrategy::SVD, const Mode mode_ = Mode::CovMax,
           const WeightSignConstraint weight_sign_constraint_ = WeightSignConstraint::None,
           const LambdaSelection lambda_selection_weights_ = LambdaSelection::Manual,
           const LambdaSelection lambda_selection_components_ = LambdaSelection::Automatic,
@@ -1082,7 +1141,7 @@ public:
             seed(seed_),
             bias(bias_),
             homogeneous_dirichlet_bc(homogeneous_dirichlet_bc),
-            init(init_),
+            init_strategy(init_strategy_),
             mode(mode_),
             weight_sign_constraint(weight_sign_constraint_),
             lambda_selection_weights(lambda_selection_weights_),
@@ -1103,6 +1162,62 @@ public:
             for (int j = 0; j < J; ++j) {
                 Cov(j, j) = 1.0;
                 dirty(j, j) = 0;
+            }
+        }
+    };
+
+    struct BootstrapConfig {
+        int B = 10;
+        unsigned seed = 12345;
+        ResamplingStrategy resampling_strategy = ResamplingStrategy::Ordinary;
+    };
+
+    struct BootstrapSelectionResult {
+        using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+
+        int h = 0;
+        int B = 0;
+
+        std::vector<double> lambda_grid;
+        std::vector<double> criterion;
+
+        double lambda_opt = std::numeric_limits<double>::quiet_NaN();
+
+        std::vector<std::string> block_names;
+
+        // [lambda][block] -> vector/matrix
+        std::vector<std::vector<Vector>> w_fit_by_lambda;
+        std::vector<std::vector<Matrix>> w_boot_by_lambda;
+        std::vector<std::vector<Vector>> w_min_by_lambda;
+
+        BootstrapSelectionResult() = default;
+
+        BootstrapSelectionResult(
+            const int h_,
+            const int B_,
+            const std::vector<double>& lambda_grid_,
+            const std::vector<std::string>& block_names_,
+            const std::vector<int>& block_dims
+        ) :
+            h(h_),
+            B(B_),
+            lambda_grid(lambda_grid_),
+            criterion(lambda_grid_.size(), -std::numeric_limits<double>::infinity()),
+            block_names(block_names_)
+        {
+            const std::size_t n_lambda = lambda_grid.size();
+            const std::size_t J = block_dims.size();
+
+            w_fit_by_lambda.resize(n_lambda);
+            w_boot_by_lambda.resize(n_lambda);
+            w_min_by_lambda.resize(n_lambda);
+
+            for (std::size_t i = 0; i < n_lambda; ++i) {
+                w_boot_by_lambda[i].resize(J);
+
+                for (std::size_t j = 0; j < J; ++j) {
+                    w_boot_by_lambda[i][j].setZero(block_dims[j], B);
+                }
             }
         }
     };
@@ -1221,6 +1336,11 @@ public:
         for (auto& b : blocks_) b->deflate(opt_.deflation_mode);
     }
 
+    // Bootstrap
+    void set_n_bootstrap_samples(const int n_bootstrap_samples) {
+        bootstrap_config_.B = n_bootstrap_samples;
+    }
+
     // Fit
     std::vector<Result> fit() {
         if (!initialized_) init(DesignMode::FullyConnected);
@@ -1228,10 +1348,18 @@ public:
         // room for results
         std::vector<Result> results;
         results.reserve(n_comp());
+        bootstrap_selection_results_.clear();
+        bootstrap_selection_results_.reserve(n_comp());
 
         // components loop
         for (int hh = 0; hh < n_comp(); ++hh) {
             set_h(hh);
+
+            if (opt_.lambda_selection_weights == LambdaSelection::Automatic) {
+                const double lambda = select_lambda_weights_bootstrap();
+                set_lambda_weights_all(lambda);
+            }
+
             init_comp();
             results.push_back(fit_component());
 
@@ -1255,6 +1383,76 @@ public:
         for (auto& b : blocks_) b->compute_weights_star();
     }
 
+    double select_lambda_weights_bootstrap() {
+        if (lambda_grid_weights_.empty())
+            throw std::runtime_error("lambda_grid_weights_ is empty");
+
+        auto blocks = main_blocks_();
+        std::mt19937_64 rng(bootstrap_config_.seed + static_cast<unsigned>(h_));
+
+        const int J = blocks_.size();
+
+        BootstrapSelectionResult boot_res(
+            h_,
+            bootstrap_config_.B,
+            lambda_grid_weights_,
+            block_names_(blocks),
+            block_dims_(blocks)
+        );
+
+        // fit preliminare al lambda più grande
+        set_lambda_weights_all(lambda_grid_weights_.back());
+        init_comp_(blocks);
+        auto result_main0 = fit_component_(blocks);
+        std::cout << "main0: niter = " << result_main0.iters << std::endl;
+
+        for (int i = static_cast<int>(lambda_grid_weights_.size()) - 1; i >= 0; --i) {
+            const double lambda = lambda_grid_weights_[i];
+            std::cout << "- lambda = " << lambda << std::endl;
+
+            set_lambda_weights_all(lambda);
+
+            init_comp_(blocks, InitStrategy::WarmStart);
+            auto result_main = fit_component_(blocks);
+            std::cout << "  - main: niter = " << result_main.iters << std::endl;
+
+            auto w_fit = weights_(blocks);
+            auto w_min = w_fit;
+
+            for (int b = 0; b < bootstrap_config_.B; ++b) {
+                auto boot_blocks = clone_blocks_for_bootstrap_();
+
+                const auto idx = bootstrap_indices_(n_, rng);
+                set_row_index_all_(boot_blocks.refs, idx);
+
+                init_comp_(boot_blocks.refs, InitStrategy::WarmStart);
+
+                auto result_boot = fit_component_(boot_blocks.refs);
+                std::cout << "  - boot" << b+1 << ": niter = " << result_boot.iters << std::endl;
+
+                auto w_b = weights_(boot_blocks.refs);
+
+                for (int j = 0; j < J; ++j) {
+                    boot_res.w_boot_by_lambda[i][j].col(b) = w_b[j];
+                    w_min[j] = w_min[j].cwiseMin(w_b[j]);
+                }
+            }
+
+            boot_res.w_fit_by_lambda[i] = w_fit;
+            boot_res.w_min_by_lambda[i] = w_min;
+            boot_res.criterion[i] = criterion_score_with_weights_(blocks, w_min, C_);
+            std::cout << " -> " << boot_res.criterion[i] << std::endl;;
+        }
+
+        const auto it = std::max_element(boot_res.criterion.begin(), boot_res.criterion.end());
+        const int i_opt = static_cast<int>(std::distance(boot_res.criterion.begin(), it));
+
+        boot_res.lambda_opt = lambda_grid_weights_[i_opt];
+        bootstrap_selection_results_.push_back(std::move(boot_res));
+
+        return boot_res.lambda_opt;
+    }
+
     // ===== Accessors =====
     [[nodiscard]] int n() const { return n_; }
     [[nodiscard]] int n_comp() const { return n_comp_; }
@@ -1266,6 +1464,7 @@ public:
     [[nodiscard]] bool initialized() const { return initialized_; }
     [[nodiscard]] bool user_defined_design() const { return user_defined_design_; }
     [[nodiscard]] const SparseMatrix& Psi_T() const { return Psi_T_; };
+    [[nodiscard]] std::vector<BootstrapSelectionResult> bootstrap_selection_results() const { return bootstrap_selection_results_; }
 
 private:
 
@@ -1277,30 +1476,42 @@ private:
         return out;
     }
 
-    void init_comp_(const BlockRefList& blocks) {
+    void init_comp_(const BlockRefList& blocks, InitStrategy init_strategy = InitStrategy::None) {
         if (opt_.mode == Mode::Regularized) set_tau_auto_all_(blocks);
         if (opt_.lambda_selection_components == LambdaSelection::Automatic) set_lambda_components_auto_all_(blocks);
+
+        if (init_strategy == InitStrategy::None) init_strategy = opt_.init_strategy;
 
         for (int j = 0; j < static_cast<int>(blocks.size()); ++j) {
             auto* b = blocks[j];
             b->set_h(h_);
-            b->init_weight_uniform();
 
-            if (opt_.init == Init::Uniform) {
-                const auto info = b->uniform_init();
-                b->compute(info.nu);
-            }
+            if (init_strategy == InitStrategy::WarmStart) {
+                // std::cout << "\nwarm-start block " << j+1 << std::endl;
+                b->refresh_component();
+                // std::cout << b->weights().block(0,0,5,1).transpose() << std::endl;
+                // std::cout << std::endl;
+            } else {
 
-            if (opt_.init == Init::SVD) {
-                const auto info = b->svd_init();
-                b->compute(info.nu);
-            }
+                b->init_weight_uniform();
 
-            if (opt_.init == Init::Random) {
-                std::mt19937_64 rng(opt_.seed);
-                std::uniform_real_distribution<double> U(-1.0, 1.0);
-                const Vector nu = Vector::NullaryExpr(n_, [&]{ return U(rng); });
-                b->compute(nu);
+                if (init_strategy == InitStrategy::Uniform) {
+                    const auto info = b->uniform_init();
+                    b->compute(info.nu);
+                }
+
+                if (init_strategy == InitStrategy::SVD) {
+                    const auto info = b->svd_init();
+                    b->compute(info.nu);
+                }
+
+                if (init_strategy == InitStrategy::Random) {
+                    std::mt19937_64 rng(opt_.seed);
+                    std::uniform_real_distribution<double> U(-1.0, 1.0);
+                    const Vector nu = Vector::NullaryExpr(n_, [&]{ return U(rng); });
+                    b->compute(nu);
+                }
+
             }
         }
     }
@@ -1483,8 +1694,8 @@ private:
         }
     }
 
-    Vector eta_eval_(Block& b) {
-        const Vector eta = b.normalized_component_for_evaluation(h());
+    Vector eta_eval_(Block& b, const Vector& a) {
+        const Vector eta = b.normalized_component_for_evaluation(a, h());
 
         if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
             return Psi_T() * eta;
@@ -1516,23 +1727,113 @@ private:
         return f;
     }
 
-    double rho_tot_(const BlockRefList& blocks, const BoolMatrix& C) {
+    // Bootstrap helpers
+
+    struct BootstrapBlocks {
+        BlockOwnerList owners;
+        BlockRefList refs;
+    };
+
+    BootstrapBlocks clone_blocks_for_bootstrap_() const {
+        BootstrapBlocks out;
+        out.owners.reserve(blocks_.size());
+        out.refs.reserve(blocks_.size());
+
+        for (const auto& b : blocks_) {
+            auto copy = b->clone();
+            copy->set_allow_raw_mutation(false);
+
+            out.refs.push_back(copy.get());
+            out.owners.push_back(std::move(copy));
+        }
+
+        return out;
+    }
+
+    std::vector<std::string> block_names_(const BlockRefList& blocks) const {
+        std::vector<std::string> out;
+        out.reserve(blocks.size());
+
+        for (auto* b : blocks)
+            out.push_back(b->name());
+
+        return out;
+    }
+
+    std::vector<int> block_dims_(const BlockRefList& blocks) const {
+        std::vector<int> out;
+        out.reserve(blocks.size());
+
+        for (auto* b : blocks)
+            out.push_back(b->n_dofs_weights());
+
+        return out;
+    }
+
+    void set_row_index_all_(const BlockRefList& blocks, const typename Block::IndexVector& idx) {
+        for (auto* b : blocks) b->set_row_index(idx);
+    }
+
+    void clear_row_index_all_(const BlockRefList& blocks) {
+        for (auto* b : blocks) b->clear_row_index();
+    }
+
+    typename Block::IndexVector bootstrap_indices_(int n, std::mt19937_64& rng) const {
+        if (bootstrap_config_.resampling_strategy != ResamplingStrategy::Ordinary)
+            throw std::runtime_error("Only ordinary bootstrap is implemented");
+
+        std::uniform_int_distribution<int> U(0, n - 1);
+        typename Block::IndexVector idx(n);
+
+        for (int i = 0; i < n; ++i)
+            idx(i) = U(rng);
+
+        return idx;
+    }
+
+    std::vector<Vector> weights_(const BlockRefList& blocks) const {
+        std::vector<Vector> out;
+        out.reserve(blocks.size());
+
+        for (auto* b : blocks) {
+            out.push_back(b->weights().col(h_));
+        }
+
+        return out;
+    }
+
+    double rho_tot_with_weights_(
+        const BlockRefList& blocks,
+        const std::vector<Vector>& weights,
+        const BoolMatrix& C
+    ) const {
         const int J = static_cast<int>(blocks.size());
+
+        if (static_cast<int>(weights.size()) != J)
+            throw std::logic_error("rho_tot_with_weights_: size mismatch");
+
         double num = 0.0;
         double den = 0.0;
 
+        std::vector<Vector> eta(J);
+
         for (int j = 0; j < J; ++j) {
-            Vector eta_j = eta_eval_(*blocks[j]);
-            const double nj = std::sqrt(eta_j.squaredNorm());
+            if (weights[j].size() != blocks[j]->n_dofs_weights())
+                throw std::logic_error("rho_tot_with_weights_: incompatible weight size");
+
+            eta[j] = blocks[j]->data() * blocks[j]->Psi_D() *  weights[j];
+        }
+
+        for (int j = 0; j < J; ++j) {
+            const double nj = std::sqrt(eta[j].squaredNorm());
 
             for (int k = j + 1; k < J; ++k) {
                 if (!C(j, k)) continue;
 
-                Vector eta_k = eta_eval_(*blocks[k]);
-                const double nk = std::sqrt(eta_k.squaredNorm());
+                const double nk = std::sqrt(eta[k].squaredNorm());
 
                 if (nj > 0.0 && nk > 0.0) {
-                    const double corr_jk = eta_j.dot(eta_k) / (nj * nk);
+                    const double corr_jk = eta[j].dot(eta[k]) / (nj * nk);
                     num += opt_.scheme.g(corr_jk);
                     den += 1.0;
                 }
@@ -1542,18 +1843,34 @@ private:
         return den > 0.0 ? num / den : 0.0;
     }
 
-    double criterion_score_(const BlockRefList& blocks, const BoolMatrix& C) {
+    double criterion_score_with_weights_(
+        const BlockRefList& blocks,
+        const std::vector<Vector>& weights,
+        const BoolMatrix& C
+    ) {
         const int J = static_cast<int>(blocks.size());
+
+        if (static_cast<int>(weights.size()) != J)
+            throw std::logic_error("criterion_score_with_weights_: size mismatch");
+
         double num = 0.0;
         double den = 0.0;
 
-        for (int j = 0; j < J; ++j) {
-            const Vector eta_j = eta_eval_(*blocks[j]);
+        std::vector<Vector> eta(J);
 
+        for (int j = 0; j < J; ++j) {
+
+            if (weights[j].size() != blocks[j]->n_dofs_weights())
+                throw std::logic_error("criterion_score_with_weights_: incompatible weight size");
+
+            eta[j] = eta_eval_(*blocks[j], weights[j]);
+
+        }
+        for (int j = 0; j < J; ++j) {
             for (int k = j + 1; k < J; ++k) {
                 if (!C(j, k)) continue;
 
-                const double cov_jk = cov_(eta_j, eta_eval_(*blocks[k]));
+                const double cov_jk = cov_(eta[j], eta[k]);
                 num += opt_.scheme.g(cov_jk);
                 den += 1.0;
             }
@@ -1628,6 +1945,10 @@ private:
 
     std::vector<std::unique_ptr<Matrix>> data_blocks_;
     std::vector<BlockPtr> blocks_;
+
+    BootstrapConfig bootstrap_config_;
+    std::vector<double> lambda_grid_weights_ {1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2};
+    std::vector<BootstrapSelectionResult> bootstrap_selection_results_;
 
     // topology & caches (sized in init())
     bool initialized_ {false};
