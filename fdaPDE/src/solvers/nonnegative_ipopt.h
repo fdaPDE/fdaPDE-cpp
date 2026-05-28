@@ -68,8 +68,10 @@ public:
         Ipopt::Number* g_u              // (out) the upper bounds g_H for the constraints g(x)
     ) override {
 
+
         for (Ipopt::Index i = 0; i < n; ++i) {
-            if (is_boundary_[i]) {
+            const bool boundary = !is_boundary_.empty() && is_boundary_[static_cast<std::size_t>(i)];
+            if (boundary) {
                 // Dirichlet Homogeneous BC
                 x_l[i] = 0.0;
                 x_u[i] = 0.0;
@@ -271,6 +273,9 @@ public:
         const std::vector<int>& boundary_dofs = {}
     ) : Psi_(Psi), Omega_(Omega) {
 
+        Psi_.makeCompressed();
+        Omega_.makeCompressed();
+
         app_ = IpoptApplicationFactory();
 
         // dimensions
@@ -298,10 +303,29 @@ public:
         xopt_ = x0_;
 
         const auto status = app_->Initialize();
-        if (status != Ipopt::Solve_Succeeded) {
-            throw std::runtime_error("Ipopt initialization failed.");
-        }
+        if (status != Ipopt::Solve_Succeeded) throw std::runtime_error("Ipopt initialization failed.");
     }
+
+    NonNegativeWeightSolver(const NonNegativeWeightSolver& other)
+    : Psi_(other.Psi_),
+      Omega_(other.Omega_),
+      is_boundary_(other.is_boundary_),
+      x0_(other.x0_),
+      xopt_(other.xopt_)
+    {
+        Psi_.makeCompressed();
+        Omega_.makeCompressed();
+
+        app_ = IpoptApplicationFactory();
+
+        app_->Options()->SetIntegerValue("print_level", 0);
+        app_->Options()->SetStringValue("sb", "yes");
+
+        const auto status = app_->Initialize();
+        if (status != Ipopt::Solve_Succeeded) throw std::runtime_error("Ipopt initialization failed in copy constructor.");
+    }
+
+    NonNegativeWeightSolver& operator=(const NonNegativeWeightSolver&) = delete;
 
     Vector solve(const Vector& z) {
 

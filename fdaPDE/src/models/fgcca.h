@@ -18,6 +18,7 @@
 #define __FGCCA_H__
 
 #include "fdaPDE/src/solvers/nonnegative_ipopt.h"
+#include "fdaPDE/execution.h"
 #include "header_check.h"
 
 namespace fdapde {
@@ -635,7 +636,6 @@ protected:
             M_ = tau_ * I;
             M_ += Sigma.sparseView();
         }
-
         M_.makeCompressed();
         M_ready_ = true;
         ginvM_ready_ = false;
@@ -967,7 +967,7 @@ public:
 
         if (!Omega_ready_) {
             Omega_ = Psi_D().transpose() * M() * Psi_D();
-            Omega_ += lambda_weights_ * weights_solver_.P_lumped();
+            Omega_ += lambda_weights_ * weights_solver_.P();
             Omega_ready_ = true;
         }
 
@@ -996,7 +996,7 @@ protected:
             return solve_nonnegative_weight_ipopt_(z, weights_solver_.boundary_dofs());
         }
 
-        weights_solver_.update_z_and_weights(z, M());
+        weights_solver_.update_z_and_weights(z, M()); // can be optimized by passing M only when it has changed
         weights_solver_.fit(lambda_weights_);
         return weights_solver_.f();
     }
@@ -1356,7 +1356,7 @@ public:
             set_h(hh);
 
             if (opt_.lambda_selection_weights == LambdaSelection::Automatic) {
-                const double lambda = select_lambda_weights_bootstrap();
+                const double lambda = select_lambda_weights_bootstrap_parallel();
                 set_lambda_weights_all(lambda);
             }
 
@@ -1388,23 +1388,136 @@ public:
             throw std::runtime_error("lambda_grid_weights_ is empty");
 
         auto blocks = main_blocks_();
-        std::mt19937_64 rng(bootstrap_config_.seed + static_cast<unsigned>(h_));
+        const int J = static_cast<int>(blocks_.size());
+        const int B = bootstrap_config_.B;
 
-        const int J = blocks_.size();
+        const int patience = 2;
+        int no_improve = 0;
+        double best_criterion = -std::numeric_limits<double>::infinity();
+        int best_i = -1;
 
-        BootstrapSelectionResult boot_res(
-            h_,
-            bootstrap_config_.B,
-            lambda_grid_weights_,
-            block_names_(blocks),
-            block_dims_(blocks)
-        );
+        BootstrapSelectionResult boot_results(h_, B, lambda_grid_weights_, block_names_(blocks), block_dims_(blocks));
 
-        // fit preliminare al lambda più grande
+        // same bootstrap resamples for all lambda values
+        std::vector<typename Block::IndexVector> bootstrap_idx(B);
+        const unsigned seed = bootstrap_config_.seed + static_cast<unsigned>(h_);
+        std::mt19937_64 rng(seed);
+        for (int b = 0; b < B; ++b) {
+            bootstrap_idx[b] = bootstrap_indices_(n_, rng);
+        }
+
+        // preliminary fit at largest lambda
         set_lambda_weights_all(lambda_grid_weights_.back());
         init_comp_(blocks);
-        auto result_main0 = fit_component_(blocks);
-        std::cout << "main0: niter = " << result_main0.iters << std::endl;
+        fit_component_(blocks);
+
+        for (int i = static_cast<int>(lambda_grid_weights_.size()) - 1; i >= 0; --i) {
+
+            const double lambda = lambda_grid_weights_[i];
+            set_lambda_weights_all(lambda);
+            std::cout << "- lambda = " << lambda << std::endl;
+
+            // fit using the fit on the previous lambda as warm start
+            init_comp_(blocks, InitStrategy::WarmStart);
+            fit_component_(blocks);
+
+            auto w_fit = weights_(blocks);
+            auto w_min = w_fit;
+
+            for (int b = 0; b < B; ++b) {
+
+                auto boot_blocks = clone_blocks_();
+                set_row_index_all_(boot_blocks.refs, bootstrap_idx[b]);
+
+                init_comp_(boot_blocks.refs, InitStrategy::WarmStart);
+                fit_component_(boot_blocks.refs);
+
+                auto w_b = weights_(boot_blocks.refs);
+
+                for (int j = 0; j < J; ++j) {
+
+                    Vector w_bj =w_b[j];
+
+                    // Align bootstrap weight sign with original fit
+                    if (w_bj.dot(w_fit[j]) < 0.0) {
+                        w_bj *= -1.0;
+                    }
+
+                    // Save aligned bootstrap weight
+                    boot_results.w_boot_by_lambda[i][j].col(b) = w_bj;
+
+                    // Update w_min toward zero, preserving the sign pattern of w_fit[j]
+                    for (int r = 0; r < w_min[j].size(); ++r) {
+                        if (w_fit[j][r] > 0.0) {
+                            // take minimum, but do not go below zero
+                            w_min[j][r] = std::max(0.0, std::min(w_min[j][r], w_bj[r]));
+                        } else if (w_fit[j][r] < 0.0) {
+                            // take maximum, but do not go above zero
+                            w_min[j][r] = std::min(0.0, std::max(w_min[j][r], w_bj[r]));
+                        } else {
+                            w_min[j][r] = 0.0;
+                        }
+                    }
+                }
+            }
+
+            boot_results.w_fit_by_lambda[i] = w_fit;
+            boot_results.w_min_by_lambda[i] = w_min;
+            const double crit = criterion_score_with_weights_(blocks, w_min, C_);
+            boot_results.criterion[i] = crit;
+
+            std::cout << " -> " << crit << std::endl;
+
+            if (crit > best_criterion) {
+                best_criterion = crit;
+                best_i = i;
+                no_improve = 0;
+            } else {
+                ++no_improve;
+            }
+
+            if (no_improve >= patience) {
+                std::cout << "early stop: no improvement for " << patience << " consecutive lambdas" << std::endl;
+                break;
+            }
+        }
+
+        boot_results.lambda_opt = lambda_grid_weights_[best_i];
+        bootstrap_selection_results_.push_back(std::move(boot_results));
+
+        return bootstrap_selection_results_.back().lambda_opt;
+    }
+
+   double select_lambda_weights_bootstrap_parallel() {
+        if (lambda_grid_weights_.empty())
+            throw std::runtime_error("lambda_grid_weights_ is empty");
+
+        const int n_threads = 12;
+        parallel_set_num_threads(n_threads);
+
+        auto blocks = main_blocks_();
+        const int J = static_cast<int>(blocks_.size());
+        const int B = bootstrap_config_.B;
+
+        const int patience = 2;
+        int no_improve = 0;
+        double best_criterion = -std::numeric_limits<double>::infinity();
+        int best_i = -1;
+
+        BootstrapSelectionResult boot_results(h_, B, lambda_grid_weights_, block_names_(blocks), block_dims_(blocks));
+
+        // same bootstrap resamples for all lambda values
+        std::vector<typename Block::IndexVector> bootstrap_idx(B);
+        const unsigned seed = bootstrap_config_.seed + static_cast<unsigned>(h_);
+        std::mt19937_64 rng(seed);
+        for (int b = 0; b < B; ++b) {
+            bootstrap_idx[b] = bootstrap_indices_(n_, rng);
+        }
+
+        // preliminary fit at largest lambda
+        set_lambda_weights_all(lambda_grid_weights_.back());
+        init_comp_(blocks);
+        fit_component_(blocks);
 
         for (int i = static_cast<int>(lambda_grid_weights_.size()) - 1; i >= 0; --i) {
             const double lambda = lambda_grid_weights_[i];
@@ -1412,45 +1525,110 @@ public:
 
             set_lambda_weights_all(lambda);
 
+            // fit using the fit on the previous lambda as warm start
             init_comp_(blocks, InitStrategy::WarmStart);
-            auto result_main = fit_component_(blocks);
-            std::cout << "  - main: niter = " << result_main.iters << std::endl;
+            fit_component_(blocks);
 
             auto w_fit = weights_(blocks);
             auto w_min = w_fit;
 
-            for (int b = 0; b < bootstrap_config_.B; ++b) {
-                auto boot_blocks = clone_blocks_for_bootstrap_();
+            // thread-local storage
+            std::vector<int> thread_count(n_threads, 0);
 
-                const auto idx = bootstrap_indices_(n_, rng);
-                set_row_index_all_(boot_blocks.refs, idx);
-
-                init_comp_(boot_blocks.refs, InitStrategy::WarmStart);
-
-                auto result_boot = fit_component_(boot_blocks.refs);
-                std::cout << "  - boot" << b+1 << ": niter = " << result_boot.iters << std::endl;
-
-                auto w_b = weights_(boot_blocks.refs);
-
+            std::vector<std::vector<Matrix>> thread_w_boot(n_threads);
+            std::vector<std::vector<int>> thread_sample_id(n_threads);
+            for (int tid = 0; tid < n_threads; ++tid) {
+                thread_w_boot[tid].resize(J);
+                thread_sample_id[tid].resize(B);
                 for (int j = 0; j < J; ++j) {
-                    boot_res.w_boot_by_lambda[i][j].col(b) = w_b[j];
-                    w_min[j] = w_min[j].cwiseMin(w_b[j]);
+                    thread_w_boot[tid][j].resize(w_fit[j].size(), B);
                 }
             }
 
-            boot_res.w_fit_by_lambda[i] = w_fit;
-            boot_res.w_min_by_lambda[i] = w_min;
-            boot_res.criterion[i] = criterion_score_with_weights_(blocks, w_min, C_);
-            std::cout << " -> " << boot_res.criterion[i] << std::endl;;
+            std::vector<BootstrapBlocks> thread_boot_template(n_threads);
+            for (int t = 0; t < n_threads; ++t) {
+                thread_boot_template[t] = clone_blocks_();
+            }
+
+            std::cout << "Parallelizzazione su " <<  n_threads <<  " threads --> ";
+            parallel_for(0, B,[&](int b) {
+                const int tid = this_thread_id();
+
+                auto boot_blocks = clone_blocks_from_(thread_boot_template[tid]);
+
+                set_row_index_all_(boot_blocks.refs, bootstrap_idx[b]);
+
+                init_comp_(boot_blocks.refs, InitStrategy::WarmStart);
+                fit_component_(boot_blocks.refs);
+
+                auto w_b = weights_(boot_blocks.refs);
+
+                const int local_col = thread_count[tid]++;
+                thread_sample_id[tid][local_col] = b;
+                for (int j = 0; j < J; ++j) {
+                    thread_w_boot[tid][j].col(local_col) = w_b[j];
+                }
+
+            });
+            std::cout << "<--";
+
+            // sequential merge
+            for (int tid = 0; tid < n_threads; ++tid) {
+                for (int local_col = 0; local_col < thread_count[tid]; ++local_col) {
+                    const int b = thread_sample_id[tid][local_col];
+
+                    for (int j = 0; j < J; ++j) {
+                        Vector w_bj = thread_w_boot[tid][j].col(local_col);
+
+                        // Align bootstrap weight sign with original fit
+                        if (w_bj.dot(w_fit[j]) < 0.0) {
+                            w_bj *= -1.0;
+                        }
+
+                        // Save aligned bootstrap weight
+                        boot_results.w_boot_by_lambda[i][j].col(b) = w_bj;
+
+                        // Update w_min toward zero, preserving the sign pattern of w_fit[j]
+                        for (int r = 0; r < w_min[j].size(); ++r) {
+                            if (w_fit[j][r] > 0.0) {
+                                // take minimum, but do not go below zero
+                                w_min[j][r] = std::max(0.0, std::min(w_min[j][r], w_bj[r]));
+                            } else if (w_fit[j][r] < 0.0) {
+                                // take maximum, but do not go above zero
+                                w_min[j][r] = std::min(0.0, std::max(w_min[j][r], w_bj[r]));
+                            } else {
+                                w_min[j][r] = 0.0;
+                            }
+                        }
+                    }
+                }
+            }
+
+            boot_results.w_fit_by_lambda[i] = w_fit;
+            boot_results.w_min_by_lambda[i] = w_min;
+
+            const double crit = criterion_score_with_weights_(blocks, w_min, C_);
+            boot_results.criterion[i] = crit;
+            std::cout << " -> " << crit << std::endl;
+
+            if (crit > best_criterion) {
+                best_criterion = crit;
+                best_i = i;
+                no_improve = 0;
+            } else {
+                ++no_improve;
+            }
+
+            if (no_improve >= patience) {
+                std::cout << "early stop: no improvement for " << patience << " consecutive lambdas" << std::endl;
+                break;
+            }
         }
 
-        const auto it = std::max_element(boot_res.criterion.begin(), boot_res.criterion.end());
-        const int i_opt = static_cast<int>(std::distance(boot_res.criterion.begin(), it));
+        boot_results.lambda_opt = lambda_grid_weights_[best_i];
+        bootstrap_selection_results_.push_back(std::move(boot_results));
 
-        boot_res.lambda_opt = lambda_grid_weights_[i_opt];
-        bootstrap_selection_results_.push_back(std::move(boot_res));
-
-        return boot_res.lambda_opt;
+        return bootstrap_selection_results_.back().lambda_opt;
     }
 
     // ===== Accessors =====
@@ -1487,10 +1665,7 @@ private:
             b->set_h(h_);
 
             if (init_strategy == InitStrategy::WarmStart) {
-                // std::cout << "\nwarm-start block " << j+1 << std::endl;
                 b->refresh_component();
-                // std::cout << b->weights().block(0,0,5,1).transpose() << std::endl;
-                // std::cout << std::endl;
             } else {
 
                 b->init_weight_uniform();
@@ -1734,12 +1909,28 @@ private:
         BlockRefList refs;
     };
 
-    BootstrapBlocks clone_blocks_for_bootstrap_() const {
+    BootstrapBlocks clone_blocks_() const {
         BootstrapBlocks out;
         out.owners.reserve(blocks_.size());
         out.refs.reserve(blocks_.size());
 
         for (const auto& b : blocks_) {
+            auto copy = b->clone();
+            copy->set_allow_raw_mutation(false);
+
+            out.refs.push_back(copy.get());
+            out.owners.push_back(std::move(copy));
+        }
+
+        return out;
+    }
+
+    BootstrapBlocks clone_blocks_from_(const BootstrapBlocks& src) const {
+        BootstrapBlocks out;
+        out.owners.reserve(src.refs.size());
+        out.refs.reserve(src.refs.size());
+
+        for (auto* b : src.refs) {
             auto copy = b->clone();
             copy->set_allow_raw_mutation(false);
 
@@ -1783,8 +1974,8 @@ private:
             throw std::runtime_error("Only ordinary bootstrap is implemented");
 
         std::uniform_int_distribution<int> U(0, n - 1);
-        typename Block::IndexVector idx(n);
 
+        typename Block::IndexVector idx(n);
         for (int i = 0; i < n; ++i)
             idx(i) = U(rng);
 
