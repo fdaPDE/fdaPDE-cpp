@@ -1656,7 +1656,7 @@ public:
         // blocks deactivation
         boot_results.active_blocks.assign(J, true);
         for (int j = 0; j < J; ++j) {
-            const double nrm = boot_results.w_min_by_lambda[best_i][j];
+            const double nrm = boot_results.w_min_by_lambda[best_i][j].norm();
             std::cout << "block " << j << " ||w_min|| = " << nrm << " active = " << (nrm >= opt_.active_block_tol) << std::endl;
             boot_results.active_blocks[j] = nrm >= opt_.active_block_tol;
         }
