@@ -40,14 +40,14 @@ void ginv(const Eigen::MatrixXd& X, Eigen::MatrixXd& ginvX, double tol = std::sq
     const double d1 = d(0);
     const double thresh = std::max(tol * d1, 0.0);
 
-    // Identify Positive singular values
+    // identify Positive singular values
     std::vector<int> idx;
     idx.reserve(d.size());
     for (int i = 0; i < d.size(); ++i) {
         if (d(i) > thresh) idx.push_back(i);
     }
 
-    // Compute V_pos * diag(1/d_pos) * U_pos^T * z without forming full matrices
+    // compute V_pos * diag(1/d_pos) * U_pos^T * z without forming full matrices
     Eigen::MatrixXd Upos(X.rows(), (int)idx.size());
     Eigen::MatrixXd Vpos(X.cols(), (int)idx.size());
     Eigen::VectorXd invd((int)idx.size());
@@ -73,13 +73,13 @@ struct identity_ls {
 
     explicit identity_ls(const int n_dofs) : n_dofs_(n_dofs) {}
 
-    // Shapes / accessors used by GCV path (harmless no-ops here)
+    // shapes / accessors used by GCV path (harmless no-ops here)
     [[nodiscard]] int n_dofs()  const { return n_dofs_; }
     [[nodiscard]] int n_obs()   const { return static_cast<int>(y_.size()); }
     [[nodiscard]] int n_covs()  const { return 0; } // no param covariates in identity model
     [[nodiscard]] double edf(int = 0, int = 0) const { return 0; } // hat-trace is 0 for identity
 
-    // Data flow API
+    // data flow API
     void analyze_data() {
         Psi_.resize(n_dofs_, n_dofs_);
         Psi_.setIdentity();
@@ -87,10 +87,10 @@ struct identity_ls {
 
     void update_response_and_weights(const vector_t& y, const sparse_matrix_t& /*W*/) { y_ = y; }
 
-    // Identity: fitted values equal z
+    // identity: fitted values equal z
     void fit(double /*lambda*/) { f_ = y_; }
 
-    // Outputs
+    // outputs
     [[nodiscard]] const vector_t& response() const { return y_; }
     [[nodiscard]] vector_t fn() const { return f_; }     // fitted values
     [[nodiscard]] const vector_t& f() const { return f_; }
@@ -180,7 +180,7 @@ struct GCVConfig {
     double eps_dof = 1e-12;  // avoid divide-by-zero in denominator
 };
 template <class Smoother> struct GCVEval {
-    Smoother* s;     // must expose: fit(λ), edf(r,seed), response(), fn(), n_obs(), n_covs()
+    Smoother* s; // must expose: fit(λ), edf(r,seed), response(), fn(), n_obs(), n_covs()
     GCVConfig cfg;
 
     double operator()(double lambda) {
@@ -222,7 +222,7 @@ public:
     requires std::same_as<S, IndependentSampling>
     BaseBlock(const std::string& block_name, Matrix* data_ptr, const int n_dofs_weights) :
         block_name_(block_name), data_ptr_(data_ptr), components_solver_(data_ptr->rows()), n_dofs_weights_(n_dofs_weights) {
-        // Init components solver
+        // init components solver
         init_identity_row_index_();
         components_solver_.analyze_data();
     }
@@ -231,116 +231,95 @@ public:
     requires std::same_as<SamplingStrategy, TimeDependentSampling>
     BaseBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Vector& times, Matrix* data_ptr, const int n_dofs_weights) :
         block_name_(block_name), times_(times), data_ptr_(data_ptr), n_dofs_weights_(n_dofs_weights) {
-        // Init sparse identity
+        // init sparse identity
         init_identity_row_index_();
         I_.resize(n(), n());
         I_.setIdentity();
-        // Init components solver
+        // init components solver
         SamplingStrategy::discretize(T, components_solver_);
         components_solver_.analyze_data(Matrix{times}, Vector::Zero(n()), I_);
     }
 
     BaseBlock(const BaseBlock& other) :
-    n_dofs_weights_(other.n_dofs_weights_),
-    n_comp_(other.n_comp_),
-    times_(other.times_),
-    block_name_(other.block_name_),
-    h_(other.h_),
-    data_ptr_(other.data_ptr_),
-    row_index_(other.row_index_),
-    components_solver_(other.components_solver_),
-    tau_(other.tau_),
-    mode_(other.mode_),
-    weight_sign_constraint_(other.weight_sign_constraint_),
-    bias_(other.bias_),
-    components_gcv_cfg_(other.components_gcv_cfg_),
-    lambda_components_(other.lambda_components_),
-    noise_variance_(other.noise_variance_),
-    weights_(other.weights_),
-    weights_star_(other.weights_star_),
-    components_(other.components_),
-    deflation_projections_(other.deflation_projections_),
-    I_(other.I_),
-    allow_raw_mutation_(false),
-    lambda_components_selection_(other.lambda_components_selection_),
-    weights_ready_(other.weights_ready_),
-    components_ready_(other.components_ready_) {
+        n_dofs_weights_(other.n_dofs_weights_),
+        n_comp_(other.n_comp_),
+        times_(other.times_),
+        block_name_(other.block_name_),
+        h_(other.h_),
+        data_ptr_(other.data_ptr_),
+        row_index_(other.row_index_),
+        components_solver_(other.components_solver_),
+        tau_(other.tau_),
+        mode_(other.mode_),
+        weight_sign_constraint_(other.weight_sign_constraint_),
+        bias_(other.bias_),
+        components_gcv_cfg_(other.components_gcv_cfg_),
+        lambda_components_(other.lambda_components_),
+        noise_variance_(other.noise_variance_),
+        weights_(other.weights_),
+        weights_star_(other.weights_star_),
+        components_(other.components_),
+        deflation_projections_(other.deflation_projections_),
+        I_(other.I_),
+        lambda_components_selection_(other.lambda_components_selection_),
+        weights_ready_(other.weights_ready_),
+        components_ready_(other.components_ready_) {
 
         M_ready_ = false;
         invM_ready_ = false;
         ginvM_ready_ = false;
+        raw_data_mutable_ = false;
 
-        // Do not copy nn_solver_.
         nn_solver_.reset();
     }
 
-    virtual std::unique_ptr<BaseBlock<SamplingStrategy>> clone() const = 0;
-
     virtual ~BaseBlock() = default;
 
-    // Initialization
+    // block initialization
     void init() {
         ensure_M_();
         ensure_lc_();
     }
 
-    // Data
+    // data
     [[nodiscard]] const std::string& name() const { return block_name_; }
     [[nodiscard]] const Matrix& raw_data() const {
         if (!data_ptr_) throw std::logic_error("BaseBlock: Block has no data pointer");
         return *data_ptr_;
     }
-    void set_allow_raw_mutation(const bool value) { allow_raw_mutation_ = value; }
     [[nodiscard]] auto data() const {
         return raw_data()(row_index_, Eigen::all);
     }
+    void set_raw_data_mutable(const bool value) { raw_data_mutable_ = value; }
 
-    // Bootstrapping utils
-    void set_row_index(const IndexVector& idx) {
-        for (int i = 0; i < idx.size(); ++i) {
-            if (idx(i) < 0 || idx(i) >= n_raw())
-                throw std::out_of_range("invalid row index");
-        }
-
-        row_index_ = idx;
-
-        I_.resize(n(), n());
-        I_.setIdentity();
-
-        invalidate_M_();
-        components_ready_ = false;
-    }
-
-    void clear_row_index() {
-        row_index_.resize(n_raw());
-        std::iota(row_index_.data(), row_index_.data() + row_index_.size(), 0);
-
-        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
-            I_.resize(n(), n());
-            I_.setIdentity();
-        }
-
-        invalidate_M_();
-        components_ready_ = false;
-    }
-
-    // Dimensions
+    // dimensions
     [[nodiscard]] int n() const { return static_cast<int>(row_index_.size()); }
     [[nodiscard]] int n_raw() const { return static_cast<int>(raw_data().rows()); }
     [[nodiscard]] int m() const { return static_cast<int>(raw_data().cols()); }
     [[nodiscard]] int n_dofs_weights() const { return n_dofs_weights_; }
 
-    // Components
-    [[nodiscard]] int n_comp() const { return n_comp_; }
+    // components
     void set_n_comp(const int n_comp) {
-        if (n_comp <= 0) throw std::invalid_argument("n_comp must be > 0");
+        if (n_comp <= 0)
+            throw std::invalid_argument("n_comp must be > 0");
+
         n_comp_ = n_comp;
+
         // force resize on next access
         weights_ready_ = false;
         components_ready_ = false;
     }
+    [[nodiscard]] int n_comp() const { return n_comp_; }
+    void set_h(const int idx) {
+        if (idx < 0 || idx >= n_comp_)
+            throw std::out_of_range("h");
 
-    // Mode & Shrinkage parameter
+        h_ = idx;
+    }
+    [[nodiscard]] int h() const { return h_; }
+    void next_component() { set_h(h_ + 1); }
+
+    // mode and shrinkage parameter
     [[nodiscard]] double tau() const { return tau_; }
     void select_tau_auto() { select_tau_auto_(); }
     void set_mode(const Mode mode) {
@@ -352,19 +331,12 @@ public:
     }
     [[nodiscard]] Mode mode() const { return mode_; }
 
-    // Bias flag
-    void set_bias(const bool bias) { bias_ = bias; }
+    // normalization matrix
+    [[nodiscard]] const SparseMatrix& M() const { ensure_M_(); return M_; }
+    [[nodiscard]] const Matrix& ginvM() const { ensure_ginvM_(); return ginvM_; }
+    [[nodiscard]] SparseSolver& invM() { ensure_invM_(); return invM_; }
 
-    // Boundary conditions
-    virtual void set_homogeneous_dirichlet_bc(bool homogeneous_dirichlet_bc) = 0;
-
-    // Weight sign constraint
-    void set_weight_sign_constraint(const WeightSignConstraint weight_sign_constraint = WeightSignConstraint::None) {
-        weight_sign_constraint_ = weight_sign_constraint;
-    }
-    [[nodiscard]] WeightSignConstraint weight_sign_constraint() const { return weight_sign_constraint_; }
-
-    // Components regularization utilities
+    // components regularization utilities
     void set_lambda_components(const double lambda) {
         lambda_components_ = lambda;
         lambda_components_selection_ = lambda < 0.0;
@@ -374,31 +346,34 @@ public:
         if (lambda_components_.has_value() && *lambda_components_ > 0.0) return *lambda_components_;
         return std::numeric_limits<double>::quiet_NaN();
     }
-    void set_components_gcv_config(const GCVConfig& cfg) { components_gcv_cfg_ = cfg; }
-
-    // Weights regularization utilities
-    virtual void set_lambda_weights(const double) {};
-    [[nodiscard]] virtual double lambda_weights() const { return std::numeric_limits<double>::quiet_NaN(); }
-
-    // Noise variance
-    void set_noise_variance(const double noise_variance) { noise_variance_ = std::max(0.0, noise_variance); }
-    [[nodiscard]] double noise_variance() const {
-        if (!noise_variance_.has_value()) return std::numeric_limits<double>::quiet_NaN();
-        return *noise_variance_;
+    void set_components_gcv_config(const GCVConfig& cfg) {
+        components_gcv_cfg_ = cfg;
     }
 
-    // Weights initialization
+    // weights regularization utilities
+    virtual void set_lambda_weights(const double) {};
+    [[nodiscard]] virtual double lambda_weights() const {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    // weight and component initialization API
     void init_weight_uniform() {
         ensure_lc_();
-
         Vector a = Vector::Ones(n_dofs_weights_);
         double norm2 = a.dot(Omega() * a);
         if (norm2 <= 0) norm2 = 1.0;
         weights_.col(h()) = a / std::sqrt(norm2);
     }
+    void refresh_component() {
+        ensure_lc_();
+        const Vector s = data() * Psi_D() * weights_.col(h());
+        components_.col(h()) = c_fit_(s);
+    }
 
-    // Inner-Component initialization
-    struct InitInfo { bool active{false}; Vector nu; };
+    // inner-component initialization API
+    struct InitInfo {
+        bool active{false}; Vector nu;
+    };
     InitInfo uniform_init() const {
         InitInfo out{true, Vector::Ones(n()) };
         const Matrix& X = data();
@@ -421,36 +396,67 @@ public:
         return out;
     }
 
-    // M: normalization matrix
-    [[nodiscard]] virtual const SparseMatrix& Omega() = 0;
-    [[nodiscard]] const SparseMatrix& M() const { ensure_M_(); return M_; }
-    [[nodiscard]] const Matrix& ginvM() const { ensure_ginvM_(); return ginvM_; }
-    [[nodiscard]] SparseSolver& invM() { ensure_invM_(); return invM_; }
+    // bootstrap API
+    void set_row_index(const IndexVector& idx) {
+        if (idx.size() == 0)
+            throw std::invalid_argument("row index cannot be empty");
 
-    // Current component index
-    [[nodiscard]] int h() const { return h_; }
-    void set_h(const int idx) { if (idx < 0 || idx >= n_comp_) throw std::out_of_range("h"); h_ = idx; }
-    void next_component() { set_h(h_ + 1); }
+        for (int i = 0; i < idx.size(); ++i) {
+            if (idx(i) < 0 || idx(i) >= n_raw())
+                throw std::out_of_range("invalid row index");
+        }
 
-    // Main compute method
+        row_index_ = idx;
+
+        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
+            I_.resize(n(), n());
+            I_.setIdentity();
+        }
+
+        invalidate_M_();
+        components_ready_ = false;
+    }
+    void clear_row_index() {
+        IndexVector idx(n_raw());
+        std::iota(idx.data(), idx.data() + idx.size(), 0);
+        set_row_index(idx);
+    }
+
+    // noise variance
+    void set_noise_variance(const double noise_variance) {
+        noise_variance_ = std::max(0.0, noise_variance);
+    }
+    [[nodiscard]] double noise_variance() const {
+        if (!noise_variance_.has_value()) return std::numeric_limits<double>::quiet_NaN();
+        return *noise_variance_;
+    }
+    std::pair<double, double> component_reconstruction_info() {
+        const Vector a_m = Psi_D() * a_();
+        const Vector eta_t = Psi_T() * eta_();
+        const Vector r = data() * a_m - eta_t;
+        const double den = n();
+        const double mse = r.squaredNorm() / den;
+
+        if (noise_variance_.has_value()) {
+            const double edge = noise_variance() * a_m.squaredNorm();
+            return {mse, edge};
+        }
+        return {mse, std::numeric_limits<double>::quiet_NaN()};
+    }
+
+    // main compute method
     void compute(const Vector& nu_D) {
 
-        // Compute the weight
+        // compute the weight
         const Vector a = w_fit_(nu_D);
         weights().col(h()) = a;
 
-        // Compute the component and regularize it (the regularization acts only in the TimeDependent sampling scenrio)
+        // compute the component and regularize it (the regularization acts only in the TimeDependent sampling scenario)
         const Vector s = data() * Psi_D() * a;
         components().col(h()) = c_fit_(s);
     }
 
-    void refresh_component() {
-        ensure_lc_();
-        const Vector s = data() * Psi_D() * weights_.col(h());
-        components_.col(h()) = c_fit_(s);
-    }
-
-    // Deflation
+    // deflation
     void deflate(const Deflation mode) {
         if (h() == n_comp()) throw std::out_of_range("h");
         switch (mode) {
@@ -460,7 +466,7 @@ public:
         invalidate_M_();
     }
 
-    // Post-processing weights
+    // weights post-processing
     void compute_weights_star() {
         ensure_lc_();
         weights_star_.setZero(weights_.rows(), weights_.cols());
@@ -475,54 +481,26 @@ public:
             weights_star_.col(h) = a_star;
         }
     }
-    [[nodiscard]] Vector normalized_component_for_evaluation(const Vector& a, const int hh) {
-        if (hh != h()) {
-            throw std::logic_error(
-                "normalized_component_for_evaluation: requested component differs from current h; M may refer to current deflated data."
-            );
-        }
 
+    // model evaluation
+    [[nodiscard]] Vector normalized_component_for_evaluation(const Vector& a, const int hh) {
+        if (hh != h())
+            throw std::logic_error("normalized_component_for_evaluation: requested component differs from current h; M may refer to current deflated data.");
+
+        // weight at locations
         const Vector am = Psi_D() * a;
+
+        // normalization
+        // M(), not Omega()! in the evaluation, the regularization term should not be taken into account
         double nrm2 = am.dot(M() * am);
         if (nrm2 <= 0.0 || !std::isfinite(nrm2)) nrm2 = 1.0;
 
+        // components
         const Vector s = data() * am / std::sqrt(nrm2);
-
         return c_fit_(s);
     }
 
-    std::pair<double, double> reconstruction_constraint_info() {
-        const Vector a_m = Psi_D() * a_();
-        const Vector eta_t = Psi_T() * eta_();
-        const Vector r = data() * a_m - eta_t;
-        const double den = n();
-        const double mse = r.squaredNorm() / den;
-
-        if (noise_variance_.has_value()) {
-            const double edge = noise_variance() * a_m.squaredNorm();
-            return {mse, edge};
-        }
-        return {mse, std::numeric_limits<double>::quiet_NaN()};
-    }
-
-    // Psi matrices
-    [[nodiscard]] virtual const SparseMatrix& Psi_D() const = 0; // It depends on the weights' solver
-    [[nodiscard]] const SparseMatrix& Psi_T() const { return components_solver_.Psi(); }
-
-    // Weights & Components
-    Matrix& weights() { ensure_lc_(); return weights_; }
-    Matrix weights_m() { ensure_lc_(); return Psi_D() * weights_; }
-    Matrix& weights_star() { ensure_lc_(); return weights_star_; }
-    Matrix weights_star_m() { ensure_lc_(); return Psi_D() * weights_star_; }
-    Matrix& components() { ensure_lc_(); return components_; }
-    Matrix components_m() { ensure_lc_(); return Psi_T() * components_; }
-
-    // Times getter (only active with TimeDependentSampling strategy)
-    template <typename S = SamplingStrategy>
-    requires std::same_as<S, TimeDependentSampling>
-    const Vector& times() { return times_; }
-
-    // Virtual printer
+    // virtual printer
     virtual void print(std::ostream& os) const {
         const Matrix& X = data();   // no copy
         using Index = Eigen::Index;
@@ -542,39 +520,62 @@ public:
         os << "tau = " << tau() << std::endl;
     }
 
+    // setters
+    void set_bias(const bool bias) { bias_ = bias; }
+    void set_weight_sign_constraint(const WeightSignConstraint weight_sign_constraint = WeightSignConstraint::None) {
+        weight_sign_constraint_ = weight_sign_constraint;
+    }
+
+    // observers
+    [[nodiscard]] const SparseMatrix& Psi_T() const { return components_solver_.Psi(); }
+    Matrix& weights() { ensure_lc_(); return weights_; }
+    Matrix weights_m() { ensure_lc_(); return Psi_D() * weights_; }
+    Matrix& weights_star() { ensure_lc_(); return weights_star_; }
+    Matrix weights_star_m() { ensure_lc_(); return Psi_D() * weights_star_; }
+    Matrix& components() { ensure_lc_(); return components_; }
+    Matrix components_m() { ensure_lc_(); return Psi_T() * components_; }
+    [[nodiscard]] WeightSignConstraint weight_sign_constraint() const { return weight_sign_constraint_; }
+    template <typename S = SamplingStrategy> requires std::same_as<S, TimeDependentSampling> const Vector& times() { return times_; }
+
+    // abstract methods
+    [[nodiscard]] virtual const SparseMatrix& Psi_D() const = 0;
+    virtual void set_homogeneous_dirichlet_bc(bool homogeneous_dirichlet_bc) = 0;
+    [[nodiscard]] virtual const SparseMatrix& Omega() = 0; // M + regularization when present
+    virtual std::unique_ptr<BaseBlock> clone() const = 0;
+
 protected:
 
-    // Data
+    // data utils
     [[nodiscard]] Matrix& mutable_raw_data_() {
         if (!data_ptr_) throw std::logic_error("BaseBlock: Block has no data pointer");
-        if (!allow_raw_mutation_)
+        if (!raw_data_mutable_)
             throw std::logic_error("BaseBlock: This block is not allowed to mutate raw data");
         return *data_ptr_;
     }
-
-    // Weights solver
-    virtual Vector w_fit_(const Vector& nu) = 0;
-
-    // Component solver
-    Vector c_fit_(const Vector& s) {
-
-        components_solver_.update_response_and_weights(s, I_);
-
-        double lambda = 1e-15;
-        if (lambda_components_selection_) {
-            auto [success, l] = select_lambda_with_gcv(components_solver_, components_gcv_cfg_);
-            lambda_components_ = l;
-            lambda_components_selection_ = false;
-        }
-        if (lambda_components_.has_value()) {
-            lambda = *lambda_components_;
-        }
-        components_solver_.fit(lambda);
-
-        return components_solver_.f();
+    void init_identity_row_index_() {
+        row_index_.resize(raw_data().rows());
+        std::iota(row_index_.data(), row_index_.data() + row_index_.size(), 0);
+    }
+    [[nodiscard]] bool is_identity_row_index_() const {
+        if (row_index_.size() != n_raw()) return false;
+        for (int i = 0; i < row_index_.size(); ++i)
+            if (row_index_(i) != i) return false;
+        return true;
     }
 
-    // Current weight and component getters
+    // weights and components
+    void ensure_lc_() {
+        if (!weights_ready_) {
+            weights_.setZero(n_dofs_weights_, n_comp_);
+            weights_star_.setZero(n_dofs_weights_, n_comp_);
+            deflation_projections_.setZero(m(), n_comp_);
+            weights_ready_ = true;
+        }
+        if (!components_ready_) {
+            components_.setZero(components_solver_.n_dofs(), n_comp_);
+            components_ready_ = true;
+        }
+    }
     [[nodiscard]] Vector a_() { ensure_lc_(); return weights_.col(h());}
     [[nodiscard]] Vector eta_() { ensure_lc_(); return components_.col(h());}
 
@@ -617,7 +618,7 @@ protected:
         invalidate_M_();
     }
 
-    // M
+    // normalization matrix
     void compute_M_() {
         M_.resize(m(), m());
 
@@ -672,33 +673,7 @@ protected:
     } // this is enough to invalidate also ginvM and invM
     virtual void invalidate_derived_caches_() {}
 
-    // Weights and Components
-    void ensure_lc_() {
-        if (!weights_ready_) {
-            weights_.setZero(n_dofs_weights_, n_comp_);
-            weights_star_.setZero(n_dofs_weights_, n_comp_);
-            deflation_projections_.setZero(m(), n_comp_);
-            weights_ready_ = true;
-        }
-        if (!components_ready_) {
-            components_.setZero(components_solver_.n_dofs(), n_comp_);
-            components_ready_ = true;
-        }
-    }
-
-    // Bootstrap utils
-    void init_identity_row_index_() {
-        row_index_.resize(raw_data().rows());
-        std::iota(row_index_.data(), row_index_.data() + row_index_.size(), 0);
-    }
-    bool is_identity_row_index_() const {
-        if (row_index_.size() != n_raw()) return false;
-        for (int i = 0; i < row_index_.size(); ++i)
-            if (row_index_(i) != i) return false;
-        return true;
-    }
-
-    // Deflation
+    // deflation
     void deflate_scores_() {
         ensure_lc_();
 
@@ -719,66 +694,85 @@ protected:
         invalidate_M_();
     }
 
+    // non-negative solver utils
     Vector solve_nonnegative_weight_ipopt_(const Vector& z, const std::vector<int>& dirichlet_dofs = {}) {
-
-        if (!nn_solver_) {
+        if (!nn_solver_)
             nn_solver_ = std::make_unique<NonNegativeWeightSolver>(
                 Psi_D(),
                 Omega(),
                 dirichlet_dofs
             );
-        }
-
         return nn_solver_->solve(z);
     }
-
     void reset_nonnegative_weight_solver_() {
         nn_solver_.reset();
     }
 
-    // Dimensions
+    // weights solver
+    virtual Vector w_fit_(const Vector& nu) = 0;
+
+    // component solver
+    Vector c_fit_(const Vector& s) {
+
+        components_solver_.update_response_and_weights(s, I_);
+
+        double lambda = 1e-15;
+        if (lambda_components_selection_) {
+            auto [success, l] = select_lambda_with_gcv(components_solver_, components_gcv_cfg_);
+            lambda_components_ = l;
+            lambda_components_selection_ = false;
+        }
+        if (lambda_components_.has_value()) {
+            lambda = *lambda_components_;
+        }
+        components_solver_.fit(lambda);
+
+        return components_solver_.f();
+    }
+
+    // dimensions
     int n_dofs_weights_ {0};
     int n_comp_ {1};
 
-    // State
+    // state
     Vector times_{0};
     const std::string block_name_;
     int h_ {0};
 
-    // Data
+    // data
     Matrix* data_ptr_ = nullptr;
     IndexVector row_index_;
 
-    // Solvers
+    // solvers
     ComponentsSolverType components_solver_;
     std::unique_ptr<NonNegativeWeightSolver> nn_solver_;
 
-    // Options
+    // options
     double tau_ {0.0};
     Mode mode_ = Mode::CorMax;
     WeightSignConstraint weight_sign_constraint_ = WeightSignConstraint::None;
     bool bias_ = true;
 
-    // Parameters
+    // parameters
     GCVConfig components_gcv_cfg_;
     std::optional<double> lambda_components_;
     std::optional<double> noise_variance_;
 
-    // Results
+    // results
     Matrix weights_, weights_star_, components_;
     Matrix deflation_projections_;
 
-    // Utilities
-    SparseMatrix I_; // n x n identity matrix
+    // utilities
+    SparseMatrix I_;
     SparseMatrix M_;
     Matrix ginvM_;
     SparseSolver invM_;
 
-    // Flags
-    bool allow_raw_mutation_ = false;
+    // flags
+    bool raw_data_mutable_ = false;
+    bool weights_ready_ {false}, components_ready_ {false};
     bool M_ready_ {false}, invM_ready_ {false}, ginvM_ready_ {false};
     bool lambda_components_selection_ {false};
-    bool weights_ready_ {false}, components_ready_ {false};
 };
 
 // single non-member operator<< visible to all derived classes
@@ -1244,7 +1238,7 @@ public:
             if (b->n() != n()) throw std::invalid_argument("RGCCA/add_block: n mismatch");
         } else { add_times_(b->times()); }
         b->set_bias(opt_.bias);
-        b->set_allow_raw_mutation(true);
+        b->set_raw_data_mutable(true);
         b->set_homogeneous_dirichlet_bc(opt_.homogeneous_dirichlet_bc);
         b->set_mode(opt_.mode);
         b->set_weight_sign_constraint(opt_.weight_sign_constraint);
@@ -1797,7 +1791,7 @@ private:
         compute_covariance_matrix_(blocks, res.covariance_matrix);
         get_tau(blocks, res.tau_values);
         get_lambdas(blocks, res.lambda_components_values, res.lambda_weights_values);
-        get_reconstruction_constraint_info(blocks, res.reconstruction_error, res.reconstruction_edge);
+        get_component_reconstruction_info(blocks, res.reconstruction_error, res.reconstruction_edge);
 
         return res;
     }
@@ -1857,10 +1851,10 @@ private:
         }
     }
 
-    void get_reconstruction_constraint_info(const BlockRefList& blocks, std::vector<double> & reconstruction_error, std::vector<double> & reconstruction_edge) {
+    void get_component_reconstruction_info(const BlockRefList& blocks, std::vector<double> & reconstruction_error, std::vector<double> & reconstruction_edge) {
         const int J = static_cast<int>(blocks.size());
         for (std::size_t j = 0; j < J; ++j) {
-            auto [error, edge] = blocks[j]->reconstruction_constraint_info();
+            auto [error, edge] = blocks[j]->component_reconstruction_info();
             reconstruction_error[j] = error;
             reconstruction_edge[j] = edge;
         }
@@ -1967,7 +1961,7 @@ private:
 
         for (const auto& b : blocks_) {
             auto copy = b->clone();
-            copy->set_allow_raw_mutation(false);
+            copy->set_raw_data_mutable(false);
 
             out.refs.push_back(copy.get());
             out.owners.push_back(std::move(copy));
@@ -1983,7 +1977,7 @@ private:
 
         for (auto* b : src.refs) {
             auto copy = b->clone();
-            copy->set_allow_raw_mutation(false);
+            copy->set_raw_data_mutable(false);
 
             out.refs.push_back(copy.get());
             out.owners.push_back(std::move(copy));
@@ -2189,7 +2183,7 @@ private:
     std::vector<BlockPtr> blocks_;
 
     BootstrapConfig bootstrap_config_;
-    std::vector<std::vector<double>> lambda_grid_weights_ {{1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2}};
+    std::vector<double> lambda_grid_weights_ {1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2};
     std::vector<BootstrapSelectionResult> bootstrap_selection_results_;
 
     // topology & caches (sized in init())
