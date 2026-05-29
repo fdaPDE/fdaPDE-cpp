@@ -14,12 +14,16 @@ using SparseMatrix = Eigen::SparseMatrix<double, Eigen::ColMajor, int>;
 class NonNegativeWeightProblem : public Ipopt::TNLP {
 public:
     NonNegativeWeightProblem(
-        const SparseMatrix& Psi,
         const SparseMatrix& Omega,
         const Vector& c,
-        const Vector& x0,
-        const std::vector<bool>& is_boundary = {}
-    ) : Omega_(Omega), c_(c), x0_(x0), is_boundary_(is_boundary) {
+        const Vector& x0
+    ) : Omega_(Omega), c_(c), x0_(x0) {
+
+        if (Omega_.rows() != Omega_.cols())
+            throw std::invalid_argument("Omega must be square");
+
+        if (Omega_.rows() != c_.size() || Omega_.rows() != x0_.size())
+            throw std::invalid_argument("incompatible dimensions");
 
         // dimensions
         n_ = static_cast<Ipopt::Index>(x0_.size());
@@ -68,18 +72,10 @@ public:
         Ipopt::Number* g_u              // (out) the upper bounds g_H for the constraints g(x)
     ) override {
 
-
+        // non-negativity constraint
         for (Ipopt::Index i = 0; i < n; ++i) {
-            const bool boundary = !is_boundary_.empty() && is_boundary_[static_cast<std::size_t>(i)];
-            if (boundary) {
-                // Dirichlet Homogeneous BC
-                x_l[i] = 0.0;
-                x_u[i] = 0.0;
-            } else {
-                // Non-Negativity constraint
-                x_l[i] = 0.0;
-                x_u[i] = 2e19;
-            }
+            x_l[i] = 0.0;
+            x_u[i] = 2e19;
         }
 
         g_l[0] = 1.0;
@@ -256,7 +252,6 @@ private:
 
     // cache for constant quantities
     std::vector<std::pair<Ipopt::Index, Ipopt::Index>> hess_pos_;
-    std::vector<bool> is_boundary_;
 
     // results
     Vector solution_;
@@ -269,8 +264,7 @@ class NonNegativeWeightSolver {
 public:
     NonNegativeWeightSolver(
         const SparseMatrix& Psi,
-        const SparseMatrix& Omega,
-        const std::vector<int>& boundary_dofs = {}
+        const SparseMatrix& Omega
     ) : Psi_(Psi), Omega_(Omega) {
 
         Psi_.makeCompressed();
@@ -281,26 +275,13 @@ public:
         // dimensions
         const int n = static_cast<Ipopt::Index>(Psi_.cols());
 
-        // boundary conditions
-        is_boundary_.assign(n, false);
-        for (const int idx : boundary_dofs) {
-            if (idx < 0 || idx >= n) {
-                throw std::out_of_range("NonNegativeWeightProblem: boundary dof out of range");
-            }
-            is_boundary_[idx] = true;
-        }
-
         // starting point
         x0_ = Vector::Ones(n);
-        for (Ipopt::Index i = 0; i < n; ++i) {
-            if (is_boundary_[i]) x0_[i] = 0.0;
-        }
-
         const double norm2 = x0_.dot(Omega_ * x0_);
         if (norm2 > 0.0) x0_ /= std::sqrt(norm2);
         else throw std::runtime_error("NonNegativeWeightProblem: invalid starting point");
 
-        xopt_ = x0_;
+        last_solution_ = x0_;
 
         const auto status = app_->Initialize();
         if (status != Ipopt::Solve_Succeeded) throw std::runtime_error("Ipopt initialization failed.");
@@ -309,17 +290,13 @@ public:
     NonNegativeWeightSolver(const NonNegativeWeightSolver& other)
     : Psi_(other.Psi_),
       Omega_(other.Omega_),
-      is_boundary_(other.is_boundary_),
       x0_(other.x0_),
-      xopt_(other.xopt_)
+      last_solution_(other.last_solution_)
     {
         Psi_.makeCompressed();
         Omega_.makeCompressed();
 
         app_ = IpoptApplicationFactory();
-
-        app_->Options()->SetIntegerValue("print_level", 0);
-        app_->Options()->SetStringValue("sb", "yes");
 
         const auto status = app_->Initialize();
         if (status != Ipopt::Solve_Succeeded) throw std::runtime_error("Ipopt initialization failed in copy constructor.");
@@ -330,12 +307,13 @@ public:
     Vector solve(const Vector& z) {
 
         // scaling
-        double s = abs(z.dot(Psi_ * x0_));
-        if (s * s <= 0.0) s = 1.0;
+        double s = std::abs(z.dot(Psi_ * x0_));
+        if (s <= 0.0 || !std::isfinite(s)) s = 1.0;
+
         const Vector c = Psi_.transpose() * z / s;
 
-        auto* raw_pos = new NonNegativeWeightProblem(Psi_, Omega_, c, x0_, is_boundary_);
-        auto* raw_neg = new NonNegativeWeightProblem(Psi_, Omega_, -c, x0_, is_boundary_);
+        auto* raw_pos = new NonNegativeWeightProblem(Omega_, c, x0_);
+        auto* raw_neg = new NonNegativeWeightProblem(Omega_, -c, x0_);
 
         Ipopt::SmartPtr<Ipopt::TNLP> problem_pos = raw_pos;
         Ipopt::SmartPtr<Ipopt::TNLP> problem_neg = raw_neg;
@@ -345,26 +323,27 @@ public:
 
         const bool pos_ok = raw_pos->status() == Ipopt::SUCCESS || raw_pos->status() == Ipopt::STOP_AT_ACCEPTABLE_POINT;
         const bool neg_ok = raw_neg->status() == Ipopt::SUCCESS || raw_neg->status() == Ipopt::STOP_AT_ACCEPTABLE_POINT;
-        const bool pos_is_better = raw_pos->obj_value() <= raw_neg->obj_value(); // minimization problem
 
-        if (pos_ok && neg_ok) xopt_ = (pos_is_better) ? raw_pos->solution() : raw_neg->solution();
-        else if (pos_ok || neg_ok) {
-            if (pos_ok) xopt_ =  raw_pos->solution();
-            if (neg_ok) xopt_ =  raw_neg->solution();
+        if (pos_ok && neg_ok) {
+            const bool choose_pos = raw_pos->obj_value() <= raw_neg->obj_value();
+            last_solution_ = choose_pos ? raw_pos->solution() : raw_neg->solution();
+        } else if (pos_ok) {
+            last_solution_ = raw_pos->solution();
+        } else if (neg_ok) {
+            last_solution_ = raw_neg->solution();
         } else {
-            std::cerr << "NonNegativeWeightSolver: optimization failed, returning the last admissible solution" << std::endl;
+            std::cerr << "NonNegativeWeightSolver: optimization failed, returning the last admissible solution\n";
         }
 
-        return xopt_;
+        return last_solution_;
     }
 
 private:
     SparseMatrix Psi_;
     SparseMatrix Omega_;
 
-    std::vector<bool> is_boundary_;
     Vector x0_;
-    Vector xopt_;
+    Vector last_solution_;
 
     Ipopt::SmartPtr<Ipopt::IpoptApplication> app_;
 };

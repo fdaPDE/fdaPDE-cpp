@@ -539,7 +539,6 @@ public:
 
     // abstract methods
     [[nodiscard]] virtual const SparseMatrix& Psi_D() const = 0;
-    virtual void set_homogeneous_dirichlet_bc(bool homogeneous_dirichlet_bc) = 0;
     [[nodiscard]] virtual const SparseMatrix& Omega() = 0; // M + regularization when present
     virtual std::unique_ptr<BaseBlock> clone() const = 0;
 
@@ -695,12 +694,11 @@ protected:
     }
 
     // non-negative solver utils
-    Vector solve_nonnegative_weight_ipopt_(const Vector& z, const std::vector<int>& dirichlet_dofs = {}) {
+    Vector solve_nonnegative_weight_ipopt_(const Vector& z) {
         if (!nn_solver_)
             nn_solver_ = std::make_unique<NonNegativeWeightSolver>(
                 Psi_D(),
-                Omega(),
-                dirichlet_dofs
+                Omega()
             );
         return nn_solver_->solve(z);
     }
@@ -710,6 +708,11 @@ protected:
 
     // weights solver
     virtual Vector w_fit_(const Vector& nu) = 0;
+    [[nodiscard]] Vector normalize_weight_(const Vector& a) {
+        const double rho2 = a.dot(Omega() * a);
+        if (rho2 <= 0.0 || !std::isfinite(rho2)) return a;
+        return a / std::sqrt(rho2);
+    }
 
     // component solver
     Vector c_fit_(const Vector& s) {
@@ -782,7 +785,6 @@ inline std::ostream& operator<<(std::ostream& os, const BaseBlock<SamplingStrate
     return os;
 }
 
-// ========== MultivariateBlock ==========
 template <typename SamplingStrategy>
 class MultivariateBlock final : public BaseBlock<SamplingStrategy> {
 public:
@@ -807,46 +809,29 @@ public:
     requires std::same_as<S, IndependentSampling>
     MultivariateBlock(const std::string& block_name, Matrix* data_ptr) :
         Base(block_name, data_ptr, static_cast<int>(data_ptr->cols())) {
-        init_multivariate();
+        init_multivariate_();
     }
 
     template<typename S = SamplingStrategy>
     requires std::same_as<SamplingStrategy, TimeDependentSampling>
     MultivariateBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Vector& times, Matrix* data_ptr) :
         Base(block_name, T, times, data_ptr, static_cast<int>(data_ptr->cols())) {
-        init_multivariate();
+        init_multivariate_();
     }
 
-    MultivariateBlock(const MultivariateBlock& other) : Base(other), Psi_D_(other.Psi_D_) {
-        Omega_ready_ = false;
-    }
+    MultivariateBlock(const MultivariateBlock& other) : Base(other), Psi_D_(other.Psi_D_) { }
 
     std::unique_ptr<Base> clone() const override {
         return std::make_unique<MultivariateBlock>(*this);
     }
 
-    void init_multivariate() {
-        Psi_D_.resize(m(), n_dofs_weights()); // m == n_dofs_weights in this case
-        Psi_D_.setIdentity();
-        init();
-    }
-
     // Omega
-    [[nodiscard]] const SparseMatrix& Omega() override {
-        if (!Omega_ready_) {
-            Omega_ = M();
-            Omega_ready_ = true;
-        }
-        return Omega_;
-    };
+    [[nodiscard]] const SparseMatrix& Omega() override { return M(); };
 
     // Psi_D
     [[nodiscard]] const SparseMatrix& Psi_D() const override { return Psi_D_; }
 
-    // Boundary conditions
-    void set_homogeneous_dirichlet_bc(bool homogeneous_dirichlet_bc) override {}
-
-    // Print
+    // print
     void print(std::ostream& os) const override {
         Base::print(os);
         os << "type: MultivariateBlock, n_dofs_weights = m = " << n_dofs_weights();
@@ -856,6 +841,13 @@ public:
 protected:
     using Base::solve_nonnegative_weight_ipopt_;
     using Base::reset_nonnegative_weight_solver_;
+    using Base::normalize_weight_;
+
+    void init_multivariate_() {
+        Psi_D_.resize(m(), n_dofs_weights()); // n_dofs_weights == m in this case
+        Psi_D_.setIdentity();
+        init();
+    }
 
     Vector w_fit_(const Vector& nu) override {
         assert(nu.size() == n() && "nu must have size n (rows of X)");
@@ -864,29 +856,21 @@ protected:
         Vector z = data().transpose() * nu;
 
         if (weight_sign_constraint() == WeightSignConstraint::NonNegative) {
-            return solve_nonnegative_weight_ipopt_(z);
+            return solve_nonnegative_weight_ipopt_(z); // already normalized
         }
 
-        const Vector a_tilde = ginvM() * z; // If mode == Mode::CovMax, ginvM = I
-        // Normalization
-        double rho = a_tilde.dot(M() * a_tilde);
-        if (rho <= 0.0) rho = 1.;
-        rho = std::sqrt(rho);
-        return a_tilde / rho;
+        const Vector a_tilde = ginvM() * z;
+        return normalize_weight_(a_tilde);
     }
 
     void invalidate_derived_caches_() override {
-        Omega_ready_ = false;
         reset_nonnegative_weight_solver_();
     }
 
 private:
-    SparseMatrix Omega_;
-    bool Omega_ready_ {false};
     SparseMatrix Psi_D_; // m x m sparse identity matrix
 };
 
-// ========== FunctionalBlock ==========
 template <class WeightsPenaltyType, typename SamplingStrategy>
 class FunctionalBlock final : public BaseBlock<SamplingStrategy> {
 public:
@@ -911,21 +895,18 @@ public:
     requires std::same_as<SamplingStrategy, IndependentSampling>
     FunctionalBlock(const std::string& block_name, GeoFrame& gf, Matrix* data_ptr, WeightsPenaltyType&& weights_penalty) :
         Base(block_name, data_ptr, weights_penalty.get().bilinear_form().n_dofs()) {
-        init_functional(gf, std::forward<WeightsPenaltyType>(weights_penalty));
+        init_functional_(gf, std::forward<WeightsPenaltyType>(weights_penalty));
     }
 
     template <typename GeoFrame>
     requires std::same_as<SamplingStrategy, TimeDependentSampling>
     FunctionalBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Vector& times, GeoFrame& gf, Matrix* data_ptr, WeightsPenaltyType&& weights_penalty) :
         Base(block_name, T, times, data_ptr, weights_penalty.get().bilinear_form().n_dofs()) {
-        init_functional(gf, std::forward<WeightsPenaltyType>(weights_penalty));
+        init_functional_(gf, std::forward<WeightsPenaltyType>(weights_penalty));
     }
 
     FunctionalBlock(const FunctionalBlock& other) :
-    Base(other),
-    homogeneous_dirichlet_bc_(other.homogeneous_dirichlet_bc_),
-    weights_solver_(other.weights_solver_),
-    lambda_weights_(other.lambda_weights_) {
+        Base(other), weights_solver_(other.weights_solver_), lambda_weights_(other.lambda_weights_) {
         Omega_ready_ = false;
     }
 
@@ -933,20 +914,10 @@ public:
         return std::make_unique<FunctionalBlock>(*this);
     }
 
-    template <typename GeoFrame>
-    void init_functional(GeoFrame& gf, WeightsPenaltyType&& weights_penalty) {
-        weights_solver_.discretize(weights_penalty.get());
-        weights_solver_.analyze_data(gf, M());
-        init();
-    }
-
     // Psi_D
     [[nodiscard]] const SparseMatrix& Psi_D() const override { return weights_solver_.Psi(); }
 
-    // Boundary conditions
-    void set_homogeneous_dirichlet_bc(const bool homogeneous_dirichlet_bc) override { homogeneous_dirichlet_bc_ = homogeneous_dirichlet_bc; }
-
-    // Weights regularization utilities
+    // weights regularization utils
     void set_lambda_weights(const double lambda) override {
         lambda_weights_ = lambda;
         Omega_ready_ = false;
@@ -958,26 +929,32 @@ public:
 
     // Omega matrix
     [[nodiscard]] const SparseMatrix& Omega() override {
-
         if (!Omega_ready_) {
             Omega_ = Psi_D().transpose() * M() * Psi_D();
             Omega_ += lambda_weights_ * weights_solver_.P();
             Omega_ready_ = true;
         }
-
         return Omega_;
     }
 
-    // Print
+    // print
     void print(std::ostream& os) const override {
         Base::print(os);
         os << "type: FunctionalBlock, n_dofs_weights = " << n_dofs_weights();
         os << ", lambda = " << lambda_weights_;
         os << "\n";
     }
+
 protected:
     using Base::solve_nonnegative_weight_ipopt_;
     using Base::reset_nonnegative_weight_solver_;
+
+    template <typename GeoFrame>
+    void init_functional_(GeoFrame& gf, WeightsPenaltyType&& weights_penalty) {
+        weights_solver_.discretize(weights_penalty.get());
+        weights_solver_.analyze_data(gf, M());
+        init();
+    }
 
     Vector w_fit_(const Vector& nu) override {
         assert(nu.size() == n() && "nu must have size n (rows of X)");
@@ -986,27 +963,24 @@ protected:
         Vector z = data().transpose() * nu;
 
         if (weight_sign_constraint() == WeightSignConstraint::NonNegative) {
-            if (!homogeneous_dirichlet_bc_) return solve_nonnegative_weight_ipopt_(z);
-            return solve_nonnegative_weight_ipopt_(z, weights_solver_.boundary_dofs());
+            return solve_nonnegative_weight_ipopt_(z);  // already normalized
         }
 
         weights_solver_.update_z_and_weights(z, M()); // can be optimized by passing M only when it has changed
         weights_solver_.fit(lambda_weights_);
-        return weights_solver_.f();
+        return weights_solver_.f(); // already normalized
     }
     void invalidate_derived_caches_() override {
         Omega_ready_ = false;
         reset_nonnegative_weight_solver_();
     }
+
 private:
     SparseMatrix Omega_;
     bool Omega_ready_ {false};
-    bool homogeneous_dirichlet_bc_ {false};
     WeightsSolverType weights_solver_;
     double lambda_weights_ = 1e-15;
 };
-
-
 
 template <typename SamplingStrategy, typename Matrix = Eigen::Matrix<double, Dynamic, Dynamic>>
 requires std::same_as<SamplingStrategy, IndependentSampling>
@@ -1036,11 +1010,8 @@ make_functional_block(std::string block_name, const Triangulation<1, 1>& T, cons
     return std::make_unique<internals::FunctionalBlock<WeightsPenaltyType, SamplingStrategy>>(block_name, T, times, gf, data_ptr,  std::forward<WeightsPenaltyType>(weights_penalty));
 }
 
+} // namespace internals
 
-
-}   // namespace internals
-
-// ===== Scheme (g, w, phi) =====
 struct Scheme {
     std::function<double(double)> g;   // g(t)
     std::function<double(double)> w;   // w(t)
@@ -1059,7 +1030,6 @@ struct Scheme {
     }
 };
 
-// ===== Results =====
 struct Result {
     using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
     using BoolMatrix = Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>;
@@ -1113,7 +1083,6 @@ public:
         bool verbose;
         bool cache_covariances;
         bool bias;
-        bool homogeneous_dirichlet_bc;
         InitStrategy init_strategy;
         LambdaSelection lambda_selection_weights;
         LambdaSelection lambda_selection_components;
@@ -1124,7 +1093,7 @@ public:
 
         explicit Options(
           const int max_iter_ = 1000, const double tol_ = 1e-8, const double active_block_tol_ = 1e-8, const unsigned seed_ = 0,
-          const bool bias_ = true, bool homogeneous_dirichlet_bc = false,
+          const bool bias_ = true,
           const InitStrategy init_strategy_ = InitStrategy::SVD, const Mode mode_ = Mode::CovMax,
           const WeightSignConstraint weight_sign_constraint_ = WeightSignConstraint::None,
           const LambdaSelection lambda_selection_weights_ = LambdaSelection::Manual,
@@ -1136,7 +1105,6 @@ public:
             active_block_tol(active_block_tol_),
             seed(seed_),
             bias(bias_),
-            homogeneous_dirichlet_bc(homogeneous_dirichlet_bc),
             init_strategy(init_strategy_),
             mode(mode_),
             weight_sign_constraint(weight_sign_constraint_),
@@ -1239,7 +1207,6 @@ public:
         } else { add_times_(b->times()); }
         b->set_bias(opt_.bias);
         b->set_raw_data_mutable(true);
-        b->set_homogeneous_dirichlet_bc(opt_.homogeneous_dirichlet_bc);
         b->set_mode(opt_.mode);
         b->set_weight_sign_constraint(opt_.weight_sign_constraint);
         b->set_n_comp(n_comp());
