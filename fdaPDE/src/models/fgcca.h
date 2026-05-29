@@ -1114,6 +1114,7 @@ public:
     struct Options {
         int max_iter;
         double tol;
+        double active_block_tol;
         unsigned seed;
         bool verbose;
         bool cache_covariances;
@@ -1128,7 +1129,7 @@ public:
         Scheme scheme;
 
         explicit Options(
-          const int max_iter_ = 1000, const double tol_ = 1e-8, const unsigned seed_ = 0,
+          const int max_iter_ = 1000, const double tol_ = 1e-8, const double active_block_tol_ = 1e-8, const unsigned seed_ = 0,
           const bool bias_ = true, bool homogeneous_dirichlet_bc = false,
           const InitStrategy init_strategy_ = InitStrategy::SVD, const Mode mode_ = Mode::CovMax,
           const WeightSignConstraint weight_sign_constraint_ = WeightSignConstraint::None,
@@ -1138,6 +1139,7 @@ public:
           const bool verbose_ = false, const bool cache_ = true) :
             max_iter(max_iter_),
             tol(tol_),
+            active_block_tol(active_block_tol_),
             seed(seed_),
             bias(bias_),
             homogeneous_dirichlet_bc(homogeneous_dirichlet_bc),
@@ -1184,6 +1186,7 @@ public:
         double lambda_opt = std::numeric_limits<double>::quiet_NaN();
 
         std::vector<std::string> block_names;
+        std::vector<bool> active_blocks;
 
         // [lambda][block] -> vector/matrix
         std::vector<std::vector<Vector>> w_fit_by_lambda;
@@ -1197,7 +1200,7 @@ public:
             const int B_,
             const std::vector<double>& lambda_grid_,
             const std::vector<std::string>& block_names_,
-            const std::vector<int>& block_dims
+            const std::vector<int>& block_dims_
         ) :
             h(h_),
             B(B_),
@@ -1206,17 +1209,19 @@ public:
             block_names(block_names_)
         {
             const std::size_t n_lambda = lambda_grid.size();
-            const std::size_t J = block_dims.size();
+            const std::size_t J = block_dims_.size();
 
             w_fit_by_lambda.resize(n_lambda);
             w_boot_by_lambda.resize(n_lambda);
             w_min_by_lambda.resize(n_lambda);
 
+            active_blocks.resize(J);
+
             for (std::size_t i = 0; i < n_lambda; ++i) {
                 w_boot_by_lambda[i].resize(J);
 
                 for (std::size_t j = 0; j < J; ++j) {
-                    w_boot_by_lambda[i][j].setZero(block_dims[j], B);
+                    w_boot_by_lambda[i][j].setZero(block_dims_[j], B);
                 }
             }
         }
@@ -1351,17 +1356,24 @@ public:
         bootstrap_selection_results_.clear();
         bootstrap_selection_results_.reserve(n_comp());
 
+        double lambda {0};
+        std::vector<bool> active_blocks(n_blocks(), true);
+
         // components loop
         for (int hh = 0; hh < n_comp(); ++hh) {
             set_h(hh);
 
             if (opt_.lambda_selection_weights == LambdaSelection::Automatic) {
-                const double lambda = select_lambda_weights_bootstrap_parallel();
+                auto selection = select_lambda_weights_bootstrap_parallel();
+
+                lambda = selection.first;
+                active_blocks = std::move(selection.second);
+
                 set_lambda_weights_all(lambda);
             }
 
             init_comp();
-            results.push_back(fit_component());
+            results.push_back(fit_component(active_blocks));
 
             if (hh + 1 < n_comp()) deflate_all();
         }
@@ -1375,15 +1387,20 @@ public:
         auto blocks = main_blocks_();
         init_comp_(blocks);
     }
+    Result fit_component(const std::vector<bool>& active_blocks) {
+        auto blocks = main_blocks_();
+        return fit_component_(blocks, active_blocks);
+    }
     Result fit_component() {
         auto blocks = main_blocks_();
-        return fit_component_(blocks);
+        std::vector<bool> active_blocks(blocks.size(), true);
+        return fit_component_(blocks, active_blocks);
     }
     void compute_weights_star() {
         for (auto& b : blocks_) b->compute_weights_star();
     }
 
-    double select_lambda_weights_bootstrap() {
+    std::pair<double, std::vector<bool>>  select_lambda_weights_bootstrap() {
         if (lambda_grid_weights_.empty())
             throw std::runtime_error("lambda_grid_weights_ is empty");
 
@@ -1482,13 +1499,21 @@ public:
             }
         }
 
+        // lambda selection
         boot_results.lambda_opt = lambda_grid_weights_[best_i];
-        bootstrap_selection_results_.push_back(std::move(boot_results));
 
-        return bootstrap_selection_results_.back().lambda_opt;
+        // blocks deactivation
+        boot_results.active_blocks.assign(J, true);
+        for (int j = 0; j < J; ++j) {
+            const double nrm = boot_results.w_min_by_lambda[best_i][j].norm();
+            boot_results.active_blocks[j] = nrm >= opt_.active_block_tol;
+        }
+
+        bootstrap_selection_results_.push_back(std::move(boot_results));
+        return {bootstrap_selection_results_.back().lambda_opt, bootstrap_selection_results_.back().active_blocks};
     }
 
-   double select_lambda_weights_bootstrap_parallel() {
+   std::pair<double, std::vector<bool>> select_lambda_weights_bootstrap_parallel() {
         if (lambda_grid_weights_.empty())
             throw std::runtime_error("lambda_grid_weights_ is empty");
 
@@ -1625,10 +1650,19 @@ public:
             }
         }
 
+        // lambda selection
         boot_results.lambda_opt = lambda_grid_weights_[best_i];
-        bootstrap_selection_results_.push_back(std::move(boot_results));
 
-        return bootstrap_selection_results_.back().lambda_opt;
+        // blocks deactivation
+        boot_results.active_blocks.assign(J, true);
+        for (int j = 0; j < J; ++j) {
+            const double nrm = boot_results.w_min_by_lambda[best_i][j];
+            std::cout << "block " << j << " ||w_min|| = " << nrm << " active = " << (nrm >= opt_.active_block_tol) << std::endl;
+            boot_results.active_blocks[j] = nrm >= opt_.active_block_tol;
+        }
+
+        bootstrap_selection_results_.push_back(std::move(boot_results));
+        return {bootstrap_selection_results_.back().lambda_opt, bootstrap_selection_results_.back().active_blocks};
     }
 
     // ===== Accessors =====
@@ -1691,7 +1725,7 @@ private:
         }
     }
 
-    Result fit_component_(const BlockRefList& blocks) {
+    Result fit_component_(const BlockRefList& blocks, const std::vector<bool>& active_blocks) {
         const int J = static_cast<int>(blocks.size());
         if (J < 2)
             throw std::runtime_error("RGCCA: need ≥ 2 blocks");
@@ -1700,7 +1734,17 @@ private:
 
         Result res(J);
         res.obj_history.reserve(opt_.max_iter);
+
         res.C = C_;
+        res.active_blocks = active_blocks;
+        for (int j = 0; j < J; ++j) {
+            if (!active_blocks[j]) {
+                res.C.row(j).setConstant(false);
+                res.C.col(j).setConstant(false);
+                blocks[j]->weights().col(h()).setZero();
+                blocks[j]->components().col(h()).setZero();
+            }
+        }
 
         res.obj_history.push_back(objective_(blocks, ws, res.C));
 
@@ -1711,6 +1755,9 @@ private:
 
         for (int s = 0; s < opt_.max_iter; ++s) {
             for (int l = 0; l < J; ++l) {
+
+                if (!active_blocks[l]) continue;
+
                 Vector nu_l = Vector::Zero(blocks[l]->n());
                 const Vector eta_l = eta_(*blocks[l]);
 
@@ -1753,6 +1800,10 @@ private:
         get_reconstruction_constraint_info(blocks, res.reconstruction_error, res.reconstruction_edge);
 
         return res;
+    }
+    Result fit_component_(const BlockRefList& blocks) {
+        std::vector<bool> active_blocks(blocks.size(), true);
+        return fit_component_(blocks, active_blocks);
     }
 
     std::vector<Vector> snapshot_weights_(const BlockRefList& blocks) const {
@@ -2138,7 +2189,7 @@ private:
     std::vector<BlockPtr> blocks_;
 
     BootstrapConfig bootstrap_config_;
-    std::vector<double> lambda_grid_weights_ {1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2};
+    std::vector<std::vector<double>> lambda_grid_weights_ {{1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2}};
     std::vector<BootstrapSelectionResult> bootstrap_selection_results_;
 
     // topology & caches (sized in init())
