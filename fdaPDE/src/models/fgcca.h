@@ -23,7 +23,7 @@
 
 namespace fdapde {
 
-enum class InitStrategy { None, Random, SVD, Uniform, WarmStart };
+enum class InitStrategy { None, SVD, Uniform, WarmStart };
 enum class DesignMode {Empty, FullyConnected};
 enum class LambdaSelection {Manual, Automatic};
 enum class Mode { CorMax, Regularized, CovMax };
@@ -458,7 +458,7 @@ public:
 
     // deflation
     void deflate(const Deflation mode) {
-        if (h() == n_comp()) throw std::out_of_range("h");
+        if (h() == n_comp()) return;
         switch (mode) {
             case Deflation::Scores: deflate_scores_(); break;
             case Deflation::None: default: break;
@@ -586,23 +586,23 @@ protected:
         if (n_obs < 2 || n_vars < 1) throw std::runtime_error("tau_auto: need n >= 2 and m >= 1");
 
         Eigen::RowVectorXd mu = data().colwise().mean();
-        Matrix xs = data().rowwise() - mu;
-        Eigen::RowVectorXd var = (xs.array().square().colwise().sum() / static_cast<double>(n_obs - 1)).matrix();
+        Matrix Xc = data().rowwise() - mu;
+        Eigen::RowVectorXd var = (Xc.array().square().colwise().sum() / static_cast<double>(n_obs - 1)).matrix();
         Eigen::RowVectorXd sd = var.array().sqrt().matrix();
 
         for (int j = 0; j < n_vars; ++j) {
             if (!(sd[j] > 0.0) || !std::isfinite(sd[j])) sd[j] = 1.0;
         }
 
-        xs.array().rowwise() /= sd.array();
-        const Matrix XtX = xs.transpose() * xs;
-        const Matrix xs2 = xs.array().square().matrix();
-        const Matrix xs2T_xs2 = xs2.transpose() * xs2;
+        Xc.array().rowwise() /= sd.array();
+        const Matrix XtX = Xc.transpose() * Xc;
+        const Matrix Xc2 = Xc.array().square().matrix();
+        const Matrix Xc2T_Xc2 = Xc2.transpose() * Xc2;
 
         const double n_d = static_cast<double>(n_obs);
         const double c = n_d / std::pow(n_d - 1.0, 3.0);
 
-        Matrix V = c * (xs2T_xs2 - (1.0 / n_d) * XtX.array().square().matrix());
+        Matrix V = c * (Xc2T_Xc2 - (1.0 / n_d) * XtX.array().square().matrix());
         V.diagonal().setZero();
 
         const double num = V.sum();
@@ -623,19 +623,26 @@ protected:
 
         if (mode_ == Mode::CovMax) {
             M_.setIdentity();
-        } else if (mode_ == Mode::CorMax) {
-            const double den = bias_ ? n() : std::max(1, n() - 1);
-            M_ = (data().transpose() * data() / den).sparseView();
         } else {
-            SparseMatrix I(m(), m());
-            I.setIdentity();
+            const double n_d = static_cast<double>(n());
+            const double den = bias_ ? n_d : std::max(1.0, n_d - 1.0);
 
-            const double den = bias_ ? n() : std::max(1, n() - 1);
-            const Matrix Sigma = ((1.0 - tau_) / den) * (data().transpose() * data());
+            const Matrix XtX = data().transpose() * data();
+            const Vector mu = data().colwise().mean();
 
-            M_ = tau_ * I;
-            M_ += Sigma.sparseView();
+            const Matrix Sigma = (XtX - n_d * (mu * mu.transpose())) / den;
+
+            if (mode_ == Mode::CorMax) {
+                M_ = Sigma.sparseView();
+            } else {
+                SparseMatrix I(m(), m());
+                I.setIdentity();
+
+                M_ = tau_ * I;
+                M_ += ((1.0 - tau_) * Sigma).sparseView();
+            }
         }
+
         M_.makeCompressed();
         M_ready_ = true;
         ginvM_ready_ = false;
@@ -1046,13 +1053,11 @@ struct Result {
     std::vector<double> lambda_components_values;
     std::vector<double> lambda_weights_values;
     std::vector<bool> active_blocks;
-    std::vector<double> s1_blocks;
-    std::vector<double> s1_edge_blocks;
     std::vector<double> reconstruction_error;
     std::vector<double> reconstruction_edge;
 
     explicit Result(const int n_blocks) : J(n_blocks), C(J, J), covariance_matrix(J,J),
-    tau_values(J), lambda_components_values(J), lambda_weights_values(J), active_blocks(J), s1_blocks(J), s1_edge_blocks(J),
+    tau_values(J), lambda_components_values(J), lambda_weights_values(J), active_blocks(J),
     reconstruction_error(J), reconstruction_edge(J) {}
 };
 
@@ -1079,7 +1084,6 @@ public:
         int max_iter;
         double tol;
         double active_block_tol;
-        unsigned seed;
         bool verbose;
         bool cache_covariances;
         bool bias;
@@ -1092,8 +1096,7 @@ public:
         Scheme scheme;
 
         explicit Options(
-          const int max_iter_ = 1000, const double tol_ = 1e-8, const double active_block_tol_ = 1e-8, const unsigned seed_ = 0,
-          const bool bias_ = true,
+          const int max_iter_ = 1000, const double tol_ = 1e-8, const double active_block_tol_ = 1e-8, const bool bias_ = true,
           const InitStrategy init_strategy_ = InitStrategy::SVD, const Mode mode_ = Mode::CovMax,
           const WeightSignConstraint weight_sign_constraint_ = WeightSignConstraint::None,
           const LambdaSelection lambda_selection_weights_ = LambdaSelection::Manual,
@@ -1103,7 +1106,6 @@ public:
             max_iter(max_iter_),
             tol(tol_),
             active_block_tol(active_block_tol_),
-            seed(seed_),
             bias(bias_),
             init_strategy(init_strategy_),
             mode(mode_),
@@ -1115,7 +1117,6 @@ public:
             verbose(verbose_),
             cache_covariances(cache_) { }
     };
-
     struct FitWorkspace {
         Matrix Cov;
         Eigen::ArrayXXi dirty;
@@ -1129,13 +1130,11 @@ public:
             }
         }
     };
-
     struct BootstrapConfig {
-        int B = 10;
+        int B = 1000;
         unsigned seed = 12345;
         ResamplingStrategy resampling_strategy = ResamplingStrategy::Ordinary;
     };
-
     struct BootstrapSelectionResult {
         using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
@@ -1191,30 +1190,29 @@ public:
 
     template <typename S = SamplingStrategy>
     requires std::same_as<S, IndependentSampling>
-    explicit RGCCA(const int n, const Options& opt = Options(), const int n_comp = 1) :
-        n_(n), opt_(opt), n_comp_(n_comp) {}
+    explicit RGCCA(const int n, const Options& opt = Options(), const int n_comp = 1) : n_(n), opt_(opt), n_comp_(n_comp) {}
 
     template <typename S = SamplingStrategy>
     requires std::same_as<S, TimeDependentSampling>
-    explicit RGCCA(const int n, const Triangulation<1, 1>& T, const Options& opt = Options(), const int n_comp = 1) :
-        n_(n), T_(T), opt_(opt), n_comp_(n_comp) {}
+    explicit RGCCA(const int n, const Triangulation<1, 1>& T, const Options& opt = Options(), const int n_comp = 1) : n_(n), T_(T), opt_(opt), n_comp_(n_comp) {}
 
-    // ===== Blocks =====
+    // blocks management
     int add_block(BlockPtr b) {
         if (!b) throw std::invalid_argument("RGCCA/add_block: null block");
-        if constexpr (std::same_as<SamplingStrategy, IndependentSampling>){
+        if constexpr (std::same_as<SamplingStrategy, IndependentSampling>) {
             if (b->n() != n()) throw std::invalid_argument("RGCCA/add_block: n mismatch");
-        } else { add_times_(b->times()); }
+        } else {
+            add_times_(b->times());
+        }
         b->set_bias(opt_.bias);
         b->set_raw_data_mutable(true);
         b->set_mode(opt_.mode);
         b->set_weight_sign_constraint(opt_.weight_sign_constraint);
         b->set_n_comp(n_comp());
         blocks_.emplace_back(std::move(b));
-        initialized_ = false;   // topology/caches need a fresh init later
+        initialized_ = false;
         return ++J_;
     }
-
     template<typename S = SamplingStrategy>
     requires std::same_as<S, IndependentSampling>
     int add_multivariate_block(std::string block_name, Matrix&& X) {
@@ -1239,77 +1237,92 @@ public:
         data_blocks_.push_back(std::make_unique<Matrix>(std::move(X)));
         return add_block(internals::make_functional_block<SamplingStrategy>(block_name, T_, times, gf, data_blocks_.back().get(), std::forward<WeightsPenaltyType>(weights_penalty)));
     }
-
-    [[nodiscard]] int n_blocks() { return J_; }
-
-    // Connect blocks
     void connect(int j, int k, bool on = true) {
-        if (!initialized_) init(DesignMode::Empty);
+        ensure_design_initialized_();
+
         check_index_(j);
         check_index_(k);
-        if (j == k) return;
-        C_(k, j) = C_(j, k) = on;
-        user_defined_design_ = true;
-    }
 
-    // ===== One-shot init (does all resizes) =====
-    void init(const DesignMode mode) {
-        const int J = n_blocks();
-        if (J < 2) throw std::runtime_error("RGCCA: need ≥ 2 blocks");
-
-        // resize design
-        C_.resize(J, J);
-        C_.setConstant(false);
-        if (mode == DesignMode::FullyConnected) {
-            for (int j = 0; j < J; ++j)
-                for (int k = 0; k < J; ++k)
-                    if (k != j) C_(j, k) = true;   // diag remains false
+        if (j == k) {
+            std::cerr << "RGCCA::connect(): ignoring self-connection for block " << j << '\n';
+            return;
         }
-        if (noise_variance_.has_value()) set_noise_variance_all_();
-        compute_Psi_();
-        initialized_ = true;
-        user_defined_design_ = (mode == DesignMode::Empty);   // means user will set edges
+
+        C_(j, k) = on;
+        C_(k, j) = on;
     }
 
-    // Noise
+    // initialization
+    void init(const DesignMode mode = DesignMode::FullyConnected) {
+        if (n_blocks() < 2) throw std::runtime_error("RGCCA: need ≥ 2 blocks");
+
+        // design matrix initialization
+        switch (mode) {
+            case DesignMode::Empty: clear_design_(); break;
+            case DesignMode::FullyConnected: set_fully_connected_design_(); break;
+        }
+
+        compute_Psi_();
+        if (noise_variance_.has_value()) set_noise_variance_all_();
+
+        initialized_ = true;
+    }
+
+    // noise variance
     void set_noise_variance(double noise_variance) { noise_variance_ = std::max(0.0, noise_variance); }
     [[nodiscard]] double noise_variance() const {
         if (!noise_variance_.has_value()) return std::numeric_limits<double>::quiet_NaN();
         return *noise_variance_;
     }
 
-    // Parameters setters
+    // weights and components regularization utilities
     void set_lambda_weights_all(const double lambda) const {
         for (auto& b : blocks_) b->set_lambda_weights(lambda);
     }
     void set_lambda_components_all(const double lambda) const {
         for (auto& b : blocks_) b->set_lambda_components(lambda);
     }
+    void set_lambda_grid_weights(const std::vector<double>& lambda_grid) {
+        if (lambda_grid.empty())
+            throw std::invalid_argument("lambda grid cannot be empty");
 
-    // Components
-    void set_h(const int h) {
-        auto blocks = main_blocks_();
-        set_h_(blocks, h);
+        lambda_grid_weights_.assign(n_comp(), lambda_grid);
     }
+    void set_lambda_grid_weights(const std::vector<std::vector<double>>& lambda_grid) {
+        if (lambda_grid.empty())
+            throw std::invalid_argument("lambda grid cannot be empty");
+
+        if (static_cast<int>(lambda_grid.size()) == 1) {
+            set_lambda_grid_weights(lambda_grid.front());
+            return;
+        }
+
+        if (static_cast<int>(lambda_grid.size()) != n_comp())
+            throw std::invalid_argument("lambda grid must have size 1 or n_comp");
+
+        for (const auto& grid : lambda_grid) {
+            if (grid.empty())
+                throw std::invalid_argument("lambda grid contains an empty component grid");
+        }
+
+        lambda_grid_weights_ = lambda_grid;
+    }
+
+    // setters
     void set_n_comp(const int n_comp) {
         auto blocks = main_blocks_();
         set_n_comp_(blocks, n_comp);
     }
-    [[nodiscard]] int h() const { return h_; }
-
-    // Deflation
-    void deflate_all() const {
-        for (auto& b : blocks_) b->deflate(opt_.deflation_mode);
-    }
-
-    // Bootstrap
     void set_n_bootstrap_samples(const int n_bootstrap_samples) {
         bootstrap_config_.B = n_bootstrap_samples;
     }
 
-    // Fit
+    // fit
     std::vector<Result> fit() {
-        if (!initialized_) init(DesignMode::FullyConnected);
+        if (!initialized_) init();
+
+        const int J = n_blocks();
+        if (J < 2) throw std::runtime_error("RGCCA: need ≥ 2 blocks");
 
         // room for results
         std::vector<Result> results;
@@ -1317,51 +1330,332 @@ public:
         bootstrap_selection_results_.clear();
         bootstrap_selection_results_.reserve(n_comp());
 
-        double lambda {0};
-        std::vector<bool> active_blocks(n_blocks(), true);
-
         // components loop
         for (int hh = 0; hh < n_comp(); ++hh) {
-            set_h(hh);
+            set_h_(hh);
 
+            // weights lambda selection
+            std::vector<bool> active_blocks(n_blocks(), true);
             if (opt_.lambda_selection_weights == LambdaSelection::Automatic) {
-                auto selection = select_lambda_weights_bootstrap_parallel();
-
-                lambda = selection.first;
+                auto selection = select_lambda_weights_bootstrap_parallel_();
+                const double lambda = selection.first;
                 active_blocks = std::move(selection.second);
-
                 set_lambda_weights_all(lambda);
             }
 
-            init_comp();
-            results.push_back(fit_component(active_blocks));
+            // final fit
+            init_comp_();
+            results.push_back(fit_component_(active_blocks));
 
-            if (hh + 1 < n_comp()) deflate_all();
+            deflate_all_();
         }
 
         // post-processing weights
-        compute_weights_star();
+        compute_weights_star_();
 
         return results;
     }
-    void init_comp() {
+
+    // getters
+    void get_tau(const BlockRefList& blocks, std::vector<double>& tau_values) const {
+        const int J = n_blocks();
+        for (std::size_t j = 0; j < J; ++j)
+            tau_values[j] = blocks[j]->tau();
+    }
+    void get_lambdas(const BlockRefList& blocks, std::vector<double> & lambda_components_values, std::vector<double> & lambda_weights_values) const {
+        const int J = n_blocks();
+        for (std::size_t j = 0; j < J; ++j) {
+            lambda_components_values[j] = blocks[j]->lambda_components();
+            lambda_weights_values[j] = blocks[j]->lambda_weights();
+        }
+    }
+    void get_component_reconstruction_info(const BlockRefList& blocks, std::vector<double> & reconstruction_error, std::vector<double> & reconstruction_edge) {
+        const int J = n_blocks();
+        for (std::size_t j = 0; j < J; ++j) {
+            auto [error, edge] = blocks[j]->component_reconstruction_info();
+            reconstruction_error[j] = error;
+            reconstruction_edge[j] = edge;
+        }
+    }
+
+    // observers
+    [[nodiscard]] int n() const { return n_; }
+    [[nodiscard]] int n_comp() const { return n_comp_; }
+    [[nodiscard]] int n_blocks() const { return J_; }
+    [[nodiscard]] const Options& options() const { return opt_; }
+    [[nodiscard]] const Scheme& scheme() const { return opt_.scheme; }
+    [[nodiscard]] const std::vector<BlockPtr>& blocks() const { return blocks_; }
+    [[nodiscard]] const Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>& C() const { return C_; }
+    [[nodiscard]] const SparseMatrix& Psi_T() const { return Psi_T_; };
+    [[nodiscard]] std::vector<BootstrapSelectionResult> bootstrap_selection_results() const { return bootstrap_selection_results_; }
+
+private:
+
+    // initialization utils
+    void check_index_(int j) const {
+        if (j < 0 || j >= static_cast<int>(blocks_.size())) throw std::out_of_range("block index");
+    }
+    void initialize_design_(const DesignMode mode) {
+        const int J = n_blocks();
+
+        C_.resize(J, J);
+        C_.setConstant(false);
+
+        if (mode == DesignMode::FullyConnected) {
+            for (int j = 0; j < J; ++j)
+                for (int k = 0; k < J; ++k)
+                    C_(j, k) = (j != k);
+        }
+    }
+    void ensure_design_initialized_() {
+        if (C_.rows() == n_blocks() && C_.cols() == n_blocks()) return;
+
+        C_.resize(n_blocks(), n_blocks());
+        C_.setConstant(false);
+    }
+    void clear_design_() {
+        C_.resize(n_blocks(), n_blocks());
+        C_.setConstant(false);
+    }
+    void set_fully_connected_design_() {
+        clear_design_();
+        for (int j = 0; j < n_blocks(); ++j)
+            for (int k = 0; k < n_blocks(); ++k)
+                C_(j, k) = (j != k);
+    }
+    template <typename S = SamplingStrategy>
+    requires std::same_as<S, TimeDependentSampling>
+    void add_times_(const Vector& t) {
+        times_.reserve(times_.size() + static_cast<size_t>(t.size()));
+        times_.insert(times_.end(), t.data(), t.data() + t.size());
+    }
+    void compute_Psi_() {
+        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
+            std::ranges::sort(times_);
+            times_.erase(std::ranges::unique(times_).begin(), times_.end());
+            Eigen::VectorXd times_eig = Eigen::Map<Eigen::VectorXd>(times_.data(), times_.size());
+            SamplingStrategy::compute_Psi(T_, Matrix{times_eig}, Psi_T_);
+        } else {
+            Psi_T_.resize(n(), n());
+            Psi_T_.setIdentity();
+        }
+    }
+
+    // blocks utils
+    BlockRefList main_blocks_() const {
+        BlockRefList out;
+        out.reserve(blocks_.size());
+        for (const auto& b : blocks_)
+            out.push_back(b.get());
+        return out;
+    }
+    struct BootstrapBlocks {
+        BlockOwnerList owners;
+        BlockRefList refs;
+    };
+    BootstrapBlocks clone_blocks_() const {
+        BootstrapBlocks out;
+        out.owners.reserve(blocks_.size());
+        out.refs.reserve(blocks_.size());
+
+        for (const auto& b : blocks_) {
+            auto copy = b->clone();
+            copy->set_raw_data_mutable(false);
+
+            out.refs.push_back(copy.get());
+            out.owners.push_back(std::move(copy));
+        }
+
+        return out;
+    }
+    BootstrapBlocks clone_blocks_from_(const BootstrapBlocks& src) const {
+        BootstrapBlocks out;
+        out.owners.reserve(src.refs.size());
+        out.refs.reserve(src.refs.size());
+
+        for (auto* b : src.refs) {
+            auto copy = b->clone();
+            copy->set_raw_data_mutable(false);
+
+            out.refs.push_back(copy.get());
+            out.owners.push_back(std::move(copy));
+        }
+
+        return out;
+    }
+    std::vector<std::string> block_names_(const BlockRefList& blocks) const {
+        std::vector<std::string> out;
+        out.reserve(blocks.size());
+
+        for (auto* b : blocks)
+            out.push_back(b->name());
+
+        return out;
+    }
+    std::vector<int> block_dims_(const BlockRefList& blocks) const {
+        std::vector<int> out;
+        out.reserve(blocks.size());
+
+        for (auto* b : blocks)
+            out.push_back(b->n_dofs_weights());
+
+        return out;
+    }
+
+    // components initialization
+    void init_comp_(const BlockRefList& blocks, InitStrategy init_strategy = InitStrategy::None) {
+        if (opt_.mode == Mode::Regularized) set_tau_auto_all_(blocks);
+        if (opt_.lambda_selection_components == LambdaSelection::Automatic) set_lambda_components_auto_all_(blocks);
+
+        if (init_strategy == InitStrategy::None) init_strategy = opt_.init_strategy;
+
+        for (int j = 0; j < n_blocks(); ++j) {
+            auto* b = blocks[j];
+            b->set_h(h_);
+
+            if (init_strategy == InitStrategy::WarmStart) {
+                b->refresh_component();
+            } else {
+                b->init_weight_uniform();
+                switch (init_strategy) {
+                    case InitStrategy::Uniform: {
+                        const auto info = b->uniform_init();
+                        b->compute(info.nu);
+                        break;
+                    }
+                    case InitStrategy::SVD: {
+                        const auto info = b->svd_init();
+                        b->compute(info.nu);
+                        break;
+                    }
+                    default: throw std::logic_error("unsupported initialization strategy");
+                }
+            }
+        }
+    }
+    void init_comp_() {
         auto blocks = main_blocks_();
         init_comp_(blocks);
     }
-    Result fit_component(const std::vector<bool>& active_blocks) {
+
+    // components fit
+    Result fit_component_(const BlockRefList& blocks, const std::vector<bool>& active_blocks) {
+        const int J = n_blocks();
+        FitWorkspace ws(J);
+
+        // room for results
+        Result res(J);
+        res.obj_history.reserve(opt_.max_iter);
+
+        // design update according to current active blocks
+        res.C = C_;
+        res.active_blocks = active_blocks;
+        for (int j = 0; j < J; ++j) {
+            if (!active_blocks[j]) {
+                res.C.row(j).setConstant(false);
+                res.C.col(j).setConstant(false);
+                blocks[j]->weights().col(h_).setZero();
+                blocks[j]->components().col(h_).setZero();
+            }
+        }
+
+        // initialization
+        res.obj_history.push_back(objective_(blocks, ws, res.C));
+        auto a_prev = snapshot_weights_(blocks);
+        if (opt_.lambda_selection_components == LambdaSelection::Automatic)
+            set_lambda_components_auto_all_(blocks);
+
+        // main loop
+        for (int s = 0; s < opt_.max_iter; ++s) {
+            for (int l = 0; l < J; ++l) {
+
+                // skip deactivated blocks
+                if (!active_blocks[l]) continue;
+
+                // inner-component assembler
+                Vector nu_l = Vector::Zero(blocks[l]->n());
+                const Vector eta_l = eta_(*blocks[l]);
+                for (int k = 0; k < J; ++k) {
+                    if (!res.C(l, k)) continue;
+                    const Vector eta_k = eta_(*blocks[k]);
+                    const double cov_lk = cov_value_(ws, l, k, eta_l, eta_k);
+                    const double w_lk = opt_.scheme.w(cov_lk);
+                    nu_l.noalias() += w_lk * eta_(*blocks[k], *blocks[l]);
+                }
+
+                // block update
+                blocks[l]->compute(nu_l);
+                mark_cov_rowcol_dirty_(ws, l);
+            }
+
+            // update metrics
+            const double f_obj = objective_(blocks, ws, res.C);
+            const double obj_prev = res.obj_history.back();
+            res.obj_history.push_back(f_obj);
+            res.iters = s + 1;
+
+            // chek monotonicity
+            if (f_obj + 1e-15 < obj_prev)
+                res.monotone = false;
+
+            // stopping criteria
+            const double delta_obj = std::abs(f_obj - obj_prev);
+            const double delta_a = weights_variation_(blocks, a_prev);
+            if (delta_obj < opt_.tol || delta_a < opt_.tol)
+                break;
+
+            a_prev = snapshot_weights_(blocks);
+        }
+
+        // save results
+        res.noise_variance = noise_variance();
+        covariance_matrix_(blocks, res.covariance_matrix);
+        get_tau(blocks, res.tau_values);
+        get_lambdas(blocks, res.lambda_components_values, res.lambda_weights_values);
+        get_component_reconstruction_info(blocks, res.reconstruction_error, res.reconstruction_edge);
+
+        return res;
+    }
+    Result fit_component_(const BlockRefList& blocks) {
+        std::vector<bool> active_blocks(blocks.size(), true);
+        return fit_component_(blocks, active_blocks);
+    }
+    Result fit_component_(const std::vector<bool>& active_blocks) {
         auto blocks = main_blocks_();
         return fit_component_(blocks, active_blocks);
     }
-    Result fit_component() {
+    Result fit_component_() {
         auto blocks = main_blocks_();
         std::vector<bool> active_blocks(blocks.size(), true);
         return fit_component_(blocks, active_blocks);
     }
-    void compute_weights_star() {
+
+    // fit helpers
+    void deflate_all_() const {
+        for (auto& b : blocks_) b->deflate(opt_.deflation_mode);
+    }
+    void compute_weights_star_() {
         for (auto& b : blocks_) b->compute_weights_star();
     }
+    std::vector<Vector> snapshot_weights_(const BlockRefList& blocks) const {
+        std::vector<Vector> out;
+        out.reserve(blocks.size());
+        for (auto* b : blocks) out.push_back(b->weights().col(h_));
+        return out;
+    }
+    double weights_variation_(const BlockRefList& blocks, const std::vector<Vector>& a_prev) const {
+        double acc = 0.0;
 
-    std::pair<double, std::vector<bool>>  select_lambda_weights_bootstrap() {
+        for (int j = 0; j < n_blocks(); ++j) {
+            const auto aj = blocks[j]->weights().col(h_);
+            acc += (aj - a_prev[j]).squaredNorm();
+        }
+
+        return acc;
+    }
+
+    // bootstrap selectors
+    std::pair<double, std::vector<bool>> select_lambda_weights_bootstrap_() {
         if (lambda_grid_weights_.empty())
             throw std::runtime_error("lambda_grid_weights_ is empty");
 
@@ -1473,9 +1767,8 @@ public:
         bootstrap_selection_results_.push_back(std::move(boot_results));
         return {bootstrap_selection_results_.back().lambda_opt, bootstrap_selection_results_.back().active_blocks};
     }
-
-   std::pair<double, std::vector<bool>> select_lambda_weights_bootstrap_parallel() {
-        if (lambda_grid_weights_.empty())
+    std::pair<double, std::vector<bool>> select_lambda_weights_bootstrap_parallel_() {
+        if (lambda_grid_weights_[h_].empty())
             throw std::runtime_error("lambda_grid_weights_ is empty");
 
         const int n_threads = 12;
@@ -1490,7 +1783,7 @@ public:
         double best_criterion = -std::numeric_limits<double>::infinity();
         int best_i = -1;
 
-        BootstrapSelectionResult boot_results(h_, B, lambda_grid_weights_, block_names_(blocks), block_dims_(blocks));
+        BootstrapSelectionResult boot_results(h_, B, lambda_grid_weights_[h_], block_names_(blocks), block_dims_(blocks));
 
         // same bootstrap resamples for all lambda values
         std::vector<typename Block::IndexVector> bootstrap_idx(B);
@@ -1501,12 +1794,12 @@ public:
         }
 
         // preliminary fit at largest lambda
-        set_lambda_weights_all(lambda_grid_weights_.back());
+        set_lambda_weights_all(lambda_grid_weights_[h_].back());
         init_comp_(blocks);
         fit_component_(blocks);
 
-        for (int i = static_cast<int>(lambda_grid_weights_.size()) - 1; i >= 0; --i) {
-            const double lambda = lambda_grid_weights_[i];
+        for (int i = static_cast<int>(lambda_grid_weights_[h_].size()) - 1; i >= 0; --i) {
+            const double lambda = lambda_grid_weights_[h_][i];
             std::cout << "- lambda = " << lambda << std::endl;
 
             set_lambda_weights_all(lambda);
@@ -1612,7 +1905,7 @@ public:
         }
 
         // lambda selection
-        boot_results.lambda_opt = lambda_grid_weights_[best_i];
+        boot_results.lambda_opt = lambda_grid_weights_[h_][best_i];
 
         // blocks deactivation
         boot_results.active_blocks.assign(J, true);
@@ -1626,361 +1919,13 @@ public:
         return {bootstrap_selection_results_.back().lambda_opt, bootstrap_selection_results_.back().active_blocks};
     }
 
-    // ===== Accessors =====
-    [[nodiscard]] int n() const { return n_; }
-    [[nodiscard]] int n_comp() const { return n_comp_; }
-    [[nodiscard]] int n_blocks() const { return static_cast<int>(blocks_.size()); }
-    [[nodiscard]] const Options& options() const { return opt_; }
-    [[nodiscard]] const Scheme& scheme() const { return opt_.scheme; }
-    [[nodiscard]] const std::vector<BlockPtr>& blocks() const { return blocks_; }
-    [[nodiscard]] const Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>& C() const { return C_; }
-    [[nodiscard]] bool initialized() const { return initialized_; }
-    [[nodiscard]] bool user_defined_design() const { return user_defined_design_; }
-    [[nodiscard]] const SparseMatrix& Psi_T() const { return Psi_T_; };
-    [[nodiscard]] std::vector<BootstrapSelectionResult> bootstrap_selection_results() const { return bootstrap_selection_results_; }
-
-private:
-
-    BlockRefList main_blocks_() const {
-        BlockRefList out;
-        out.reserve(blocks_.size());
-        for (const auto& b : blocks_)
-            out.push_back(b.get());
-        return out;
-    }
-
-    void init_comp_(const BlockRefList& blocks, InitStrategy init_strategy = InitStrategy::None) {
-        if (opt_.mode == Mode::Regularized) set_tau_auto_all_(blocks);
-        if (opt_.lambda_selection_components == LambdaSelection::Automatic) set_lambda_components_auto_all_(blocks);
-
-        if (init_strategy == InitStrategy::None) init_strategy = opt_.init_strategy;
-
-        for (int j = 0; j < static_cast<int>(blocks.size()); ++j) {
-            auto* b = blocks[j];
-            b->set_h(h_);
-
-            if (init_strategy == InitStrategy::WarmStart) {
-                b->refresh_component();
-            } else {
-
-                b->init_weight_uniform();
-
-                if (init_strategy == InitStrategy::Uniform) {
-                    const auto info = b->uniform_init();
-                    b->compute(info.nu);
-                }
-
-                if (init_strategy == InitStrategy::SVD) {
-                    const auto info = b->svd_init();
-                    b->compute(info.nu);
-                }
-
-                if (init_strategy == InitStrategy::Random) {
-                    std::mt19937_64 rng(opt_.seed);
-                    std::uniform_real_distribution<double> U(-1.0, 1.0);
-                    const Vector nu = Vector::NullaryExpr(n_, [&]{ return U(rng); });
-                    b->compute(nu);
-                }
-
-            }
-        }
-    }
-
-    Result fit_component_(const BlockRefList& blocks, const std::vector<bool>& active_blocks) {
-        const int J = static_cast<int>(blocks.size());
-        if (J < 2)
-            throw std::runtime_error("RGCCA: need ≥ 2 blocks");
-
-        FitWorkspace ws(J);
-
-        Result res(J);
-        res.obj_history.reserve(opt_.max_iter);
-
-        res.C = C_;
-        res.active_blocks = active_blocks;
-        for (int j = 0; j < J; ++j) {
-            if (!active_blocks[j]) {
-                res.C.row(j).setConstant(false);
-                res.C.col(j).setConstant(false);
-                blocks[j]->weights().col(h()).setZero();
-                blocks[j]->components().col(h()).setZero();
-            }
-        }
-
-        res.obj_history.push_back(objective_(blocks, ws, res.C));
-
-        auto a_prev = snapshot_weights_(blocks);
-
-        if (opt_.lambda_selection_components == LambdaSelection::Automatic)
-            set_lambda_components_auto_all_(blocks);
-
-        for (int s = 0; s < opt_.max_iter; ++s) {
-            for (int l = 0; l < J; ++l) {
-
-                if (!active_blocks[l]) continue;
-
-                Vector nu_l = Vector::Zero(blocks[l]->n());
-                const Vector eta_l = eta_(*blocks[l]);
-
-                for (int k = 0; k < J; ++k) {
-                    if (!res.C(l, k)) continue;
-
-                    const Vector eta_k = eta_(*blocks[k]);
-                    const double cov_lk = cov_value_(ws, l, k, eta_l, eta_k);
-                    const double w_lk = opt_.scheme.w(cov_lk);
-
-                    nu_l.noalias() += w_lk * eta_(*blocks[k], *blocks[l]);
-                }
-
-                blocks[l]->compute(nu_l);
-                mark_cov_rowcol_dirty_(ws, l);
-            }
-
-            const double f_obj = objective_(blocks, ws, res.C);
-            const double obj_prev = res.obj_history.back();
-
-            res.obj_history.push_back(f_obj);
-            res.iters = s + 1;
-
-            if (f_obj + 1e-15 < obj_prev)
-                res.monotone = false;
-
-            const double delta_obj = std::abs(f_obj - obj_prev);
-            const double delta_a = weights_variation_(blocks, a_prev);
-
-            if (delta_obj < opt_.tol || delta_a < opt_.tol)
-                break;
-
-            a_prev = snapshot_weights_(blocks);
-        }
-
-        res.noise_variance = noise_variance();
-        compute_covariance_matrix_(blocks, res.covariance_matrix);
-        get_tau(blocks, res.tau_values);
-        get_lambdas(blocks, res.lambda_components_values, res.lambda_weights_values);
-        get_component_reconstruction_info(blocks, res.reconstruction_error, res.reconstruction_edge);
-
-        return res;
-    }
-    Result fit_component_(const BlockRefList& blocks) {
-        std::vector<bool> active_blocks(blocks.size(), true);
-        return fit_component_(blocks, active_blocks);
-    }
-
-    std::vector<Vector> snapshot_weights_(const BlockRefList& blocks) const {
-        std::vector<Vector> out;
-        out.reserve(blocks.size());
-        for (auto* b : blocks) out.push_back(b->weights().col(h_));
-        return out;
-    }
-
-    double weights_variation_(const BlockRefList& blocks, const std::vector<Vector>& a_prev) const {
-        double acc = 0.0;
-
-        for (int j = 0; j < static_cast<int>(blocks.size()); ++j) {
-            const auto aj = blocks[j]->weights().col(h_);
-            acc += (aj - a_prev[j]).squaredNorm();
-        }
-
-        return acc;
-    }
-
-    template <typename S = SamplingStrategy>
-    requires std::same_as<S, TimeDependentSampling>
-    void add_times_(const Vector& t) {
-        times_.reserve(times_.size() + static_cast<size_t>(t.size()));
-        times_.insert(times_.end(), t.data(), t.data() + t.size());
-    }
-
-    void compute_Psi_() {
-        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
-            std::ranges::sort(times_);
-            times_.erase(std::ranges::unique(times_).begin(), times_.end());
-            Eigen::VectorXd times_eig = Eigen::Map<Eigen::VectorXd>(times_.data(), times_.size());
-            SamplingStrategy::compute_Psi(T_, Matrix{times_eig}, Psi_T_);
-        } else {
-            Psi_T_.resize(n(), n());
-            Psi_T_.setIdentity();
-        }
-    }
-
-    void get_tau(const BlockRefList& blocks, std::vector<double>& tau_values) const {
-        const int J = static_cast<int>(blocks.size());
-        for (std::size_t j = 0; j < J; ++j)
-            tau_values[j] = blocks[j]->tau();
-    }
-
-    void get_lambdas(const BlockRefList& blocks, std::vector<double> & lambda_components_values, std::vector<double> & lambda_weights_values) const {
-        const int J = static_cast<int>(blocks.size());
-        for (std::size_t j = 0; j < J; ++j) {
-            lambda_components_values[j] = blocks[j]->lambda_components();
-            lambda_weights_values[j] = blocks[j]->lambda_weights();
-        }
-    }
-
-    void get_component_reconstruction_info(const BlockRefList& blocks, std::vector<double> & reconstruction_error, std::vector<double> & reconstruction_edge) {
-        const int J = static_cast<int>(blocks.size());
-        for (std::size_t j = 0; j < J; ++j) {
-            auto [error, edge] = blocks[j]->component_reconstruction_info();
-            reconstruction_error[j] = error;
-            reconstruction_edge[j] = edge;
-        }
-    }
-
-    void set_h_(const BlockRefList& blocks, const int h) {
-        if (h < 0 || h >= n_comp_) throw std::out_of_range("component index");
-
-        h_ = h;
-        for (auto* b : blocks) b->set_h(h_);
-    }
-
-    void set_n_comp_(const BlockRefList& blocks, const int n_comp) {
-        if (n_comp <= 0) throw std::invalid_argument("n_comp must be > 0");
-
-        n_comp_ = n_comp;
-        for (auto* b : blocks)
-            b->set_n_comp(n_comp);
-
-        if (h_ >= n_comp)
-            set_h_(blocks, n_comp - 1);
-    }
-
-    void set_tau_auto_all_(const BlockRefList& blocks) const {
-        for (auto* b : blocks)
-            b->select_tau_auto();
-    }
-
-    void set_lambda_components_auto_all_(const BlockRefList& blocks) const {
-        for (auto* b : blocks)
-            b->set_lambda_components(-1);
-    }
-
-    void set_lambda_weights_all_(const BlockRefList& blocks, double lambda) const {
-        for (auto* b : blocks)
-            b->set_lambda_weights(lambda);
-    }
-
-    void set_noise_variance_all_() const { for (auto& b : blocks_) b->set_noise_variance(*noise_variance_); }
-
-    // ===== Helpers =====
-
-    // eta using the RGCCA own Psi_T (or components_m for independent)
-    Vector eta_(Block& b) const {
-        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
-            return Psi_T() * b.components().col(h());
-        } else {
-            return b.components_m().col(h());
-        }
-    }
-    // eta using reference block's Psi_T
-    Vector eta_(Block& b, const Block& ref) const {
-        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
-            return ref.Psi_T() * b.components().col(h());
-        } else {
-            return b.components_m().col(h());
-        }
-    }
-
-    Vector eta_eval_(Block& b, const Vector& a) {
-        const Vector eta = b.normalized_component_for_evaluation(a, h());
-
-        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
-            return Psi_T() * eta;
-        } else {
-            return eta;
-        }
-    }
-
-    // covariance of two vectors
-    double cov_(const Vector& u, const Vector& v) const {
-        double den = opt_.bias ? u.size() : u.size()-1;
-        return u.dot(v) / den;
-    }
-
-    // objective f = Σ_{j,k} C_jk * g( cov(η_j, η_k) )
-    double objective_(const BlockRefList& blocks, FitWorkspace& ws, const BoolMatrix& C) const {
-        const int J = static_cast<int>(blocks.size());
-        double f = 0.0;
-        for (int j = 0; j < J; ++j) {
-            const Vector eta_j = eta_(*blocks[j]);
-            for (int k = j; k < J; ++k) {
-                if (C(j, k)) {
-                    const double cov_jk = cov_value_(ws, j, k, eta_j, eta_(*blocks[k]));
-                    const double mult = j == k ? 1.0 : 2.0;
-                    f += mult * opt_.scheme.g(cov_jk);
-                }
-            }
-        }
-        return f;
-    }
-
-    // Bootstrap helpers
-
-    struct BootstrapBlocks {
-        BlockOwnerList owners;
-        BlockRefList refs;
-    };
-
-    BootstrapBlocks clone_blocks_() const {
-        BootstrapBlocks out;
-        out.owners.reserve(blocks_.size());
-        out.refs.reserve(blocks_.size());
-
-        for (const auto& b : blocks_) {
-            auto copy = b->clone();
-            copy->set_raw_data_mutable(false);
-
-            out.refs.push_back(copy.get());
-            out.owners.push_back(std::move(copy));
-        }
-
-        return out;
-    }
-
-    BootstrapBlocks clone_blocks_from_(const BootstrapBlocks& src) const {
-        BootstrapBlocks out;
-        out.owners.reserve(src.refs.size());
-        out.refs.reserve(src.refs.size());
-
-        for (auto* b : src.refs) {
-            auto copy = b->clone();
-            copy->set_raw_data_mutable(false);
-
-            out.refs.push_back(copy.get());
-            out.owners.push_back(std::move(copy));
-        }
-
-        return out;
-    }
-
-    std::vector<std::string> block_names_(const BlockRefList& blocks) const {
-        std::vector<std::string> out;
-        out.reserve(blocks.size());
-
-        for (auto* b : blocks)
-            out.push_back(b->name());
-
-        return out;
-    }
-
-    std::vector<int> block_dims_(const BlockRefList& blocks) const {
-        std::vector<int> out;
-        out.reserve(blocks.size());
-
-        for (auto* b : blocks)
-            out.push_back(b->n_dofs_weights());
-
-        return out;
-    }
-
+    // bootstrap utils
     void set_row_index_all_(const BlockRefList& blocks, const typename Block::IndexVector& idx) {
         for (auto* b : blocks) b->set_row_index(idx);
     }
-
     void clear_row_index_all_(const BlockRefList& blocks) {
         for (auto* b : blocks) b->clear_row_index();
     }
-
     typename Block::IndexVector bootstrap_indices_(int n, std::mt19937_64& rng) const {
         if (bootstrap_config_.resampling_strategy != ResamplingStrategy::Ordinary)
             throw std::runtime_error("Only ordinary bootstrap is implemented");
@@ -1994,6 +1939,74 @@ private:
         return idx;
     }
 
+    // components utils
+    void set_h_(const BlockRefList& blocks, const int h) {
+        if (h < 0 || h >= n_comp_) throw std::out_of_range("component index");
+        h_ = h;
+        for (auto* b : blocks) b->set_h(h_);
+    }
+    void set_h_(const int h) {
+        auto blocks = main_blocks_();
+        set_h_(blocks, h);
+    }
+    void set_n_comp_(const BlockRefList& blocks, const int n_comp) {
+        if (n_comp <= 0) throw std::invalid_argument("n_comp must be > 0");
+
+        n_comp_ = n_comp;
+        for (auto* b : blocks)
+            b->set_n_comp(n_comp);
+
+        if (h_ >= n_comp)
+            set_h_(blocks, n_comp - 1);
+    }
+
+    // private setters
+    void set_tau_auto_all_(const BlockRefList& blocks) const {
+        for (auto* b : blocks)
+            b->select_tau_auto();
+    }
+    void set_lambda_components_auto_all_(const BlockRefList& blocks) const {
+        for (auto* b : blocks)
+            b->set_lambda_components(-1);
+    }
+    void set_lambda_weights_all_(const BlockRefList& blocks, double lambda) const {
+        for (auto* b : blocks)
+            b->set_lambda_weights(lambda);
+    }
+    void set_noise_variance_all_() const {
+        for (auto& b : blocks_) b->set_noise_variance(*noise_variance_);
+    }
+
+    // ===== Helpers =====
+
+    // eta
+    Vector eta_(Block& b) const {
+        // using the RGCCA own Psi_T (or components_m for independent)
+        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
+            return Psi_T() * b.components().col(h_);
+        } else {
+            return b.components_m().col(h_);
+        }
+    }
+    Vector eta_(Block& b, const Block& ref) const {
+        // using reference block's Psi_T
+        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
+            return ref.Psi_T() * b.components().col(h_);
+        } else {
+            return b.components_m().col(h_);
+        }
+    }
+    Vector eta_eval_(Block& b, const Vector& a) {
+        // computed wrt a and normalized wrt M (no regularization)
+        const Vector eta = b.normalized_component_for_evaluation(a, h_);
+        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
+            return Psi_T() * eta;
+        } else {
+            return eta;
+        }
+    }
+
+    // weights
     std::vector<Vector> weights_(const BlockRefList& blocks) const {
         std::vector<Vector> out;
         out.reserve(blocks.size());
@@ -2005,12 +2018,57 @@ private:
         return out;
     }
 
-    double rho_tot_with_weights_(
-        const BlockRefList& blocks,
-        const std::vector<Vector>& weights,
-        const BoolMatrix& C
-    ) const {
-        const int J = static_cast<int>(blocks.size());
+    // covariance
+    double cov_(const Vector& u, const Vector& v) const {
+        const double den = opt_.bias ? u.size() : std::max<int>(1, u.size() - 1);
+        return (u.dot(v) - static_cast<double>(u.size()) * u.mean() * v.mean()) / den;
+    }
+    double cov_value_(FitWorkspace& ws, int l, int k, const Vector& eta_l, const Vector& eta_k) const {
+        // compute or reuse cov(l,k); when computed, store and mark clean (both (l,k) and (k,l))
+        if (!ws.dirty(l, k)) return ws.Cov(l, k);
+        const double c = cov_(eta_l, eta_k);
+        ws.Cov(l, k) = ws.Cov(k, l) = c;
+        ws.dirty(l, k) = ws.dirty(k, l) = 0;
+        return c;
+    }
+    void mark_cov_rowcol_dirty_(FitWorkspace& ws, int l) const {
+        if (!opt_.cache_covariances) return;
+        for (int k = 0; k < ws.Cov.rows(); ++k) {
+            ws.dirty(l, k) = 1;
+            ws.dirty(k, l) = 1;
+        }
+        ws.dirty(l, l) = 0;
+        ws.Cov(l, l) = 1.0;
+    }
+    void covariance_matrix_(const BlockRefList& blocks, Matrix& Cov) const {
+        const int J = n_blocks();
+        for (int j = 0; j < J; ++j) {
+            const Vector eta_j = eta_(*blocks[j]);
+            for (int k = 0; k < J; ++k) {
+                const Vector eta_k = eta_(*blocks[k]);
+                Cov(j, k) = cov_(eta_j, eta_k);
+            }
+        }
+    }
+
+    // optimization criteria
+    double objective_(const BlockRefList& blocks, FitWorkspace& ws, const BoolMatrix& C) const {
+        const int J = n_blocks();
+        double f = 0.0;
+        for (int j = 0; j < J; ++j) {
+            const Vector eta_j = eta_(*blocks[j]);
+            for (int k = j; k < J; ++k) {
+                if (C(j, k)) {
+                    const double cov_jk = cov_value_(ws, j, k, eta_j, eta_(*blocks[k]));
+                    const double mult = j == k ? 1.0 : 2.0;
+                    f += mult * opt_.scheme.g(cov_jk);
+                }
+            }
+        }
+        return f;
+    }
+    double rho_tot_with_weights_(const BlockRefList& blocks, const std::vector<Vector>& weights, const BoolMatrix& C) const {
+        const int J = n_blocks();
 
         if (static_cast<int>(weights.size()) != J)
             throw std::logic_error("rho_tot_with_weights_: size mismatch");
@@ -2045,13 +2103,8 @@ private:
 
         return den > 0.0 ? num / den : 0.0;
     }
-
-    double criterion_score_with_weights_(
-        const BlockRefList& blocks,
-        const std::vector<Vector>& weights,
-        const BoolMatrix& C
-    ) {
-        const int J = static_cast<int>(blocks.size());
+    double criterion_score_with_weights_(const BlockRefList& blocks, const std::vector<Vector>& weights, const BoolMatrix& C) {
+        const int J = n_blocks();
 
         if (static_cast<int>(weights.size()) != J)
             throw std::logic_error("criterion_score_with_weights_: size mismatch");
@@ -2082,55 +2135,6 @@ private:
         return den > 0.0 ? num / den : 0.0;
     }
 
-    // Covariance matrix
-    void compute_covariance_matrix_(const BlockRefList& blocks, Matrix& Cov) const {
-        const int J = static_cast<int>(blocks.size());
-
-        for (int j = 0; j < J; ++j) {
-            const Vector eta_j = eta_(*blocks[j]);
-            for (int k = 0; k < J; ++k) {
-                const Vector eta_k = eta_(*blocks[k]);
-                Cov(j, k) = cov_(eta_j, eta_k);
-            }
-        }
-    }
-
-    // --- covariance cache management ---
-    void mark_cov_rowcol_dirty_(FitWorkspace& ws, int l) const {
-        if (!opt_.cache_covariances) return;
-        for (int k = 0; k < ws.Cov.rows(); ++k) {
-            ws.dirty(l, k) = 1;
-            ws.dirty(k, l) = 1;
-        }
-        ws.dirty(l, l) = 0;
-        ws.Cov(l, l) = 1.0;
-    }
-
-    // compute or reuse cov(l,k); when computed, store & mark clean (both (l,k) and (k,l))
-    double cov_value_(FitWorkspace& ws, int l, int k, const Vector& eta_l, const Vector& eta_k) const {
-        if (!ws.dirty(l, k)) return ws.Cov(l, k);
-        const double c = cov_(eta_l, eta_k);
-        ws.Cov(l, k) = ws.Cov(k, l) = c;
-        ws.dirty(l, k) = ws.dirty(k, l) = 0;
-        return c;
-    }
-
-    // indexes
-    void check_index_(int j) const {
-        if (j < 0 || j >= static_cast<int>(blocks_.size())) throw std::out_of_range("block index");
-    }
-
-    bool no_connections_(Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic> C) {
-        bool flag = true;
-        const int J = n_blocks();
-        for (int j = 0; j < J; ++j) {
-            for (int k = 0; k < J; ++k) {
-                if (C(j, k)) return false;
-            }
-        }
-        return true;
-    }
-
 private:
     Options opt_;
 
@@ -2142,7 +2146,7 @@ private:
     SparseMatrix Psi_T_;
 
     int h_ {0};   // current component index
-    int n_comp_{0};
+    int n_comp_{1};
 
     std::optional<double> noise_variance_;
 
@@ -2150,12 +2154,23 @@ private:
     std::vector<BlockPtr> blocks_;
 
     BootstrapConfig bootstrap_config_;
-    std::vector<double> lambda_grid_weights_ {1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2};
     std::vector<BootstrapSelectionResult> bootstrap_selection_results_;
+    /*
+    std::vector<std::vector<double>> lambda_grid_weights_ {
+            {1e-3},
+            {1e-3},
+            {1e-3}
+    };
+    */
 
-    // topology & caches (sized in init())
+    std::vector<std::vector<double>> lambda_grid_weights_ {
+        {1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2},
+        {1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2},
+        {1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2}
+    };
+
+
     bool initialized_ {false};
-    bool user_defined_design_ {false};
     BoolMatrix C_;
 };
 
@@ -2171,8 +2186,7 @@ inline std::ostream& operator<<(std::ostream& os, const Result& r) {
         os << std::endl;
         os << "active blocks :\n";
         for (size_t i = 0; i < r.active_blocks.size(); ++i) {
-            os << "- Block " << i+1  << ": " << (r.active_blocks[i] ? "active    " : "non-active" )
-               << " ("<< r.s1_blocks[i]<< (r.active_blocks[i] ? " > " : " < ") << r.s1_edge_blocks[i] << ")" << "\n";
+            os << "- Block " << i+1  << ": " << (r.active_blocks[i] ? "active    " : "non-active" ) << "\n";
         }
         os << std::endl;
         os << "(updated) connections matrix :\n";
