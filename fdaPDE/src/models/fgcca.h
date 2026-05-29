@@ -255,7 +255,6 @@ public:
         bias_(other.bias_),
         components_gcv_cfg_(other.components_gcv_cfg_),
         lambda_components_(other.lambda_components_),
-        noise_variance_(other.noise_variance_),
         weights_(other.weights_),
         weights_star_(other.weights_star_),
         components_(other.components_),
@@ -420,28 +419,6 @@ public:
         IndexVector idx(n_raw());
         std::iota(idx.data(), idx.data() + idx.size(), 0);
         set_row_index(idx);
-    }
-
-    // noise variance
-    void set_noise_variance(const double noise_variance) {
-        noise_variance_ = std::max(0.0, noise_variance);
-    }
-    [[nodiscard]] double noise_variance() const {
-        if (!noise_variance_.has_value()) return std::numeric_limits<double>::quiet_NaN();
-        return *noise_variance_;
-    }
-    std::pair<double, double> component_reconstruction_info() {
-        const Vector a_m = Psi_D() * a_();
-        const Vector eta_t = Psi_T() * eta_();
-        const Vector r = data() * a_m - eta_t;
-        const double den = n();
-        const double mse = r.squaredNorm() / den;
-
-        if (noise_variance_.has_value()) {
-            const double edge = noise_variance() * a_m.squaredNorm();
-            return {mse, edge};
-        }
-        return {mse, std::numeric_limits<double>::quiet_NaN()};
     }
 
     // main compute method
@@ -766,7 +743,6 @@ protected:
     // parameters
     GCVConfig components_gcv_cfg_;
     std::optional<double> lambda_components_;
-    std::optional<double> noise_variance_;
 
     // results
     Matrix weights_, weights_star_, components_;
@@ -1048,17 +1024,13 @@ struct Result {
     int iters = 0;
     BoolMatrix C;
     Matrix covariance_matrix;
-    double noise_variance = 0.0;
     std::vector<double> tau_values;
     std::vector<double> lambda_components_values;
     std::vector<double> lambda_weights_values;
     std::vector<bool> active_blocks;
-    std::vector<double> reconstruction_error;
-    std::vector<double> reconstruction_edge;
 
     explicit Result(const int n_blocks) : J(n_blocks), C(J, J), covariance_matrix(J,J),
-    tau_values(J), lambda_components_values(J), lambda_weights_values(J), active_blocks(J),
-    reconstruction_error(J), reconstruction_edge(J) {}
+    tau_values(J), lambda_components_values(J), lambda_weights_values(J), active_blocks(J) {}
 };
 
 // forward declaration of pretty printers
@@ -1263,16 +1235,8 @@ public:
         }
 
         compute_Psi_();
-        if (noise_variance_.has_value()) set_noise_variance_all_();
 
         initialized_ = true;
-    }
-
-    // noise variance
-    void set_noise_variance(double noise_variance) { noise_variance_ = std::max(0.0, noise_variance); }
-    [[nodiscard]] double noise_variance() const {
-        if (!noise_variance_.has_value()) return std::numeric_limits<double>::quiet_NaN();
-        return *noise_variance_;
     }
 
     // weights and components regularization utilities
@@ -1367,14 +1331,6 @@ public:
         for (std::size_t j = 0; j < J; ++j) {
             lambda_components_values[j] = blocks[j]->lambda_components();
             lambda_weights_values[j] = blocks[j]->lambda_weights();
-        }
-    }
-    void get_component_reconstruction_info(const BlockRefList& blocks, std::vector<double> & reconstruction_error, std::vector<double> & reconstruction_edge) {
-        const int J = n_blocks();
-        for (std::size_t j = 0; j < J; ++j) {
-            auto [error, edge] = blocks[j]->component_reconstruction_info();
-            reconstruction_error[j] = error;
-            reconstruction_edge[j] = edge;
         }
     }
 
@@ -1608,11 +1564,9 @@ private:
         }
 
         // save results
-        res.noise_variance = noise_variance();
         covariance_matrix_(blocks, res.covariance_matrix);
         get_tau(blocks, res.tau_values);
         get_lambdas(blocks, res.lambda_components_values, res.lambda_weights_values);
-        get_component_reconstruction_info(blocks, res.reconstruction_error, res.reconstruction_edge);
 
         return res;
     }
@@ -1973,11 +1927,6 @@ private:
         for (auto* b : blocks)
             b->set_lambda_weights(lambda);
     }
-    void set_noise_variance_all_() const {
-        for (auto& b : blocks_) b->set_noise_variance(*noise_variance_);
-    }
-
-    // ===== Helpers =====
 
     // eta
     Vector eta_(Block& b) const {
@@ -2148,27 +2097,12 @@ private:
     int h_ {0};   // current component index
     int n_comp_{1};
 
-    std::optional<double> noise_variance_;
-
     std::vector<std::unique_ptr<Matrix>> data_blocks_;
     std::vector<BlockPtr> blocks_;
 
     BootstrapConfig bootstrap_config_;
     std::vector<BootstrapSelectionResult> bootstrap_selection_results_;
-    /*
-    std::vector<std::vector<double>> lambda_grid_weights_ {
-            {1e-3},
-            {1e-3},
-            {1e-3}
-    };
-    */
-
-    std::vector<std::vector<double>> lambda_grid_weights_ {
-        {1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2},
-        {1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2},
-        {1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2}
-    };
-
+    std::vector<std::vector<double>> lambda_grid_weights_;
 
     bool initialized_ {false};
     BoolMatrix C_;
@@ -2217,21 +2151,6 @@ inline std::ostream& operator<<(std::ostream& os, const Result& r) {
     }
     os << std::endl;
     if (!minimal) {
-        os << "reconstruction constraint :\n";
-        for (size_t i = 0; i < r.reconstruction_error.size(); ++i) {
-            if (!r.active_blocks[i] || r.reconstruction_edge[i] == 0) {
-                os << "- Block " << i+1  << ": " << "non-active" << "\n";
-            } else {
-                const bool check = r.reconstruction_error[i] <= r.reconstruction_edge[i];
-                os << "- Block " << i+1  << ": " << (check ? "satisfied    " : "not-satisfied" )
-                   << " ("<< std::setw(10) << r.reconstruction_error[i] << (check ? " ≤ " : " > ") << std::setw(10) << r.reconstruction_edge[i] << ")";
-                os << ", equality for σ_noise = "
-                   << std::sqrt(r.noise_variance) << " -> "
-                   << std::sqrt(r.reconstruction_error[i]/r.reconstruction_edge[i] * r.noise_variance);
-                std::cout << "\n";
-            }
-        }
-        os << std::endl;
         os << "covariance matrix :\n";
         os << std::fixed << std::setprecision(2);
         os << r.covariance_matrix << std::endl;
