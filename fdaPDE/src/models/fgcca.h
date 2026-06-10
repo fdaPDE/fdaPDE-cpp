@@ -20,6 +20,7 @@
 #include "fdaPDE/src/solvers/nonnegative_ipopt.h"
 #include "fdaPDE/execution.h"
 #include "header_check.h"
+#include <chrono>
 
 namespace fdapde {
 
@@ -1631,10 +1632,12 @@ private:
         const int J = static_cast<int>(blocks_.size());
         const int B = bootstrap_config_.B;
 
-        const int patience = 2;
+        const int patience = 10;
         int no_improve = 0;
         double best_criterion = -std::numeric_limits<double>::infinity();
         int best_i = -1;
+
+        std::cout << "Init bootstrap --> ";
 
         BootstrapSelectionResult boot_results(h_, B, lambda_grid_weights_[h_], block_names_(blocks), block_dims_(blocks));
 
@@ -1646,10 +1649,15 @@ private:
             bootstrap_idx[b] = bootstrap_indices_(n_, rng);
         }
 
+        std::cout << "<--" << std::endl;
+        std::cout << "Preliminary fit --> ";
+
         // preliminary fit at largest lambda
         set_lambda_weights_all(lambda_grid_weights_[h_].back());
         init_comp_(blocks);
         fit_component_(blocks);
+
+        std::cout << "<--" << std::endl;
 
         for (int i = static_cast<int>(lambda_grid_weights_[h_].size()) - 1; i >= 0; --i) {
             const double lambda = lambda_grid_weights_[h_][i];
@@ -1664,6 +1672,8 @@ private:
             auto w_fit = weights_(blocks);
             auto w_min = w_fit;
 
+            std::cout << "  Resize storage --> ";
+
             // thread-local storage
             std::vector<int> thread_count(n_threads, 0);
 
@@ -1677,12 +1687,19 @@ private:
                 }
             }
 
+            std::cout << "<--" << std::endl;
+            std::cout << "  Clone blocks --> ";
+
             std::vector<BootstrapBlocks> thread_boot_template(n_threads);
             for (int t = 0; t < n_threads; ++t) {
                 thread_boot_template[t] = clone_blocks_();
             }
 
-            std::cout << "Parallelizzazione su " <<  n_threads <<  " threads --> ";
+            std::cout << "<--" << std::endl;
+
+            auto start = std::chrono::high_resolution_clock::now();
+
+            std::cout << "  Parallelizzazione su " <<  n_threads <<  " threads --> ";
             parallel_for(0, B,[&](int b) {
                 const int tid = this_thread_id();
 
@@ -1703,6 +1720,10 @@ private:
 
             });
             std::cout << "<--";
+
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start);
+            std::cout << " Execution time: "<< std::setw(3) << duration.count() << "s";
 
             // sequential merge
             for (int tid = 0; tid < n_threads; ++tid) {
@@ -1736,12 +1757,17 @@ private:
                 }
             }
 
+            for (int j = 0; j < J; ++j) {
+                const double nrm = w_min[j].norm();
+                if (nrm < opt_.active_block_tol)  w_min[j] *= 0;
+            }
+
             boot_results.w_fit_by_lambda[i] = w_fit;
             boot_results.w_min_by_lambda[i] = w_min;
 
             const double crit = criterion_score_with_weights_(blocks, w_min, C_);
             boot_results.criterion[i] = crit;
-            std::cout << " -> " << crit << std::endl;
+            std::cout << ", crit = " << crit << std::endl;
 
             if (crit > best_criterion) {
                 best_criterion = crit;
@@ -1752,7 +1778,7 @@ private:
             }
 
             if (no_improve >= patience) {
-                std::cout << "early stop: no improvement for " << patience << " consecutive lambdas" << std::endl;
+                std::cout << "  early stop: no improvement for " << patience << " consecutive lambdas" << std::endl;
                 break;
             }
         }
@@ -1764,7 +1790,7 @@ private:
         boot_results.active_blocks.assign(J, true);
         for (int j = 0; j < J; ++j) {
             const double nrm = boot_results.w_min_by_lambda[best_i][j].norm();
-            std::cout << "block " << j << " ||w_min|| = " << nrm << " active = " << (nrm >= opt_.active_block_tol) << std::endl;
+            std::cout << "  . block " << j << " ||w_min|| = " << nrm << " active = " << (nrm >= opt_.active_block_tol) << std::endl;
             boot_results.active_blocks[j] = nrm >= opt_.active_block_tol;
         }
 
@@ -1985,7 +2011,8 @@ private:
 
                 if (nj > 0.0 && nk > 0.0) {
                     const double corr_jk = eta[j].dot(eta[k]) / (nj * nk);
-                    num += opt_.scheme.g(corr_jk);
+                    if (opt_.scheme.name == "Horst") num += corr_jk;
+                    else num += std::abs(corr_jk);
                     den += 1.0;
                 }
             }
