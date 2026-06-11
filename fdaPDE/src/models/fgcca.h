@@ -1524,6 +1524,8 @@ private:
         // design update according to current active blocks
         res.C = C_;
         res.active_blocks = active_blocks;
+        int n_active_blocks = 0;
+        int last_active_block = 0;
         for (int j = 0; j < J; ++j) {
             if (!active_blocks[j]) {
                 res.C.row(j).setConstant(false);
@@ -1531,6 +1533,16 @@ private:
                 blocks[j]->weights().col(h_).setZero();
                 blocks[j]->components().col(h_).setZero();
             }
+            else {
+                n_active_blocks++;
+                last_active_block = j;
+            }
+        }
+        if (n_active_blocks == 1) {
+            res.C.row(last_active_block).setConstant(false);
+            res.C.col(last_active_block).setConstant(false);
+            blocks[last_active_block]->weights().col(h_).setZero();
+            blocks[last_active_block]->components().col(h_).setZero();
         }
 
         // initialization
@@ -1678,6 +1690,7 @@ private:
         // original blocks
         auto blocks = main_blocks_();
         const int J = static_cast<int>(blocks.size());
+        std::vector<bool> active_blocks(J, true);
 
         // init bootstrap
         std::cout << "Init bootstrap --> ";
@@ -1692,7 +1705,7 @@ private:
         std::cout << "Preliminary fit --> ";
         set_lambda_weights_all(lambda_grid_weights_[h_].back());
         init_comp_(blocks);
-        fit_component_(blocks);
+        fit_component_(blocks, active_blocks);
         std::cout << "<--" << std::endl;
 
         for (int lambda_i = static_cast<int>(lambda_grid_weights_[h_].size()) - 1; lambda_i >= 0; --lambda_i) {
@@ -1704,7 +1717,7 @@ private:
             // init warm start at lambda
             set_lambda_weights_all(lambda);
             init_comp_(blocks, InitStrategy::WarmStart);
-            fit_component_(blocks);
+            fit_component_(blocks, active_blocks);
             auto w_fit = weights_(blocks);
             auto w_min = w_fit;
 
@@ -1730,6 +1743,7 @@ private:
                     lambda_i,
                     bootstrap_state,
                     thread_boot_template,
+                    active_blocks,
                     w_fit,
                     w_min,
                     boot_results
@@ -1737,13 +1751,14 @@ private:
 
                 bootstrap_state.B_done += bootstrap_state.B_run;
 
-                threshold_inactive_blocks_(w_min, J);
+                int n_active_blocks = threshold_inactive_blocks_(w_min, active_blocks);
 
                 std::cout << "avg_fit_time = " << std::fixed << std::setprecision(3) << bootstrap_timing.avg_fit_time
                           << " ± " << bootstrap_timing.sd_fit_time << std::defaultfloat << "s";
                 std::cout << ", eff = " << std::setprecision(2) << 100.0 * bootstrap_timing.efficiency << "%" << std::defaultfloat;
 
                 bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_);
+                std::cout << " | ab = " << n_active_blocks;
                 std::cout << " | crit = " << std::setw(6) << std::fixed << std::setprecision(3) <<  bootstrap_state.crit;
                 std::cout << std::defaultfloat;
 
@@ -1809,6 +1824,7 @@ private:
     BootstrapBatchTiming run_bootstrap_batch_(
         int lambda_i, AdaptiveBootstrapState& bootstrap_state,
         const std::vector<BootstrapBlocks>& thread_boot_template,
+        std::vector<bool> active_blocks,
         const std::vector<Vector>& w_fit,
         std::vector<Vector>& w_min,
         BootstrapSelectionResult& boot_results
@@ -1848,7 +1864,7 @@ private:
 
             const auto fit_start = std::chrono::high_resolution_clock::now();
             init_comp_(boot_blocks.refs, InitStrategy::WarmStart);
-            fit_component_(boot_blocks.refs);
+            fit_component_(boot_blocks.refs, active_blocks);
             const auto fit_end = std::chrono::high_resolution_clock::now();
 
             fit_times_sec[b] = std::chrono::duration<double>(fit_end - fit_start).count();
@@ -1958,11 +1974,26 @@ private:
     }
 
     // bootstrap utils
-    void threshold_inactive_blocks_(std::vector<Vector>& w_min, int J) const {
-        for (int j = 0; j < J; ++j) {
+    int threshold_inactive_blocks_(std::vector<Vector>& w_min, std::vector<bool>& active_blocks) const {
+        int n_active_blocks = 0;
+        int last_active_block = 0;
+        for (int j = 0; j < active_blocks.size(); ++j) {
             const double nrm = w_min[j].norm();
-            if (nrm < bootstrap_config_.active_block_tol) w_min[j] *= 0;
+            if (nrm < bootstrap_config_.active_block_tol) {
+                w_min[j] *= 0;
+                active_blocks[j] = false;
+            }
+            else {
+                n_active_blocks++;
+                last_active_block = j;
+            }
         }
+        if (n_active_blocks == 1) {
+            w_min[last_active_block] *= 0;
+            active_blocks[last_active_block] = false;
+            n_active_blocks = 0;
+        }
+        return n_active_blocks;
     }
     void update_w_min_(Vector& w_min_j, const Vector& w_fit_j, const Vector& w_bj) const {
         for (int r = 0; r < w_min_j.size(); ++r) {
