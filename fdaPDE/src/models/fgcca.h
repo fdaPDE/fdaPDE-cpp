@@ -25,7 +25,7 @@
 namespace fdapde {
 
 enum class InitStrategy { None, SVD, Uniform, WarmStart };
-enum class DesignMode {Empty, FullyConnected};
+enum class DesignMode {Empty, Custom, FullyConnected};
 enum class LambdaSelection {Manual, Automatic};
 enum class Mode { CorMax, Regularized, CovMax };
 enum class Deflation { None, Scores };
@@ -607,8 +607,10 @@ protected:
 
             const Matrix XtX = data().transpose() * data();
             const Vector mu = data().colwise().mean();
-
             const Matrix Sigma = (XtX - n_d * (mu * mu.transpose())) / den;
+
+            // const Matrix XtX = data().transpose() * data();
+            // const Matrix Sigma = XtX / den;
 
             if (mode_ == Mode::CorMax) {
                 M_ = Sigma.sparseView();
@@ -1240,16 +1242,19 @@ public:
 
         C_(j, k) = on;
         C_(k, j) = on;
+
+        design_mode_ = DesignMode::Custom;
     }
 
     // initialization
-    void init(const DesignMode mode = DesignMode::FullyConnected) {
+    void init() {
         if (n_blocks() < 2) throw std::runtime_error("RGCCA: need ≥ 2 blocks");
 
-        // design matrix initialization
-        switch (mode) {
-            case DesignMode::Empty: clear_design_(); break;
-            case DesignMode::FullyConnected: set_fully_connected_design_(); break;
+        ensure_design_initialized_();
+
+        if (design_mode_ == DesignMode::Empty) {
+            set_fully_connected_design_();
+            design_mode_ = DesignMode::FullyConnected;
         }
 
         compute_Psi_();
@@ -1368,18 +1373,6 @@ private:
     // initialization utils
     void check_index_(int j) const {
         if (j < 0 || j >= static_cast<int>(blocks_.size())) throw std::out_of_range("block index");
-    }
-    void initialize_design_(const DesignMode mode) {
-        const int J = n_blocks();
-
-        C_.resize(J, J);
-        C_.setConstant(false);
-
-        if (mode == DesignMode::FullyConnected) {
-            for (int j = 0; j < J; ++j)
-                for (int k = 0; k < J; ++k)
-                    C_(j, k) = (j != k);
-        }
     }
     void ensure_design_initialized_() {
         if (C_.rows() == n_blocks() && C_.cols() == n_blocks()) return;
@@ -2173,6 +2166,7 @@ private:
     double cov_(const Vector& u, const Vector& v) const {
         const double den = opt_.bias ? u.size() : std::max<int>(1, u.size() - 1);
         return (u.dot(v) - static_cast<double>(u.size()) * u.mean() * v.mean()) / den;
+        // return u.dot(v) / den;
     }
     double cov_value_(FitWorkspace& ws, int l, int k, const Vector& eta_l, const Vector& eta_k) const {
         // compute or reuse cov(l,k); when computed, store and mark clean (both (l,k) and (k,l))
@@ -2289,6 +2283,7 @@ private:
 
 private:
     Options opt_;
+    DesignMode design_mode_ {DesignMode::Empty};
 
     int J_ {0};
     int n_ {0}; // global number of observations
