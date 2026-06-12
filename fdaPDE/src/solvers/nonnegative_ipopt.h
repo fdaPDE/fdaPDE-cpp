@@ -274,14 +274,17 @@ public:
 
         // dimensions
         const int n = static_cast<Ipopt::Index>(Psi_.cols());
+        const int m = static_cast<Ipopt::Index>(Psi_.rows());
 
         // starting point
-        x0_ = Vector::Ones(n);
-        const double norm2 = x0_.dot(Omega_ * x0_);
-        if (norm2 > 0.0) x0_ /= std::sqrt(norm2);
-        else throw std::runtime_error("NonNegativeWeightProblem: invalid starting point");
+        x_init_ = Vector::Ones(n);
+        x_init_ = normalize_convex_comb_(x_init_, x_init_, 0);
 
-        last_solution_ = x0_;
+        last_solution_ = x_init_;
+        last_solution_pos_ = x_init_;
+        last_solution_neg_ = x_init_;
+
+        last_z_ = Vector::Zero(m);
 
         const auto status = app_->Initialize();
         if (status != Ipopt::Solve_Succeeded) throw std::runtime_error("Ipopt initialization failed.");
@@ -290,8 +293,10 @@ public:
     NonNegativeWeightSolver(const NonNegativeWeightSolver& other)
     : Psi_(other.Psi_),
       Omega_(other.Omega_),
-      x0_(other.x0_),
-      last_solution_(other.last_solution_)
+      x_init_(other.x_init_),
+      last_solution_(other.last_solution_),
+      last_solution_pos_(other.last_solution_pos_),
+      last_solution_neg_(other.last_solution_neg_)
     {
         Psi_.makeCompressed();
         Omega_.makeCompressed();
@@ -306,14 +311,28 @@ public:
 
     Vector solve(const Vector& z) {
 
-        // scaling
-        double s = std::abs(z.dot(Psi_ * x0_));
-        if (s <= 0.0 || !std::isfinite(s)) s = 1.0;
+        double alpha = 0.0;
+        if (has_last_z_) {
+            const double nz  = std::sqrt(z.dot(z));
+            const double nlz = std::sqrt(last_z_.dot(last_z_));
+            if (nz > 0.0 && nlz > 0.0) {
+                alpha = z.dot(last_z_) / (nz * nlz);
+                alpha = std::clamp(alpha, 0.0, 0.95);
+            }
+        }
 
-        const Vector c = Psi_.transpose() * z / s;
+        // positive
+        Vector x0_pos = normalize_convex_comb_(x_init_, last_solution_pos_, alpha);
+        double s_pos = std::abs(z.dot(Psi_ * x0_pos));
+        if (s_pos <= 0.0 || !std::isfinite(s_pos)) s_pos = 1.0;
+        const Vector c_pos = Psi_.transpose() * z / s_pos;
+        auto* raw_pos = new NonNegativeWeightProblem(Omega_, c_pos, x0_pos);
 
-        auto* raw_pos = new NonNegativeWeightProblem(Omega_, c, x0_);
-        auto* raw_neg = new NonNegativeWeightProblem(Omega_, -c, x0_);
+        Vector x0_neg = normalize_convex_comb_(x_init_, last_solution_neg_, alpha);
+        double s_neg = std::abs(z.dot(Psi_ * x0_neg));
+        if (s_neg <= 0.0 || !std::isfinite(s_neg)) s_neg = 1.0;
+        const Vector c_neg = - Psi_.transpose() * z / s_neg;
+        auto* raw_neg = new NonNegativeWeightProblem(Omega_, c_neg, x0_neg);
 
         Ipopt::SmartPtr<Ipopt::TNLP> problem_pos = raw_pos;
         Ipopt::SmartPtr<Ipopt::TNLP> problem_neg = raw_neg;
@@ -325,24 +344,49 @@ public:
         const bool neg_ok = raw_neg->status() == Ipopt::SUCCESS || raw_neg->status() == Ipopt::STOP_AT_ACCEPTABLE_POINT;
 
         if (pos_ok && neg_ok) {
-            const bool choose_pos = raw_pos->obj_value() <= raw_neg->obj_value();
-            last_solution_ = choose_pos ? raw_pos->solution() : raw_neg->solution();
+            last_solution_pos_ = raw_pos->solution();
+            last_solution_neg_ = raw_neg->solution();
+            const double score_pos =  z.dot(Psi_ * last_solution_pos_);
+            const double score_neg = -z.dot(Psi_ * last_solution_neg_);
+            const bool choose_pos = score_pos >= score_neg;
+            last_solution_ = choose_pos ? last_solution_pos_ : last_solution_neg_;
         } else if (pos_ok) {
-            last_solution_ = raw_pos->solution();
+            last_solution_pos_ = raw_pos->solution();
+            last_solution_ = last_solution_pos_;
         } else if (neg_ok) {
-            last_solution_ = raw_neg->solution();
+            last_solution_neg_ = raw_neg->solution();
+            last_solution_ = last_solution_neg_;
         } else {
             std::cerr << "NonNegativeWeightSolver: optimization failed, returning the last admissible solution\n";
+        }
+
+        if (pos_ok || neg_ok) {
+            last_z_ = z;
+            has_last_z_ = true;
         }
 
         return last_solution_;
     }
 
 private:
+    Vector normalize_convex_comb_(const Vector& x1, const Vector& x2, const double alpha) const {
+        Vector x = (1.0-alpha) * x1 + alpha * x2;
+        const double norm2 = x.dot(Omega_ * x);
+        if (norm2 > 0.0) x /= std::sqrt(norm2);
+        else throw std::runtime_error("NonNegativeWeightProblem: invalid starting point");
+        return x;
+    }
+
+
     SparseMatrix Psi_;
     SparseMatrix Omega_;
 
-    Vector x0_;
+    Vector last_z_;
+    bool has_last_z_ = false;
+
+    Vector x_init_;
+    Vector last_solution_pos_;
+    Vector last_solution_neg_;
     Vector last_solution_;
 
     Ipopt::SmartPtr<Ipopt::IpoptApplication> app_;
