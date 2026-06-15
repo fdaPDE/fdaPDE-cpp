@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cmath>
+#include <limits>
 #include <optional>
 
 #include <Eigen/Dense>
@@ -310,6 +311,12 @@ public:
     NonNegativeWeightSolver& operator=(const NonNegativeWeightSolver&) = delete;
 
     Vector solve(const Vector& z) {
+        const double z_norm2 = z.squaredNorm();
+        const double scale = static_cast<double>(z.size() > 0 ? z.size() : 1);
+        const double zero_tol = std::numeric_limits<double>::epsilon() * scale;
+        if (z_norm2 <= zero_tol * zero_tol || !std::isfinite(z_norm2)) {
+            return Vector::Zero(Psi_.cols());
+        }
 
         double alpha = 0.0;
         if (has_last_z_) {
