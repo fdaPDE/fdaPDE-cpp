@@ -2451,6 +2451,8 @@ private:
         // return u.dot(v) / den;
     }
     double cov_value_(FitWorkspace& ws, int l, int k, const Vector& eta_l, const Vector& eta_k) const {
+        if (!opt_.cache_covariances) return cov_(eta_l, eta_k);
+
         // compute or reuse cov(l,k); when computed, store and mark clean (both (l,k) and (k,l))
         if (!ws.dirty(l, k)) return ws.Cov(l, k);
         const double c = cov_(eta_l, eta_k);
