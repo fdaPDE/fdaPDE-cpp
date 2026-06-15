@@ -133,7 +133,7 @@ struct bs_normcovmax_elliptic {
 
    public:
     static constexpr int n_lambda = 1;
-    using solver_category = ls_solver;
+    using solver_category = normcovmax_solver;
 
     bs_normcovmax_elliptic() noexcept = default;
     template <typename GeoFrame, typename Penalty, typename WeightMatrix>
