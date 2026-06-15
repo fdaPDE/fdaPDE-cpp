@@ -151,6 +151,12 @@ template <typename SamplingStrategy> class BaseBlock;   // forward decl for oper
 template <typename SamplingStrategy>
 std::ostream& operator<<(std::ostream& os, const BaseBlock<SamplingStrategy>& b);
 
+inline void validate_rgcca_positive_regularization_lambda_(const double lambda, const char* name) {
+    if (!(lambda > 0.0) || !std::isfinite(lambda)) {
+        throw std::invalid_argument(std::string("RGCCA: ") + name + " must be finite and positive");
+    }
+}
+
 // GCV utils
 template<class Fun> inline std::pair<double,double> argmin_over_log_grid(Fun&& f, const double log10_min, const double log10_max, int n_grid) {
     if(n_grid<2) n_grid=2;
@@ -905,6 +911,7 @@ public:
 
     // weights regularization utils
     void set_lambda_weights(const double lambda) override {
+        validate_rgcca_positive_regularization_lambda_(lambda, "weight lambda");
         lambda_weights_ = lambda;
         Omega_ready_ = false;
         reset_nonnegative_weight_solver_();
@@ -1294,9 +1301,11 @@ public:
 
     // weights and components regularization utilities
     void set_lambda_weights_all(const double lambda) const {
+        internals::validate_rgcca_positive_regularization_lambda_(lambda, "weight lambda");
         for (auto& b : blocks_) b->set_lambda_weights(lambda);
     }
     void set_lambda_components_all(const double lambda) const {
+        internals::validate_rgcca_positive_regularization_lambda_(lambda, "component lambda");
         for (auto& b : blocks_) b->set_lambda_components(lambda);
     }
     void set_lambda_grid_weights(const std::vector<double>& lambda_grid) {
