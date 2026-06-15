@@ -1117,6 +1117,11 @@ public:
         // block deactivation
         double active_block_tol = 1e-8;
 
+        // connection deactivation
+        double active_connection_sign_stability = 0.95;
+        double active_connection_min_abs_corr = 0.05;
+        // int active_connection_min_bootstrap = 100;
+
         // early stop
         int patience = 1;
 
@@ -1322,17 +1327,17 @@ public:
             set_h_(hh);
 
             // weights lambda selection
-            std::vector<bool> active_blocks(n_blocks(), true);
+            BoolMatrix C_active = C_;
             if (opt_.lambda_selection_weights == LambdaSelection::Automatic) {
                 auto selection = select_lambda_weights_bootstrap_parallel_();
                 const double lambda = selection.first;
-                active_blocks = std::move(selection.second);
+                C_active = std::move(selection.second);
                 set_lambda_weights_all(lambda);
             }
 
             // final fit
             init_comp_();
-            results.push_back(fit_component_(active_blocks));
+            results.push_back(fit_component_(C_active));
 
             deflate_all_();
         }
@@ -1506,7 +1511,7 @@ private:
     }
 
     // components fit
-    Result fit_component_(const BlockRefList& blocks, const std::vector<bool>& active_blocks) {
+    Result fit_component_(const BlockRefList& blocks, const BoolMatrix& C_active) {
         const int J = n_blocks();
         FitWorkspace ws(J);
 
@@ -1515,27 +1520,13 @@ private:
         res.obj_history.reserve(opt_.max_iter);
 
         // design update according to current active blocks
-        res.C = C_;
-        res.active_blocks = active_blocks;
-        int n_active_blocks = 0;
-        int last_active_block = 0;
+        res.C = C_active;
+        res.active_blocks = active_blocks_from_C_(C_active);
         for (int j = 0; j < J; ++j) {
-            if (!active_blocks[j]) {
-                res.C.row(j).setConstant(false);
-                res.C.col(j).setConstant(false);
+            if (!res.active_blocks[j]){
                 blocks[j]->weights().col(h_).setZero();
                 blocks[j]->components().col(h_).setZero();
             }
-            else {
-                n_active_blocks++;
-                last_active_block = j;
-            }
-        }
-        if (n_active_blocks == 1) {
-            res.C.row(last_active_block).setConstant(false);
-            res.C.col(last_active_block).setConstant(false);
-            blocks[last_active_block]->weights().col(h_).setZero();
-            blocks[last_active_block]->components().col(h_).setZero();
         }
 
         // initialization
@@ -1549,7 +1540,7 @@ private:
             for (int l = 0; l < J; ++l) {
 
                 // skip deactivated blocks
-                if (!active_blocks[l]) continue;
+                if (!res.active_blocks[l]) continue;
 
                 // inner-component assembler
                 Vector nu_l = Vector::Zero(blocks[l]->n());
@@ -1594,17 +1585,15 @@ private:
         return res;
     }
     Result fit_component_(const BlockRefList& blocks) {
-        std::vector<bool> active_blocks(blocks.size(), true);
-        return fit_component_(blocks, active_blocks);
+        return fit_component_(blocks, C_);
     }
-    Result fit_component_(const std::vector<bool>& active_blocks) {
+    Result fit_component_(const BoolMatrix& C_active) {
         auto blocks = main_blocks_();
-        return fit_component_(blocks, active_blocks);
+        return fit_component_(blocks, C_active);
     }
     Result fit_component_() {
         auto blocks = main_blocks_();
-        std::vector<bool> active_blocks(blocks.size(), true);
-        return fit_component_(blocks, active_blocks);
+        return fit_component_(blocks, C_);
     }
 
     // fit helpers
@@ -1668,7 +1657,7 @@ private:
         int no_improve = 0;
     };
 
-    std::pair<double, std::vector<bool>> select_lambda_weights_bootstrap_parallel_() {
+    std::pair<double, BoolMatrix> select_lambda_weights_bootstrap_parallel_() {
         if (lambda_grid_weights_[h_].empty())
             throw std::runtime_error("lambda_grid_weights_ is empty");
 
@@ -1683,7 +1672,8 @@ private:
         // original blocks
         auto blocks = main_blocks_();
         const int J = static_cast<int>(blocks.size());
-        std::vector<bool> active_blocks(J, true);
+        BoolMatrix C_active = C_;
+        BoolMatrix C_best = C_;
 
         // init bootstrap
         std::cout << "Init bootstrap --> ";
@@ -1698,7 +1688,7 @@ private:
         std::cout << "Preliminary fit --> ";
         set_lambda_weights_all(lambda_grid_weights_[h_].back());
         init_comp_(blocks);
-        fit_component_(blocks, active_blocks);
+        fit_component_(blocks, C_active);
         std::cout << "<--" << std::endl;
 
         for (int lambda_i = static_cast<int>(lambda_grid_weights_[h_].size()) - 1; lambda_i >= 0; --lambda_i) {
@@ -1710,7 +1700,7 @@ private:
             // init warm start at lambda
             set_lambda_weights_all(lambda);
             init_comp_(blocks, InitStrategy::WarmStart);
-            fit_component_(blocks, active_blocks);
+            fit_component_(blocks, C_active);
             auto w_fit = weights_(blocks);
             auto w_min = w_fit;
 
@@ -1736,25 +1726,28 @@ private:
                     lambda_i,
                     bootstrap_state,
                     thread_boot_template,
-                    active_blocks,
+                    C_active,
                     w_fit,
                     w_min,
                     boot_results
                 );
 
-                bootstrap_state.B_done += bootstrap_state.B_run;
-
-                int n_active_blocks = threshold_inactive_blocks_(w_min, active_blocks);
+                int n_active_blocks = threshold_inactive_blocks_(w_min, C_active);
+                // int n_active_connections = threshold_inactive_connections_(C_active);
+                int n_active_connections = threshold_inactive_connections_(lambda_i, bootstrap_state, blocks, boot_results, C_active);
+                bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_);
 
                 std::cout << "avg_fit_time = " << std::fixed << std::setprecision(3) << bootstrap_timing.avg_fit_time
                           << " ± " << bootstrap_timing.sd_fit_time << std::defaultfloat << "s";
                 std::cout << ", eff = " << std::setprecision(2) << 100.0 * bootstrap_timing.efficiency << "%" << std::defaultfloat;
 
-                bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_);
                 std::cout << " | ab = " << n_active_blocks;
+                std::cout << ", ac = " << n_active_connections;
+
                 std::cout << " | crit = " << std::setw(6) << std::fixed << std::setprecision(3) <<  bootstrap_state.crit;
                 std::cout << std::defaultfloat;
 
+                bootstrap_state.B_done += bootstrap_state.B_run;
 
                 if (adaptive_stop_(bootstrap_state, bootstrap_config_)) {
                     break;
@@ -1769,6 +1762,10 @@ private:
             boot_results.w_min_by_lambda[lambda_i] = w_min;
             boot_results.criterion[lambda_i] = bootstrap_state.crit;
             boot_results.B_used_by_lambda[lambda_i] = bootstrap_state.B_done;
+
+            if (bootstrap_state.crit > bootstrap_state.best_criterion) {
+                C_best = C_active;
+            }
 
             std::cout << "  Bootstrap used: " << bootstrap_state.B_done
                       << ", execution time: " << std::fixed << std::setprecision(3) << elapsed_sec << std::defaultfloat << "s"
@@ -1787,24 +1784,21 @@ private:
 
         boot_results.lambda_opt = lambda_grid_weights_[h_][bootstrap_state.best_i];
 
-        boot_results.active_blocks.assign(J, true);
+        boot_results.active_blocks = active_blocks_from_C_(C_best);
         std::cout << "\n  Blocks deactivation:" << std::endl;
         for (int j = 0; j < J; ++j) {
             const double nrm = boot_results.w_min_by_lambda[bootstrap_state.best_i][j].norm();
-
             std::cout << "  . block " << j
                       << " ||w_min|| = " << nrm
-                      << " active = " << (nrm > 0)
+                      << " active = " << boot_results.active_blocks[j]
                       << std::endl;
-
-            boot_results.active_blocks[j] = nrm > 0;
         }
 
         bootstrap_selection_results_.push_back(std::move(boot_results));
 
         return {
             bootstrap_selection_results_.back().lambda_opt,
-            bootstrap_selection_results_.back().active_blocks
+            C_best
         };
     }
 
@@ -1817,7 +1811,7 @@ private:
     BootstrapBatchTiming run_bootstrap_batch_(
         int lambda_i, AdaptiveBootstrapState& bootstrap_state,
         const std::vector<BootstrapBlocks>& thread_boot_template,
-        std::vector<bool> active_blocks,
+        const BoolMatrix& C_active,
         const std::vector<Vector>& w_fit,
         std::vector<Vector>& w_min,
         BootstrapSelectionResult& boot_results
@@ -1857,7 +1851,7 @@ private:
 
             const auto fit_start = std::chrono::high_resolution_clock::now();
             init_comp_(boot_blocks.refs, InitStrategy::WarmStart);
-            fit_component_(boot_blocks.refs, active_blocks);
+            fit_component_(boot_blocks.refs, C_active);
             const auto fit_end = std::chrono::high_resolution_clock::now();
 
             fit_times_sec[b] = std::chrono::duration<double>(fit_end - fit_start).count();
@@ -1967,26 +1961,183 @@ private:
     }
 
     // bootstrap utils
-    int threshold_inactive_blocks_(std::vector<Vector>& w_min, std::vector<bool>& active_blocks) const {
-        int n_active_blocks = 0;
-        int last_active_block = 0;
-        for (int j = 0; j < active_blocks.size(); ++j) {
+    int threshold_inactive_blocks_(std::vector<Vector>& w_min, BoolMatrix& C_active) const {
+        const int J = static_cast<int>(w_min.size());
+
+        for (int j = 0; j < J; ++j) {
             const double nrm = w_min[j].norm();
+
             if (nrm < bootstrap_config_.active_block_tol) {
-                w_min[j] *= 0;
-                active_blocks[j] = false;
+                w_min[j].setZero();
+                C_active.row(j).setConstant(false);
+                C_active.col(j).setConstant(false);
             }
-            else {
-                n_active_blocks++;
+        }
+
+        int n_active_blocks = 0;
+        int last_active_block = -1;
+        auto active_blocks = active_blocks_from_C_(C_active);
+        for (int j = 0; j < J; ++j) {
+            if (active_blocks[j]) {
+                ++n_active_blocks;
                 last_active_block = j;
             }
         }
+
         if (n_active_blocks == 1) {
-            w_min[last_active_block] *= 0;
-            active_blocks[last_active_block] = false;
+            w_min[last_active_block].setZero();
+            C_active.row(last_active_block).setConstant(false);
+            C_active.col(last_active_block).setConstant(false);
             n_active_blocks = 0;
         }
+
         return n_active_blocks;
+    }
+    /*
+    int threshold_inactive_connections_(BoolMatrix& C_active) const {
+        return count_active_connections_(C_active);
+    }
+    */
+    int threshold_inactive_connections_(
+        int lambda_i,
+        AdaptiveBootstrapState& state,
+        const BlockRefList& blocks,
+        const BootstrapSelectionResult& boot_results,
+        BoolMatrix& C_active
+    ) {
+        const int J = static_cast<int>(C_active.rows());
+        const int B_old = state.B_done;
+        const int B_new = state.B_done + state.B_run;
+        const int B_batch = B_new - B_old;
+
+        for (int j = 0; j < J; ++j) {
+            for (int k = j + 1; k < J; ++k) {
+                if (!C_active(j, k)) continue;
+
+                int n_pos = 0;
+                int n_neg = 0;
+
+                std::vector<double> abs_corr;
+                abs_corr.reserve(B_batch);
+
+                for (int b = B_old; b < B_new; ++b) {
+                    const Vector w_j = boot_results.w_boot_by_lambda[lambda_i][j].col(b);
+                    const Vector w_k = boot_results.w_boot_by_lambda[lambda_i][k].col(b);
+
+                    const double corr_jk = corr_with_weights_pair_(
+                        blocks[j],
+                        blocks[k],
+                        w_j,
+                        w_k
+                    );
+
+                    if (corr_jk > 0.0) ++n_pos;
+                    if (corr_jk < 0.0) ++n_neg;
+
+                    abs_corr.push_back(std::abs(corr_jk));
+                }
+
+                const double sign_stability = static_cast<double>(std::max(n_pos, n_neg)) / static_cast<double>(B_batch);
+                const double med_abs_corr = median_(abs_corr);
+                const bool active =
+                    sign_stability >= bootstrap_config_.active_connection_sign_stability &&
+                    med_abs_corr >= bootstrap_config_.active_connection_min_abs_corr;
+
+                if (!active) {
+                    C_active(j, k) = false;
+                    C_active(k, j) = false;
+                }
+            }
+        }
+
+        deactivate_isolated_blocks_(C_active);
+
+        return count_active_connections_(C_active);
+    }
+    double median_(std::vector<double>& x) const {
+        if (x.empty())
+            return 0.0;
+
+        const std::size_t n = x.size();
+        const std::size_t mid = n / 2;
+
+        std::nth_element(x.begin(), x.begin() + mid, x.end());
+
+        if (n % 2 == 1)
+            return x[mid];
+
+        const double upper = x[mid];
+
+        std::nth_element(x.begin(), x.begin() + mid - 1, x.end());
+        const double lower = x[mid - 1];
+
+        return 0.5 * (lower + upper);
+    }
+    double corr_with_weights_pair_(
+        Block* block_j,
+        Block* block_k,
+        const Vector& w_j,
+        const Vector& w_k
+    ) {
+        const Vector eta_j = eta_eval_(*block_j, w_j);
+        const Vector eta_k = eta_eval_(*block_k, w_k);
+
+        const double var_j = cov_(eta_j, eta_j);
+        const double var_k = cov_(eta_k, eta_k);
+
+        if (var_j <= 0.0 || var_k <= 0.0)
+            return 0.0;
+
+        return cov_(eta_j, eta_k) / std::sqrt(var_j * var_k);
+    }
+    void deactivate_isolated_blocks_(BoolMatrix& C_active) const {
+        const int J = static_cast<int>(C_active.rows());
+
+        for (int j = 0; j < J; ++j) {
+            bool active = false;
+
+            for (int k = 0; k < J; ++k) {
+                if (C_active(j, k)) {
+                    active = true;
+                    break;
+                }
+            }
+
+            if (!active) {
+                C_active.row(j).setConstant(false);
+                C_active.col(j).setConstant(false);
+            }
+        }
+    }
+    int count_active_connections_(const BoolMatrix& C_active) const {
+        const int J = static_cast<int>(C_active.rows());
+
+        int n_active_connections = 0;
+
+        for (int j = 0; j < J; ++j) {
+            for (int k = j + 1; k < J; ++k) {
+                if (C_active(j, k))
+                    ++n_active_connections;
+            }
+        }
+
+        return n_active_connections;
+    }
+    std::vector<bool> active_blocks_from_C_(const BoolMatrix& C_active) const {
+        const int J = static_cast<int>(C_active.rows());
+
+        std::vector<bool> active_blocks(J, false);
+
+        for (int j = 0; j < J; ++j) {
+            for (int k = 0; k < J; ++k) {
+                if (C_active(j, k)) {
+                    active_blocks[j] = true;
+                    break;
+                }
+            }
+        }
+
+        return active_blocks;
     }
     void update_w_min_(Vector& w_min_j, const Vector& w_fit_j, const Vector& w_bj) const {
         for (int r = 0; r < w_min_j.size(); ++r) {
