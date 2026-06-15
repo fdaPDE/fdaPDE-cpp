@@ -1342,6 +1342,7 @@ public:
         if (J < 2) throw std::runtime_error("RGCCA: need ≥ 2 blocks");
         if (opt_.lambda_selection_weights == LambdaSelection::Automatic) {
             validate_weight_lambda_selection_support_();
+            validate_bootstrap_config_();
             validate_lambda_grid_weights_();
         }
 
@@ -2374,6 +2375,47 @@ private:
                 "RGCCA: automatic weight lambda selection uses bootstrap and is not supported "
                 "for TimeDependentSampling"
             );
+        }
+    }
+
+    void validate_bootstrap_config_() const {
+        if (bootstrap_config_.max_threads <= 0)
+            throw std::invalid_argument("RGCCA: bootstrap max_threads must be positive");
+        if (bootstrap_config_.B_max <= 0)
+            throw std::invalid_argument("RGCCA: bootstrap B_max must be positive");
+        if (bootstrap_config_.B_per_thread_per_batch <= 0)
+            throw std::invalid_argument("RGCCA: bootstrap B_per_thread_per_batch must be positive");
+        if (bootstrap_config_.stable_batches_required <= 0)
+            throw std::invalid_argument("RGCCA: bootstrap stable_batches_required must be positive");
+        if (!(bootstrap_config_.adaptive_tol >= 0.0) || !std::isfinite(bootstrap_config_.adaptive_tol))
+            throw std::invalid_argument("RGCCA: bootstrap adaptive_tol must be finite and nonnegative");
+        if (!(bootstrap_config_.active_block_tol >= 0.0) || !std::isfinite(bootstrap_config_.active_block_tol))
+            throw std::invalid_argument("RGCCA: bootstrap active_block_tol must be finite and nonnegative");
+        if (
+            !(bootstrap_config_.active_connection_sign_stability >= 0.0) ||
+            bootstrap_config_.active_connection_sign_stability > 1.0 ||
+            !std::isfinite(bootstrap_config_.active_connection_sign_stability)
+        ) {
+            throw std::invalid_argument(
+                "RGCCA: bootstrap active_connection_sign_stability must be finite and in [0, 1]"
+            );
+        }
+        if (
+            !(bootstrap_config_.active_connection_min_abs_corr >= 0.0) ||
+            !std::isfinite(bootstrap_config_.active_connection_min_abs_corr)
+        ) {
+            throw std::invalid_argument(
+                "RGCCA: bootstrap active_connection_min_abs_corr must be finite and nonnegative"
+            );
+        }
+        if (bootstrap_config_.patience <= 0)
+            throw std::invalid_argument("RGCCA: bootstrap patience must be positive");
+        if (
+            bootstrap_config_.resampling_strategy == ResamplingStrategy::Stationary &&
+            (!(bootstrap_config_.stationary_block_length > 0.0) ||
+             !std::isfinite(bootstrap_config_.stationary_block_length))
+        ) {
+            throw std::invalid_argument("RGCCA: bootstrap stationary_block_length must be finite and positive");
         }
     }
 
