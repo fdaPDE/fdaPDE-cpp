@@ -2099,8 +2099,9 @@ private:
 
                 const int n_pos = state.corr_pos_count(j, k);
                 const int n_neg = state.corr_neg_count(j, k);
-                const int n_tot = state.corr_pos_count(j, k) + state.corr_neg_count(j, k);
-                const double sign_stability = static_cast<double>(std::max(n_pos, n_neg)) / static_cast<double>(n_tot);
+                const double sign_stability = B_eff > 0 ?
+                    static_cast<double>(std::max(n_pos, n_neg)) / static_cast<double>(B_eff) :
+                    0.0;
 
                 const double med_abs_corr = median_(abs_corr);
 
