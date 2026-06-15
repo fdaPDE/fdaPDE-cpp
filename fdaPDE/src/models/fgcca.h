@@ -1107,6 +1107,7 @@ public:
     struct BootstrapConfig {
 
         unsigned seed = 12345;
+        int max_threads = 12;
 
         int B_max = 1000;
         int B_per_thread_per_batch = 5;
@@ -1705,8 +1706,7 @@ private:
         std::cout << "=========================\n" << std::endl;
 
         // set the number of threads
-        const int n_threads = 12;
-        parallel_set_num_threads(n_threads);
+        const int n_threads = bootstrap_n_threads_();
 
         // original blocks
         auto blocks = main_blocks_();
@@ -2375,6 +2375,28 @@ private:
                 "for TimeDependentSampling"
             );
         }
+    }
+
+    int bootstrap_n_threads_() const {
+        const int max_threads = bootstrap_config_.max_threads;
+        if (max_threads <= 0) {
+            throw std::invalid_argument("RGCCA: bootstrap max_threads must be positive");
+        }
+
+        const int available_threads = std::max(1, static_cast<int>(fdapde::available_concurrency()));
+        const int requested_threads = std::min(max_threads, available_threads);
+        parallel_set_num_threads(requested_threads);
+        const int actual_threads = static_cast<int>(internals::threaded_executor::instance().size());
+
+        if (actual_threads > max_threads) {
+            throw std::runtime_error(
+                "RGCCA: bootstrap allows at most " + std::to_string(max_threads) +
+                " threads, but the executor is already initialized with " +
+                std::to_string(actual_threads) + " threads"
+            );
+        }
+
+        return actual_threads;
     }
 
     void validate_lambda_grid_weights_() const {
