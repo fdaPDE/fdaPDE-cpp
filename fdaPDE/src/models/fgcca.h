@@ -1027,6 +1027,7 @@ struct Result {
     int iters = 0;
     BoolMatrix C;
     Matrix covariance_matrix;
+    Matrix correlation_matrix;
     std::vector<double> tau_values;
     std::vector<double> lambda_components_values;
     std::vector<double> lambda_weights_values;
@@ -1150,6 +1151,13 @@ public:
         std::vector<std::vector<Vector>> w_min_by_lambda;
         std::vector<int> B_used_by_lambda;
 
+        // CI
+        std::vector<Matrix> corr_boot_by_lambda;      // [lambda] -> J*J x B
+        std::vector<Matrix> corr_ci_low_by_lambda;    // [lambda] -> J x J
+        std::vector<Matrix> corr_ci_high_by_lambda;   // [lambda] -> J x J
+        std::vector<std::vector<Vector>> w_ci_low_by_lambda;
+        std::vector<std::vector<Vector>> w_ci_high_by_lambda;
+
         BootstrapSelectionResult() = default;
 
         BootstrapSelectionResult(
@@ -1181,6 +1189,22 @@ public:
                 for (std::size_t j = 0; j < J; ++j) {
                     w_boot_by_lambda[i][j].setZero(block_dims_[j], B);
                 }
+            }
+
+            corr_boot_by_lambda.resize(n_lambda);
+            corr_ci_low_by_lambda.resize(n_lambda);
+            corr_ci_high_by_lambda.resize(n_lambda);
+
+            w_ci_low_by_lambda.resize(n_lambda);
+            w_ci_high_by_lambda.resize(n_lambda);
+
+            for (std::size_t i = 0; i < n_lambda; ++i) {
+                corr_boot_by_lambda[i].setZero(J * J, B);
+                corr_ci_low_by_lambda[i].setZero(J, J);
+                corr_ci_high_by_lambda[i].setZero(J, J);
+
+                w_ci_low_by_lambda[i].resize(J);
+                w_ci_high_by_lambda[i].resize(J);
             }
         }
     };
@@ -1579,6 +1603,7 @@ private:
 
         // save results
         covariance_matrix_(blocks, res.covariance_matrix);
+        correlation_matrix_(blocks, res.correlation_matrix);
         get_tau(blocks, res.tau_values);
         get_lambdas(blocks, res.lambda_components_values, res.lambda_weights_values);
 
@@ -1623,10 +1648,17 @@ private:
     // bootstrap
     struct AdaptiveBootstrapState {
 
-        explicit AdaptiveBootstrapState(const BootstrapConfig bootstrap_config, const int n_threads_, const int h) : n_threads(n_threads_) {
+        explicit AdaptiveBootstrapState(
+            const BootstrapConfig bootstrap_config,
+            const int n_threads_,
+            const int h,
+            const int J_
+        ) : n_threads(n_threads_), J(J_) {
             seed = bootstrap_config.seed + static_cast<unsigned>(h);
             B_max = bootstrap_config.B_max;
             B_batch = n_threads * bootstrap_config.B_per_thread_per_batch;
+            corr_pos_count.setZero(J, J);
+            corr_neg_count.setZero(J, J);
         }
 
         void reset() {
@@ -1634,10 +1666,13 @@ private:
             stable_batches = 0;
             crit_prev_batch = std::numeric_limits<double>::infinity();
             crit = std::numeric_limits<double>::quiet_NaN();
+            corr_pos_count.setZero(J, J);
+            corr_neg_count.setZero(J, J);
         }
 
         // config
         int n_threads;
+        int J;
         int seed;
         int B_max;
         int B_batch;
@@ -1645,6 +1680,9 @@ private:
         // state
         int B_done = 0;
         int B_run = 0;
+
+        Eigen::MatrixXi corr_pos_count;
+        Eigen::MatrixXi corr_neg_count;
 
         // adaptive batch
         int stable_batches = 0;
@@ -1677,7 +1715,7 @@ private:
 
         // init bootstrap
         std::cout << "Init bootstrap --> ";
-        AdaptiveBootstrapState bootstrap_state(bootstrap_config_, n_threads, h_);
+        AdaptiveBootstrapState bootstrap_state(bootstrap_config_, n_threads, h_, J);
         BootstrapSelectionResult boot_results(
             h_, bootstrap_state.B_max, lambda_grid_weights_[h_],
             block_names_(blocks), block_dims_(blocks)
@@ -1735,7 +1773,7 @@ private:
 
                 int n_active_blocks = threshold_inactive_blocks_(w_min, C_active);
                 // int n_active_connections = threshold_inactive_connections_(C_active);
-                int n_active_connections = threshold_inactive_connections_(lambda_i, bootstrap_state, blocks, boot_results, C_active);
+                int n_active_connections = threshold_inactive_connections_(lambda_i, bootstrap_state, boot_results, C_active);
                 bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_);
 
                 std::cout << "avg_fit_time = " << std::fixed << std::setprecision(3) << bootstrap_timing.avg_fit_time
@@ -1789,15 +1827,19 @@ private:
 
         boot_results.lambda_opt = lambda_grid_weights_[h_][bootstrap_state.best_i];
 
+        std::cout << "\nOptimal lambda: " << boot_results.lambda_opt << std::endl;
+
         boot_results.active_blocks = active_blocks_from_C_(C_best);
-        std::cout << "\n  Blocks deactivation:" << std::endl;
+        std::cout << "\nBlocks deactivation:" << std::endl;
         for (int j = 0; j < J; ++j) {
             const double nrm = boot_results.w_min_by_lambda[bootstrap_state.best_i][j].norm();
-            std::cout << "  . block " << j
+            std::cout << ". block " << j
                       << " ||w_min|| = " << nrm
                       << " active = " << boot_results.active_blocks[j]
                       << std::endl;
         }
+        std::cout << "\n(Updated) Design matrix:" << std::endl;
+        std::cout << C_best << std::endl;
 
         bootstrap_selection_results_.push_back(std::move(boot_results));
 
@@ -1834,10 +1876,12 @@ private:
         std::vector<double> fit_times_sec(B_run, 0.0);
 
         std::vector<std::vector<Matrix>> thread_w_boot(n_threads);
+        std::vector<std::vector<Matrix>> thread_corr_boot(n_threads);
         std::vector<std::vector<int>> thread_sample_id(n_threads);
 
         for (int tid = 0; tid < n_threads; ++tid) {
             thread_w_boot[tid].resize(J);
+            thread_corr_boot[tid].resize(B_run);
             thread_sample_id[tid].resize(B_run);
 
             for (int j = 0; j < J; ++j) {
@@ -1865,9 +1909,16 @@ private:
             thread_sample_id[tid][local_col] = b;
 
             auto w_b = weights_(boot_blocks.refs);
+
             for (int j = 0; j < J; ++j) {
+                if (w_b[j].dot(w_fit[j]) < 0.0) w_b[j] *= -1.0;
                 thread_w_boot[tid][j].col(local_col) = w_b[j];
             }
+
+            clear_row_index_all_(boot_blocks.refs);
+
+            Matrix corr_b = corr_matrix_with_weights_(boot_blocks.refs, w_b);
+            thread_corr_boot[tid][local_col] = std::move(corr_b);
 
         });
 
@@ -1879,9 +1930,27 @@ private:
                 const int b = thread_sample_id[tid][local_col];
                 const int b_global = B_offset + b;
 
+                const Matrix& corr_b = thread_corr_boot[tid][local_col];
+
+                boot_results.corr_boot_by_lambda[lambda_i].col(b_global) =
+                    Eigen::Map<const Vector>(corr_b.data(), J * J);
+
                 for (int j = 0; j < J; ++j) {
-                    Vector w_bj = thread_w_boot[tid][j].col(local_col);
-                    if (w_bj.dot(w_fit[j]) < 0.0) w_bj *= -1.0; // sign alignment
+                    for (int k = j + 1; k < J; ++k) {
+                        const double c = corr_b(j, k);
+
+                        if (c > 0.0) {
+                            ++bootstrap_state.corr_pos_count(j, k);
+                            ++bootstrap_state.corr_pos_count(k, j);
+                        } else if (c < 0.0) {
+                            ++bootstrap_state.corr_neg_count(j, k);
+                            ++bootstrap_state.corr_neg_count(k, j);
+                        }
+                    }
+                }
+
+                for (int j = 0; j < J; ++j) {
+                    const Vector w_bj = thread_w_boot[tid][j].col(local_col);
                     boot_results.w_boot_by_lambda[lambda_i][j].col(b_global) = w_bj;
                     update_w_min_(w_min[j], w_fit[j], w_bj);
                 }
@@ -2006,44 +2075,36 @@ private:
     int threshold_inactive_connections_(
         int lambda_i,
         AdaptiveBootstrapState& state,
-        const BlockRefList& blocks,
         const BootstrapSelectionResult& boot_results,
         BoolMatrix& C_active
     ) {
         const int J = static_cast<int>(C_active.rows());
-        const int B_old = state.B_done;
         const int B_new = state.B_done + state.B_run;
-        const int B_batch = B_new - B_old;
+        const int B_eff = B_new;
 
         for (int j = 0; j < J; ++j) {
             for (int k = j + 1; k < J; ++k) {
                 if (!C_active(j, k)) continue;
 
-                int n_pos = 0;
-                int n_neg = 0;
-
                 std::vector<double> abs_corr;
-                abs_corr.reserve(B_batch);
+                abs_corr.reserve(B_eff);
 
-                for (int b = B_old; b < B_new; ++b) {
-                    const Vector w_j = boot_results.w_boot_by_lambda[lambda_i][j].col(b);
-                    const Vector w_k = boot_results.w_boot_by_lambda[lambda_i][k].col(b);
+                const int row_jk = j + k * J;
 
-                    const double corr_jk = corr_with_weights_pair_(
-                        blocks[j],
-                        blocks[k],
-                        w_j,
-                        w_k
-                    );
-
-                    if (corr_jk > 0.0) ++n_pos;
-                    if (corr_jk < 0.0) ++n_neg;
+                for (int b = 0; b < B_eff; ++b) {
+                    const double corr_jk =
+                        boot_results.corr_boot_by_lambda[lambda_i](row_jk, b);
 
                     abs_corr.push_back(std::abs(corr_jk));
                 }
 
-                const double sign_stability = static_cast<double>(std::max(n_pos, n_neg)) / static_cast<double>(B_batch);
+                const int n_pos = state.corr_pos_count(j, k);
+                const int n_neg = state.corr_neg_count(j, k);
+                const int n_tot = state.corr_pos_count(j, k) + state.corr_neg_count(j, k);
+                const double sign_stability = static_cast<double>(std::max(n_pos, n_neg)) / static_cast<double>(n_tot);
+
                 const double med_abs_corr = median_(abs_corr);
+
                 const bool active =
                     sign_stability >= bootstrap_config_.active_connection_sign_stability &&
                     med_abs_corr >= bootstrap_config_.active_connection_min_abs_corr;
@@ -2101,17 +2162,35 @@ private:
         Block* block_k,
         const Vector& w_j,
         const Vector& w_k
-    ) {
-        const Vector eta_j = eta_eval_(*block_j, w_j);
-        const Vector eta_k = eta_eval_(*block_k, w_k);
+    ) const {
+        const Vector eta_j = block_j->data() * block_j->Psi_D() * w_j;
+        const Vector eta_k = block_k->data() * block_k->Psi_D() * w_k;
 
         const double var_j = cov_(eta_j, eta_j);
         const double var_k = cov_(eta_k, eta_k);
 
-        if (var_j <= 0.0 || var_k <= 0.0)
-            return 0.0;
+        if (var_j <= 0.0 || var_k <= 0.0) return 0.0;
 
         return cov_(eta_j, eta_k) / std::sqrt(var_j * var_k);
+    }
+    Matrix corr_matrix_with_weights_(
+        const BlockRefList& blocks,
+        const std::vector<Vector>& weights
+    ) const {
+        const int J = static_cast<int>(blocks.size());
+        Matrix Corr = Matrix::Identity(J, J);
+
+        for (int j = 0; j < J; ++j) {
+            for (int k = j + 1; k < J; ++k) {
+                const double c = corr_with_weights_pair_(
+                    blocks[j], blocks[k], weights[j], weights[k]
+                );
+                Corr(j, k) = c;
+                Corr(k, j) = c;
+            }
+        }
+
+        return Corr;
     }
     void deactivate_isolated_blocks_(BoolMatrix& C_active) const {
         const int J = static_cast<int>(C_active.rows());
@@ -2173,11 +2252,7 @@ private:
             }
         }
     }
-    void resize_bootstrap_results_(
-        BootstrapSelectionResult& boot_results,
-        int n_lambdas,
-        int J
-    ) const {
+    void resize_bootstrap_results_(BootstrapSelectionResult& boot_results, int n_lambdas, int J) const {
         for (int i = 0; i < n_lambdas; ++i) {
             const int B_eff = boot_results.B_used_by_lambda[i];
 
@@ -2186,6 +2261,10 @@ private:
                     Eigen::NoChange, B_eff
                 );
             }
+
+            boot_results.corr_boot_by_lambda[i].conservativeResize(
+                Eigen::NoChange, B_eff
+            );
         }
     }
 
@@ -2363,9 +2442,36 @@ private:
         const int J = n_blocks();
         for (int j = 0; j < J; ++j) {
             const Vector eta_j = eta_(*blocks[j]);
+
             for (int k = 0; k < J; ++k) {
                 const Vector eta_k = eta_(*blocks[k]);
                 Cov(j, k) = cov_(eta_j, eta_k);
+            }
+        }
+    }
+    void correlation_matrix_(const BlockRefList& blocks, Matrix& Corr) const {
+        const int J = n_blocks();
+
+        Corr.setIdentity(J, J);
+
+        for (int j = 0; j < J; ++j) {
+
+            const Vector eta_j = eta_(*blocks[j]);
+            const double var_j = cov_(eta_j, eta_j);
+
+            for (int k = j + 1; k < J; ++k) {
+
+                const Vector eta_k = eta_(*blocks[k]);
+                const double var_k = cov_(eta_k, eta_k);
+
+                double corr_jk = 0.0;
+
+                if (var_j > 0.0 && var_k > 0.0) {
+                    corr_jk = cov_(eta_j, eta_k) / std::sqrt(var_j * var_k);
+                }
+
+                Corr(j, k) = corr_jk;
+                Corr(k, j) = corr_jk;
             }
         }
     }
@@ -2526,6 +2632,10 @@ inline std::ostream& operator<<(std::ostream& os, const Result& r) {
         os << "covariance matrix :\n";
         os << std::fixed << std::setprecision(2);
         os << r.covariance_matrix << std::endl;
+        os << std::fixed << std::setprecision(8);
+        os << "\ncorrelation matrix :\n";
+        os << std::fixed << std::setprecision(2);
+        os << r.correlation_matrix << std::endl;
         os << std::fixed << std::setprecision(8);
     }
 
