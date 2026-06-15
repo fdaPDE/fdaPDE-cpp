@@ -1629,7 +1629,7 @@ private:
             B_batch = n_threads * bootstrap_config.B_per_thread_per_batch;
         }
 
-        void reset_batch() {
+        void reset() {
             B_done = 0;
             stable_batches = 0;
             crit_prev_batch = std::numeric_limits<double>::infinity();
@@ -1691,7 +1691,8 @@ private:
         fit_component_(blocks, C_active);
         std::cout << "<--" << std::endl;
 
-        for (int lambda_i = static_cast<int>(lambda_grid_weights_[h_].size()) - 1; lambda_i >= 0; --lambda_i) {
+        int n_lambda = static_cast<int>(lambda_grid_weights_[h_].size());
+        for (int lambda_i = n_lambda - 1; lambda_i >= 0; --lambda_i) {
 
             // current lambda
             const double lambda = lambda_grid_weights_[h_][lambda_i];
@@ -1704,8 +1705,6 @@ private:
             auto w_fit = weights_(blocks);
             auto w_min = w_fit;
 
-            bootstrap_state.reset_batch();
-
             std::cout << "  Clone blocks --> ";
             std::vector<BootstrapBlocks> thread_boot_template(n_threads);
             for (int t = 0; t < n_threads; ++t) {
@@ -1715,6 +1714,8 @@ private:
 
             auto start = std::chrono::high_resolution_clock::now();
 
+            // bootstrapping by batch
+            bootstrap_state.reset();
             while (bootstrap_state.B_done < bootstrap_state.B_max) {
                 bootstrap_state.B_run = std::min(bootstrap_state.B_batch, bootstrap_state.B_max - bootstrap_state.B_done);
 
@@ -1775,6 +1776,10 @@ private:
             if (early_stop_lambda_(bootstrap_state, lambda_i, bootstrap_config_)) {
                 break;
             }
+
+            // reset connections, but keep fully deactivated blocks off
+            C_active = reset_connections_keep_inactive_blocks_(C_, C_active);
+
         }
 
         resize_bootstrap_results_(boot_results, static_cast<int>(lambda_grid_weights_[h_].size()), J);
@@ -2053,6 +2058,24 @@ private:
         deactivate_isolated_blocks_(C_active);
 
         return count_active_connections_(C_active);
+    }
+    BoolMatrix reset_connections_keep_inactive_blocks_(const BoolMatrix& C_full, const BoolMatrix& C_current) const {
+        BoolMatrix C_reset = C_full;
+
+        const auto active_blocks = active_blocks_from_C_(C_current);
+        const int J = static_cast<int>(C_reset.rows());
+
+        for (int j = 0; j < J; ++j) {
+            if (!active_blocks[j]) {
+                C_reset.row(j).setConstant(false);
+                C_reset.col(j).setConstant(false);
+            }
+        }
+
+        for (int j = 0; j < J; ++j)
+            C_reset(j, j) = false;
+
+        return C_reset;
     }
     double median_(std::vector<double>& x) const {
         if (x.empty())
