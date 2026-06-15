@@ -1771,8 +1771,7 @@ private:
                 );
 
                 int n_active_blocks = threshold_inactive_blocks_(w_min, C_active);
-                // int n_active_connections = threshold_inactive_connections_(C_active);
-                int n_active_connections = threshold_inactive_connections_(lambda_i, bootstrap_state, boot_results, C_active);
+                int n_active_connections = count_active_connections_(C_active);
                 bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_);
 
                 std::cout << "avg_fit_time = " << std::fixed << std::setprecision(3) << bootstrap_timing.avg_fit_time
@@ -1792,6 +1791,11 @@ private:
                 }
             }
 
+            BoolMatrix C_lambda = C_active;
+            const int n_active_connections = threshold_inactive_connections_(
+                lambda_i, bootstrap_state, boot_results, C_lambda
+            );
+
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
             const double elapsed_sec = duration.count() / 1000.0;
@@ -1802,11 +1806,12 @@ private:
             boot_results.B_used_by_lambda[lambda_i] = bootstrap_state.B_done;
 
             if (bootstrap_state.crit > bootstrap_state.best_criterion) {
-                C_best = C_active;
+                C_best = C_lambda;
             }
 
             std::cout << "  Bootstrap used: " << bootstrap_state.B_done
                       << ", execution time: " << std::fixed << std::setprecision(3) << elapsed_sec << std::defaultfloat << "s"
+                      << ", ac = " << n_active_connections
                       << ", crit = " << bootstrap_state.crit << std::endl;
 
             // early stop
@@ -2078,8 +2083,7 @@ private:
         BoolMatrix& C_active
     ) {
         const int J = static_cast<int>(C_active.rows());
-        const int B_new = state.B_done + state.B_run;
-        const int B_eff = B_new;
+        const int B_eff = state.B_done;
 
         for (int j = 0; j < J; ++j) {
             for (int k = j + 1; k < J; ++k) {
