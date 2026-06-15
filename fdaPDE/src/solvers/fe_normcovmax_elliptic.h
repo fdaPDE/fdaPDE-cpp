@@ -355,6 +355,8 @@ struct fe_normcovmax_elliptic {
                 }
             }
             P_ = R1_.transpose() * invR0_R1;
+            P_.makeCompressed();
+            P_ready_ = true;
         }
         return P_;
     }
