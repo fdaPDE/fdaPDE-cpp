@@ -1339,8 +1339,10 @@ public:
 
         const int J = n_blocks();
         if (J < 2) throw std::runtime_error("RGCCA: need ≥ 2 blocks");
-        if (opt_.lambda_selection_weights == LambdaSelection::Automatic)
+        if (opt_.lambda_selection_weights == LambdaSelection::Automatic) {
+            validate_weight_lambda_selection_support_();
             validate_lambda_grid_weights_();
+        }
 
         // room for results
         std::vector<Result> results;
@@ -2364,6 +2366,15 @@ private:
 
         if (h_ >= n_comp)
             set_h_(blocks, n_comp - 1);
+    }
+
+    void validate_weight_lambda_selection_support_() const {
+        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
+            throw std::runtime_error(
+                "RGCCA: automatic weight lambda selection uses bootstrap and is not supported "
+                "for TimeDependentSampling"
+            );
+        }
     }
 
     void validate_lambda_grid_weights_() const {
