@@ -1339,6 +1339,8 @@ public:
 
         const int J = n_blocks();
         if (J < 2) throw std::runtime_error("RGCCA: need ≥ 2 blocks");
+        if (opt_.lambda_selection_weights == LambdaSelection::Automatic)
+            validate_lambda_grid_weights_();
 
         // room for results
         std::vector<Result> results;
@@ -1696,9 +1698,6 @@ private:
     };
 
     std::pair<double, BoolMatrix> select_lambda_weights_bootstrap_parallel_() {
-        if (lambda_grid_weights_[h_].empty())
-            throw std::runtime_error("lambda_grid_weights_ is empty");
-
         std::cout << "\n=========================" << std::endl;
         std::cout << "Bootstrap for component " << h_ +1 << std::endl;
         std::cout << "=========================\n" << std::endl;
@@ -2360,6 +2359,35 @@ private:
 
         if (h_ >= n_comp)
             set_h_(blocks, n_comp - 1);
+    }
+
+    void validate_lambda_grid_weights_() const {
+        if (static_cast<int>(lambda_grid_weights_.size()) != n_comp_) {
+            throw std::runtime_error(
+                "RGCCA: automatic weight lambda selection requires set_lambda_grid_weights(...) "
+                "with one grid or one grid per component"
+            );
+        }
+
+        for (int h = 0; h < n_comp_; ++h) {
+            const auto& grid = lambda_grid_weights_[h];
+
+            if (grid.empty()) {
+                throw std::runtime_error("RGCCA: weight lambda grid contains an empty component grid");
+            }
+
+            for (std::size_t i = 0; i < grid.size(); ++i) {
+                const double lambda = grid[i];
+
+                if (!(lambda > 0.0) || !std::isfinite(lambda)) {
+                    throw std::runtime_error("RGCCA: weight lambda grid values must be finite and positive");
+                }
+
+                if (i > 0 && grid[i] < grid[i - 1]) {
+                    throw std::runtime_error("RGCCA: weight lambda grid must be sorted in nondecreasing order");
+                }
+            }
+        }
     }
 
     // private setters
