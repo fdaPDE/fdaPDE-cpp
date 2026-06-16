@@ -18,6 +18,7 @@
 #define __FGCCA_H__
 
 #include "fdaPDE/src/solvers/nonnegative_ipopt.h"
+#include "fdaPDE/src/logging.h"
 #include "fdaPDE/execution.h"
 #include "header_check.h"
 #include <chrono>
@@ -1860,9 +1861,9 @@ private:
     };
 
     std::pair<double, BoolMatrix> select_lambda_weights_bootstrap_parallel_() {
-        std::cout << "\n=========================" << std::endl;
-        std::cout << "Bootstrap for component " << h_ +1 << std::endl;
-        std::cout << "=========================\n" << std::endl;
+        fdapde::cout << "\n=========================" << std::endl;
+        fdapde::cout << "Bootstrap for component " << h_ +1 << std::endl;
+        fdapde::cout << "=========================\n" << std::endl;
 
         // set the number of threads
         const int n_threads = bootstrap_n_threads_();
@@ -1874,27 +1875,27 @@ private:
         BoolMatrix C_best = C_;
 
         // init bootstrap
-        std::cout << "Init bootstrap --> ";
+        fdapde::cout << "Init bootstrap --> ";
         AdaptiveBootstrapState bootstrap_state(bootstrap_config_, n_threads, h_, J);
         BootstrapSelectionResult boot_results(
             h_, bootstrap_state.B_max, lambda_grid_weights_[h_],
             block_names_(blocks), block_dims_(blocks), bootstrap_config_.ci_level
         );
-        std::cout << "<--" << std::endl;
+        fdapde::cout << "<--" << std::endl;
 
         // preliminary fit
-        std::cout << "Preliminary fit --> ";
+        fdapde::cout << "Preliminary fit --> ";
         set_lambda_weights_all(lambda_grid_weights_[h_].back());
         init_comp_(blocks);
         fit_component_(blocks, C_active);
-        std::cout << "<--" << std::endl;
+        fdapde::cout << "<--" << std::endl;
 
         int n_lambda = static_cast<int>(lambda_grid_weights_[h_].size());
         for (int lambda_i = n_lambda - 1; lambda_i >= 0; --lambda_i) {
 
             // current lambda
             const double lambda = lambda_grid_weights_[h_][lambda_i];
-            std::cout << "- lambda = " << lambda << std::endl;
+            fdapde::cout << "- lambda = " << lambda << std::endl;
 
             // init warm start at lambda
             set_lambda_weights_all(lambda);
@@ -1903,12 +1904,12 @@ private:
             auto w_fit = weights_(blocks);
             auto w_min = w_fit;
 
-            std::cout << "  Clone blocks --> ";
+            fdapde::cout << "  Clone blocks --> ";
             std::vector<BootstrapBlocks> thread_boot_template(n_threads);
             for (int t = 0; t < n_threads; ++t) {
                 thread_boot_template[t] = clone_blocks_();
             }
-            std::cout << "<--" << std::endl;
+            fdapde::cout << "<--" << std::endl;
 
             auto start = std::chrono::high_resolution_clock::now();
 
@@ -1917,7 +1918,7 @@ private:
             while (bootstrap_state.B_done < bootstrap_state.B_max) {
                 bootstrap_state.B_run = std::min(bootstrap_state.B_batch, bootstrap_state.B_max - bootstrap_state.B_done);
 
-                std::cout << "  Adaptive batch "
+                fdapde::cout << "  Adaptive batch "
                           << std::setw(4) << bootstrap_state.B_done << "..."
                           << std::setw(4) << (bootstrap_state.B_done + bootstrap_state.B_run - 1) << " --> ";
 
@@ -1935,15 +1936,15 @@ private:
                 int n_active_connections = count_active_connections_(C_active);
                 bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_);
 
-                std::cout << "avg_fit_time = " << std::fixed << std::setprecision(3) << bootstrap_timing.avg_fit_time
+                fdapde::cout << "avg_fit_time = " << std::fixed << std::setprecision(3) << bootstrap_timing.avg_fit_time
                           << " ± " << bootstrap_timing.sd_fit_time << std::defaultfloat << "s";
-                std::cout << ", eff = " << std::setprecision(2) << 100.0 * bootstrap_timing.efficiency << "%" << std::defaultfloat;
+                fdapde::cout << ", eff = " << std::setprecision(2) << 100.0 * bootstrap_timing.efficiency << "%" << std::defaultfloat;
 
-                std::cout << " | ab = " << n_active_blocks;
-                std::cout << ", ac = " << n_active_connections;
+                fdapde::cout << " | ab = " << n_active_blocks;
+                fdapde::cout << ", ac = " << n_active_connections;
 
-                std::cout << " | crit = " << std::setw(6) << std::fixed << std::setprecision(3) <<  bootstrap_state.crit;
-                std::cout << std::defaultfloat;
+                fdapde::cout << " | crit = " << std::setw(6) << std::fixed << std::setprecision(3) <<  bootstrap_state.crit;
+                fdapde::cout << std::defaultfloat;
 
                 bootstrap_state.B_done += bootstrap_state.B_run;
 
@@ -1971,7 +1972,7 @@ private:
                 C_best = C_lambda;
             }
 
-            std::cout << "  Bootstrap used: " << bootstrap_state.B_done
+            fdapde::cout << "  Bootstrap used: " << bootstrap_state.B_done
                       << ", execution time: " << std::fixed << std::setprecision(3) << elapsed_sec << std::defaultfloat << "s"
                       << ", ac = " << n_active_connections
                       << ", crit = " << bootstrap_state.crit << std::endl;
@@ -1995,19 +1996,19 @@ private:
         boot_results.lambda_opt_index = bootstrap_state.best_i;
         boot_results.lambda_opt = lambda_grid_weights_[h_][bootstrap_state.best_i];
 
-        std::cout << "\nOptimal lambda: " << boot_results.lambda_opt << std::endl;
+        fdapde::cout << "\nOptimal lambda: " << boot_results.lambda_opt << std::endl;
 
         boot_results.active_blocks = active_blocks_from_C_(C_best);
-        std::cout << "\nBlocks deactivation:" << std::endl;
+        fdapde::cout << "\nBlocks deactivation:" << std::endl;
         for (int j = 0; j < J; ++j) {
             const double nrm = boot_results.w_min_by_lambda[bootstrap_state.best_i][j].norm();
-            std::cout << ". block " << j
+            fdapde::cout << ". block " << j
                       << " ||w_min|| = " << nrm
                       << " active = " << boot_results.active_blocks[j]
                       << std::endl;
         }
-        std::cout << "\n(Updated) Design matrix:" << std::endl;
-        std::cout << C_best << std::endl;
+        fdapde::cout << "\n(Updated) Design matrix:" << std::endl;
+        fdapde::cout << C_best << std::endl;
 
         bootstrap_selection_results_.push_back(std::move(boot_results));
 
@@ -2144,13 +2145,13 @@ private:
 
     bool adaptive_stop_(AdaptiveBootstrapState& state, const BootstrapConfig& config) const {
         if (state.crit == 0.0) {
-            std::cout << ", adaptive stop (crit = 0)" << std::endl;
+            fdapde::cout << ", adaptive stop (crit = 0)" << std::endl;
             return true;
         }
 
         if (!std::isfinite(state.crit_prev_batch)) {
             state.crit_prev_batch = state.crit;
-            std::cout << std::endl;
+            fdapde::cout << std::endl;
             return false;
         }
 
@@ -2158,7 +2159,7 @@ private:
             std::abs(state.crit_prev_batch - state.crit) /
             (std::abs(state.crit_prev_batch) + 1e-12);
 
-        std::cout << ", rel_change = " << std::fixed << std::setprecision(3) << rel_change;
+        fdapde::cout << ", rel_change = " << std::fixed << std::setprecision(3) << rel_change;
 
         if (rel_change < config.adaptive_tol) {
             ++state.stable_batches;
@@ -2169,11 +2170,11 @@ private:
         state.crit_prev_batch = state.crit;
 
         if (state.stable_batches >= config.stable_batches_required && state.B_done >= state.B_min) {
-            std::cout << ", adaptive stop (stable)" << std::endl;
+            fdapde::cout << ", adaptive stop (stable)" << std::endl;
             return true;
         }
 
-        std::cout << std::endl;
+        fdapde::cout << std::endl;
         return false;
     }
 
@@ -2191,7 +2192,7 @@ private:
         }
 
         if (state.no_improve >= config.patience) {
-            std::cout << "  early stop: no improvement for "
+            fdapde::cout << "  early stop: no improvement for "
                       << config.patience
                       << " consecutive lambdas" << std::endl;
             return true;

@@ -84,7 +84,7 @@ else
 fi
 cd "$BUILD_DIR"
 
-cmake -Wno-dev -S "$SCRIPT_DIR" -B .
+cmake -Wno-dev -S "$SCRIPT_DIR" -B . -DFDAPDE_ENABLE_COUT=OFF
 cmake --build .
 
 if [ "$MEMCHECK" = true ]; then

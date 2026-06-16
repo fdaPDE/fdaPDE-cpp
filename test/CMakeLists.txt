@@ -7,6 +7,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_WARNINGS_FLAGS "")
 set(CMAKE_CXX_FLAGS "-O2 -march=native -std=c++20 ${CMAKE_WARNINGS_FLAGS}")
 
+option(FDAPDE_ENABLE_COUT "Enable fdapde::cout diagnostic output" OFF)
+if(FDAPDE_ENABLE_COUT)
+	add_compile_definitions(FDAPDE_ENABLE_COUT)
+endif()
+
 if(APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 	add_compile_definitions(_Static_assert=static_assert)
 endif()

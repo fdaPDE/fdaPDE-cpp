@@ -10,6 +10,7 @@
 test/fdapde_test
 test/.cache
 test/build/
+test/_deps/
 build/
 CMakeFiles/
 .DS_Store
