@@ -347,6 +347,15 @@ struct bs_normcovmax_elliptic {
     sparse_matrix_t P(const double lambda) const { return lambda * P(); }
     double ftPf(const double lambda) const { return f_.dot(P(lambda) * f_); }
 
+    sparse_matrix_t eval_basis_at(const matrix_t& locs) const {
+        if (!point_eval_) throw std::logic_error("bs_normcovmax_elliptic: point basis evaluator is not initialized");
+        return point_eval_(locs);
+    }
+    sparse_matrix_t eval_basis_at(const binary_t& locs) const {
+        if (!areal_eval_) throw std::logic_error("bs_normcovmax_elliptic: areal basis evaluator is not initialized");
+        return areal_eval_(locs).first;
+    }
+
     // left multiplication by \Psi
     vector_t fn() const { return Psi_ * f_; }
 

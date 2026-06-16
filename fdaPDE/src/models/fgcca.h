@@ -222,6 +222,7 @@ public:
     using Vector = Eigen::Matrix<double, Eigen::Dynamic, 1>;
     using IndexVector = Eigen::Vector<int, Eigen::Dynamic>;
     using SparseMatrix = Eigen::SparseMatrix<double, Eigen::ColMajor, int>;
+    using BinaryMatrixT = BinaryMatrix<Dynamic, Dynamic>;
     using SparseSolver = eigen_sparse_solver_movable_wrap<Eigen::SimplicialLDLT<SparseMatrix>>;
     using ComponentsSolverType = typename std::decay_t<SamplingStrategy>::solver_t;
 
@@ -520,11 +521,15 @@ public:
     Matrix components_m() { ensure_lc_(); return Psi_T() * components_; }
     [[nodiscard]] WeightSignConstraint weight_sign_constraint() const { return weight_sign_constraint_; }
     template <typename S = SamplingStrategy> requires std::same_as<S, TimeDependentSampling> const Vector& times() { return times_; }
+    [[nodiscard]] SparseMatrix Psi_at(const Matrix& locs) const { return Psi_at_(locs); }
+    [[nodiscard]] SparseMatrix Psi_at(const BinaryMatrixT& locs) const { return Psi_at_(locs); }
 
     // abstract methods
     [[nodiscard]] virtual const SparseMatrix& Psi_D() const = 0;
     [[nodiscard]] virtual const SparseMatrix& Omega() = 0; // M + regularization when present
     virtual std::unique_ptr<BaseBlock> clone() const = 0;
+    [[nodiscard]] virtual SparseMatrix Psi_at_(const Matrix& locs) const = 0;
+    [[nodiscard]] virtual SparseMatrix Psi_at_(const BinaryMatrixT& locs) const = 0;
 
 protected:
 
@@ -784,6 +789,7 @@ public:
     using Matrix = typename Base::Matrix;
     using Vector = typename Base::Vector;
     using SparseMatrix = typename Base::SparseMatrix;
+    using BinaryMatrixT = typename Base::BinaryMatrixT;
 
     using Base::init;
     using Base::M;
@@ -822,6 +828,12 @@ public:
 
     // Psi_D
     [[nodiscard]] const SparseMatrix& Psi_D() const override { return Psi_D_; }
+    [[nodiscard]] SparseMatrix Psi_at_(const Matrix&) const override {
+        throw std::logic_error("MultivariateBlock: locations cannot define a weight basis; pass a Psi matrix explicitly");
+    }
+    [[nodiscard]] SparseMatrix Psi_at_(const BinaryMatrixT&) const override {
+        throw std::logic_error("MultivariateBlock: locations cannot define a weight basis; pass a Psi matrix explicitly");
+    }
 
     // print
     void print(std::ostream& os) const override {
@@ -870,6 +882,7 @@ public:
     using Vector = typename Base::Vector;
     using Matrix = typename Base::Matrix;
     using SparseMatrix = typename Base::SparseMatrix;
+    using BinaryMatrixT = typename Base::BinaryMatrixT;
     using WeightsSolverType = typename std::decay_t<WeightsPenaltyType>::solver_t;
 
     using Base::init;
@@ -908,6 +921,8 @@ public:
 
     // Psi_D
     [[nodiscard]] const SparseMatrix& Psi_D() const override { return weights_solver_.Psi(); }
+    [[nodiscard]] SparseMatrix Psi_at_(const Matrix& locs) const override { return weights_solver_.eval_basis_at(locs); }
+    [[nodiscard]] SparseMatrix Psi_at_(const BinaryMatrixT& locs) const override { return weights_solver_.eval_basis_at(locs); }
 
     // weights regularization utils
     void set_lambda_weights(const double lambda) override {
@@ -1116,6 +1131,7 @@ public:
         unsigned seed = 12345;
         int max_threads = 12;
 
+        int B_min = 500;
         int B_max = 1000;
         int B_per_thread_per_batch = 5;
 
@@ -1130,6 +1146,9 @@ public:
         double active_connection_sign_stability = 0.95;
         double active_connection_min_abs_corr = 0.05;
         // int active_connection_min_bootstrap = 100;
+
+        // confidence intervals
+        double ci_level = 0.95;
 
         // early stop
         int patience = 1;
@@ -1149,6 +1168,8 @@ public:
         std::vector<double> criterion;
 
         double lambda_opt = std::numeric_limits<double>::quiet_NaN();
+        int lambda_opt_index = -1;
+        double ci_level = std::numeric_limits<double>::quiet_NaN();
 
         std::vector<std::string> block_names;
         std::vector<bool> active_blocks;
@@ -1159,12 +1180,14 @@ public:
         std::vector<std::vector<Vector>> w_min_by_lambda;
         std::vector<int> B_used_by_lambda;
 
+        // [lambda] -> vector/matrix
+        std::vector<Matrix> corr_boot_by_lambda;
+        std::vector<Matrix> corr_min_by_lambda;
+
         // CI
-        std::vector<Matrix> corr_boot_by_lambda;      // [lambda] -> J*J x B
         std::vector<Matrix> corr_ci_low_by_lambda;    // [lambda] -> J x J
         std::vector<Matrix> corr_ci_high_by_lambda;   // [lambda] -> J x J
-        std::vector<std::vector<Vector>> w_ci_low_by_lambda;
-        std::vector<std::vector<Vector>> w_ci_high_by_lambda;
+        // weight CIs are location-dependent; compute them with RGCCA::bootstrap_weights_ci(...).
 
         BootstrapSelectionResult() = default;
 
@@ -1173,12 +1196,14 @@ public:
             const int B_,
             const std::vector<double>& lambda_grid_,
             const std::vector<std::string>& block_names_,
-            const std::vector<int>& block_dims_
+            const std::vector<int>& block_dims_,
+            const double ci_level_
         ) :
             h(h_),
             B(B_),
             lambda_grid(lambda_grid_),
             criterion(lambda_grid_.size(), -std::numeric_limits<double>::infinity()),
+            ci_level(ci_level_),
             block_names(block_names_)
         {
             const std::size_t n_lambda = lambda_grid.size();
@@ -1199,20 +1224,16 @@ public:
                 }
             }
 
+            corr_min_by_lambda.resize(n_lambda);
             corr_boot_by_lambda.resize(n_lambda);
             corr_ci_low_by_lambda.resize(n_lambda);
             corr_ci_high_by_lambda.resize(n_lambda);
 
-            w_ci_low_by_lambda.resize(n_lambda);
-            w_ci_high_by_lambda.resize(n_lambda);
-
             for (std::size_t i = 0; i < n_lambda; ++i) {
                 corr_boot_by_lambda[i].setZero(J * J, B);
+                corr_min_by_lambda[i].setZero(J , J);
                 corr_ci_low_by_lambda[i].setZero(J, J);
                 corr_ci_high_by_lambda[i].setZero(J, J);
-
-                w_ci_low_by_lambda[i].resize(J);
-                w_ci_high_by_lambda[i].resize(J);
             }
         }
     };
@@ -1412,11 +1433,137 @@ public:
     [[nodiscard]] const SparseMatrix& Psi_T() const { return Psi_T_; };
     [[nodiscard]] std::vector<BootstrapSelectionResult> bootstrap_selection_results() const { return bootstrap_selection_results_; }
 
+    [[nodiscard]] std::pair<Vector, Vector> bootstrap_weights_ci(
+        const int h,
+        const int lambda_i,
+        const int block_j,
+        const SparseMatrix& Psi
+    ) const {
+        const auto& boot_results = bootstrap_selection_result_(h);
+        return bootstrap_weights_ci_(boot_results, lambda_i, block_j, Psi);
+    }
+    [[nodiscard]] std::pair<Vector, Vector> bootstrap_weights_ci(
+        const int h,
+        const int block_j,
+        const SparseMatrix& Psi
+    ) const {
+        const auto& boot_results = bootstrap_selection_result_(h);
+        return bootstrap_weights_ci_(boot_results, bootstrap_lambda_opt_index_(boot_results), block_j, Psi);
+    }
+    template <typename DataLocs>
+    requires(!std::same_as<std::decay_t<DataLocs>, SparseMatrix>)
+    [[nodiscard]] std::pair<Vector, Vector> bootstrap_weights_ci(
+        const int h,
+        const int lambda_i,
+        const int block_j,
+        const DataLocs& locs
+    ) const {
+        check_index_(block_j);
+        const SparseMatrix Psi = blocks_[block_j]->Psi_at(locs);
+        return bootstrap_weights_ci(h, lambda_i, block_j, Psi);
+    }
+    template <typename DataLocs>
+    requires(!std::same_as<std::decay_t<DataLocs>, SparseMatrix>)
+    [[nodiscard]] std::pair<Vector, Vector> bootstrap_weights_ci(
+        const int h,
+        const int block_j,
+        const DataLocs& locs
+    ) const {
+        const auto& boot_results = bootstrap_selection_result_(h);
+        check_index_(block_j);
+        const SparseMatrix Psi = blocks_[block_j]->Psi_at(locs);
+        return bootstrap_weights_ci_(boot_results, bootstrap_lambda_opt_index_(boot_results), block_j, Psi);
+    }
+
 private:
 
     // initialization utils
     void check_index_(int j) const {
         if (j < 0 || j >= static_cast<int>(blocks_.size())) throw std::out_of_range("block index");
+    }
+    const BootstrapSelectionResult& bootstrap_selection_result_(const int h) const {
+        if (bootstrap_selection_results_.empty()) {
+            throw std::logic_error(
+                "RGCCA: bootstrap weight CIs require automatic weight lambda selection results"
+            );
+        }
+
+        for (const auto& result : bootstrap_selection_results_) {
+            if (result.h == h) return result;
+        }
+
+        throw std::out_of_range("RGCCA: bootstrap component index");
+    }
+    int bootstrap_lambda_opt_index_(const BootstrapSelectionResult& boot_results) const {
+        if (
+            boot_results.lambda_opt_index >= 0 &&
+            boot_results.lambda_opt_index < static_cast<int>(boot_results.lambda_grid.size())
+        ) {
+            return boot_results.lambda_opt_index;
+        }
+
+        for (int i = 0; i < static_cast<int>(boot_results.lambda_grid.size()); ++i) {
+            if (boot_results.lambda_grid[i] == boot_results.lambda_opt) return i;
+        }
+
+        throw std::logic_error("RGCCA: bootstrap optimal lambda index is unavailable");
+    }
+    std::pair<Vector, Vector> bootstrap_weights_ci_(
+        const BootstrapSelectionResult& boot_results,
+        const int lambda_i,
+        const int block_j,
+        const SparseMatrix& Psi
+    ) const {
+        if (lambda_i < 0 || lambda_i >= static_cast<int>(boot_results.lambda_grid.size()))
+            throw std::out_of_range("RGCCA: bootstrap lambda index");
+        if (block_j < 0 || block_j >= static_cast<int>(boot_results.block_names.size()))
+            throw std::out_of_range("RGCCA: bootstrap block index");
+        if (
+            !(boot_results.ci_level > 0.0) ||
+            boot_results.ci_level >= 1.0 ||
+            !std::isfinite(boot_results.ci_level)
+        ) {
+            throw std::logic_error("RGCCA: bootstrap CI level is unavailable");
+        }
+
+        const Matrix& w_boot = boot_results.w_boot_by_lambda[lambda_i][block_j];
+        if (Psi.rows() <= 0 || Psi.cols() != w_boot.rows()) {
+            throw std::invalid_argument(
+                "RGCCA: Psi must have one column per bootstrap weight coefficient"
+            );
+        }
+
+        const double alpha_low = (1.0 - boot_results.ci_level) / 2.0;
+        const double alpha_high = 1.0 - alpha_low;
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        const int B_eff = std::min(
+            boot_results.B_used_by_lambda[lambda_i],
+            static_cast<int>(w_boot.cols())
+        );
+
+        Vector ci_low(Psi.rows());
+        Vector ci_high(Psi.rows());
+
+        if (B_eff <= 0) {
+            ci_low.setConstant(nan);
+            ci_high.setConstant(nan);
+            return {ci_low, ci_high};
+        }
+
+        const Matrix w_eval = Psi * w_boot.leftCols(B_eff);
+
+        for (int r = 0; r < w_eval.rows(); ++r) {
+            std::vector<double> values;
+            values.reserve(B_eff);
+
+            for (int b = 0; b < B_eff; ++b)
+                values.push_back(w_eval(r, b));
+
+            ci_low[r] = empirical_quantile_(values, alpha_low);
+            ci_high[r] = empirical_quantile_(values, alpha_high);
+        }
+
+        return {ci_low, ci_high};
     }
     void ensure_design_initialized_() {
         if (C_.rows() == n_blocks() && C_.cols() == n_blocks()) return;
@@ -1670,6 +1817,7 @@ private:
             const int J_
         ) : n_threads(n_threads_), J(J_) {
             seed = bootstrap_config.seed + static_cast<unsigned>(h);
+            B_min = bootstrap_config.B_min;
             B_max = bootstrap_config.B_max;
             B_batch = n_threads * bootstrap_config.B_per_thread_per_batch;
             corr_pos_count.setZero(J, J);
@@ -1689,6 +1837,7 @@ private:
         int n_threads;
         int J;
         int seed;
+        int B_min;
         int B_max;
         int B_batch;
 
@@ -1729,7 +1878,7 @@ private:
         AdaptiveBootstrapState bootstrap_state(bootstrap_config_, n_threads, h_, J);
         BootstrapSelectionResult boot_results(
             h_, bootstrap_state.B_max, lambda_grid_weights_[h_],
-            block_names_(blocks), block_dims_(blocks)
+            block_names_(blocks), block_dims_(blocks), bootstrap_config_.ci_level
         );
         std::cout << "<--" << std::endl;
 
@@ -1814,6 +1963,7 @@ private:
 
             boot_results.w_fit_by_lambda[lambda_i] = w_fit;
             boot_results.w_min_by_lambda[lambda_i] = w_min;
+            boot_results.corr_min_by_lambda[lambda_i] = corr_matrix_with_weights_(blocks, w_min).cwiseProduct(C_lambda.cast<double>() + Matrix::Identity(J, J));
             boot_results.criterion[lambda_i] = bootstrap_state.crit;
             boot_results.B_used_by_lambda[lambda_i] = bootstrap_state.B_done;
 
@@ -1837,10 +1987,12 @@ private:
         }
 
         resize_bootstrap_results_(boot_results, static_cast<int>(lambda_grid_weights_[h_].size()), J);
+        compute_bootstrap_corr_cis_(boot_results, J);
 
         if (bootstrap_state.best_i < 0)
             throw std::runtime_error("No lambda was evaluated during bootstrap selection");
 
+        boot_results.lambda_opt_index = bootstrap_state.best_i;
         boot_results.lambda_opt = lambda_grid_weights_[h_][bootstrap_state.best_i];
 
         std::cout << "\nOptimal lambda: " << boot_results.lambda_opt << std::endl;
@@ -1947,9 +2099,7 @@ private:
                 const int b_global = B_offset + b;
 
                 const Matrix& corr_b = thread_corr_boot[tid][local_col];
-
-                boot_results.corr_boot_by_lambda[lambda_i].col(b_global) =
-                    Eigen::Map<const Vector>(corr_b.data(), J * J);
+                boot_results.corr_boot_by_lambda[lambda_i].col(b_global) = Eigen::Map<const Vector>(corr_b.data(), J * J);
 
                 for (int j = 0; j < J; ++j) {
                     for (int k = j + 1; k < J; ++k) {
@@ -2018,7 +2168,7 @@ private:
 
         state.crit_prev_batch = state.crit;
 
-        if (state.stable_batches >= config.stable_batches_required) {
+        if (state.stable_batches >= config.stable_batches_required && state.B_done >= state.B_min) {
             std::cout << ", adaptive stop (stable)" << std::endl;
             return true;
         }
@@ -2107,9 +2257,7 @@ private:
                 const int row_jk = j + k * J;
 
                 for (int b = 0; b < B_eff; ++b) {
-                    const double corr_jk =
-                        boot_results.corr_boot_by_lambda[lambda_i](row_jk, b);
-
+                    const double corr_jk = boot_results.corr_boot_by_lambda[lambda_i](row_jk, b);
                     abs_corr.push_back(std::abs(corr_jk));
                 }
 
@@ -2172,6 +2320,57 @@ private:
         const double lower = x[mid - 1];
 
         return 0.5 * (lower + upper);
+    }
+    double empirical_quantile_(std::vector<double>& x, const double p) const {
+        x.erase(
+            std::remove_if(x.begin(), x.end(), [](const double v) { return !std::isfinite(v); }),
+            x.end()
+        );
+
+        if (x.empty())
+            return std::numeric_limits<double>::quiet_NaN();
+
+        std::sort(x.begin(), x.end());
+
+        if (x.size() == 1)
+            return x.front();
+
+        const double pos = std::clamp(p, 0.0, 1.0) * static_cast<double>(x.size() - 1);
+        const std::size_t lo = static_cast<std::size_t>(std::floor(pos));
+        const std::size_t hi = static_cast<std::size_t>(std::ceil(pos));
+        const double frac = pos - static_cast<double>(lo);
+
+        return (1.0 - frac) * x[lo] + frac * x[hi];
+    }
+    std::pair<double, double> fisher_z_corr_ci_(
+        const Matrix& corr_boot,
+        const int row,
+        const int B_eff,
+        const double alpha_low,
+        const double alpha_high
+    ) const {
+        constexpr double eps = 1e-12;
+
+        std::vector<double> z_values;
+        z_values.reserve(B_eff);
+
+        for (int b = 0; b < B_eff; ++b) {
+            const double corr = corr_boot(row, b);
+            if (!std::isfinite(corr)) continue;
+
+            const double corr_clamped = std::clamp(corr, -1.0 + eps, 1.0 - eps);
+            z_values.push_back(std::atanh(corr_clamped));
+        }
+
+        const double z_low = empirical_quantile_(z_values, alpha_low);
+        const double z_high = empirical_quantile_(z_values, alpha_high);
+
+        if (!std::isfinite(z_low) || !std::isfinite(z_high)) {
+            const double nan = std::numeric_limits<double>::quiet_NaN();
+            return {nan, nan};
+        }
+
+        return {std::tanh(z_low), std::tanh(z_high)};
     }
     double corr_with_weights_pair_(
         Block* block_j,
@@ -2283,6 +2482,46 @@ private:
             );
         }
     }
+    void compute_bootstrap_corr_cis_(BootstrapSelectionResult& boot_results, int J) const {
+        const double alpha_low = (1.0 - boot_results.ci_level) / 2.0;
+        const double alpha_high = 1.0 - alpha_low;
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+
+        for (std::size_t i = 0; i < boot_results.lambda_grid.size(); ++i) {
+            const int B_eff = boot_results.B_used_by_lambda[i];
+
+            if (B_eff <= 0) {
+                boot_results.corr_ci_low_by_lambda[i].setConstant(J, J, nan);
+                boot_results.corr_ci_high_by_lambda[i].setConstant(J, J, nan);
+
+                continue;
+            }
+
+            boot_results.corr_ci_low_by_lambda[i].setZero(J, J);
+            boot_results.corr_ci_high_by_lambda[i].setZero(J, J);
+
+            for (int j = 0; j < J; ++j) {
+                boot_results.corr_ci_low_by_lambda[i](j, j) = 1.0;
+                boot_results.corr_ci_high_by_lambda[i](j, j) = 1.0;
+
+                for (int k = j + 1; k < J; ++k) {
+                    const int row_jk = j + k * J;
+                    const auto [ci_low, ci_high] = fisher_z_corr_ci_(
+                        boot_results.corr_boot_by_lambda[i],
+                        row_jk,
+                        B_eff,
+                        alpha_low,
+                        alpha_high
+                    );
+
+                    boot_results.corr_ci_low_by_lambda[i](j, k) = ci_low;
+                    boot_results.corr_ci_low_by_lambda[i](k, j) = ci_low;
+                    boot_results.corr_ci_high_by_lambda[i](j, k) = ci_high;
+                    boot_results.corr_ci_high_by_lambda[i](k, j) = ci_high;
+                }
+            }
+        }
+    }
 
 
     void set_row_index_all_(const BlockRefList& blocks, const typename Block::IndexVector& idx) {
@@ -2390,8 +2629,12 @@ private:
     void validate_bootstrap_config_() const {
         if (bootstrap_config_.max_threads <= 0)
             throw std::invalid_argument("RGCCA: bootstrap max_threads must be positive");
+        if (bootstrap_config_.B_min <= 0)
+            throw std::invalid_argument("RGCCA: bootstrap B_min must be positive");
         if (bootstrap_config_.B_max <= 0)
             throw std::invalid_argument("RGCCA: bootstrap B_max must be positive");
+        if (bootstrap_config_.B_min > bootstrap_config_.B_max)
+            throw std::invalid_argument("RGCCA: bootstrap B_max must be greater than B_min");
         if (bootstrap_config_.B_per_thread_per_batch <= 0)
             throw std::invalid_argument("RGCCA: bootstrap B_per_thread_per_batch must be positive");
         if (bootstrap_config_.stable_batches_required <= 0)
@@ -2416,6 +2659,13 @@ private:
             throw std::invalid_argument(
                 "RGCCA: bootstrap active_connection_min_abs_corr must be finite and nonnegative"
             );
+        }
+        if (
+            !(bootstrap_config_.ci_level > 0.0) ||
+            bootstrap_config_.ci_level >= 1.0 ||
+            !std::isfinite(bootstrap_config_.ci_level)
+        ) {
+            throw std::invalid_argument("RGCCA: bootstrap ci_level must be finite and in (0, 1)");
         }
         if (bootstrap_config_.patience <= 0)
             throw std::invalid_argument("RGCCA: bootstrap patience must be positive");
