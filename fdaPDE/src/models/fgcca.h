@@ -1635,20 +1635,16 @@ private:
 
         return out;
     }
-    BootstrapBlocks clone_blocks_from_(const BootstrapBlocks& src) const {
-        BootstrapBlocks out;
-        out.owners.reserve(src.refs.size());
-        out.refs.reserve(src.refs.size());
+    void copy_weights_snapshot_(const BlockRefList& blocks, const std::vector<Vector>& weights) const {
+        if (blocks.size() != weights.size())
+            throw std::logic_error("copy_weights_snapshot_: size mismatch");
 
-        for (auto* b : src.refs) {
-            auto copy = b->clone();
-            copy->set_raw_data_mutable(false);
+        for (std::size_t j = 0; j < blocks.size(); ++j) {
+            if (blocks[j]->n_dofs_weights() != weights[j].size())
+                throw std::logic_error("copy_weights_snapshot_: incompatible weight size");
 
-            out.refs.push_back(copy.get());
-            out.owners.push_back(std::move(copy));
+            blocks[j]->weights().col(h_) = weights[j];
         }
-
-        return out;
     }
     std::vector<std::string> block_names_(const BlockRefList& blocks) const {
         std::vector<std::string> out;
@@ -1909,13 +1905,13 @@ private:
             set_lambda_weights_all(lambda);
             init_comp_(blocks, InitStrategy::WarmStart);
             fit_component_(blocks, C_active);
-            auto w_fit = weights_(blocks);
+            auto w_fit = snapshot_weights_(blocks);
             auto w_min = w_fit;
 
-            fdapde::cout << "  Clone blocks --> ";
-            std::vector<BootstrapBlocks> thread_boot_template(n_threads);
+            fdapde::cout << "  Clone worker blocks --> ";
+            std::vector<BootstrapBlocks> thread_boot_worker(n_threads);
             for (int t = 0; t < n_threads; ++t) {
-                thread_boot_template[t] = clone_blocks_();
+                thread_boot_worker[t] = clone_blocks_();
             }
             fdapde::cout << "<--" << std::endl;
 
@@ -1933,7 +1929,7 @@ private:
                 auto bootstrap_timing = run_bootstrap_batch_(
                     lambda_i,
                     bootstrap_state,
-                    thread_boot_template,
+                    thread_boot_worker,
                     C_active,
                     w_fit,
                     w_min,
@@ -2035,7 +2031,7 @@ private:
     };
     BootstrapBatchTiming run_bootstrap_batch_(
         int lambda_i, AdaptiveBootstrapState& bootstrap_state,
-        const std::vector<BootstrapBlocks>& thread_boot_template,
+        std::vector<BootstrapBlocks>& thread_boot_worker,
         const BoolMatrix& C_active,
         const std::vector<Vector>& w_fit,
         std::vector<Vector>& w_min,
@@ -2072,7 +2068,8 @@ private:
         parallel_for(0, B_run, 1, [&](int b) {
 
             const int tid = this_thread_id();
-            auto boot_blocks = clone_blocks_from_(thread_boot_template[tid]);
+            auto& boot_blocks = thread_boot_worker[tid];
+            copy_weights_snapshot_(boot_blocks.refs, w_fit);
 
             set_row_index_all_(boot_blocks.refs, bootstrap_idx[b]);
 
@@ -2086,7 +2083,7 @@ private:
             const int local_col = thread_count[tid]++;
             thread_sample_id[tid][local_col] = b;
 
-            auto w_b = weights_(boot_blocks.refs);
+            auto w_b = snapshot_weights_(boot_blocks.refs);
 
             for (int j = 0; j < J; ++j) {
                 if (w_b[j].dot(w_fit[j]) < 0.0) w_b[j] *= -1.0;
@@ -2779,18 +2776,6 @@ private:
                 eta = Psi_T() * eta;
             }
             out.push_back(std::move(eta));
-        }
-
-        return out;
-    }
-
-    // weights
-    std::vector<Vector> weights_(const BlockRefList& blocks) const {
-        std::vector<Vector> out;
-        out.reserve(blocks.size());
-
-        for (auto* b : blocks) {
-            out.push_back(b->weights().col(h_));
         }
 
         return out;
