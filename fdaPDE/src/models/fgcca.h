@@ -1964,7 +1964,8 @@ private:
 
             boot_results.w_fit_by_lambda[lambda_i] = w_fit;
             boot_results.w_min_by_lambda[lambda_i] = w_min;
-            boot_results.corr_min_by_lambda[lambda_i] = corr_matrix_with_weights_(blocks, w_min).cwiseProduct(C_lambda.cast<double>() + Matrix::Identity(J, J));
+            correlation_matrix_(blocks, w_min, boot_results.corr_min_by_lambda[lambda_i]);
+            boot_results.corr_min_by_lambda[lambda_i].array() *= (C_lambda.cast<double>() + Matrix::Identity(J, J)).array();
             boot_results.criterion[lambda_i] = bootstrap_state.crit;
             boot_results.B_used_by_lambda[lambda_i] = bootstrap_state.B_done;
 
@@ -2085,9 +2086,7 @@ private:
             }
 
             clear_row_index_all_(boot_blocks.refs);
-
-            Matrix corr_b = corr_matrix_with_weights_(boot_blocks.refs, w_b);
-            thread_corr_boot[tid][local_col] = std::move(corr_b);
+            correlation_matrix_(boot_blocks.refs, w_b, thread_corr_boot[tid][local_col]);
 
         });
 
@@ -2372,41 +2371,6 @@ private:
         }
 
         return {std::tanh(z_low), std::tanh(z_high)};
-    }
-    double corr_with_weights_pair_(
-        Block* block_j,
-        Block* block_k,
-        const Vector& w_j,
-        const Vector& w_k
-    ) const {
-        const Vector eta_j = block_j->data() * block_j->Psi_D() * w_j;
-        const Vector eta_k = block_k->data() * block_k->Psi_D() * w_k;
-
-        const double var_j = cov_(eta_j, eta_j);
-        const double var_k = cov_(eta_k, eta_k);
-
-        if (var_j <= 0.0 || var_k <= 0.0) return 0.0;
-
-        return cov_(eta_j, eta_k) / std::sqrt(var_j * var_k);
-    }
-    Matrix corr_matrix_with_weights_(
-        const BlockRefList& blocks,
-        const std::vector<Vector>& weights
-    ) const {
-        const int J = static_cast<int>(blocks.size());
-        Matrix Corr = Matrix::Identity(J, J);
-
-        for (int j = 0; j < J; ++j) {
-            for (int k = j + 1; k < J; ++k) {
-                const double c = corr_with_weights_pair_(
-                    blocks[j], blocks[k], weights[j], weights[k]
-                );
-                Corr(j, k) = c;
-                Corr(k, j) = c;
-            }
-        }
-
-        return Corr;
     }
     void deactivate_isolated_blocks_(BoolMatrix& C_active) const {
         const int J = static_cast<int>(C_active.rows());
@@ -2761,14 +2725,55 @@ private:
             return b.components_m().col(h_);
         }
     }
-    Vector eta_eval_(Block& b, const Vector& a) {
-        // computed wrt a and normalized wrt M (no regularization)
-        const Vector eta = b.normalized_component_for_evaluation(a, h_);
-        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
-            return Psi_T() * eta;
-        } else {
-            return eta;
+    std::vector<Vector> eta_(const BlockRefList& blocks) const {
+        std::vector<Vector> out;
+        out.reserve(blocks.size());
+
+        for (auto* b : blocks)
+            out.push_back(eta_(*b));
+
+        return out;
+    }
+    std::vector<Vector> eta_with_weights_(const BlockRefList& blocks, const std::vector<Vector>& weights) const {
+        const int J = static_cast<int>(blocks.size());
+
+        if (static_cast<int>(weights.size()) != J)
+            throw std::logic_error("eta_with_weights_: size mismatch");
+
+        std::vector<Vector> out;
+        out.reserve(blocks.size());
+
+        for (int j = 0; j < J; ++j) {
+            if (weights[j].size() != blocks[j]->n_dofs_weights())
+                throw std::logic_error("eta_with_weights_: incompatible weight size");
+
+            out.push_back(blocks[j]->data() * blocks[j]->Psi_D() * weights[j]);
         }
+
+        return out;
+    }
+    std::vector<Vector> eta_with_weights_for_evaluation_(const BlockRefList& blocks, const std::vector<Vector>& weights) {
+        const int J = static_cast<int>(blocks.size());
+
+        if (static_cast<int>(weights.size()) != J)
+            throw std::logic_error("eta_with_weights_for_evaluation_: size mismatch");
+
+        std::vector<Vector> out;
+        out.reserve(blocks.size());
+
+        for (int j = 0; j < J; ++j) {
+            if (weights[j].size() != blocks[j]->n_dofs_weights())
+                throw std::logic_error("eta_with_weights_for_evaluation_: incompatible weight size");
+
+            // Evaluation normalizes with M, not Omega, so the penalty does not affect the reported component.
+            Vector eta = blocks[j]->normalized_component_for_evaluation(weights[j], h_);
+            if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
+                eta = Psi_T() * eta;
+            }
+            out.push_back(std::move(eta));
+        }
+
+        return out;
     }
 
     // weights
@@ -2783,7 +2788,7 @@ private:
         return out;
     }
 
-    // covariance
+    // covariance and correlation
     double cov_(const Vector& u, const Vector& v) const {
         const double den = opt_.bias ? u.size() : std::max<int>(1, u.size() - 1);
         return (u.dot(v) - static_cast<double>(u.size()) * u.mean() * v.mean()) / den;
@@ -2808,42 +2813,48 @@ private:
         ws.dirty(l, l) = 0;
         ws.Cov(l, l) = 1.0;
     }
-    void covariance_matrix_(const BlockRefList& blocks, Matrix& Cov) const {
-        const int J = n_blocks();
-        for (int j = 0; j < J; ++j) {
-            const Vector eta_j = eta_(*blocks[j]);
+    void covariance_matrix_(const std::vector<Vector>& eta, Matrix& Cov) const {
+        const int J = static_cast<int>(eta.size());
+        Cov.setZero(J, J);
 
-            for (int k = 0; k < J; ++k) {
-                const Vector eta_k = eta_(*blocks[k]);
-                Cov(j, k) = cov_(eta_j, eta_k);
+        for (int j = 0; j < J; ++j) {
+            for (int k = j; k < J; ++k) {
+                const double c = cov_(eta[j], eta[k]);
+                Cov(j, k) = c;
+                Cov(k, j) = c;
             }
         }
     }
+    void covariance_matrix_(const BlockRefList& blocks, Matrix& Cov) const {
+        covariance_matrix_(eta_(blocks), Cov);
+    }
     void correlation_matrix_(const BlockRefList& blocks, Matrix& Corr) const {
-        const int J = n_blocks();
-
+        correlation_matrix_(eta_(blocks), Corr);
+    }
+    void correlation_matrix_(const std::vector<Vector>& eta, Matrix& Corr) const {
+        const int J = static_cast<int>(eta.size());
         Corr.setIdentity(J, J);
 
+        std::vector<double> vars(J);
         for (int j = 0; j < J; ++j) {
+            vars[j] = cov_(eta[j], eta[j]);
+        }
 
-            const Vector eta_j = eta_(*blocks[j]);
-            const double var_j = cov_(eta_j, eta_j);
-
+        for (int j = 0; j < J; ++j) {
             for (int k = j + 1; k < J; ++k) {
-
-                const Vector eta_k = eta_(*blocks[k]);
-                const double var_k = cov_(eta_k, eta_k);
-
                 double corr_jk = 0.0;
 
-                if (var_j > 0.0 && var_k > 0.0) {
-                    corr_jk = cov_(eta_j, eta_k) / std::sqrt(var_j * var_k);
+                if (vars[j] > 0.0 && vars[k] > 0.0) {
+                    corr_jk = cov_(eta[j], eta[k]) / std::sqrt(vars[j] * vars[k]);
                 }
 
                 Corr(j, k) = corr_jk;
                 Corr(k, j) = corr_jk;
             }
         }
+    }
+    void correlation_matrix_(const BlockRefList& blocks, const std::vector<Vector>& weights, Matrix& Corr) const {
+        correlation_matrix_(eta_with_weights_(blocks, weights), Corr);
     }
 
     // optimization criteria
@@ -2865,31 +2876,19 @@ private:
     double rho_tot_with_weights_(const BlockRefList& blocks, const std::vector<Vector>& weights, const BoolMatrix& C) const {
         const int J = n_blocks();
 
-        if (static_cast<int>(weights.size()) != J)
-            throw std::logic_error("rho_tot_with_weights_: size mismatch");
-
         double num = 0.0;
         double den = 0.0;
 
-        std::vector<Vector> eta(J);
+        const std::vector<Vector> eta = eta_with_weights_(blocks, weights);
+        std::vector<double> eta_norms(J);
+        for (int j = 0; j < J; ++j)
+            eta_norms[j] = std::sqrt(eta[j].squaredNorm());
 
         for (int j = 0; j < J; ++j) {
-            if (weights[j].size() != blocks[j]->n_dofs_weights())
-                throw std::logic_error("rho_tot_with_weights_: incompatible weight size");
-
-            eta[j] = blocks[j]->data() * blocks[j]->Psi_D() *  weights[j];
-        }
-
-        for (int j = 0; j < J; ++j) {
-            const double nj = std::sqrt(eta[j].squaredNorm());
-
             for (int k = j + 1; k < J; ++k) {
                 if (!C(j, k)) continue;
-
-                const double nk = std::sqrt(eta[k].squaredNorm());
-
-                if (nj > 0.0 && nk > 0.0) {
-                    const double corr_jk = eta[j].dot(eta[k]) / (nj * nk);
+                if (eta_norms[j] > 0.0 && eta_norms[k] > 0.0) {
+                    const double corr_jk = eta[j].dot(eta[k]) / (eta_norms[j] * eta_norms[k]);
                     if (opt_.scheme.name == "Horst") num += corr_jk;
                     else num += std::abs(corr_jk);
                     den += 1.0;
@@ -2902,22 +2901,10 @@ private:
     double criterion_score_with_weights_(const BlockRefList& blocks, const std::vector<Vector>& weights, const BoolMatrix& C) {
         const int J = n_blocks();
 
-        if (static_cast<int>(weights.size()) != J)
-            throw std::logic_error("criterion_score_with_weights_: size mismatch");
-
         double num = 0.0;
         double den = 0.0;
 
-        std::vector<Vector> eta(J);
-
-        for (int j = 0; j < J; ++j) {
-
-            if (weights[j].size() != blocks[j]->n_dofs_weights())
-                throw std::logic_error("criterion_score_with_weights_: incompatible weight size");
-
-            eta[j] = eta_eval_(*blocks[j], weights[j]);
-
-        }
+        const std::vector<Vector> eta = eta_with_weights_for_evaluation_(blocks, weights);
         for (int j = 0; j < J; ++j) {
             for (int k = j + 1; k < J; ++k) {
                 if (!C(j, k)) continue;
@@ -2957,7 +2944,7 @@ private:
 };
 
 
-// Pretty printer for a single Result
+// pretty printer for a single Result
 inline std::ostream& operator<<(std::ostream& os, const Result& r) {
     const bool minimal = false;
     if (!minimal) {
@@ -3012,7 +2999,7 @@ inline std::ostream& operator<<(std::ostream& os, const Result& r) {
     return os;
 }
 
-// Pretty printer for a vector of Result (components)
+// pretty printer for a vector of Result (components)
 inline std::ostream& operator<<(std::ostream& os, const std::vector<Result>& results) {
     for (size_t h = 0; h < results.size(); ++h) {
         os << "\n";
