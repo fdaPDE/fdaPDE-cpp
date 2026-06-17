@@ -26,6 +26,7 @@
 #include <cmath>
 #include <limits>
 #include <numeric>
+#include <optional>
 #include <random>
 #include <string_view>
 
@@ -1107,6 +1108,8 @@ public:
         LambdaSelection lambda_selection_weights;
         LambdaSelection lambda_selection_components;
         bool component_significance;
+        bool block_deactivation;
+        bool connection_deactivation;
         Mode mode;
         WeightSignConstraint weight_sign_constraint;
         Deflation deflation_mode;
@@ -1120,7 +1123,8 @@ public:
           const LambdaSelection lambda_selection_components_ = LambdaSelection::Automatic,
           const bool component_significance_ = false,
           const Deflation deflation_mode_ = Deflation::Scores, const Scheme& scheme_ = Scheme::Factorial(),
-          const bool verbose_ = false, const bool cache_ = true) :
+          const bool verbose_ = false, const bool cache_ = true,
+          const bool block_deactivation_ = false, const bool connection_deactivation_ = false) :
             max_iter(max_iter_),
             tol(tol_),
             bias(bias_),
@@ -1130,6 +1134,8 @@ public:
             lambda_selection_weights(lambda_selection_weights_),
             lambda_selection_components(lambda_selection_components_),
             component_significance(component_significance_),
+            block_deactivation(block_deactivation_),
+            connection_deactivation(connection_deactivation_),
             deflation_mode(deflation_mode_),
             scheme(scheme_),
             verbose(verbose_),
@@ -1395,11 +1401,15 @@ public:
 
         const int J = n_blocks();
         if (J < 2) throw std::runtime_error("RGCCA: need ≥ 2 blocks");
+        const bool run_model_selection = bootstrap_model_selection_requested_();
         if (opt_.component_significance)
+            validate_bootstrap_support_();
             validate_component_significance_config_();
-        if (opt_.lambda_selection_weights == LambdaSelection::Automatic) {
-            validate_weight_lambda_selection_support_();
+        if (run_model_selection) {
+            validate_bootstrap_support_();
             validate_bootstrap_config_();
+        }
+        if (opt_.lambda_selection_weights == LambdaSelection::Automatic) {
             validate_lambda_grid_weights_();
         }
 
@@ -1413,13 +1423,13 @@ public:
         for (int hh = 0; hh < n_comp(); ++hh) {
             set_h_(hh);
 
-            // weights lambda selection
+            // bootstrap model selection
             BoolMatrix C_active = C_;
-            if (opt_.lambda_selection_weights == LambdaSelection::Automatic) {
-                auto selection = select_lambda_weights_bootstrap_parallel_();
-                const double lambda = selection.first;
-                C_active = std::move(selection.second);
-                set_lambda_weights_all(lambda);
+            if (run_model_selection) {
+                auto selection = bootstrap_model_selection_();
+                C_active = std::move(selection.C_active);
+                if (selection.lambda_selected)
+                    set_lambda_weights_all(selection.lambda);
             }
 
             // final fit
@@ -1427,7 +1437,7 @@ public:
             Result component_result = fit_component_(C_active);
 
             if (opt_.component_significance) {
-                const auto significance = test_component_significance_(C_active);
+                const auto significance = bootstrap_test_component_significance_(C_active);
                 annotate_component_significance_(component_result, significance);
 
                 if (!significance.significant) {
@@ -1910,10 +1920,34 @@ private:
         int no_improve = 0;
     };
 
-    std::pair<double, BoolMatrix> select_lambda_weights_bootstrap_parallel_() {
-        fdapde::cout << "\n=========================" << std::endl;
-        fdapde::cout << "Bootstrap for component " << h_ +1 << std::endl;
-        fdapde::cout << "=========================\n" << std::endl;
+    struct ModelSelectionResult {
+        bool lambda_selected = false;
+        double lambda = std::numeric_limits<double>::quiet_NaN();
+        BoolMatrix C_active;
+    };
+
+    bool bootstrap_model_selection_requested_() const {
+        return opt_.block_deactivation ||
+            opt_.connection_deactivation ||
+            opt_.lambda_selection_weights == LambdaSelection::Automatic;
+    }
+    bool weight_lambda_selection_requested_() const {
+        return opt_.lambda_selection_weights == LambdaSelection::Automatic;
+    }
+    std::vector<double> model_selection_lambda_grid_() const {
+        if (weight_lambda_selection_requested_())
+            return lambda_grid_weights_[h_];
+
+        return {std::numeric_limits<double>::quiet_NaN()};
+    }
+
+    ModelSelectionResult bootstrap_model_selection_() {
+        fdapde::cout << "\n=========================================" << std::endl;
+        fdapde::cout << "Bootstrap model selection for component " << h_ + 1 << std::endl;
+        fdapde::cout << "=========================================\n" << std::endl;
+
+        const bool select_lambda = weight_lambda_selection_requested_();
+        const std::vector<double> lambda_grid = model_selection_lambda_grid_();
 
         // set the number of threads
         const int n_threads = bootstrap_n_threads_();
@@ -1928,27 +1962,32 @@ private:
         fdapde::cout << "Init bootstrap --> ";
         AdaptiveBootstrapState bootstrap_state(bootstrap_config_, n_threads, h_, J);
         BootstrapSelectionResult boot_results(
-            h_, bootstrap_state.B_max, lambda_grid_weights_[h_],
+            h_, bootstrap_state.B_max, lambda_grid,
             block_names_(blocks), block_dims_(blocks), bootstrap_config_.ci_level
         );
         fdapde::cout << "<--" << std::endl;
 
         // preliminary fit
         fdapde::cout << "Preliminary fit --> ";
-        set_lambda_weights_all(lambda_grid_weights_[h_].back());
+        if (select_lambda)
+            set_lambda_weights_all(lambda_grid.back());
         init_comp_(blocks);
         fit_component_(blocks, C_active);
         fdapde::cout << "<--" << std::endl;
 
-        int n_lambda = static_cast<int>(lambda_grid_weights_[h_].size());
+        int n_lambda = static_cast<int>(lambda_grid.size());
         for (int lambda_i = n_lambda - 1; lambda_i >= 0; --lambda_i) {
 
-            // current lambda
-            const double lambda = lambda_grid_weights_[h_][lambda_i];
-            fdapde::cout << "- lambda = " << lambda << std::endl;
+            if (select_lambda) {
+                // current lambda
+                const double lambda = lambda_grid[lambda_i];
+                fdapde::cout << "- lambda = " << lambda << std::endl;
+                set_lambda_weights_all(lambda);
+            } else {
+                fdapde::cout << "- fixed weight regularization" << std::endl;
+            }
 
             // init warm start at lambda
-            set_lambda_weights_all(lambda);
             init_comp_(blocks, InitStrategy::WarmStart);
             fit_component_(blocks, C_active);
             auto w_fit = snapshot_weights_(blocks);
@@ -1982,7 +2021,9 @@ private:
                     boot_results
                 );
 
-                int n_active_blocks = threshold_inactive_blocks_(w_min, C_active);
+                int n_active_blocks = count_active_blocks_(C_active);
+                if (opt_.block_deactivation)
+                    n_active_blocks = threshold_inactive_blocks_(w_min, C_active);
                 int n_active_connections = count_active_connections_(C_active);
                 bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_);
 
@@ -2004,9 +2045,12 @@ private:
             }
 
             BoolMatrix C_lambda = C_active;
-            const int n_active_connections = threshold_inactive_connections_(
-                lambda_i, bootstrap_state, boot_results, C_lambda
-            );
+            int n_active_connections = count_active_connections_(C_lambda);
+            if (opt_.connection_deactivation) {
+                n_active_connections = threshold_inactive_connections_(
+                    lambda_i, bootstrap_state, boot_results, C_lambda
+                );
+            }
 
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
@@ -2038,16 +2082,20 @@ private:
 
         }
 
-        resize_bootstrap_results_(boot_results, static_cast<int>(lambda_grid_weights_[h_].size()), J);
+        resize_bootstrap_results_(boot_results, static_cast<int>(lambda_grid.size()), J);
         compute_bootstrap_corr_cis_(boot_results, J);
 
         if (bootstrap_state.best_i < 0)
-            throw std::runtime_error("No lambda was evaluated during bootstrap selection");
+            throw std::runtime_error("No model candidate was evaluated during bootstrap selection");
 
         boot_results.lambda_opt_index = bootstrap_state.best_i;
-        boot_results.lambda_opt = lambda_grid_weights_[h_][bootstrap_state.best_i];
+        if (select_lambda) {
+            boot_results.lambda_opt = lambda_grid[bootstrap_state.best_i];
+            fdapde::cout << "\nOptimal lambda: " << boot_results.lambda_opt << std::endl;
+        } else {
+            fdapde::cout << "\nNo weight lambda selection requested" << std::endl;
+        }
 
-        fdapde::cout << "\nOptimal lambda: " << boot_results.lambda_opt << std::endl;
 
         boot_results.active_blocks = active_blocks_from_C_(C_best);
         fdapde::cout << "\nBlocks deactivation:" << std::endl;
@@ -2063,10 +2111,11 @@ private:
 
         bootstrap_selection_results_.push_back(std::move(boot_results));
 
-        return {
-            bootstrap_selection_results_.back().lambda_opt,
-            C_best
-        };
+        ModelSelectionResult out;
+        out.lambda_selected = select_lambda;
+        out.lambda = bootstrap_selection_results_.back().lambda_opt;
+        out.C_active = C_best;
+        return out;
     }
 
     struct BootstrapBatchTiming {
@@ -2109,7 +2158,7 @@ private:
             results.push_back(std::move(inactive_result));
         }
     }
-    ComponentSignificanceResult test_component_significance_(const BoolMatrix& C_active) {
+    ComponentSignificanceResult bootstrap_test_component_significance_(const BoolMatrix& C_active) {
         ComponentSignificanceResult out;
 
         auto blocks = main_blocks_();
@@ -2545,6 +2594,10 @@ private:
 
         return n_active_connections;
     }
+    int count_active_blocks_(const BoolMatrix& C_active) const {
+        const auto active_blocks = active_blocks_from_C_(C_active);
+        return static_cast<int>(std::count(active_blocks.begin(), active_blocks.end(), true));
+    }
     std::vector<bool> active_blocks_from_C_(const BoolMatrix& C_active) const {
         const int J = static_cast<int>(C_active.rows());
 
@@ -2738,10 +2791,10 @@ private:
             set_h_(blocks, n_comp - 1);
     }
 
-    void validate_weight_lambda_selection_support_() const {
+    void validate_bootstrap_support_() const {
         if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
             throw std::runtime_error(
-                "RGCCA: automatic weight lambda selection uses bootstrap and is not supported "
+                "RGCCA: bootstrap is not supported "
                 "for TimeDependentSampling"
             );
         }

@@ -15,6 +15,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <cstdlib>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -101,17 +102,6 @@ void check_tau(
         }
     }
     EXPECT_TRUE(almost_equal<double>(actual_tau, load_market_matrix(reference_path)));
-}
-
-void write_tau_reference(
-  const std::vector<Result>& results, const std::string& reference_path, int n_blocks, int n_comp) {
-    Eigen::Matrix<double, Dynamic, Dynamic> actual_tau(n_blocks * n_comp, 1);
-    for (int h = 0; h < n_comp; ++h) {
-        for (int j = 0; j < n_blocks; ++j) {
-            actual_tau(h * n_blocks + j, 0) = results[h].tau_values[j];
-        }
-    }
-    write_market_matrix(actual_tau, reference_path + "ref_tau.mtx");
 }
 
 void write_component_significance_reference(
@@ -300,7 +290,6 @@ void check_rgcca_against_first_run(
     const auto results = rgcca.fit();
 
     if (update_functional_references()) {
-        write_tau_reference(results, reference_path, n_blocks, n_comp);
         for (const auto& block : rgcca.blocks()) {
             for (int h = 0; h < n_comp; ++h) {
                 write_block_component_reference(*block, reference_path, h);
@@ -308,8 +297,6 @@ void check_rgcca_against_first_run(
         }
         return;
     }
-
-    check_tau(results, reference_path + "ref_tau.mtx", n_blocks, n_comp);
 
     for (const auto& block : rgcca.blocks()) {
         for (int h = 0; h < n_comp; ++h) {
@@ -407,6 +394,92 @@ void check_bootstrap_references(
     }
 }
 
+void write_multivariate_bootstrap_references(
+  const RGCCA<IndependentSampling>& rgcca, const std::vector<Result>& results, const std::string& reference_path) {
+    const int n_results = static_cast<int>(results.size());
+    ASSERT_EQ(n_results, n_comp);
+
+    for (const auto& block : rgcca.blocks()) {
+        for (int h = 0; h < n_results; ++h) {
+            write_block_component_reference(*block, reference_path, h);
+        }
+    }
+
+    const auto bootstrap_results = rgcca.bootstrap_selection_results();
+    ASSERT_EQ(static_cast<int>(bootstrap_results.size()), n_results);
+
+    for (int h = 0; h < n_results; ++h) {
+        const auto* component = find_bootstrap_result(bootstrap_results, h);
+        ASSERT_NE(component, nullptr);
+        ASSERT_EQ(component->lambda_opt_index, 0);
+        ASSERT_EQ(static_cast<int>(component->lambda_grid.size()), 1);
+        EXPECT_TRUE(std::isnan(component->lambda_grid.front()));
+        EXPECT_TRUE(std::isnan(component->lambda_opt));
+
+        const std::string suffix = comp_suffix(h);
+        write_market_matrix(as_double_matrix(results[h].C), reference_path + "ref_connections" + suffix + ".mtx");
+
+        const int lambda_i = component->lambda_opt_index;
+        for (int j = 0; j < n_blocks; ++j) {
+            const std::string block_name = component->block_names[j];
+            write_market_matrix(
+              component->w_min_by_lambda[lambda_i][j],
+              reference_path + "ref_wmin_" + block_name + suffix + ".mtx");
+
+            const auto [ci_low, ci_high] = rgcca.bootstrap_weights_ci(h, j, rgcca.blocks()[j]->Psi_D());
+            write_market_matrix(ci_low, reference_path + "ref_weights_ci_low_" + block_name + suffix + ".mtx");
+            write_market_matrix(ci_high, reference_path + "ref_weights_ci_high_" + block_name + suffix + ".mtx");
+        }
+
+        write_market_matrix(component->corr_ci_low_by_lambda[lambda_i], reference_path + "ref_corr_ci_low" + suffix + ".mtx");
+        write_market_matrix(component->corr_ci_high_by_lambda[lambda_i], reference_path + "ref_corr_ci_high" + suffix + ".mtx");
+    }
+}
+
+void check_multivariate_bootstrap_references(
+  const RGCCA<IndependentSampling>& rgcca, const std::vector<Result>& results, const std::string& reference_path) {
+    const int n_results = static_cast<int>(results.size());
+    ASSERT_EQ(n_results, n_comp);
+
+    for (const auto& block : rgcca.blocks()) {
+        for (int h = 0; h < n_results; ++h) {
+            check_block_component(*block, reference_path, h);
+        }
+    }
+
+    const auto bootstrap_results = rgcca.bootstrap_selection_results();
+    ASSERT_EQ(static_cast<int>(bootstrap_results.size()), n_results);
+
+    for (int h = 0; h < n_results; ++h) {
+        const auto* component = find_bootstrap_result(bootstrap_results, h);
+        ASSERT_NE(component, nullptr);
+        ASSERT_EQ(component->lambda_opt_index, 0);
+        ASSERT_EQ(static_cast<int>(component->lambda_grid.size()), 1);
+        EXPECT_TRUE(std::isnan(component->lambda_grid.front()));
+        EXPECT_TRUE(std::isnan(component->lambda_opt));
+
+        const std::string suffix = comp_suffix(h);
+        check_market_matrix(as_double_matrix(results[h].C), reference_path + "ref_connections" + suffix + ".mtx");
+
+        const int lambda_i = component->lambda_opt_index;
+        for (int j = 0; j < n_blocks; ++j) {
+            const std::string block_name = component->block_names[j];
+            SCOPED_TRACE("mv_bootstrap_" + block_name + suffix);
+
+            check_market_matrix(
+              component->w_min_by_lambda[lambda_i][j],
+              reference_path + "ref_wmin_" + block_name + suffix + ".mtx");
+
+            const auto [ci_low, ci_high] = rgcca.bootstrap_weights_ci(h, j, rgcca.blocks()[j]->Psi_D());
+            check_market_matrix(ci_low, reference_path + "ref_weights_ci_low_" + block_name + suffix + ".mtx");
+            check_market_matrix(ci_high, reference_path + "ref_weights_ci_high_" + block_name + suffix + ".mtx");
+        }
+
+        check_market_matrix(component->corr_ci_low_by_lambda[lambda_i], reference_path + "ref_corr_ci_low" + suffix + ".mtx");
+        check_market_matrix(component->corr_ci_high_by_lambda[lambda_i], reference_path + "ref_corr_ci_high" + suffix + ".mtx");
+    }
+}
+
 void check_fem_bootstrap_rgcca_against_first_run() {
     const std::string data_path = "../data/models/rgcca/";
     const std::string reference_path = data_path + "functional/fem_bootstrap_cov/";
@@ -414,6 +487,8 @@ void check_fem_bootstrap_rgcca_against_first_run() {
     RGCCA<IndependentSampling>::Options options;
     options.mode = Mode::CovMax;
     options.lambda_selection_weights = LambdaSelection::Automatic;
+    options.block_deactivation = true;
+    options.connection_deactivation = true;
 
     RGCCA<IndependentSampling> rgcca(n_obs, options, n_comp);
     add_fem_functional_blocks(rgcca, data_path);
@@ -429,7 +504,6 @@ void check_fem_bootstrap_rgcca_against_first_run() {
     const auto results = rgcca.fit();
 
     if (update_functional_references()) {
-        write_tau_reference(results, reference_path, n_blocks, n_comp);
         for (const auto& block : rgcca.blocks()) {
             for (int h = 0; h < n_comp; ++h) {
                 write_block_component_reference(*block, reference_path, h);
@@ -439,14 +513,40 @@ void check_fem_bootstrap_rgcca_against_first_run() {
         return;
     }
 
-    check_tau(results, reference_path + "ref_tau.mtx", n_blocks, n_comp);
-
     for (const auto& block : rgcca.blocks()) {
         for (int h = 0; h < n_comp; ++h) {
             check_block_component(*block, reference_path, h);
         }
     }
     check_bootstrap_references(rgcca, results, reference_path);
+}
+
+void check_multivariate_model_selection_without_lambda_grid() {
+    const std::string data_path = "../data/models/rgcca/";
+    const std::string reference_path = data_path + "bootstrap/mv_deactivation_cov/";
+
+    RGCCA<IndependentSampling>::Options options;
+    options.mode = Mode::CovMax;
+    options.block_deactivation = true;
+
+    RGCCA<IndependentSampling> rgcca(n_obs, options, n_comp);
+    add_multivariate_blocks(rgcca, data_path);
+    connect_reference_design(rgcca);
+
+    RGCCA<IndependentSampling>::BootstrapConfig bootstrap_config;
+    bootstrap_config.max_threads = 1;
+    bootstrap_config.B_per_thread_per_batch = 5*12;
+    bootstrap_config.patience = 1;
+    rgcca.set_bootstrap_config(bootstrap_config);
+
+    const auto results = rgcca.fit();
+
+    if (update_functional_references()) {
+        write_multivariate_bootstrap_references(rgcca, results, reference_path);
+        return;
+    }
+
+    check_multivariate_bootstrap_references(rgcca, results, reference_path);
 }
 
 void check_fem_cov_component_significance() {
@@ -546,6 +646,10 @@ TEST(rgcca, F_GCCA_NN_splines_cov) {
 
 TEST(rgcca, F_GCCA_fem_bootstrap_cov) {
     check_fem_bootstrap_rgcca_against_first_run();
+}
+
+TEST(rgcca, GCCA_bootstrap_model_selection_without_lambda_grid) {
+    check_multivariate_model_selection_without_lambda_grid();
 }
 
 TEST(rgcca, F_GCCA_fem_cov_component_significance) {
