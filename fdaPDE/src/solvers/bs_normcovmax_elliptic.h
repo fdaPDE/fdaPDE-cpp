@@ -107,19 +107,24 @@ struct bs_normcovmax_elliptic {
         return true;
     }
 
-    void enforce_dof_(sparse_matrix_t& A, vector_t& rhs, const int dof, const double value) const {
-        rhs -= A.col(dof) * value;
-
+    void enforce_lhs_dirichlet_dof_(sparse_matrix_t& A, const int dof) const {
         A.row(dof) *= 0.0;
         A.col(dof) *= 0.0;
-
         A.coeffRef(dof, dof) = 1.0;
-        rhs[dof] = value;
     }
 
-    void enforce_lhs_dirichlet_bc_(sparse_matrix_t& A, vector_t& rhs) const {
+    void enforce_lhs_dirichlet_bc_(sparse_matrix_t& A) const {
         for (size_t i = 0; i < dirichlet_dofs_.size(); ++i) {
-            enforce_dof_(A, rhs, dirichlet_dofs_[i], dirichlet_vals_[i]);
+            enforce_lhs_dirichlet_dof_(A, dirichlet_dofs_[i]);
+        }
+    }
+
+    void enforce_rhs_dirichlet_bc_(const sparse_matrix_t& A, vector_t& rhs) const {
+        for (size_t i = 0; i < dirichlet_dofs_.size(); ++i) {
+            rhs -= A.col(dirichlet_dofs_[i]) * dirichlet_vals_[i];
+        }
+        for (size_t i = 0; i < dirichlet_dofs_.size(); ++i) {
+            rhs[dirichlet_dofs_[i]] = dirichlet_vals_[i];
         }
     }
 
@@ -174,7 +179,8 @@ struct bs_normcovmax_elliptic {
       z_(other.z_),
       W_(other.W_),
       Omega_(other.Omega_),
-      Omega_changed_(false) {
+      Omega_changed_(true),
+      factorization_ready_(false) {
         R0_.makeCompressed();
         R1_.makeCompressed();
         Psi_.makeCompressed();
@@ -253,6 +259,7 @@ struct bs_normcovmax_elliptic {
         eval_basis_at_(gf);   // update \Psi matrix
         W_ = W;
         Omega_changed_ = true;
+        factorization_ready_ = false;
     }
 
     // modifiers
@@ -263,6 +270,7 @@ struct bs_normcovmax_elliptic {
 
         if (pattern_changed) {
             Omega_changed_ = true;
+            factorization_ready_ = false;
         }
 
         if (na_pattern_ready_ && nan_pattern_.any()) {
@@ -280,6 +288,7 @@ struct bs_normcovmax_elliptic {
 
         W_ = W;
         Omega_changed_ = true;
+        factorization_ready_ = false;
     }
 
     template <typename WeightMatrix>
@@ -304,6 +313,7 @@ struct bs_normcovmax_elliptic {
 
         if (pattern_changed) {
             Omega_changed_ = true;
+            factorization_ready_ = false;
         }
 
         c_ = PsiNA().transpose() * z_;
@@ -314,6 +324,7 @@ struct bs_normcovmax_elliptic {
             Omega_ = PsiNA().transpose() * D_ * W_ * PsiNA() + lambda * P();
             Omega_.makeCompressed();
             Omega_changed_ = false;
+            factorization_ready_ = false;
             lambda_saved_ = lambda;
         }
         return Omega_;
@@ -323,13 +334,18 @@ struct bs_normcovmax_elliptic {
     vector_t fit(double lambda) {
         fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
 
-        auto A = Omega(lambda);
+        const auto& A = Omega(lambda);
         vector_t rhs = c();
 
-        enforce_lhs_dirichlet_bc_(A, rhs);
+        if (!factorization_ready_ || lambda_factorized_.value() != lambda) {
+            A_factorized_ = A;
+            enforce_lhs_dirichlet_bc_(A_factorized_);
+            invA_.compute(A_factorized_);
+            factorization_ready_ = true;
+            lambda_factorized_ = lambda;
+        }
 
-        invA_.compute(A);
-
+        enforce_rhs_dirichlet_bc_(A, rhs);
         f_ = invA_.solve(rhs);
         normalize_solution_(f_, lambda);
 
@@ -397,6 +413,9 @@ protected:
     // omega
     sparse_matrix_t Omega_;
     bool Omega_changed_ {true};
+    bool factorization_ready_ {false};
+    std::optional<double> lambda_factorized_ = -1;
+    sparse_matrix_t A_factorized_;
 
     // penalty
     sparse_matrix_t P_;

@@ -914,6 +914,7 @@ public:
     FunctionalBlock(const FunctionalBlock& other) :
         Base(other), weights_solver_(other.weights_solver_), lambda_weights_(other.lambda_weights_) {
         Omega_ready_ = false;
+        weights_solver_weights_ready_ = false;
     }
 
     std::unique_ptr<Base> clone() const override {
@@ -962,6 +963,7 @@ protected:
     void init_functional_(GeoFrame& gf, WeightsPenaltyType&& weights_penalty) {
         weights_solver_.discretize(weights_penalty.get());
         weights_solver_.analyze_data(gf, M());
+        weights_solver_weights_ready_ = true;
         init();
     }
 
@@ -975,18 +977,24 @@ protected:
             return solve_nonnegative_weight_ipopt_(z);  // already normalized
         }
 
-        weights_solver_.update_z_and_weights(z, M()); // can be optimized by passing M only when it has changed
+        if (!weights_solver_weights_ready_) {
+            weights_solver_.update_weights(M());
+            weights_solver_weights_ready_ = true;
+        }
+        weights_solver_.update_z(z);
         weights_solver_.fit(lambda_weights_);
         return weights_solver_.f(); // already normalized
     }
     void invalidate_derived_caches_() override {
         Omega_ready_ = false;
+        weights_solver_weights_ready_ = false;
         reset_nonnegative_weight_solver_();
     }
 
 private:
     SparseMatrix Omega_;
     bool Omega_ready_ {false};
+    bool weights_solver_weights_ready_ {false};
     WeightsSolverType weights_solver_;
     double lambda_weights_ = 1e-15;
 };
