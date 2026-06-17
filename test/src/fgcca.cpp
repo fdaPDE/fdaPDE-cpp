@@ -114,8 +114,46 @@ void write_tau_reference(
     write_market_matrix(actual_tau, reference_path + "ref_tau.mtx");
 }
 
+void write_component_significance_reference(
+  const std::vector<Result>& results, const std::string& reference_path, int n_blocks, int n_comp) {
+    Eigen::Matrix<double, Dynamic, Dynamic> significance(n_comp, 4);
+    Eigen::Matrix<double, Dynamic, Dynamic> active_blocks(n_comp, n_blocks);
+
+    for (int h = 0; h < n_comp; ++h) {
+        significance(h, 0) = results[h].rho_tot;
+        significance(h, 1) = results[h].rho_tot_p_value;
+        significance(h, 2) = static_cast<double>(results[h].rho_tot_bootstrap_count);
+        significance(h, 3) = results[h].component_significant ? 1.0 : 0.0;
+
+        for (int j = 0; j < n_blocks; ++j)
+            active_blocks(h, j) = results[h].active_blocks[j] ? 1.0 : 0.0;
+    }
+
+    write_market_matrix(significance, reference_path + "ref_component_significance.mtx");
+    write_market_matrix(active_blocks, reference_path + "ref_active_blocks.mtx");
+}
+
 void check_market_matrix(const Eigen::Matrix<double, Dynamic, Dynamic>& actual, const std::string& reference_path) {
     EXPECT_TRUE(almost_equal<double>(actual, load_market_matrix(reference_path)));
+}
+
+void check_component_significance_reference(
+  const std::vector<Result>& results, const std::string& reference_path, int n_blocks, int n_comp) {
+    Eigen::Matrix<double, Dynamic, Dynamic> actual_significance(n_comp, 4);
+    Eigen::Matrix<double, Dynamic, Dynamic> actual_active_blocks(n_comp, n_blocks);
+
+    for (int h = 0; h < n_comp; ++h) {
+        actual_significance(h, 0) = results[h].rho_tot;
+        actual_significance(h, 1) = results[h].rho_tot_p_value;
+        actual_significance(h, 2) = static_cast<double>(results[h].rho_tot_bootstrap_count);
+        actual_significance(h, 3) = results[h].component_significant ? 1.0 : 0.0;
+
+        for (int j = 0; j < n_blocks; ++j)
+            actual_active_blocks(h, j) = results[h].active_blocks[j] ? 1.0 : 0.0;
+    }
+
+    check_market_matrix(actual_significance, reference_path + "ref_component_significance.mtx");
+    check_market_matrix(actual_active_blocks, reference_path + "ref_active_blocks.mtx");
 }
 
 void check_block_component(
@@ -410,6 +448,45 @@ void check_fem_bootstrap_rgcca_against_first_run() {
     }
     check_bootstrap_references(rgcca, results, reference_path);
 }
+
+void check_fem_cov_component_significance() {
+    const std::string data_path = "../data/models/rgcca/";
+    const std::string reference_path = data_path + "functional/fem_cov_component_significance/";
+
+    RGCCA<IndependentSampling>::Options options;
+    options.mode = Mode::CovMax;
+    options.component_significance = true;
+
+    RGCCA<IndependentSampling> rgcca(n_obs, options, n_comp);
+    add_fem_functional_blocks(rgcca, data_path);
+    rgcca.set_lambda_weights_all(lambda_weights);
+    connect_reference_design(rgcca);
+
+    RGCCA<IndependentSampling>::BootstrapConfig bootstrap_config;
+    bootstrap_config.max_threads = 1;
+    rgcca.set_bootstrap_config(bootstrap_config);
+
+    const auto results = rgcca.fit();
+
+    ASSERT_EQ(static_cast<int>(results.size()), n_comp);
+
+    if (update_functional_references()) {
+        for (const auto& block : rgcca.blocks()) {
+            for (int h = 0; h < n_comp; ++h) {
+                write_block_component_reference(*block, reference_path, h);
+            }
+        }
+        write_component_significance_reference(results, reference_path, n_blocks, n_comp);
+        return;
+    }
+
+    for (const auto& block : rgcca.blocks()) {
+        for (int h = 0; h < n_comp; ++h) {
+            check_block_component(*block, reference_path, h);
+        }
+    }
+    check_component_significance_reference(results, reference_path, n_blocks, n_comp);
+}
 }   // namespace
 
 TEST(rgcca, R_GCCA_cov) {
@@ -469,4 +546,8 @@ TEST(rgcca, F_GCCA_NN_splines_cov) {
 
 TEST(rgcca, F_GCCA_fem_bootstrap_cov) {
     check_fem_bootstrap_rgcca_against_first_run();
+}
+
+TEST(rgcca, F_GCCA_fem_cov_component_significance) {
+    check_fem_cov_component_significance();
 }

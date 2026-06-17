@@ -21,7 +21,13 @@
 #include "fdaPDE/src/logging.h"
 #include "fdaPDE/execution.h"
 #include "header_check.h"
+#include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <limits>
+#include <numeric>
+#include <random>
+#include <string_view>
 
 namespace fdapde {
 
@@ -1063,6 +1069,10 @@ struct Result {
     std::vector<double> lambda_components_values;
     std::vector<double> lambda_weights_values;
     std::vector<bool> active_blocks;
+    double rho_tot = std::numeric_limits<double>::quiet_NaN();
+    double rho_tot_p_value = std::numeric_limits<double>::quiet_NaN();
+    int rho_tot_bootstrap_count = 0;
+    bool component_significant = true;
 
     explicit Result(const int n_blocks) : J(n_blocks), C(J, J), covariance_matrix(J,J),
     tau_values(J), lambda_components_values(J), lambda_weights_values(J), active_blocks(J) {}
@@ -1096,6 +1106,7 @@ public:
         InitStrategy init_strategy;
         LambdaSelection lambda_selection_weights;
         LambdaSelection lambda_selection_components;
+        bool component_significance;
         Mode mode;
         WeightSignConstraint weight_sign_constraint;
         Deflation deflation_mode;
@@ -1107,6 +1118,7 @@ public:
           const WeightSignConstraint weight_sign_constraint_ = WeightSignConstraint::None,
           const LambdaSelection lambda_selection_weights_ = LambdaSelection::Manual,
           const LambdaSelection lambda_selection_components_ = LambdaSelection::Automatic,
+          const bool component_significance_ = false,
           const Deflation deflation_mode_ = Deflation::Scores, const Scheme& scheme_ = Scheme::Factorial(),
           const bool verbose_ = false, const bool cache_ = true) :
             max_iter(max_iter_),
@@ -1117,6 +1129,7 @@ public:
             weight_sign_constraint(weight_sign_constraint_),
             lambda_selection_weights(lambda_selection_weights_),
             lambda_selection_components(lambda_selection_components_),
+            component_significance(component_significance_),
             deflation_mode(deflation_mode_),
             scheme(scheme_),
             verbose(verbose_),
@@ -1154,7 +1167,6 @@ public:
         // connection deactivation
         double active_connection_sign_stability = 0.95;
         double active_connection_min_abs_corr = 0.05;
-        // int active_connection_min_bootstrap = 100;
 
         // confidence intervals
         double ci_level = 0.95;
@@ -1166,6 +1178,10 @@ public:
 
         // stationary bootstrap: expected block length = 1 / p
         double stationary_block_length = 10.0;
+
+        // component significance test for H0: rho_tot = 0
+        int component_significance_resamples = 100;
+        double component_significance_alpha = 0.05;
     };
     struct BootstrapSelectionResult {
         using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
@@ -1379,6 +1395,8 @@ public:
 
         const int J = n_blocks();
         if (J < 2) throw std::runtime_error("RGCCA: need ≥ 2 blocks");
+        if (opt_.component_significance)
+            validate_component_significance_config_();
         if (opt_.lambda_selection_weights == LambdaSelection::Automatic) {
             validate_weight_lambda_selection_support_();
             validate_bootstrap_config_();
@@ -1406,7 +1424,20 @@ public:
 
             // final fit
             init_comp_();
-            results.push_back(fit_component_(C_active));
+            Result component_result = fit_component_(C_active);
+
+            if (opt_.component_significance) {
+                const auto significance = test_component_significance_(C_active);
+                annotate_component_significance_(component_result, significance);
+
+                if (!significance.significant) {
+                    results.push_back(std::move(component_result));
+                    append_inactive_components_(results, hh + 1, J);
+                    break;
+                }
+            }
+
+            results.push_back(std::move(component_result));
 
             deflate_all_();
         }
@@ -1590,6 +1621,11 @@ private:
             for (int k = 0; k < n_blocks(); ++k)
                 C_(j, k) = (j != k);
     }
+    BoolMatrix inactive_design_(const int J) const {
+        BoolMatrix C_inactive(J, J);
+        C_inactive.setConstant(false);
+        return C_inactive;
+    }
     template <typename S = SamplingStrategy>
     requires std::same_as<S, TimeDependentSampling>
     void add_times_(const Vector& t) {
@@ -1666,9 +1702,15 @@ private:
     }
 
     // components initialization
-    void init_comp_(const BlockRefList& blocks, InitStrategy init_strategy = InitStrategy::None) {
-        if (opt_.mode == Mode::Regularized) set_tau_auto_all_(blocks);
-        if (opt_.lambda_selection_components == LambdaSelection::Automatic) set_lambda_components_auto_all_(blocks);
+    void init_comp_(
+        const BlockRefList& blocks,
+        InitStrategy init_strategy = InitStrategy::None,
+        const bool update_regularization = true
+    ) {
+        if (update_regularization) {
+            if (opt_.mode == Mode::Regularized) set_tau_auto_all_(blocks);
+            if (opt_.lambda_selection_components == LambdaSelection::Automatic) set_lambda_components_auto_all_(blocks);
+        }
 
         if (init_strategy == InitStrategy::None) init_strategy = opt_.init_strategy;
 
@@ -1702,7 +1744,11 @@ private:
     }
 
     // components fit
-    Result fit_component_(const BlockRefList& blocks, const BoolMatrix& C_active) {
+    Result fit_component_(
+        const BlockRefList& blocks,
+        const BoolMatrix& C_active,
+        const bool update_component_lambdas = true
+    ) {
         const int J = n_blocks();
         FitWorkspace ws(J);
 
@@ -1723,7 +1769,7 @@ private:
         // initialization
         res.obj_history.push_back(objective_(blocks, ws, res.C));
         auto a_prev = snapshot_weights_(blocks);
-        if (opt_.lambda_selection_components == LambdaSelection::Automatic)
+        if (update_component_lambdas && opt_.lambda_selection_components == LambdaSelection::Automatic)
             set_lambda_components_auto_all_(blocks);
 
         // main loop
@@ -2029,6 +2075,95 @@ private:
         double wall_time = 0.0;
         double efficiency = 0.0;
     };
+    struct ComponentSignificanceResult {
+        double rho_tot = std::numeric_limits<double>::quiet_NaN();
+        double p_value = std::numeric_limits<double>::quiet_NaN();
+        int B = 0;
+        bool significant = true;
+    };
+    void annotate_component_significance_(
+        Result& result,
+        const ComponentSignificanceResult& significance
+    ) const {
+        result.rho_tot = significance.rho_tot;
+        result.rho_tot_p_value = significance.p_value;
+        result.rho_tot_bootstrap_count = significance.B;
+        result.component_significant = significance.significant;
+    }
+    ComponentSignificanceResult inactive_component_significance_() const {
+        ComponentSignificanceResult out;
+        out.rho_tot = 0.0;
+        out.p_value = 1.0;
+        out.B = 0;
+        out.significant = false;
+        return out;
+    }
+    void append_inactive_components_(std::vector<Result>& results, const int from_h, const int J) {
+        const BoolMatrix C_inactive = inactive_design_(J);
+        const ComponentSignificanceResult significance = inactive_component_significance_();
+
+        for (int hh = from_h; hh < n_comp(); ++hh) {
+            set_h_(hh);
+            Result inactive_result = fit_component_(C_inactive);
+            annotate_component_significance_(inactive_result, significance);
+            results.push_back(std::move(inactive_result));
+        }
+    }
+    ComponentSignificanceResult test_component_significance_(const BoolMatrix& C_active) {
+        ComponentSignificanceResult out;
+
+        auto blocks = main_blocks_();
+        const int J = static_cast<int>(blocks.size());
+        out.rho_tot = rho_tot_(blocks, C_active);
+
+        if (count_active_connections_(C_active) == 0 || !std::isfinite(out.rho_tot)) {
+            out.B = 0;
+            out.p_value = 1.0;
+            out.significant = false;
+            return out;
+        }
+
+        const int B = bootstrap_config_.component_significance_resamples;
+        const int n_threads = bootstrap_n_threads_();
+        out.B = B;
+
+        std::vector<BootstrapBlocks> thread_boot_worker(n_threads);
+        for (int t = 0; t < n_threads; ++t)
+            thread_boot_worker[t] = clone_blocks_();
+
+        std::vector<int> thread_ge_count(n_threads, 0);
+        const unsigned seed = bootstrap_config_.seed + static_cast<unsigned>(1000003 * (h_ + 1));
+
+        parallel_for(0, B, 1, [&](int b) {
+            const int tid = this_thread_id();
+            auto& boot_blocks = thread_boot_worker[tid];
+
+            set_permuted_row_index_all_(
+                boot_blocks.refs,
+                seed + static_cast<unsigned>(7919 * (b + 1))
+            );
+
+            init_comp_(boot_blocks.refs, InitStrategy::WarmStart, false);
+            fit_component_(boot_blocks.refs, C_active, false);
+
+            const double rho_star = rho_tot_(boot_blocks.refs, C_active);
+            if (std::isfinite(rho_star) && rho_star >= out.rho_tot)
+                ++thread_ge_count[tid];
+
+            clear_row_index_all_(boot_blocks.refs);
+        });
+
+        const int ge_count = std::accumulate(thread_ge_count.begin(), thread_ge_count.end(), 0);
+        out.p_value = static_cast<double>(ge_count) / static_cast<double>(B);
+        out.significant = out.p_value <= bootstrap_config_.component_significance_alpha;
+
+        fdapde::cout << "\nSignificance:"
+                  << "- rho_tot = " << out.rho_tot << std::endl
+                  << "- p-value = " << out.p_value << std::endl
+                  << "- significant = " << out.significant << std::endl;
+
+        return out;
+    }
     BootstrapBatchTiming run_bootstrap_batch_(
         int lambda_i, AdaptiveBootstrapState& bootstrap_state,
         std::vector<BootstrapBlocks>& thread_boot_worker,
@@ -2497,6 +2632,12 @@ private:
     void set_row_index_all_(const BlockRefList& blocks, const typename Block::IndexVector& idx) {
         for (auto* b : blocks) b->set_row_index(idx);
     }
+    void set_permuted_row_index_all_(const BlockRefList& blocks, const unsigned seed) {
+        for (int j = 0; j < static_cast<int>(blocks.size()); ++j) {
+            std::mt19937_64 rng(seed + static_cast<unsigned>(104729 * (j + 1)));
+            blocks[j]->set_row_index(permutation_indices_(blocks[j]->n_raw(), rng));
+        }
+    }
     void clear_row_index_all_(const BlockRefList& blocks) {
         for (auto* b : blocks) b->clear_row_index();
     }
@@ -2533,6 +2674,16 @@ private:
         typename Block::IndexVector idx(n);
         for (int i = 0; i < n; ++i)
             idx(i) = U(rng);
+
+        return idx;
+    }
+    typename Block::IndexVector permutation_indices_(const int n, std::mt19937_64& rng) const {
+        if (n <= 0)
+            throw std::invalid_argument("n must be positive");
+
+        typename Block::IndexVector idx(n);
+        std::iota(idx.data(), idx.data() + idx.size(), 0);
+        std::shuffle(idx.data(), idx.data() + idx.size(), rng);
 
         return idx;
     }
@@ -2645,6 +2796,21 @@ private:
              !std::isfinite(bootstrap_config_.stationary_block_length))
         ) {
             throw std::invalid_argument("RGCCA: bootstrap stationary_block_length must be finite and positive");
+        }
+    }
+    void validate_component_significance_config_() const {
+        if (bootstrap_config_.max_threads <= 0)
+            throw std::invalid_argument("RGCCA: component significance max_threads must be positive");
+        if (bootstrap_config_.component_significance_resamples <= 0)
+            throw std::invalid_argument("RGCCA: component significance resamples must be positive");
+        if (
+            !(bootstrap_config_.component_significance_alpha > 0.0) ||
+            bootstrap_config_.component_significance_alpha >= 1.0 ||
+            !std::isfinite(bootstrap_config_.component_significance_alpha)
+        ) {
+            throw std::invalid_argument(
+                "RGCCA: component significance alpha must be finite and in (0, 1)"
+            );
         }
     }
 
@@ -2866,30 +3032,36 @@ private:
         }
         return f;
     }
-    double rho_tot_with_weights_(const BlockRefList& blocks, const std::vector<Vector>& weights, const BoolMatrix& C) const {
-        const int J = n_blocks();
+    double rho_tot_from_correlation_(const Matrix& Corr, const BoolMatrix& C) const {
+        const int J = static_cast<int>(Corr.rows());
 
         double num = 0.0;
         double den = 0.0;
 
-        const std::vector<Vector> eta = eta_with_weights_(blocks, weights);
-        std::vector<double> eta_norms(J);
-        for (int j = 0; j < J; ++j)
-            eta_norms[j] = std::sqrt(eta[j].squaredNorm());
-
         for (int j = 0; j < J; ++j) {
             for (int k = j + 1; k < J; ++k) {
                 if (!C(j, k)) continue;
-                if (eta_norms[j] > 0.0 && eta_norms[k] > 0.0) {
-                    const double corr_jk = eta[j].dot(eta[k]) / (eta_norms[j] * eta_norms[k]);
-                    if (opt_.scheme.name == "Horst") num += corr_jk;
-                    else num += std::abs(corr_jk);
-                    den += 1.0;
-                }
+
+                const double corr_jk = Corr(j, k);
+                if (!std::isfinite(corr_jk)) continue;
+
+                if (std::string_view(opt_.scheme.name) == "Horst") num += corr_jk;
+                else num += std::abs(corr_jk);
+                den += 1.0;
             }
         }
 
         return den > 0.0 ? num / den : 0.0;
+    }
+    double rho_tot_(const BlockRefList& blocks, const BoolMatrix& C) const {
+        Matrix Corr;
+        correlation_matrix_(blocks, Corr);
+        return rho_tot_from_correlation_(Corr, C);
+    }
+    double rho_tot_with_weights_(const BlockRefList& blocks, const std::vector<Vector>& weights, const BoolMatrix& C) const {
+        Matrix Corr;
+        correlation_matrix_(eta_with_weights_(blocks, weights), Corr);
+        return rho_tot_from_correlation_(Corr, C);
     }
     double criterion_score_with_weights_(const BlockRefList& blocks, const std::vector<Vector>& weights, const BoolMatrix& C) {
         const int J = n_blocks();
@@ -2964,8 +3136,8 @@ inline std::ostream& operator<<(std::ostream& os, const Result& r) {
         os << std::fixed;
         os << std::endl;
     }
-    os << "n_iters   : " << r.iters << "\n";
-    os << "monotone  : " << (r.monotone ? "yes" : "no") << "\n";
+    os << "n_iters: " << r.iters << "\n";
+    os << "monotone: " << (r.monotone ? "yes" : "no") << "\n";
     os << std::endl;
     os << "objective :\n";
     double prev_obj = r.obj_history[0];
@@ -2987,6 +3159,14 @@ inline std::ostream& operator<<(std::ostream& os, const Result& r) {
         os << std::fixed << std::setprecision(2);
         os << r.correlation_matrix << std::endl;
         os << std::fixed << std::setprecision(8);
+    }
+    os << std::endl;
+    if (std::isfinite(r.rho_tot_p_value)) {
+        os << "significance:\n";
+        os << "- rho_tot: " << std::fixed << r.rho_tot << "\n";
+        os << "- p-value: " << std::fixed << r.rho_tot_p_value
+           << " (" << r.rho_tot_bootstrap_count << " resamples)\n";
+        os << "- signif.: " << (r.component_significant ? "yes" : "no") << "\n";
     }
 
     return os;
