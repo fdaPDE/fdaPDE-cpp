@@ -77,7 +77,8 @@ template <typename VariationalSolver> class fpca_power_iteration_impl {
             case OptimizeGCV: {
                 auto gcv_functor = [&](auto lambda) { return gcv_(X, lambda, V.col(i)); };
                 GridSearch<n_lambda> optimizer;
-                opt_lambda = optimizer.optimize(gcv_functor, lambda_grid);
+                auto opt_ = optimizer.optimize(gcv_functor, lambda_grid);
+                for (int i = 0; i < n_lambda; ++i) { opt_lambda[i] = opt_[i]; }
             } break;
             case OptimizeMSRE: {
             } break;
@@ -134,12 +135,12 @@ template <typename VariationalSolver> class fpca_power_iteration_impl {
     double gcv_(const matrix_t& X, const LambdaT lambda, const InitT& f0) {
         const auto& [f, s] = solve_(X, lambda, f0);
         // evaluate GCV index at convergence
-        std::array<double, n_lambda> lambda_vec;
-        std::copy(lambda.data(), lambda.data() + n_lambda, lambda_vec.begin());
-        if (edf_map_.find(lambda_vec) == edf_map_.end()) {   // cache Tr[S]
-            edf_map_[lambda_vec] = smoother_->edf();
+	std::array<double, n_lambda> lambda_;
+	for (int i = 0; i < n_lambda; ++i) { lambda_[i] = lambda[i]; }
+        if (edf_map_.find(lambda_) == edf_map_.end()) {   // cache Tr[S]
+            edf_map_[lambda_] = smoother_->edf();
         }
-        int dor = n_locs_ - edf_map_.at(lambda_vec);
+        int dor = n_locs_ - edf_map_.at(lambda_);
         return (n_locs_ / std::pow(dor, 2)) * ((smoother_->Psi() * f) - smoother_->response()).squaredNorm();
     }
     std::unordered_map<std::array<double, n_lambda>, double, internals::std_array_hash<double, n_lambda>> edf_map_;
@@ -199,7 +200,8 @@ template <typename VariationalSolver> class fpca_subspace_iteration_impl {
         case OptimizeGCV: {
             auto gcv_functor = [&](auto lambda) { return gcv_(X, rank, lambda, V); };
             GridSearch<n_lambda> optimizer;
-            opt_lambda = optimizer.optimize(gcv_functor, lambda_grid);
+            auto opt_ = optimizer.optimize(gcv_functor, lambda_grid);
+            for (int i = 0; i < n_lambda; ++i) { opt_lambda[i] = opt_[i]; }
         } break;
         case OptimizeMSRE: {
         } break;
@@ -313,7 +315,8 @@ template <typename VariationalSolver> class fpca_direct_impl {
         case OptimizeGCV: {
             auto gcv_functor = [&](auto lambda) { return gcv_(X, rank, lambda, flag); };
             GridSearch<n_lambda> optimizer;
-            opt_lambda = optimizer.optimize(gcv_functor, lambda_grid);
+            auto opt_ = optimizer.optimize(gcv_functor, lambda_grid);
+            for (int i = 0; i < n_lambda; ++i) { opt_lambda[i] = opt_[i]; }
         } break;
         case OptimizeMSRE: {
         } break;
@@ -371,7 +374,7 @@ template <typename VariationalSolver> class fpca_direct_impl {
     double gcv_(const matrix_t& X, int rank, const LambdaT lambda, int flag) {
         const auto& [F, S] = solve_(X, rank, lambda, flag);
         // evaluate GCV index at convergence (note that Tr[S] = \|D^(-1)\|_F^2)
-        int dor = n_locs_ - invD_.squaredNorm();
+        int dor = n_locs_ -  (invD_*smoother_->Psi().transpose()).squaredNorm();
         return (n_locs_ / std::pow(dor, 2)) * (X.transpose() * S - (smoother_->Psi() * F)).squaredNorm();
     }
     int n_locs_ = 0, n_units_ = 0, n_dofs_ = 0;
