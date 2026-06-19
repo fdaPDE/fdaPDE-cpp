@@ -1164,6 +1164,7 @@ public:
         int B_per_thread_per_batch = 5;
 
         // adaptive batch
+        bool adaptive = true;
         double adaptive_tol = 1e-3;
         int stable_batches_required = 3;
 
@@ -1880,7 +1881,8 @@ private:
             seed = bootstrap_config.seed + static_cast<unsigned>(h);
             B_min = bootstrap_config.B_min;
             B_max = bootstrap_config.B_max;
-            B_batch = n_threads * bootstrap_config.B_per_thread_per_batch;
+            B_batch = bootstrap_config.adaptive ?
+                n_threads * bootstrap_config.B_per_thread_per_batch : B_max;
             corr_pos_count.setZero(J, J);
             corr_neg_count.setZero(J, J);
         }
@@ -2007,7 +2009,7 @@ private:
             while (bootstrap_state.B_done < bootstrap_state.B_max) {
                 bootstrap_state.B_run = std::min(bootstrap_state.B_batch, bootstrap_state.B_max - bootstrap_state.B_done);
 
-                fdapde::cout << "  Adaptive batch "
+                fdapde::cout << (bootstrap_config_.adaptive ? "  Adaptive batch " : "  Bootstrap batch ")
                           << std::setw(4) << bootstrap_state.B_done << "..."
                           << std::setw(4) << (bootstrap_state.B_done + bootstrap_state.B_run - 1) << " --> ";
 
@@ -2039,8 +2041,12 @@ private:
 
                 bootstrap_state.B_done += bootstrap_state.B_run;
 
-                if (adaptive_stop_(bootstrap_state, bootstrap_config_)) {
-                    break;
+                if (bootstrap_config_.adaptive) {
+                    if (adaptive_stop_(bootstrap_state, bootstrap_config_)) {
+                        break;
+                    }
+                } else {
+                    fdapde::cout << std::endl;
                 }
             }
 
