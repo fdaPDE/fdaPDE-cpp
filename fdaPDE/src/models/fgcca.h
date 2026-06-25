@@ -40,6 +40,59 @@ enum class Deflation { None, Scores };
 enum class WeightSignConstraint { None, NonNegative };
 enum class ResamplingStrategy { Ordinary, Stationary };
 
+
+
+inline const char* to_string(InitStrategy x) {
+    switch (x) {
+    case InitStrategy::None:      return "None";
+    case InitStrategy::SVD:       return "SVD";
+    case InitStrategy::Uniform:   return "Uniform";
+    case InitStrategy::WarmStart: return "WarmStart";
+    }
+    return "Unknown";
+}
+
+inline const char* to_string(LambdaSelection x) {
+    switch (x) {
+    case LambdaSelection::Manual:    return "Manual";
+    case LambdaSelection::Automatic: return "Automatic";
+    }
+    return "Unknown";
+}
+
+inline const char* to_string(Mode x) {
+    switch (x) {
+    case Mode::CorMax:      return "CorMax";
+    case Mode::Regularized: return "Regularized";
+    case Mode::CovMax:      return "CovMax";
+    }
+    return "Unknown";
+}
+
+inline const char* to_string(WeightSignConstraint x) {
+    switch (x) {
+    case WeightSignConstraint::None:        return "None";
+    case WeightSignConstraint::NonNegative: return "NonNegative";
+    }
+    return "Unknown";
+}
+
+inline const char* to_string(Deflation x) {
+    switch (x) {
+    case Deflation::None:   return "None";
+    case Deflation::Scores: return "Scores";
+    }
+    return "Unknown";
+}
+
+inline const char* to_string(ResamplingStrategy x) {
+    switch (x) {
+    case ResamplingStrategy::Ordinary:   return "Ordinary";
+    case ResamplingStrategy::Stationary: return "Stationary";
+    }
+    return "Unknown";
+}
+
 namespace internals {
 
 void ginv(const Eigen::MatrixXd& X, Eigen::MatrixXd& ginvX, double tol = std::sqrt(std::numeric_limits<double>::epsilon())){
@@ -1140,6 +1193,27 @@ public:
             scheme(scheme_),
             verbose(verbose_),
             cache_covariances(cache_) { }
+
+        friend std::ostream& operator<<(std::ostream& os, const Options& opt) {
+            os << "RGCCA::Options {\n"
+               << "  max_iter                    = " << opt.max_iter << '\n'
+               << "  tol                         = " << opt.tol << '\n'
+               << "  verbose                     = " << opt.verbose << '\n'
+               << "  cache_covariances           = " << opt.cache_covariances << '\n'
+               << "  bias                        = " << opt.bias << '\n'
+               << "  init_strategy               = " << to_string(opt.init_strategy) << '\n'
+               << "  lambda_selection_weights    = " << to_string(opt.lambda_selection_weights) << '\n'
+               << "  lambda_selection_components = " << to_string(opt.lambda_selection_components) << '\n'
+               << "  component_significance      = " << opt.component_significance << '\n'
+               << "  block_deactivation          = " << opt.block_deactivation << '\n'
+               << "  connection_deactivation     = " << opt.connection_deactivation << '\n'
+               << "  mode                        = " << to_string(opt.mode) << '\n'
+               << "  weight_sign_constraint      = " << to_string(opt.weight_sign_constraint) << '\n'
+               << "  deflation_mode              = " << to_string(opt.deflation_mode) << '\n'
+               << "  scheme                      = " << opt.scheme.name << '\n'
+               << "}";
+            return os;
+        }
     };
     struct FitWorkspace {
         Matrix Cov;
@@ -1189,6 +1263,29 @@ public:
         // component significance test for H0: rho_tot = 0
         int component_significance_resamples = 100;
         double component_significance_alpha = 0.05;
+
+        friend std::ostream& operator<<(std::ostream& os, const BootstrapConfig& config) {
+            os << "RGCCA::BootstrapConfig {\n"
+               << "  seed                               = " << config.seed << '\n'
+               << "  max_threads                        = " << config.max_threads << '\n'
+               << "  B_min                              = " << config.B_min << '\n'
+               << "  B_max                              = " << config.B_max << '\n'
+               << "  B_per_thread_per_batch             = " << config.B_per_thread_per_batch << '\n'
+               << "  adaptive                           = " << config.adaptive << '\n'
+               << "  adaptive_tol                       = " << config.adaptive_tol << '\n'
+               << "  stable_batches_required            = " << config.stable_batches_required << '\n'
+               << "  active_block_tol                   = " << config.active_block_tol << '\n'
+               << "  active_connection_sign_stability   = " << config.active_connection_sign_stability << '\n'
+               << "  active_connection_min_abs_corr     = " << config.active_connection_min_abs_corr << '\n'
+               << "  ci_level                           = " << config.ci_level << '\n'
+               << "  patience                           = " << config.patience << '\n'
+               << "  resampling_strategy                = " << to_string(config.resampling_strategy) << '\n'
+               << "  stationary_block_length            = " << config.stationary_block_length << '\n'
+               << "  component_significance_resamples   = " << config.component_significance_resamples << '\n'
+               << "  component_significance_alpha       = " << config.component_significance_alpha << '\n'
+               << "}";
+            return os;
+        }
     };
     struct BootstrapSelectionResult {
         using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
@@ -1403,9 +1500,14 @@ public:
         const int J = n_blocks();
         if (J < 2) throw std::runtime_error("RGCCA: need ≥ 2 blocks");
         const bool run_model_selection = bootstrap_model_selection_requested_();
-        if (opt_.component_significance)
+        fdapde::cout << opt_ << std::endl;
+        if (run_model_selection || opt_.component_significance) {
+            fdapde::cout << bootstrap_config_ << std::endl;
+        }
+        if (opt_.component_significance) {
             validate_bootstrap_support_();
             validate_component_significance_config_();
+        }
         if (run_model_selection) {
             validate_bootstrap_support_();
             validate_bootstrap_config_();
@@ -1963,6 +2065,12 @@ private:
         // init bootstrap
         fdapde::cout << "Init bootstrap --> ";
         AdaptiveBootstrapState bootstrap_state(bootstrap_config_, n_threads, h_, J);
+        fdapde::cout << "\nBootstrap runtime {\n"
+                  << "  actual_threads = " << n_threads << '\n'
+                  << "  B_batch        = " << bootstrap_state.B_batch << '\n'
+                  << "  B_min          = " << bootstrap_state.B_min << '\n'
+                  << "  B_max          = " << bootstrap_state.B_max << '\n'
+                  << "}";
         BootstrapSelectionResult boot_results(
             h_, bootstrap_state.B_max, lambda_grid,
             block_names_(blocks), block_dims_(blocks), bootstrap_config_.ci_level
