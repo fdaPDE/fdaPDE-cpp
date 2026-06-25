@@ -2130,9 +2130,12 @@ private:
             while (bootstrap_state.B_done < bootstrap_state.B_max) {
                 bootstrap_state.B_run = std::min(bootstrap_state.B_batch, bootstrap_state.B_max - bootstrap_state.B_done);
 
-                fdapde::cout << (bootstrap_config_.adaptive ? "  Adaptive batch " : "  Bootstrap batch ")
-                          << std::setw(4) << bootstrap_state.B_done << "..."
-                          << std::setw(4) << (bootstrap_state.B_done + bootstrap_state.B_run - 1) << " --> "
+                const int batch_first = bootstrap_state.B_done;
+                const int batch_last = bootstrap_state.B_done + bootstrap_state.B_run - 1;
+                fdapde::cout << "  "
+                          << (bootstrap_config_.adaptive ? "Adaptive" : "Bootstrap")
+                          << " batch [" << std::setw(4) << batch_first
+                          << ", " << std::setw(4) << batch_last << "] --> "
                           << std::flush;
 
                 const auto batch_step_start = std::chrono::high_resolution_clock::now();
@@ -2163,7 +2166,7 @@ private:
                 fdapde::cout << " | ab = " << n_active_blocks;
                 fdapde::cout << ", ac = " << n_active_connections;
 
-                fdapde::cout << " | crit = " << std::setw(6) << std::fixed << std::setprecision(3) <<  bootstrap_state.crit;
+                fdapde::cout << " | crit = " << std::fixed << std::setprecision(3) <<  bootstrap_state.crit;
                 fdapde::cout << std::defaultfloat;
 
                 bootstrap_state.B_done += bootstrap_state.B_run;
@@ -2261,15 +2264,16 @@ private:
 
 
         boot_results.active_blocks = active_blocks_from_C_(C_best);
-        fdapde::cout << "\nBlocks deactivation:" << std::endl;
+        fdapde::cout << "\nBlock deactivation:" << std::endl;
         for (int j = 0; j < J; ++j) {
             const double nrm = boot_results.w_min_by_lambda[bootstrap_state.best_i][j].norm();
-            fdapde::cout << ". block " << j
-                      << " ||w_min|| = " << nrm
-                      << " active = " << boot_results.active_blocks[j]
+            fdapde::cout << "  - block[" << std::setw(2) << j << "]: "
+                      << "||w_min|| = " << std::fixed << std::setprecision(4) << nrm
+                      << std::defaultfloat
+                      << ", active = " << (boot_results.active_blocks[j] ? "yes" : "no")
                       << std::endl;
         }
-        fdapde::cout << "\n(Updated) Design matrix:" << std::endl;
+        fdapde::cout << "\nUpdated design matrix:" << std::endl;
         fdapde::cout << C_best << std::endl;
 
         bootstrap_selection_results_.push_back(std::move(boot_results));
@@ -2383,10 +2387,10 @@ private:
         out.p_value = static_cast<double>(ge_count) / static_cast<double>(B);
         out.significant = out.p_value <= bootstrap_config_.component_significance_alpha;
 
-        fdapde::cout << "\nSignificance:"
-                  << "- rho_tot = " << out.rho_tot << std::endl
-                  << "- p-value = " << out.p_value << std::endl
-                  << "- significant = " << out.significant << std::endl;
+        fdapde::cout << "\nSignificance:" << std::endl
+                  << "  - rho_tot = " << out.rho_tot << std::endl
+                  << "  - p-value = " << out.p_value << std::endl
+                  << "  - significant = " << out.significant << std::endl;
 
         return out;
     }
