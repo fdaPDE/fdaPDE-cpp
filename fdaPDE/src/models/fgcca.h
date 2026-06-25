@@ -1536,8 +1536,10 @@ public:
             }
 
             // final fit
+            auto step_start = log_step_start_("Final component fit");
             init_comp_();
             Result component_result = fit_component_(C_active);
+            log_step_end_(step_start);
 
             if (opt_.component_significance) {
                 const auto significance = bootstrap_test_component_significance_(C_active);
@@ -1552,11 +1554,15 @@ public:
 
             results.push_back(std::move(component_result));
 
+            step_start = log_step_start_("Deflate blocks");
             deflate_all_();
+            log_step_end_(step_start);
         }
 
         // post-processing weights
+        auto step_start = log_step_start_("Compute weights_star");
         compute_weights_star_();
+        log_step_end_(step_start);
 
         return results;
     }
@@ -1584,7 +1590,7 @@ public:
     [[nodiscard]] const std::vector<BlockPtr>& blocks() const { return blocks_; }
     [[nodiscard]] const Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>& C() const { return C_; }
     [[nodiscard]] const SparseMatrix& Psi_T() const { return Psi_T_; };
-    [[nodiscard]] std::vector<BootstrapSelectionResult> bootstrap_selection_results() const { return bootstrap_selection_results_; }
+    [[nodiscard]] const std::vector<BootstrapSelectionResult>& bootstrap_selection_results() const { return bootstrap_selection_results_; }
 
     [[nodiscard]] std::pair<Vector, Vector> bootstrap_weights_ci(
         const int h,
@@ -2045,6 +2051,17 @@ private:
         return {std::numeric_limits<double>::quiet_NaN()};
     }
 
+    std::chrono::high_resolution_clock::time_point log_step_start_(std::string_view label) const {
+        fdapde::cout << label << " --> " << std::flush;
+        return std::chrono::high_resolution_clock::now();
+    }
+    void log_step_end_(const std::chrono::high_resolution_clock::time_point start) const {
+        const auto end = std::chrono::high_resolution_clock::now();
+        const double elapsed_sec = std::chrono::duration<double>(end - start).count();
+        fdapde::cout << "<-- " << std::fixed << std::setprecision(3)
+                  << elapsed_sec << std::defaultfloat << "s" << std::endl;
+    }
+
     ModelSelectionResult bootstrap_model_selection_() {
         fdapde::cout << "\n=========================================" << std::endl;
         fdapde::cout << "Bootstrap model selection for component " << h_ + 1 << std::endl;
@@ -2063,27 +2080,21 @@ private:
         BoolMatrix C_best = C_;
 
         // init bootstrap
-        fdapde::cout << "Init bootstrap --> ";
+        auto step_start = log_step_start_("Init bootstrap");
         AdaptiveBootstrapState bootstrap_state(bootstrap_config_, n_threads, h_, J);
-        fdapde::cout << "\nBootstrap runtime {\n"
-                  << "  actual_threads = " << n_threads << '\n'
-                  << "  B_batch        = " << bootstrap_state.B_batch << '\n'
-                  << "  B_min          = " << bootstrap_state.B_min << '\n'
-                  << "  B_max          = " << bootstrap_state.B_max << '\n'
-                  << "}";
         BootstrapSelectionResult boot_results(
             h_, bootstrap_state.B_max, lambda_grid,
             block_names_(blocks), block_dims_(blocks), bootstrap_config_.ci_level
         );
-        fdapde::cout << "<--" << std::endl;
+        log_step_end_(step_start);
 
         // preliminary fit
-        fdapde::cout << "Preliminary fit --> ";
+        step_start = log_step_start_("Preliminary fit");
         if (select_lambda)
             set_lambda_weights_all(lambda_grid.back());
         init_comp_(blocks);
         fit_component_(blocks, C_active);
-        fdapde::cout << "<--" << std::endl;
+        log_step_end_(step_start);
 
         int n_lambda = static_cast<int>(lambda_grid.size());
         for (int lambda_i = n_lambda - 1; lambda_i >= 0; --lambda_i) {
@@ -2098,17 +2109,19 @@ private:
             }
 
             // init warm start at lambda
+            step_start = log_step_start_("  Warm-start fit");
             init_comp_(blocks, InitStrategy::WarmStart);
             fit_component_(blocks, C_active);
             auto w_fit = snapshot_weights_(blocks);
             auto w_min = w_fit;
+            log_step_end_(step_start);
 
-            fdapde::cout << "  Clone worker blocks --> ";
+            step_start = log_step_start_("  Clone worker blocks");
             std::vector<BootstrapBlocks> thread_boot_worker(n_threads);
             for (int t = 0; t < n_threads; ++t) {
                 thread_boot_worker[t] = clone_blocks_();
             }
-            fdapde::cout << "<--" << std::endl;
+            log_step_end_(step_start);
 
             auto start = std::chrono::high_resolution_clock::now();
 
@@ -2119,8 +2132,10 @@ private:
 
                 fdapde::cout << (bootstrap_config_.adaptive ? "  Adaptive batch " : "  Bootstrap batch ")
                           << std::setw(4) << bootstrap_state.B_done << "..."
-                          << std::setw(4) << (bootstrap_state.B_done + bootstrap_state.B_run - 1) << " --> ";
+                          << std::setw(4) << (bootstrap_state.B_done + bootstrap_state.B_run - 1) << " --> "
+                          << std::flush;
 
+                const auto batch_step_start = std::chrono::high_resolution_clock::now();
                 auto bootstrap_timing = run_bootstrap_batch_(
                     lambda_i,
                     bootstrap_state,
@@ -2130,16 +2145,20 @@ private:
                     w_min,
                     boot_results
                 );
+                log_step_end_(batch_step_start);
 
+                step_start = log_step_start_("    Post-batch update");
                 int n_active_blocks = count_active_blocks_(C_active);
                 if (opt_.block_deactivation)
                     n_active_blocks = threshold_inactive_blocks_(w_min, C_active);
                 int n_active_connections = count_active_connections_(C_active);
                 bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_);
+                log_step_end_(step_start);
 
-                fdapde::cout << "avg_fit_time = " << std::fixed << std::setprecision(3) << bootstrap_timing.avg_fit_time
+                fdapde::cout << "  Batch summary: avg_fit_time = " << std::fixed << std::setprecision(3) << bootstrap_timing.avg_fit_time
                           << " ± " << bootstrap_timing.sd_fit_time << std::defaultfloat << "s";
-                fdapde::cout << ", eff = " << std::setprecision(2) << 100.0 * bootstrap_timing.efficiency << "%" << std::defaultfloat;
+                fdapde::cout << ", eff = " << std::fixed << std::setprecision(1)
+                          << 100.0 * bootstrap_timing.efficiency << "%" << std::defaultfloat;
 
                 fdapde::cout << " | ab = " << n_active_blocks;
                 fdapde::cout << ", ac = " << n_active_connections;
@@ -2149,21 +2168,45 @@ private:
 
                 bootstrap_state.B_done += bootstrap_state.B_run;
 
+                auto print_bootstrap_timing_debug = [&]() {
+                    fdapde::cout << "    timing:" << std::endl;
+                    fdapde::cout << "      - wall(s): setup=" << std::fixed << std::setprecision(3)
+                              << bootstrap_timing.setup_time
+                              << ", parallel=" << bootstrap_timing.parallel_time
+                              << ", merge=" << bootstrap_timing.merge_time << std::endl;
+                    fdapde::cout << "      - efficiency: fit=" << std::fixed << std::setprecision(1)
+                              << 100.0 * bootstrap_timing.efficiency
+                              << "%, task=" << 100.0 * bootstrap_timing.task_efficiency
+                              << "%" << std::endl;
+                    fdapde::cout << "      - avg_task(s): prep=" << std::fixed << std::setprecision(3)
+                              << bootstrap_timing.avg_prep_time
+                              << ", fit=" << bootstrap_timing.avg_fit_time
+                              << ", snapshot=" << bootstrap_timing.avg_snapshot_time
+                              << ", corr=" << bootstrap_timing.avg_corr_time
+                              << ", total=" << bootstrap_timing.avg_task_time
+                              << std::defaultfloat << std::endl;
+                };
+
                 if (bootstrap_config_.adaptive) {
                     if (adaptive_stop_(bootstrap_state, bootstrap_config_)) {
+                        print_bootstrap_timing_debug();
                         break;
                     }
+                    print_bootstrap_timing_debug();
                 } else {
                     fdapde::cout << std::endl;
+                    print_bootstrap_timing_debug();
                 }
             }
 
             BoolMatrix C_lambda = C_active;
             int n_active_connections = count_active_connections_(C_lambda);
             if (opt_.connection_deactivation) {
+                step_start = log_step_start_("  Threshold inactive connections");
                 n_active_connections = threshold_inactive_connections_(
                     lambda_i, bootstrap_state, boot_results, C_lambda
                 );
+                log_step_end_(step_start);
             }
 
             auto end = std::chrono::high_resolution_clock::now();
@@ -2172,8 +2215,10 @@ private:
 
             boot_results.w_fit_by_lambda[lambda_i] = w_fit;
             boot_results.w_min_by_lambda[lambda_i] = w_min;
+            step_start = log_step_start_("  Final lambda correlation");
             correlation_matrix_(blocks, w_min, boot_results.corr_min_by_lambda[lambda_i]);
             boot_results.corr_min_by_lambda[lambda_i].array() *= (C_lambda.cast<double>() + Matrix::Identity(J, J)).array();
+            log_step_end_(step_start);
             boot_results.criterion[lambda_i] = bootstrap_state.crit;
             boot_results.B_used_by_lambda[lambda_i] = bootstrap_state.B_done;
 
@@ -2196,8 +2241,12 @@ private:
 
         }
 
+        step_start = log_step_start_("Resize bootstrap results");
         resize_bootstrap_results_(boot_results, static_cast<int>(lambda_grid.size()), J);
+        log_step_end_(step_start);
+        step_start = log_step_start_("Compute bootstrap correlation CIs");
         compute_bootstrap_corr_cis_(boot_results, J);
+        log_step_end_(step_start);
 
         if (bootstrap_state.best_i < 0)
             throw std::runtime_error("No model candidate was evaluated during bootstrap selection");
@@ -2237,6 +2286,14 @@ private:
         double sd_fit_time = 0.0;
         double wall_time = 0.0;
         double efficiency = 0.0;
+        double task_efficiency = 0.0;
+        double setup_time = 0.0;
+        double parallel_time = 0.0;
+        double merge_time = 0.0;
+        double avg_task_time = 0.0;
+        double avg_prep_time = 0.0;
+        double avg_snapshot_time = 0.0;
+        double avg_corr_time = 0.0;
     };
     struct ComponentSignificanceResult {
         double rho_tot = std::numeric_limits<double>::quiet_NaN();
@@ -2267,7 +2324,9 @@ private:
 
         for (int hh = from_h; hh < n_comp(); ++hh) {
             set_h_(hh);
+            const auto step_start = log_step_start_("Inactive component fit");
             Result inactive_result = fit_component_(C_inactive);
+            log_step_end_(step_start);
             annotate_component_significance_(inactive_result, significance);
             results.push_back(std::move(inactive_result));
         }
@@ -2290,13 +2349,16 @@ private:
         const int n_threads = bootstrap_n_threads_();
         out.B = B;
 
+        auto step_start = log_step_start_("  Clone significance worker blocks");
         std::vector<BootstrapBlocks> thread_boot_worker(n_threads);
         for (int t = 0; t < n_threads; ++t)
             thread_boot_worker[t] = clone_blocks_();
+        log_step_end_(step_start);
 
         std::vector<int> thread_ge_count(n_threads, 0);
         const unsigned seed = bootstrap_config_.seed + static_cast<unsigned>(1000003 * (h_ + 1));
 
+        step_start = log_step_start_("  Significance bootstrap");
         parallel_for(0, B, 1, [&](int b) {
             const int tid = this_thread_id();
             auto& boot_blocks = thread_boot_worker[tid];
@@ -2315,6 +2377,7 @@ private:
 
             clear_row_index_all_(boot_blocks.refs);
         });
+        log_step_end_(step_start);
 
         const int ge_count = std::accumulate(thread_ge_count.begin(), thread_ge_count.end(), 0);
         out.p_value = static_cast<double>(ge_count) / static_cast<double>(B);
@@ -2342,34 +2405,27 @@ private:
         const int B_offset = bootstrap_state.B_done;
         const int seed = bootstrap_state.seed;
 
+        const auto setup_start = std::chrono::high_resolution_clock::now();
         auto bootstrap_idx = make_bootstrap_indices_(B_run, B_offset, seed);
 
-        std::vector<int> thread_count(n_threads, 0);
         std::vector<double> fit_times_sec(B_run, 0.0);
+        std::vector<double> task_times_sec(B_run, 0.0);
+        std::vector<double> prep_times_sec(B_run, 0.0);
+        std::vector<double> snapshot_times_sec(B_run, 0.0);
+        std::vector<double> corr_times_sec(B_run, 0.0);
+        const auto setup_end = std::chrono::high_resolution_clock::now();
 
-        std::vector<std::vector<Matrix>> thread_w_boot(n_threads);
-        std::vector<std::vector<Matrix>> thread_corr_boot(n_threads);
-        std::vector<std::vector<int>> thread_sample_id(n_threads);
-
-        for (int tid = 0; tid < n_threads; ++tid) {
-            thread_w_boot[tid].resize(J);
-            thread_corr_boot[tid].resize(B_run);
-            thread_sample_id[tid].resize(B_run);
-
-            for (int j = 0; j < J; ++j) {
-                thread_w_boot[tid][j].resize(w_fit[j].size(), B_run);
-            }
-        }
-
-        const auto batch_start = std::chrono::high_resolution_clock::now();
+        const auto parallel_start = std::chrono::high_resolution_clock::now();
 
         parallel_for(0, B_run, 1, [&](int b) {
 
+            const auto task_start = std::chrono::high_resolution_clock::now();
             const int tid = this_thread_id();
             auto& boot_blocks = thread_boot_worker[tid];
             copy_weights_snapshot_(boot_blocks.refs, w_fit);
 
             set_row_index_all_(boot_blocks.refs, bootstrap_idx[b]);
+            const auto prep_end = std::chrono::high_resolution_clock::now();
 
             const auto fit_start = std::chrono::high_resolution_clock::now();
             init_comp_(boot_blocks.refs, InitStrategy::WarmStart);
@@ -2378,53 +2434,73 @@ private:
 
             fit_times_sec[b] = std::chrono::duration<double>(fit_end - fit_start).count();
 
-            const int local_col = thread_count[tid]++;
-            thread_sample_id[tid][local_col] = b;
-
             auto w_b = snapshot_weights_(boot_blocks.refs);
+            const int b_global = B_offset + b;
 
             for (int j = 0; j < J; ++j) {
                 if (w_b[j].dot(w_fit[j]) < 0.0) w_b[j] *= -1.0;
-                thread_w_boot[tid][j].col(local_col) = w_b[j];
+                boot_results.w_boot_by_lambda[lambda_i][j].col(b_global) = w_b[j];
             }
+            const auto snapshot_end = std::chrono::high_resolution_clock::now();
 
             clear_row_index_all_(boot_blocks.refs);
-            correlation_matrix_(boot_blocks.refs, w_b, thread_corr_boot[tid][local_col]);
+            Matrix corr_b;
+            correlation_matrix_(boot_blocks.refs, w_b, corr_b);
+            boot_results.corr_boot_by_lambda[lambda_i].col(b_global) = Eigen::Map<const Vector>(corr_b.data(), J * J);
+            const auto corr_end = std::chrono::high_resolution_clock::now();
+
+            prep_times_sec[b] = std::chrono::duration<double>(prep_end - task_start).count();
+            snapshot_times_sec[b] = std::chrono::duration<double>(snapshot_end - fit_end).count();
+            corr_times_sec[b] = std::chrono::duration<double>(corr_end - snapshot_end).count();
+            task_times_sec[b] = std::chrono::duration<double>(corr_end - task_start).count();
 
         });
 
-        const auto batch_end = std::chrono::high_resolution_clock::now();
-        const double wall_time = std::chrono::duration<double>(batch_end - batch_start).count();
+        const auto parallel_end = std::chrono::high_resolution_clock::now();
 
-        for (int tid = 0; tid < n_threads; ++tid) {
-            for (int local_col = 0; local_col < thread_count[tid]; ++local_col) {
-                const int b = thread_sample_id[tid][local_col];
-                const int b_global = B_offset + b;
+        const auto merge_start = std::chrono::high_resolution_clock::now();
 
-                const Matrix& corr_b = thread_corr_boot[tid][local_col];
-                boot_results.corr_boot_by_lambda[lambda_i].col(b_global) = Eigen::Map<const Vector>(corr_b.data(), J * J);
+        for (int b = 0; b < B_run; ++b) {
+            const int b_global = B_offset + b;
+            const auto corr_col = boot_results.corr_boot_by_lambda[lambda_i].col(b_global);
 
-                for (int j = 0; j < J; ++j) {
-                    for (int k = j + 1; k < J; ++k) {
-                        const double c = corr_b(j, k);
+            for (int j = 0; j < J; ++j) {
+                for (int k = j + 1; k < J; ++k) {
+                    const double c = corr_col(j + k * J);
 
-                        if (c > 0.0) {
-                            ++bootstrap_state.corr_pos_count(j, k);
-                            ++bootstrap_state.corr_pos_count(k, j);
-                        } else if (c < 0.0) {
-                            ++bootstrap_state.corr_neg_count(j, k);
-                            ++bootstrap_state.corr_neg_count(k, j);
-                        }
+                    if (c > 0.0) {
+                        ++bootstrap_state.corr_pos_count(j, k);
+                        ++bootstrap_state.corr_pos_count(k, j);
+                    } else if (c < 0.0) {
+                        ++bootstrap_state.corr_neg_count(j, k);
+                        ++bootstrap_state.corr_neg_count(k, j);
                     }
-                }
-
-                for (int j = 0; j < J; ++j) {
-                    const Vector w_bj = thread_w_boot[tid][j].col(local_col);
-                    boot_results.w_boot_by_lambda[lambda_i][j].col(b_global) = w_bj;
-                    update_w_min_(w_min[j], w_fit[j], w_bj);
                 }
             }
         }
+
+        parallel_for(0, J, 1, [&](int j) {
+            for (int b = 0; b < B_run; ++b) {
+                const int b_global = B_offset + b;
+                const auto w_bj = boot_results.w_boot_by_lambda[lambda_i][j].col(b_global);
+                for (int r = 0; r < w_min[j].size(); ++r) {
+                    if (w_fit[j][r] > 0.0) {
+                        w_min[j][r] = std::max(0.0, std::min(w_min[j][r], w_bj[r]));
+                    } else if (w_fit[j][r] < 0.0) {
+                        w_min[j][r] = std::min(0.0, std::max(w_min[j][r], w_bj[r]));
+                    } else {
+                        w_min[j][r] = 0.0;
+                    }
+                }
+            }
+        });
+
+        const auto merge_end = std::chrono::high_resolution_clock::now();
+
+        const double setup_time = std::chrono::duration<double>(setup_end - setup_start).count();
+        const double parallel_time = std::chrono::duration<double>(parallel_end - parallel_start).count();
+        const double merge_time = std::chrono::duration<double>(merge_end - merge_start).count();
+        const double wall_time = setup_time + parallel_time + merge_time;
 
         double total_fit_time = 0.0;
         for (double t : fit_times_sec)
@@ -2436,11 +2512,30 @@ private:
             var += d * d;
         }
 
+        double total_task_time = 0.0;
+        double total_prep_time = 0.0;
+        double total_snapshot_time = 0.0;
+        double total_corr_time = 0.0;
+        for (int b = 0; b < B_run; ++b) {
+            total_task_time += task_times_sec[b];
+            total_prep_time += prep_times_sec[b];
+            total_snapshot_time += snapshot_times_sec[b];
+            total_corr_time += corr_times_sec[b];
+        }
+
         BootstrapBatchTiming timing;
         timing.avg_fit_time = avg_fit_time;
         timing.sd_fit_time = std::sqrt(var / std::max(1, B_run - 1));
         timing.wall_time = wall_time;
-        timing.efficiency = total_fit_time / (wall_time * static_cast<double>(n_threads));
+        timing.efficiency = total_fit_time / (parallel_time * static_cast<double>(n_threads));
+        timing.task_efficiency = total_task_time / (parallel_time * static_cast<double>(n_threads));
+        timing.setup_time = setup_time;
+        timing.parallel_time = parallel_time;
+        timing.merge_time = merge_time;
+        timing.avg_task_time = total_task_time / static_cast<double>(B_run);
+        timing.avg_prep_time = total_prep_time / static_cast<double>(B_run);
+        timing.avg_snapshot_time = total_snapshot_time / static_cast<double>(B_run);
+        timing.avg_corr_time = total_corr_time / static_cast<double>(B_run);
 
         return timing;
     }
