@@ -435,7 +435,7 @@ public:
     }
     void refresh_component() {
         ensure_lc_();
-        const Vector s = data() * Psi_D() * weights_.col(h());
+        const Vector s = data_times_(Psi_D() * weights_.col(h()));
         components_.col(h()) = c_fit_(s);
     }
 
@@ -445,8 +445,7 @@ public:
     };
     InitInfo uniform_init() const {
         InitInfo out{true, Vector::Ones(n()) };
-        const Matrix& X = data();
-        out.nu = X * Psi_D() * Vector::Ones(n_dofs_weights());
+        out.nu = data_times_(Psi_D() * Vector::Ones(n_dofs_weights()));
 
         return out;
     }
@@ -499,7 +498,7 @@ public:
         weights().col(h()) = a;
 
         // compute the component and regularize it (the regularization acts only in the TimeDependent sampling scenario)
-        const Vector s = data() * Psi_D() * a;
+        const Vector s = data_times_(Psi_D() * a);
         components().col(h()) = c_fit_(s);
     }
 
@@ -543,7 +542,7 @@ public:
         if (nrm2 <= 0.0 || !std::isfinite(nrm2)) nrm2 = 1.0;
 
         // components
-        const Vector s = data() * am / std::sqrt(nrm2);
+        const Vector s = data_times_(am) / std::sqrt(nrm2);
         return c_fit_(s);
     }
 
@@ -611,6 +610,29 @@ protected:
         for (int i = 0; i < row_index_.size(); ++i)
             if (row_index_(i) != i) return false;
         return true;
+    }
+    Vector data_times_(const Vector& x) const {
+        Vector out(n());
+        if (is_identity_row_index_()) {
+            out.noalias() = raw_data() * x;
+        } else {
+            const Vector raw_out = raw_data() * x;
+            for (int i = 0; i < row_index_.size(); ++i)
+                out[i] = raw_out[row_index_(i)];
+        }
+        return out;
+    }
+    Vector data_transpose_times_(const Vector& x) const {
+        Vector out(m());
+        if (is_identity_row_index_()) {
+            out.noalias() = raw_data().transpose() * x;
+        } else {
+            Vector raw_x = Vector::Zero(n_raw());
+            for (int i = 0; i < row_index_.size(); ++i)
+                raw_x[row_index_(i)] += x[i];
+            out.noalias() = raw_data().transpose() * raw_x;
+        }
+        return out;
     }
 
     // weights and components
@@ -864,6 +886,7 @@ public:
     using Base::m;
     using Base::n_dofs_weights;
     using Base::data;
+    using Base::data_transpose_times_;
     using Base::h;
     using Base::mode;
     using Base::weights;
@@ -924,7 +947,7 @@ protected:
         assert(nu.size() == n() && "nu must have size n (rows of X)");
         init();
 
-        Vector z = data().transpose() * nu;
+        Vector z = data_transpose_times_(nu);
 
         if (weight_sign_constraint() == WeightSignConstraint::NonNegative) {
             return solve_nonnegative_weight_ipopt_(z); // already normalized
@@ -1025,6 +1048,7 @@ public:
 protected:
     using Base::solve_nonnegative_weight_ipopt_;
     using Base::reset_nonnegative_weight_solver_;
+    using Base::data_transpose_times_;
 
     template <typename GeoFrame>
     void init_functional_(GeoFrame& gf, WeightsPenaltyType&& weights_penalty) {
@@ -1038,7 +1062,7 @@ protected:
         assert(nu.size() == n() && "nu must have size n (rows of X)");
         init();
 
-        Vector z = data().transpose() * nu;
+        Vector z = data_transpose_times_(nu);
 
         if (weight_sign_constraint() == WeightSignConstraint::NonNegative) {
             return solve_nonnegative_weight_ipopt_(z);  // already normalized
@@ -2107,33 +2131,45 @@ private:
             set_lambda_weights_all(lambda_grid.back());
         init_comp_(blocks);
         fit_component_(blocks, C_active);
+        auto preliminary_w_fit = snapshot_weights_(blocks);
+        log_step_end_(step_start);
+
+        step_start = log_step_start_("  Clone worker blocks");
+        std::vector<BootstrapBlocks> thread_boot_worker(n_threads);
+        for (int t = 0; t < n_threads; ++t) {
+            thread_boot_worker[t] = clone_blocks_();
+        }
         log_step_end_(step_start);
 
         int n_lambda = static_cast<int>(lambda_grid.size());
         for (int lambda_i = n_lambda - 1; lambda_i >= 0; --lambda_i) {
+            const bool reuse_preliminary_fit = lambda_i == n_lambda - 1;
 
             if (select_lambda) {
                 // current lambda
                 const double lambda = lambda_grid[lambda_i];
                 fdapde::cout << "- lambda = " << lambda << std::endl;
-                set_lambda_weights_all(lambda);
+                if (!reuse_preliminary_fit) {
+                    set_lambda_weights_all(lambda);
+                    for (auto& worker : thread_boot_worker)
+                        set_lambda_weights_all_(worker.refs, lambda);
+                }
             } else {
                 fdapde::cout << "- fixed weight regularization" << std::endl;
             }
 
             // init warm start at lambda
-            step_start = log_step_start_("  Warm-start fit");
-            init_comp_(blocks, InitStrategy::WarmStart);
-            fit_component_(blocks, C_active);
-            auto w_fit = snapshot_weights_(blocks);
-            auto w_min = w_fit;
-            log_step_end_(step_start);
-
-            step_start = log_step_start_("  Clone worker blocks");
-            std::vector<BootstrapBlocks> thread_boot_worker(n_threads);
-            for (int t = 0; t < n_threads; ++t) {
-                thread_boot_worker[t] = clone_blocks_();
+            std::vector<Vector> w_fit;
+            if (reuse_preliminary_fit) {
+                step_start = log_step_start_("  Warm-start fit (reuse preliminary)");
+                w_fit = preliminary_w_fit;
+            } else {
+                step_start = log_step_start_("  Warm-start fit");
+                init_comp_(blocks, InitStrategy::WarmStart);
+                fit_component_(blocks, C_active);
+                w_fit = snapshot_weights_(blocks);
             }
+            auto w_min = w_fit;
             log_step_end_(step_start);
 
             auto start = std::chrono::high_resolution_clock::now();
@@ -2460,9 +2496,8 @@ private:
             }
             const auto snapshot_end = std::chrono::high_resolution_clock::now();
 
-            clear_row_index_all_(boot_blocks.refs);
             Matrix corr_b;
-            correlation_matrix_(boot_blocks.refs, w_b, corr_b);
+            correlation_matrix_raw_data_(boot_blocks.refs, w_b, corr_b);
             boot_results.corr_boot_by_lambda[lambda_i].col(b_global) = Eigen::Map<const Vector>(corr_b.data(), J * J);
             const auto corr_end = std::chrono::high_resolution_clock::now();
 
@@ -2476,6 +2511,9 @@ private:
         const auto parallel_end = std::chrono::high_resolution_clock::now();
 
         const auto merge_start = std::chrono::high_resolution_clock::now();
+
+        for (auto& boot_worker : thread_boot_worker)
+            clear_row_index_all_(boot_worker.refs);
 
         for (int b = 0; b < B_run; ++b) {
             const int b_global = B_offset + b;
@@ -3294,6 +3332,35 @@ private:
     }
     void correlation_matrix_(const BlockRefList& blocks, const std::vector<Vector>& weights, Matrix& Corr) const {
         correlation_matrix_(eta_with_weights_(blocks, weights), Corr);
+    }
+    void correlation_matrix_raw_data_(
+        const BlockRefList& blocks,
+        const std::vector<Vector>& weights,
+        Matrix& Corr
+    ) const {
+        const int J = static_cast<int>(blocks.size());
+        if (static_cast<int>(weights.size()) != J)
+            throw std::logic_error("correlation_matrix_raw_data_: size mismatch");
+
+        Corr.setIdentity(J, J);
+        std::vector<Vector> eta(J);
+        std::vector<double> vars(J, 0.0);
+
+        for (int j = 0; j < J; ++j) {
+            if (weights[j].size() != blocks[j]->n_dofs_weights())
+                throw std::logic_error("correlation_matrix_raw_data_: incompatible weight size");
+            eta[j] = blocks[j]->raw_data() * blocks[j]->Psi_D() * weights[j];
+            vars[j] = cov_(eta[j], eta[j]);
+        }
+
+        for (int j = 0; j < J; ++j) {
+            for (int k = j + 1; k < J; ++k) {
+                double corr_jk = 0.0;
+                if (vars[j] > 0.0 && vars[k] > 0.0)
+                    corr_jk = cov_(eta[j], eta[k]) / std::sqrt(vars[j] * vars[k]);
+                Corr(j, k) = Corr(k, j) = corr_jk;
+            }
+        }
     }
 
     // optimization criteria

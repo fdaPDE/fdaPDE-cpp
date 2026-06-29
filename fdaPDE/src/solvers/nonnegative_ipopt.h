@@ -1,7 +1,12 @@
 #include <cassert>
+#include <algorithm>
 #include <cmath>
+#include <iostream>
 #include <limits>
 #include <optional>
+#include <stdexcept>
+#include <utility>
+#include <vector>
 
 #include <Eigen/Dense>
 
@@ -37,10 +42,21 @@ public:
 
                 if (i >= j) {
                     hess_pos_.emplace_back(i, j);
+                    hess_values_.push_back(it.value());
                 }
             }
         }
 
+    }
+    void reset(const Vector& c, const Vector& x0) {
+        if (c.size() != n_ || x0.size() != n_)
+            throw std::invalid_argument("incompatible dimensions");
+
+        c_ = c;
+        x0_ = x0;
+        solution_.resize(n_);
+        status_ = Ipopt::SolverReturn::SUCCESS;
+        obj_value_ = 0.0;
     }
 
     // returns the size of the problem
@@ -202,8 +218,7 @@ public:
         } else {
             // return the values. this is a symmetric matrix, fill the lower left triangle only
             for (Ipopt::Index k = 0; k < static_cast<Ipopt::Index>(hess_pos_.size()); ++k) {
-                const auto [i, j] = hess_pos_[k];
-                values[k] = 2.0 * lambda[0] * Omega_.coeff(i, j);
+                values[k] = 2.0 * lambda[0] * hess_values_[k];
             }
         }
 
@@ -253,6 +268,7 @@ private:
 
     // cache for constant quantities
     std::vector<std::pair<Ipopt::Index, Ipopt::Index>> hess_pos_;
+    std::vector<double> hess_values_;
 
     // results
     Vector solution_;
@@ -286,6 +302,10 @@ public:
         last_solution_neg_ = x_init_;
 
         last_z_ = Vector::Zero(m);
+        problem_pos_raw_ = new NonNegativeWeightProblem(Omega_, Vector::Zero(n), x_init_);
+        problem_neg_raw_ = new NonNegativeWeightProblem(Omega_, Vector::Zero(n), x_init_);
+        problem_pos_ = problem_pos_raw_;
+        problem_neg_ = problem_neg_raw_;
 
         const auto status = app_->Initialize();
         if (status != Ipopt::Solve_Succeeded) throw std::runtime_error("Ipopt initialization failed.");
@@ -297,12 +317,18 @@ public:
       x_init_(other.x_init_),
       last_solution_(other.last_solution_),
       last_solution_pos_(other.last_solution_pos_),
-      last_solution_neg_(other.last_solution_neg_)
+      last_solution_neg_(other.last_solution_neg_),
+      last_z_(other.last_z_),
+      has_last_z_(other.has_last_z_)
     {
         Psi_.makeCompressed();
         Omega_.makeCompressed();
 
         app_ = IpoptApplicationFactory();
+        problem_pos_raw_ = new NonNegativeWeightProblem(Omega_, Vector::Zero(Omega_.rows()), x_init_);
+        problem_neg_raw_ = new NonNegativeWeightProblem(Omega_, Vector::Zero(Omega_.rows()), x_init_);
+        problem_pos_ = problem_pos_raw_;
+        problem_neg_ = problem_neg_raw_;
 
         const auto status = app_->Initialize();
         if (status != Ipopt::Solve_Succeeded) throw std::runtime_error("Ipopt initialization failed in copy constructor.");
@@ -329,39 +355,54 @@ public:
         }
 
         // positive
-        Vector x0_pos = normalize_convex_comb_(x_init_, last_solution_pos_, alpha);
-        double s_pos = std::abs(z.dot(Psi_ * x0_pos));
-        if (s_pos <= 0.0 || !std::isfinite(s_pos)) s_pos = 1.0;
-        const Vector c_pos = Psi_.transpose() * z / s_pos;
-        auto* raw_pos = new NonNegativeWeightProblem(Omega_, c_pos, x0_pos);
+        const Vector p = Psi_.transpose() * z;
+        const bool positive_side_only = p.minCoeff() >= 0.0 && p.maxCoeff() > 0.0;
+        const bool negative_side_only = p.maxCoeff() <= 0.0 && p.minCoeff() < 0.0;
 
-        Vector x0_neg = normalize_convex_comb_(x_init_, last_solution_neg_, alpha);
-        double s_neg = std::abs(z.dot(Psi_ * x0_neg));
-        if (s_neg <= 0.0 || !std::isfinite(s_neg)) s_neg = 1.0;
-        const Vector c_neg = - Psi_.transpose() * z / s_neg;
-        auto* raw_neg = new NonNegativeWeightProblem(Omega_, c_neg, x0_neg);
+        bool pos_ok = false;
+        bool neg_ok = false;
 
-        Ipopt::SmartPtr<Ipopt::TNLP> problem_pos = raw_pos;
-        Ipopt::SmartPtr<Ipopt::TNLP> problem_neg = raw_neg;
+        auto solve_pos = [&]() {
+            Vector x0_pos = normalize_convex_comb_(x_init_, last_solution_pos_, alpha);
+            double s_pos = std::abs(p.dot(x0_pos));
+            if (s_pos <= 0.0 || !std::isfinite(s_pos)) s_pos = 1.0;
+            problem_pos_raw_->reset(p / s_pos, x0_pos);
+            app_->OptimizeTNLP(problem_pos_);
+            pos_ok = problem_pos_raw_->status() == Ipopt::SUCCESS ||
+                problem_pos_raw_->status() == Ipopt::STOP_AT_ACCEPTABLE_POINT;
+            if (pos_ok) last_solution_pos_ = problem_pos_raw_->solution();
+        };
 
-        app_->OptimizeTNLP(problem_pos);
-        app_->OptimizeTNLP(problem_neg);
+        auto solve_neg = [&]() {
+            Vector x0_neg = normalize_convex_comb_(x_init_, last_solution_neg_, alpha);
+            double s_neg = std::abs(p.dot(x0_neg));
+            if (s_neg <= 0.0 || !std::isfinite(s_neg)) s_neg = 1.0;
+            problem_neg_raw_->reset(-p / s_neg, x0_neg);
+            app_->OptimizeTNLP(problem_neg_);
+            neg_ok = problem_neg_raw_->status() == Ipopt::SUCCESS ||
+                problem_neg_raw_->status() == Ipopt::STOP_AT_ACCEPTABLE_POINT;
+            if (neg_ok) last_solution_neg_ = problem_neg_raw_->solution();
+        };
 
-        const bool pos_ok = raw_pos->status() == Ipopt::SUCCESS || raw_pos->status() == Ipopt::STOP_AT_ACCEPTABLE_POINT;
-        const bool neg_ok = raw_neg->status() == Ipopt::SUCCESS || raw_neg->status() == Ipopt::STOP_AT_ACCEPTABLE_POINT;
+        if (positive_side_only) {
+            solve_pos();
+            if (!pos_ok) solve_neg();
+        } else if (negative_side_only) {
+            solve_neg();
+            if (!neg_ok) solve_pos();
+        } else {
+            solve_pos();
+            solve_neg();
+        }
 
         if (pos_ok && neg_ok) {
-            last_solution_pos_ = raw_pos->solution();
-            last_solution_neg_ = raw_neg->solution();
-            const double score_pos =  z.dot(Psi_ * last_solution_pos_);
-            const double score_neg = -z.dot(Psi_ * last_solution_neg_);
+            const double score_pos =  p.dot(last_solution_pos_);
+            const double score_neg = -p.dot(last_solution_neg_);
             const bool choose_pos = score_pos >= score_neg;
             last_solution_ = choose_pos ? last_solution_pos_ : last_solution_neg_;
         } else if (pos_ok) {
-            last_solution_pos_ = raw_pos->solution();
             last_solution_ = last_solution_pos_;
         } else if (neg_ok) {
-            last_solution_neg_ = raw_neg->solution();
             last_solution_ = last_solution_neg_;
         } else {
             std::cerr << "NonNegativeWeightSolver: optimization failed, returning the last admissible solution\n";
@@ -396,5 +437,9 @@ private:
     Vector last_solution_neg_;
     Vector last_solution_;
 
+    NonNegativeWeightProblem* problem_pos_raw_ = nullptr;
+    NonNegativeWeightProblem* problem_neg_raw_ = nullptr;
+    Ipopt::SmartPtr<Ipopt::TNLP> problem_pos_;
+    Ipopt::SmartPtr<Ipopt::TNLP> problem_neg_;
     Ipopt::SmartPtr<Ipopt::IpoptApplication> app_;
 };
