@@ -865,6 +865,7 @@ public:
     using Base::n_dofs_weights;
     using Base::data;
     using Base::h;
+    using Base::mode;
     using Base::weights;
     using Base::components;
     using Base::weight_sign_constraint;
@@ -929,6 +930,7 @@ protected:
             return solve_nonnegative_weight_ipopt_(z); // already normalized
         }
 
+        if (mode() == Mode::CovMax) return normalize_weight_(z);
         const Vector a_tilde = ginvM() * z;
         return normalize_weight_(a_tilde);
     }
