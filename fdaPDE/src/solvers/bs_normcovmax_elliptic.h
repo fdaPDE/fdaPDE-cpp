@@ -31,7 +31,7 @@ struct bs_normcovmax_elliptic {
     using binary_t = BinaryMatrix<Dynamic, Dynamic>;
     using diag_matrix_t   = Eigen::DiagonalMatrix<double, Dynamic, Dynamic>;
     using sparse_matrix_t = Eigen::SparseMatrix<double>;
-    using sparse_solver_t = eigen_sparse_solver_movable_wrap<Eigen::SparseLU<sparse_matrix_t>>;
+    using sparse_solver_t = eigen_sparse_solver_movable_wrap<Eigen::SimplicialLDLT<sparse_matrix_t>>;
     using dense_solver_t  = Eigen::PartialPivLU<matrix_t>;
 
     template <typename DataLocs>
