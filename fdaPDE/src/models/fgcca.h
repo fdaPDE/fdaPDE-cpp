@@ -406,6 +406,7 @@ public:
 
     // components regularization utilities
     void set_lambda_components(const double lambda) {
+        if constexpr (std::same_as<SamplingStrategy, IndependentSampling>) return;
         lambda_components_ = lambda;
         lambda_components_selection_ = lambda < 0.0;
     }
@@ -481,7 +482,7 @@ public:
             I_.setIdentity();
         }
 
-        invalidate_M_();
+        invalidate_M_after_data_change_();
         components_ready_ = false;
     }
     void clear_row_index() {
@@ -729,6 +730,9 @@ protected:
         M_ready_ = false;
         invalidate_derived_caches_();
     } // this is enough to invalidate also ginvM and invM
+    void invalidate_M_after_data_change_() {
+        if (mode_ != Mode::CovMax) invalidate_M_();
+    }
     virtual void invalidate_derived_caches_() {}
 
     // deflation
@@ -749,7 +753,7 @@ protected:
             mutable_raw_data_().noalias() -= y * p.transpose();
         }
 
-        invalidate_M_();
+        invalidate_M_after_data_change_();
     }
 
     // non-negative solver utils
@@ -775,6 +779,7 @@ protected:
 
     // component solver
     Vector c_fit_(const Vector& s) {
+        if constexpr (std::same_as<SamplingStrategy, IndependentSampling>) return s;
 
         components_solver_.update_response_and_weights(s, I_);
 
@@ -1886,7 +1891,8 @@ private:
         }
 
         // initialization
-        res.obj_history.push_back(objective_(blocks, ws, res.C));
+        std::vector<Vector> eta_cache = eta_(blocks);
+        res.obj_history.push_back(objective_(ws, res.C, eta_cache));
         auto a_prev = snapshot_weights_(blocks);
         if (update_component_lambdas && opt_.lambda_selection_components == LambdaSelection::Automatic)
             set_lambda_components_auto_all_(blocks);
@@ -1900,22 +1906,27 @@ private:
 
                 // inner-component assembler
                 Vector nu_l = Vector::Zero(blocks[l]->n());
-                const Vector eta_l = eta_(*blocks[l]);
+                const Vector& eta_l = eta_cache[l];
                 for (int k = 0; k < J; ++k) {
                     if (!res.C(l, k)) continue;
-                    const Vector eta_k = eta_(*blocks[k]);
+                    const Vector& eta_k = eta_cache[k];
                     const double cov_lk = cov_value_(ws, l, k, eta_l, eta_k);
                     const double w_lk = opt_.scheme.w(cov_lk);
-                    nu_l.noalias() += w_lk * eta_(*blocks[k], *blocks[l]);
+                    if constexpr (std::same_as<SamplingStrategy, IndependentSampling>) {
+                        nu_l.noalias() += w_lk * eta_k;
+                    } else {
+                        nu_l.noalias() += w_lk * eta_(*blocks[k], *blocks[l]);
+                    }
                 }
 
                 // block update
                 blocks[l]->compute(nu_l);
+                eta_cache[l] = eta_(*blocks[l]);
                 mark_cov_rowcol_dirty_(ws, l);
             }
 
             // update metrics
-            const double f_obj = objective_(blocks, ws, res.C);
+            const double f_obj = objective_(ws, res.C, eta_cache);
             const double obj_prev = res.obj_history.back();
             res.obj_history.push_back(f_obj);
             res.iters = s + 1;
@@ -3137,6 +3148,7 @@ private:
             b->select_tau_auto();
     }
     void set_lambda_components_auto_all_(const BlockRefList& blocks) const {
+        if constexpr (std::same_as<SamplingStrategy, IndependentSampling>) return;
         for (auto* b : blocks)
             b->set_lambda_components(-1);
     }
@@ -3151,7 +3163,7 @@ private:
         if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
             return Psi_T() * b.components().col(h_);
         } else {
-            return b.components_m().col(h_);
+            return b.components().col(h_);
         }
     }
     Vector eta_(Block& b, const Block& ref) const {
@@ -3159,7 +3171,7 @@ private:
         if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
             return ref.Psi_T() * b.components().col(h_);
         } else {
-            return b.components_m().col(h_);
+            return b.components().col(h_);
         }
     }
     std::vector<Vector> eta_(const BlockRefList& blocks) const {
@@ -3284,13 +3296,15 @@ private:
 
     // optimization criteria
     double objective_(const BlockRefList& blocks, FitWorkspace& ws, const BoolMatrix& C) const {
+        return objective_(ws, C, eta_(blocks));
+    }
+    double objective_(FitWorkspace& ws, const BoolMatrix& C, const std::vector<Vector>& eta) const {
         const int J = n_blocks();
         double f = 0.0;
         for (int j = 0; j < J; ++j) {
-            const Vector eta_j = eta_(*blocks[j]);
             for (int k = j; k < J; ++k) {
                 if (C(j, k)) {
-                    const double cov_jk = cov_value_(ws, j, k, eta_j, eta_(*blocks[k]));
+                    const double cov_jk = cov_value_(ws, j, k, eta[j], eta[k]);
                     const double mult = j == k ? 1.0 : 2.0;
                     f += mult * opt_.scheme.g(cov_jk);
                 }
