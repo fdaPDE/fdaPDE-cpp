@@ -1288,6 +1288,7 @@ public:
         int B_min = 500;
         int B_max = 1000;
         int B_per_thread_per_batch = 5;
+        int fit_max_iter = -1; // negative means use Options::max_iter
 
         // adaptive batch
         bool adaptive = true;
@@ -1300,6 +1301,7 @@ public:
         // connection deactivation
         double active_connection_sign_stability = 0.95;
         double active_connection_min_abs_corr = 0.05;
+        bool aggressive_connection_deactivation = false;
 
         // confidence intervals
         double ci_level = 0.95;
@@ -1323,12 +1325,14 @@ public:
                << "  B_min                              = " << config.B_min << '\n'
                << "  B_max                              = " << config.B_max << '\n'
                << "  B_per_thread_per_batch             = " << config.B_per_thread_per_batch << '\n'
+               << "  fit_max_iter                       = " << config.fit_max_iter << '\n'
                << "  adaptive                           = " << config.adaptive << '\n'
                << "  adaptive_tol                       = " << config.adaptive_tol << '\n'
                << "  stable_batches_required            = " << config.stable_batches_required << '\n'
                << "  active_block_tol                   = " << config.active_block_tol << '\n'
                << "  active_connection_sign_stability   = " << config.active_connection_sign_stability << '\n'
                << "  active_connection_min_abs_corr     = " << config.active_connection_min_abs_corr << '\n'
+               << "  aggressive_connection_deactivation = " << config.aggressive_connection_deactivation << '\n'
                << "  ci_level                           = " << config.ci_level << '\n'
                << "  patience                           = " << config.patience << '\n'
                << "  resampling_strategy                = " << to_string(config.resampling_strategy) << '\n'
@@ -1926,14 +1930,16 @@ private:
     Result fit_component_(
         const BlockRefList& blocks,
         const BoolMatrix& C_active,
-        const bool update_component_lambdas = true
+        const bool update_component_lambdas = true,
+        const int max_iter_override = -1
     ) {
         const int J = n_blocks();
+        const int max_iter = max_iter_override > 0 ? max_iter_override : opt_.max_iter;
         FitWorkspace ws(J);
 
         // room for results
         Result res(J);
-        res.obj_history.reserve(opt_.max_iter);
+        res.obj_history.reserve(max_iter);
 
         // design update according to current active blocks
         res.C = C_active;
@@ -1953,7 +1959,7 @@ private:
             set_lambda_components_auto_all_(blocks);
 
         // main loop
-        for (int s = 0; s < opt_.max_iter; ++s) {
+        for (int s = 0; s < max_iter; ++s) {
             for (int l = 0; l < J; ++l) {
 
                 // skip deactivated blocks
@@ -2232,10 +2238,15 @@ private:
                 log_step_end_(batch_step_start);
 
                 step_start = log_step_start_("    Post-batch update");
+                const int B_done_after_batch = bootstrap_state.B_done + bootstrap_state.B_run;
                 int n_active_blocks = count_active_blocks_(C_active);
                 if (opt_.block_deactivation)
                     n_active_blocks = threshold_inactive_blocks_(w_min, C_active);
                 int n_active_connections = count_active_connections_(C_active);
+                if (opt_.connection_deactivation && bootstrap_config_.aggressive_connection_deactivation)
+                    n_active_connections = threshold_inactive_connections_(
+                        lambda_i, bootstrap_state, boot_results, C_active, B_done_after_batch
+                    );
                 bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_);
                 log_step_end_(step_start);
 
@@ -2455,7 +2466,7 @@ private:
             );
 
             init_comp_(boot_blocks.refs, InitStrategy::WarmStart, false, &active_blocks);
-            fit_component_(boot_blocks.refs, C_active, false);
+            fit_component_(boot_blocks.refs, C_active, false, bootstrap_fit_max_iter_());
 
             const double rho_star = rho_tot_(boot_blocks.refs, C_active);
             if (std::isfinite(rho_star) && rho_star >= out.rho_tot)
@@ -2516,7 +2527,7 @@ private:
 
             const auto fit_start = std::chrono::high_resolution_clock::now();
             init_comp_(boot_blocks.refs, InitStrategy::WarmStart, true, &active_blocks);
-            fit_component_(boot_blocks.refs, C_active);
+            fit_component_(boot_blocks.refs, C_active, true, bootstrap_fit_max_iter_());
             const auto fit_end = std::chrono::high_resolution_clock::now();
 
             fit_times_sec[b] = std::chrono::duration<double>(fit_end - fit_start).count();
@@ -2729,10 +2740,13 @@ private:
         int lambda_i,
         AdaptiveBootstrapState& state,
         const BootstrapSelectionResult& boot_results,
-        BoolMatrix& C_active
+        BoolMatrix& C_active,
+        const int B_eff_override = -1
     ) {
         const int J = static_cast<int>(C_active.rows());
-        const int B_eff = state.B_done;
+        const int B_eff = B_eff_override > 0 ? B_eff_override : state.B_done;
+        if (B_eff <= 0)
+            return count_active_connections_(C_active);
 
         for (int j = 0; j < J; ++j) {
             for (int k = j + 1; k < J; ++k) {
@@ -3109,6 +3123,8 @@ private:
             throw std::invalid_argument("RGCCA: bootstrap B_max must be greater than B_min");
         if (bootstrap_config_.B_per_thread_per_batch <= 0)
             throw std::invalid_argument("RGCCA: bootstrap B_per_thread_per_batch must be positive");
+        if (bootstrap_config_.fit_max_iter == 0 || bootstrap_config_.fit_max_iter < -1)
+            throw std::invalid_argument("RGCCA: bootstrap fit_max_iter must be positive or -1");
         if (bootstrap_config_.stable_batches_required <= 0)
             throw std::invalid_argument("RGCCA: bootstrap stable_batches_required must be positive");
         if (!(bootstrap_config_.adaptive_tol >= 0.0) || !std::isfinite(bootstrap_config_.adaptive_tol))
@@ -3154,6 +3170,8 @@ private:
             throw std::invalid_argument("RGCCA: component significance max_threads must be positive");
         if (bootstrap_config_.component_significance_resamples <= 0)
             throw std::invalid_argument("RGCCA: component significance resamples must be positive");
+        if (bootstrap_config_.fit_max_iter == 0 || bootstrap_config_.fit_max_iter < -1)
+            throw std::invalid_argument("RGCCA: component significance fit_max_iter must be positive or -1");
         if (
             !(bootstrap_config_.component_significance_alpha > 0.0) ||
             bootstrap_config_.component_significance_alpha >= 1.0 ||
@@ -3163,6 +3181,10 @@ private:
                 "RGCCA: component significance alpha must be finite and in (0, 1)"
             );
         }
+    }
+
+    int bootstrap_fit_max_iter_() const {
+        return bootstrap_config_.fit_max_iter > 0 ? bootstrap_config_.fit_max_iter : opt_.max_iter;
     }
 
     int bootstrap_n_threads_() const {

@@ -380,12 +380,14 @@ public:
         bool neg_ok = false;
 
         auto solve_pos = [&]() {
-            if (try_direct_solution_(p, last_solution_pos_)) {
+            Vector x_direct_pos;
+            if (try_direct_solution_(p, last_solution_pos_, &x_direct_pos)) {
                 pos_ok = true;
                 return;
             }
 
-            Vector x0_pos = normalize_convex_comb_(x_init_, last_solution_pos_, alpha);
+            const Vector& x1_pos = x_direct_pos.size() == x_init_.size() ? x_direct_pos : x_init_;
+            Vector x0_pos = normalize_convex_comb_(x_init_, x1_pos, alpha);
             double s_pos = std::abs(p.dot(x0_pos));
             if (s_pos <= 0.0 || !std::isfinite(s_pos)) s_pos = 1.0;
             problem_pos_raw_->reset(p / s_pos, x0_pos);
@@ -396,12 +398,14 @@ public:
         };
 
         auto solve_neg = [&]() {
-            if (try_direct_solution_(-p, last_solution_neg_)) {
+            Vector x_direct_neg;
+            if (try_direct_solution_(-p, last_solution_neg_, &x_direct_neg)) {
                 neg_ok = true;
                 return;
             }
 
-            Vector x0_neg = normalize_convex_comb_(x_init_, last_solution_neg_, alpha);
+            const Vector& x1_neg = x_direct_neg.size() == x_init_.size() ? x_direct_neg : x_init_;
+            Vector x0_neg = normalize_convex_comb_(x_init_, x1_neg, alpha);
             double s_neg = std::abs(p.dot(x0_neg));
             if (s_neg <= 0.0 || !std::isfinite(s_neg)) s_neg = 1.0;
             problem_neg_raw_->reset(-p / s_neg, x0_neg);
@@ -460,7 +464,7 @@ public:
     }
 
 private:
-    bool try_direct_solution_(const Vector& c, Vector& out) const {
+    bool try_direct_solution_(const Vector& c, Vector& out, Vector* thresholded_out = nullptr) const {
         if (!omega_solver_ready_)
             return false;
 
@@ -470,8 +474,15 @@ private:
 
         const double scale = std::max(1.0, y.cwiseAbs().maxCoeff());
         const double tol = 100.0 * std::numeric_limits<double>::epsilon() * scale;
-        if (y.minCoeff() < -tol)
+        if (y.minCoeff() < -tol) {
+            if (thresholded_out != nullptr) {
+                Vector y_pos = y.cwiseMax(0.0);
+                const double norm2 = y_pos.dot(Omega_ * y_pos);
+                if (norm2 > 0.0 && std::isfinite(norm2))
+                    *thresholded_out = y_pos / std::sqrt(norm2);
+            }
             return false;
+        }
 
         y = y.cwiseMax(0.0);
         const double norm2 = y.dot(Omega_ * y);
