@@ -9,6 +9,7 @@
 #include <vector>
 
 #include <Eigen/Dense>
+#include <Eigen/Sparse>
 
 #include "IpIpoptApplication.hpp"
 #include "IpTNLP.hpp"
@@ -57,6 +58,7 @@ public:
         solution_.resize(n_);
         status_ = Ipopt::SolverReturn::SUCCESS;
         obj_value_ = 0.0;
+        omega_x_ready_ = false;
     }
 
     // returns the size of the problem
@@ -114,12 +116,12 @@ public:
         Ipopt::Number* lambda           // (out) the initial values for the constraint multipliers, \lambda
     ) override {
 
-        assert(init_x == true);
         assert(init_z == false);
         assert(init_lambda == false);
 
-        for (Ipopt::Index i = 0; i < n; ++i) {
-            x[i] = x0_[i];
+        if (init_x) {
+            for (Ipopt::Index i = 0; i < n; ++i)
+                x[i] = x0_[i];
         }
 
         return true;
@@ -162,8 +164,8 @@ public:
         Ipopt::Number* g                // (out) array to store constraint function values g(x), do not add or subtract the bound values g_L or g_u.
     ) override {
 
-        Eigen::Map<const Vector> a(x, n);
-        g[0] = a.dot(Omega_ * a);
+        const Eigen::Map<const Vector> a(x, n);
+        g[0] = a.dot(omega_x_(x, n, new_x));
 
         return true;
     }
@@ -186,9 +188,8 @@ public:
                 jCol[j] = j;
             }
         } else {
-            Eigen::Map<const Vector> a(x, n);
             Eigen::Map<Vector> jac(values, n);
-            jac.noalias() = 2.0 * (Omega_ * a);
+            jac.noalias() = 2.0 * omega_x_(x, n, new_x);
         }
 
         return true;
@@ -257,6 +258,15 @@ public:
     double obj_value() const { return obj_value_; }
 
 private:
+    const Vector& omega_x_(const Ipopt::Number* x, const Ipopt::Index n, const bool /*new_x*/) {
+        const Eigen::Map<const Vector> x_map(x, n);
+        if (!omega_x_ready_ || x_cache_.size() != n || !x_cache_.isApprox(x_map, 0.0)) {
+            x_cache_ = x_map;
+            omega_x_cache_.noalias() = Omega_ * x_cache_;
+            omega_x_ready_ = true;
+        }
+        return omega_x_cache_;
+    }
 
     // inputs
     SparseMatrix Omega_;
@@ -269,6 +279,9 @@ private:
     // cache for constant quantities
     std::vector<std::pair<Ipopt::Index, Ipopt::Index>> hess_pos_;
     std::vector<double> hess_values_;
+    Vector x_cache_;
+    Vector omega_x_cache_;
+    bool omega_x_ready_ = false;
 
     // results
     Vector solution_;
@@ -286,6 +299,8 @@ public:
 
         Psi_.makeCompressed();
         Omega_.makeCompressed();
+        omega_solver_.compute(Omega_);
+        omega_solver_ready_ = omega_solver_.info() == Eigen::Success;
 
         app_ = IpoptApplicationFactory();
 
@@ -323,6 +338,8 @@ public:
     {
         Psi_.makeCompressed();
         Omega_.makeCompressed();
+        omega_solver_.compute(Omega_);
+        omega_solver_ready_ = omega_solver_.info() == Eigen::Success;
 
         app_ = IpoptApplicationFactory();
         problem_pos_raw_ = new NonNegativeWeightProblem(Omega_, Vector::Zero(Omega_.rows()), x_init_);
@@ -363,6 +380,11 @@ public:
         bool neg_ok = false;
 
         auto solve_pos = [&]() {
+            if (try_direct_solution_(p, last_solution_pos_)) {
+                pos_ok = true;
+                return;
+            }
+
             Vector x0_pos = normalize_convex_comb_(x_init_, last_solution_pos_, alpha);
             double s_pos = std::abs(p.dot(x0_pos));
             if (s_pos <= 0.0 || !std::isfinite(s_pos)) s_pos = 1.0;
@@ -374,6 +396,11 @@ public:
         };
 
         auto solve_neg = [&]() {
+            if (try_direct_solution_(-p, last_solution_neg_)) {
+                neg_ok = true;
+                return;
+            }
+
             Vector x0_neg = normalize_convex_comb_(x_init_, last_solution_neg_, alpha);
             double s_neg = std::abs(p.dot(x0_neg));
             if (s_neg <= 0.0 || !std::isfinite(s_neg)) s_neg = 1.0;
@@ -391,8 +418,24 @@ public:
             solve_neg();
             if (!neg_ok) solve_pos();
         } else {
-            solve_pos();
-            solve_neg();
+            const double pos_bound = upper_bound_(p);
+            const double neg_bound = upper_bound_(-p);
+            auto pos_dominates = [&]() {
+                return pos_ok && std::isfinite(neg_bound) &&
+                    p.dot(last_solution_pos_) + 1e-10 * (1.0 + std::abs(neg_bound)) >= neg_bound;
+            };
+            auto neg_dominates = [&]() {
+                return neg_ok && std::isfinite(pos_bound) &&
+                    -p.dot(last_solution_neg_) + 1e-10 * (1.0 + std::abs(pos_bound)) >= pos_bound;
+            };
+
+            if (pos_bound >= neg_bound) {
+                solve_pos();
+                if (!pos_dominates()) solve_neg();
+            } else {
+                solve_neg();
+                if (!neg_dominates()) solve_pos();
+            }
         }
 
         if (pos_ok && neg_ok) {
@@ -417,6 +460,42 @@ public:
     }
 
 private:
+    bool try_direct_solution_(const Vector& c, Vector& out) const {
+        if (!omega_solver_ready_)
+            return false;
+
+        Vector y = omega_solver_.solve(c);
+        if (omega_solver_.info() != Eigen::Success || !y.allFinite())
+            return false;
+
+        const double scale = std::max(1.0, y.cwiseAbs().maxCoeff());
+        const double tol = 100.0 * std::numeric_limits<double>::epsilon() * scale;
+        if (y.minCoeff() < -tol)
+            return false;
+
+        y = y.cwiseMax(0.0);
+        const double norm2 = y.dot(Omega_ * y);
+        if (norm2 <= 0.0 || !std::isfinite(norm2))
+            return false;
+
+        out = y / std::sqrt(norm2);
+        return true;
+    }
+    double upper_bound_(const Vector& c) const {
+        if (!omega_solver_ready_)
+            return std::numeric_limits<double>::infinity();
+
+        const Vector c_pos = c.cwiseMax(0.0);
+        if (c_pos.squaredNorm() == 0.0)
+            return 0.0;
+
+        const Vector y = omega_solver_.solve(c_pos);
+        if (omega_solver_.info() != Eigen::Success)
+            return std::numeric_limits<double>::infinity();
+
+        const double q = c_pos.dot(y);
+        return q > 0.0 && std::isfinite(q) ? std::sqrt(q) : 0.0;
+    }
     Vector normalize_convex_comb_(const Vector& x1, const Vector& x2, const double alpha) const {
         Vector x = (1.0-alpha) * x1 + alpha * x2;
         const double norm2 = x.dot(Omega_ * x);
@@ -428,6 +507,8 @@ private:
 
     SparseMatrix Psi_;
     SparseMatrix Omega_;
+    Eigen::SimplicialLDLT<SparseMatrix> omega_solver_;
+    bool omega_solver_ready_ = false;
 
     Vector last_z_;
     bool has_last_z_ = false;

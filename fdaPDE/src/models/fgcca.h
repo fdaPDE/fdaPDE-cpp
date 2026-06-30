@@ -355,6 +355,21 @@ public:
         if (!data_ptr_) throw std::logic_error("BaseBlock: Block has no data pointer");
         return *data_ptr_;
     }
+    bool raw_score_cache_for_weight(const Vector& a, Vector& out) const {
+        if (!raw_score_cache_ready_ || !weights_ready_ || a.size() != weights_.rows())
+            return false;
+
+        const auto current_weight = weights_.col(h_);
+        if (a.isApprox(current_weight)) {
+            out = raw_score_cache_;
+            return true;
+        }
+        if (a.isApprox(-current_weight)) {
+            out = -raw_score_cache_;
+            return true;
+        }
+        return false;
+    }
     [[nodiscard]] auto data() const {
         return raw_data()(row_index_, Eigen::all);
     }
@@ -612,14 +627,17 @@ protected:
         return true;
     }
     Vector data_times_(const Vector& x) const {
-        Vector out(n());
+        raw_score_cache_.resize(n_raw());
+        raw_score_cache_.noalias() = raw_data() * x;
+        raw_score_cache_ready_ = true;
+
         if (is_identity_row_index_()) {
-            out.noalias() = raw_data() * x;
-        } else {
-            const Vector raw_out = raw_data() * x;
-            for (int i = 0; i < row_index_.size(); ++i)
-                out[i] = raw_out[row_index_(i)];
+            return raw_score_cache_;
         }
+
+        Vector out(n());
+        for (int i = 0; i < row_index_.size(); ++i)
+            out[i] = raw_score_cache_[row_index_(i)];
         return out;
     }
     Vector data_transpose_times_(const Vector& x) const {
@@ -753,6 +771,7 @@ protected:
         invalidate_derived_caches_();
     } // this is enough to invalidate also ginvM and invM
     void invalidate_M_after_data_change_() {
+        raw_score_cache_ready_ = false;
         if (mode_ != Mode::CovMax) invalidate_M_();
     }
     virtual void invalidate_derived_caches_() {}
@@ -831,6 +850,7 @@ protected:
     // data
     Matrix* data_ptr_ = nullptr;
     IndexVector row_index_;
+    mutable Vector raw_score_cache_;
 
     // solvers
     ComponentsSolverType components_solver_;
@@ -858,6 +878,7 @@ protected:
 
     // flags
     bool raw_data_mutable_ = false;
+    mutable bool raw_score_cache_ready_ {false};
     bool weights_ready_ {false}, components_ready_ {false};
     bool M_ready_ {false}, invM_ready_ {false}, ginvM_ready_ {false};
     bool lambda_components_selection_ {false};
@@ -1568,8 +1589,10 @@ public:
 
             // final fit
             auto step_start = log_step_start_("Final component fit");
-            init_comp_();
-            Result component_result = fit_component_(C_active);
+            auto blocks = main_blocks_();
+            const auto active_blocks = active_blocks_from_C_(C_active);
+            init_comp_(blocks, InitStrategy::None, true, &active_blocks);
+            Result component_result = fit_component_(blocks, C_active);
             log_step_end_(step_start);
 
             if (opt_.component_significance) {
@@ -1855,18 +1878,24 @@ private:
     void init_comp_(
         const BlockRefList& blocks,
         InitStrategy init_strategy = InitStrategy::None,
-        const bool update_regularization = true
+        const bool update_regularization = true,
+        const std::vector<bool>* active_blocks = nullptr
     ) {
         if (update_regularization) {
             if (opt_.mode == Mode::Regularized) set_tau_auto_all_(blocks);
             if (opt_.lambda_selection_components == LambdaSelection::Automatic) set_lambda_components_auto_all_(blocks);
         }
 
+        if (active_blocks != nullptr && active_blocks->size() != blocks.size())
+            throw std::logic_error("init_comp_: active block mask size mismatch");
+
         if (init_strategy == InitStrategy::None) init_strategy = opt_.init_strategy;
 
         for (int j = 0; j < n_blocks(); ++j) {
             auto* b = blocks[j];
             b->set_h(h_);
+            if (active_blocks != nullptr && !(*active_blocks)[j])
+                continue;
 
             if (init_strategy == InitStrategy::WarmStart) {
                 b->refresh_component();
@@ -2165,11 +2194,14 @@ private:
                 w_fit = preliminary_w_fit;
             } else {
                 step_start = log_step_start_("  Warm-start fit");
-                init_comp_(blocks, InitStrategy::WarmStart);
+                const auto active_blocks = active_blocks_from_C_(C_active);
+                init_comp_(blocks, InitStrategy::WarmStart, true, &active_blocks);
                 fit_component_(blocks, C_active);
                 w_fit = snapshot_weights_(blocks);
             }
             auto w_min = w_fit;
+            if (opt_.block_deactivation)
+                threshold_inactive_blocks_(w_min, C_active);
             log_step_end_(step_start);
 
             auto start = std::chrono::high_resolution_clock::now();
@@ -2410,6 +2442,7 @@ private:
 
         std::vector<int> thread_ge_count(n_threads, 0);
         const unsigned seed = bootstrap_config_.seed + static_cast<unsigned>(1000003 * (h_ + 1));
+        const auto active_blocks = active_blocks_from_C_(C_active);
 
         step_start = log_step_start_("  Significance bootstrap");
         parallel_for(0, B, 1, [&](int b) {
@@ -2421,7 +2454,7 @@ private:
                 seed + static_cast<unsigned>(7919 * (b + 1))
             );
 
-            init_comp_(boot_blocks.refs, InitStrategy::WarmStart, false);
+            init_comp_(boot_blocks.refs, InitStrategy::WarmStart, false, &active_blocks);
             fit_component_(boot_blocks.refs, C_active, false);
 
             const double rho_star = rho_tot_(boot_blocks.refs, C_active);
@@ -2457,6 +2490,7 @@ private:
         const int B_run = bootstrap_state.B_run;
         const int B_offset = bootstrap_state.B_done;
         const int seed = bootstrap_state.seed;
+        const auto active_blocks = active_blocks_from_C_(C_active);
 
         const auto setup_start = std::chrono::high_resolution_clock::now();
         auto bootstrap_idx = make_bootstrap_indices_(B_run, B_offset, seed);
@@ -2481,7 +2515,7 @@ private:
             const auto prep_end = std::chrono::high_resolution_clock::now();
 
             const auto fit_start = std::chrono::high_resolution_clock::now();
-            init_comp_(boot_blocks.refs, InitStrategy::WarmStart);
+            init_comp_(boot_blocks.refs, InitStrategy::WarmStart, true, &active_blocks);
             fit_component_(boot_blocks.refs, C_active);
             const auto fit_end = std::chrono::high_resolution_clock::now();
 
@@ -3349,7 +3383,10 @@ private:
         for (int j = 0; j < J; ++j) {
             if (weights[j].size() != blocks[j]->n_dofs_weights())
                 throw std::logic_error("correlation_matrix_raw_data_: incompatible weight size");
-            eta[j] = blocks[j]->raw_data() * blocks[j]->Psi_D() * weights[j];
+            if (weights[j].squaredNorm() == 0.0)
+                continue;
+            if (!blocks[j]->raw_score_cache_for_weight(weights[j], eta[j]))
+                eta[j] = blocks[j]->raw_data() * blocks[j]->Psi_D() * weights[j];
             vars[j] = cov_(eta[j], eta[j]);
         }
 
