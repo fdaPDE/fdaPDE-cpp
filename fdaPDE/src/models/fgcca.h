@@ -2182,7 +2182,7 @@ private:
         auto preliminary_w_fit = snapshot_weights_(blocks);
         log_step_end_(step_start);
 
-        step_start = log_step_start_("  Clone worker blocks");
+        step_start = log_step_start_("Clone worker blocks");
         std::vector<BootstrapBlocks> thread_boot_worker(n_threads);
         for (int t = 0; t < n_threads; ++t) {
             thread_boot_worker[t] = clone_blocks_();
@@ -2234,6 +2234,11 @@ private:
 
                 const int batch_first = bootstrap_state.B_done;
                 const int batch_last = bootstrap_state.B_done + bootstrap_state.B_run - 1;
+
+                fdapde::cout << "  batch [" << std::setw(4) << batch_first 
+                                            << ", " << std::setw(4) << batch_last << "]" 
+                                            << std::flush;
+
                 const auto batch_step_start = std::chrono::high_resolution_clock::now();
                 auto bootstrap_timing = run_bootstrap_batch_(
                     lambda_i,
@@ -2371,6 +2376,7 @@ private:
         double avg_snapshot_time = 0.0;
         double avg_corr_time = 0.0;
         double avg_iters = 0.0;
+        int max_iters = 0;
         int capped_fits = 0;
     };
     struct BootstrapTimingSummary {
@@ -2649,6 +2655,7 @@ private:
         timing.avg_snapshot_time = total_snapshot_time / static_cast<double>(B_run);
         timing.avg_corr_time = total_corr_time / static_cast<double>(B_run);
         timing.avg_iters = static_cast<double>(total_iters) / static_cast<double>(B_run);
+        timing.max_iters = *std::max_element(fit_iters.begin(), fit_iters.end());;
         timing.capped_fits = total_capped_fits;
 
         return timing;
@@ -2678,25 +2685,24 @@ private:
         const BootstrapBatchTiming& timing,
         const AdaptiveStopInfo& stop_info
     ) const {
-        fdapde::cout << "  batch [" << std::setw(4) << batch_first
-                  << ", " << std::setw(4) << batch_last << "]"
-                  << " time=" << std::fixed << std::setprecision(3) << elapsed_sec << "s"
+        fdapde::cout << " time=" << std::fixed << std::setprecision(3) << elapsed_sec << "s"
                   << " fit=" << std::setprecision(3) << timing.avg_fit_time
-                  << "+/-" << timing.sd_fit_time << "s"
-                  << " eff=" << std::setprecision(1) << 100.0 * timing.efficiency << "%"
-                  << " ab=" << n_active_blocks
-                  << " ac=" << n_active_connections
-                  << " crit=" << std::setprecision(3) << crit
-                  << " rel=";
+                  << "±" << timing.sd_fit_time << "s"
+                  << ", eff=" << std::setprecision(1) << 100.0 * timing.efficiency << "%"
+                  << " | ab=" << n_active_blocks
+                  << ", ac=" << n_active_connections
+                  << " | crit=" << std::setprecision(3) << crit
+                  << ", rel=";
         if (std::isfinite(stop_info.rel_change)) {
             fdapde::cout << std::setprecision(3) << stop_info.rel_change;
         } else {
-            fdapde::cout << "-";
+            fdapde::cout << "  -  ";
         }
-        fdapde::cout << " capped=" << timing.capped_fits << "/" << (batch_last - batch_first + 1)
-                  << " avg_iters=" << std::setprecision(1) << timing.avg_iters;
+        fdapde::cout << " | capped=" << timing.capped_fits << "/" << (batch_last - batch_first + 1)
+                     << ", avg_iters=" << std::setprecision(1) << timing.avg_iters
+                     << ", max_iters=" << std::setprecision(1) << timing.max_iters;
         if (stop_info.stop)
-            fdapde::cout << " stop=" << stop_info.reason;
+            fdapde::cout << " | stop=" << stop_info.reason;
         fdapde::cout << std::defaultfloat << std::endl;
     }
 
