@@ -1598,10 +1598,7 @@ public:
 
                 if (!significance.significant) {
                     results.push_back(std::move(component_result));
-                    if (on_component) {
-                        compute_weights_star_();
-                        on_component(*this, results.back());
-                    }
+                    run_component_callback_(on_component, results.back());
                     append_inactive_components_(results, hh + 1, J);
                     break;
                 }
@@ -1613,10 +1610,7 @@ public:
             deflate_all_();
             log_step_end_(step_start);
 
-            if (on_component) {
-                compute_weights_star_();
-                on_component(*this, results.back());
-            }
+            run_component_callback_(on_component, results.back());
         }
 
         // post-processing weights
@@ -2145,6 +2139,13 @@ private:
         fdapde::cout << "<-- " << std::fixed << std::setprecision(3)
                   << elapsed_sec << std::defaultfloat << "s" << std::endl;
     }
+    void run_component_callback_(const ComponentCallback& on_component, const Result& result) {
+        if (!on_component) return;
+        compute_weights_star_();
+        const auto step_start = log_step_start_("Component callback");
+        on_component(*this, result);
+        log_step_end_(step_start);
+    }
 
     ModelSelectionResult bootstrap_model_selection_() {
         fdapde::cout << "\n=========================================" << std::endl;
@@ -2188,6 +2189,18 @@ private:
             thread_boot_worker[t] = clone_blocks_();
         }
         log_step_end_(step_start);
+        auto print_fixed_weight_lambda = [&]() {
+            double lambda_min = std::numeric_limits<double>::infinity();
+            double lambda_max = -std::numeric_limits<double>::infinity();
+            for (const auto& block : blocks) {
+                const double lambda = block->lambda_weights();
+                lambda_min = std::min(lambda_min, lambda);
+                lambda_max = std::max(lambda_max, lambda);
+            }
+            fdapde::cout << " lambda=" << lambda_min;
+            if (lambda_min != lambda_max)
+                fdapde::cout << ".." << lambda_max;
+        };
 
         int n_lambda = static_cast<int>(lambda_grid.size());
         for (int lambda_i = n_lambda - 1; lambda_i >= 0; --lambda_i) {
@@ -2283,6 +2296,7 @@ private:
                 );
                 log_step_end_(step_start);
             }
+            const int n_active_blocks = count_active_blocks_(C_lambda);
 
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
@@ -2301,15 +2315,19 @@ private:
                 C_best = C_lambda;
             }
 
-            fdapde::cout << "  Bootstrap used: " << bootstrap_state.B_done
-                      << ", execution time: " << std::fixed << std::setprecision(3) << elapsed_sec << std::defaultfloat << "s"
-                      << ", ac = " << n_active_connections
-                      << ", crit = " << bootstrap_state.crit
-                      << ", overall_eff = " << std::fixed << std::setprecision(1)
+            fdapde::cout << "  Bootstrap used: " << bootstrap_state.B_done;
+            if (!select_lambda)
+                print_fixed_weight_lambda();
+            fdapde::cout << " time=" << std::fixed << std::setprecision(3) << elapsed_sec << "s"
+                      << " | ab=" << n_active_blocks
+                      << ", ac=" << n_active_connections
+                      << " | crit=" << std::setprecision(3) << bootstrap_state.crit
+                      << " | overall_eff=" << std::setprecision(1)
                       << 100.0 * bootstrap_timing_summary.efficiency() << "%"
-                      << ", capped = " << bootstrap_timing_summary.capped_fits << "/" << bootstrap_timing_summary.n_fits
-                      << ", avg_iters = " << std::setprecision(1) << bootstrap_timing_summary.avg_iters()
-                      << std::defaultfloat << std::endl;
+                      << ", capped=" << bootstrap_timing_summary.capped_fits << "/" << bootstrap_timing_summary.n_fits
+                      << ", avg_iters=" << std::setprecision(1) << bootstrap_timing_summary.avg_iters()
+                      << ", max_iters=" << bootstrap_timing_summary.max_iters
+                      << std::defaultfloat << std::endl << std::endl;
 
             // early stop
             if (early_stop_lambda_(bootstrap_state, lambda_i, bootstrap_config_)) {
@@ -2351,7 +2369,7 @@ private:
                       << std::endl;
         }
         fdapde::cout << "\nUpdated design matrix:" << std::endl;
-        fdapde::cout << C_best << std::endl;
+        fdapde::cout << C_best << std::endl << std::endl;
 
         bootstrap_selection_results_.push_back(std::move(boot_results));
 
@@ -2384,6 +2402,7 @@ private:
         double parallel_capacity = 0.0;
         double iters = 0.0;
         int capped_fits = 0;
+        int max_iters = 0;
         int n_fits = 0;
 
         void add(const BootstrapBatchTiming& timing, const int batch_size, const int n_threads) {
@@ -2391,6 +2410,7 @@ private:
             parallel_capacity += timing.parallel_time * static_cast<double>(n_threads);
             iters += timing.avg_iters * static_cast<double>(batch_size);
             capped_fits += timing.capped_fits;
+            max_iters = std::max(max_iters, timing.max_iters);
             n_fits += batch_size;
         }
         [[nodiscard]] double efficiency() const {
@@ -2655,7 +2675,7 @@ private:
         timing.avg_snapshot_time = total_snapshot_time / static_cast<double>(B_run);
         timing.avg_corr_time = total_corr_time / static_cast<double>(B_run);
         timing.avg_iters = static_cast<double>(total_iters) / static_cast<double>(B_run);
-        timing.max_iters = *std::max_element(fit_iters.begin(), fit_iters.end());;
+        timing.max_iters = *std::max_element(fit_iters.begin(), fit_iters.end());
         timing.capped_fits = total_capped_fits;
 
         return timing;
