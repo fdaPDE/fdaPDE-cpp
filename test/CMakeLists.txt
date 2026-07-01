@@ -44,6 +44,11 @@ target_link_libraries(fdapde_test Eigen3::Eigen)
 target_link_libraries(fdapde_test gtest_main)
 target_link_libraries(fdapde_test ipopt)
 
+add_executable(frgcca_covmax_timing frgcca_covmax_timing.cpp)
+target_compile_definitions(frgcca_covmax_timing PRIVATE FDAPDE_ENABLE_COUT)
+target_link_libraries(frgcca_covmax_timing Eigen3::Eigen)
+target_link_libraries(frgcca_covmax_timing ipopt)
+
 add_test(NAME fdapde_test
 		COMMAND $<TARGET_FILE:fdapde_test>
 )

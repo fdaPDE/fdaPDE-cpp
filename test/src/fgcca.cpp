@@ -497,7 +497,7 @@ void check_fem_bootstrap_rgcca_against_first_run() {
 
     RGCCA<IndependentSampling>::BootstrapConfig bootstrap_config;
     bootstrap_config.max_threads = 1;
-    bootstrap_config.B_per_thread_per_batch = 5*12;
+    bootstrap_config.check_every = 5*12;
     bootstrap_config.patience = 1;
     rgcca.set_bootstrap_config(bootstrap_config);
 
@@ -535,7 +535,7 @@ void check_multivariate_model_selection_without_lambda_grid() {
 
     RGCCA<IndependentSampling>::BootstrapConfig bootstrap_config;
     bootstrap_config.max_threads = 1;
-    bootstrap_config.B_per_thread_per_batch = 5*12;
+    bootstrap_config.check_every = 5*12;
     bootstrap_config.patience = 1;
     rgcca.set_bootstrap_config(bootstrap_config);
 
@@ -669,7 +669,6 @@ TEST(rgcca, component_callback_can_release_bootstrap_results) {
     bootstrap_config.max_threads = 1;
     bootstrap_config.B_min = 2;
     bootstrap_config.B_max = 2;
-    bootstrap_config.B_per_thread_per_batch = 2;
     bootstrap_config.adaptive = false;
     bootstrap_config.fit_max_iter = 2;
     rgcca.set_bootstrap_config(bootstrap_config);

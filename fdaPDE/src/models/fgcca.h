@@ -22,10 +22,12 @@
 #include "fdaPDE/execution.h"
 #include "header_check.h"
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <functional>
 #include <limits>
+#include <mutex>
 #include <numeric>
 #include <optional>
 #include <random>
@@ -1289,13 +1291,13 @@ public:
 
         int B_min = 500;
         int B_max = 1000;
-        int B_per_thread_per_batch = 5;
+        int check_every = 50;
         int fit_max_iter = -1; // negative means use Options::max_iter
 
-        // adaptive batch
+        // adaptive checks
         bool adaptive = true;
         double adaptive_tol = 1e-3;
-        int stable_batches_required = 3;
+        int stable_checks_required = 3;
 
         // block deactivation
         double active_block_tol = 1e-8;
@@ -1304,6 +1306,7 @@ public:
         double active_connection_sign_stability = 0.95;
         double active_connection_min_abs_corr = 0.05;
         bool aggressive_connection_deactivation = false;
+        int min_boots_before_connection_deactivation = 100;
 
         // confidence intervals
         double ci_level = 0.95;
@@ -1326,15 +1329,16 @@ public:
                << "  max_threads                        = " << config.max_threads << '\n'
                << "  B_min                              = " << config.B_min << '\n'
                << "  B_max                              = " << config.B_max << '\n'
-               << "  B_per_thread_per_batch             = " << config.B_per_thread_per_batch << '\n'
+               << "  check_every                        = " << config.check_every << '\n'
                << "  fit_max_iter                       = " << config.fit_max_iter << '\n'
                << "  adaptive                           = " << config.adaptive << '\n'
                << "  adaptive_tol                       = " << config.adaptive_tol << '\n'
-               << "  stable_batches_required            = " << config.stable_batches_required << '\n'
+               << "  stable_checks_required             = " << config.stable_checks_required << '\n'
                << "  active_block_tol                   = " << config.active_block_tol << '\n'
                << "  active_connection_sign_stability   = " << config.active_connection_sign_stability << '\n'
                << "  active_connection_min_abs_corr     = " << config.active_connection_min_abs_corr << '\n'
                << "  aggressive_connection_deactivation = " << config.aggressive_connection_deactivation << '\n'
+               << "  min_boots_before_connection_deactivation = " << config.min_boots_before_connection_deactivation << '\n'
                << "  ci_level                           = " << config.ci_level << '\n'
                << "  patience                           = " << config.patience << '\n'
                << "  resampling_strategy                = " << to_string(config.resampling_strategy) << '\n'
@@ -1993,8 +1997,8 @@ private:
             res.obj_history.push_back(f_obj);
             res.iters = s + 1;
 
-            // chek monotonicity
-            if (f_obj + 1e-15 < obj_prev)
+            const double rel_obj_drop = (obj_prev - f_obj) / (1.0 + std::abs(obj_prev));
+            if (rel_obj_drop > opt_.tol)
                 res.monotone = false;
 
             // stopping criteria
@@ -2062,17 +2066,26 @@ private:
             seed = bootstrap_config.seed + static_cast<unsigned>(h);
             B_min = bootstrap_config.B_min;
             B_max = bootstrap_config.B_max;
-            B_batch = bootstrap_config.adaptive ?
-                n_threads * bootstrap_config.B_per_thread_per_batch : B_max;
+            check_every = bootstrap_config.check_every;
             corr_pos_count.setZero(J, J);
             corr_neg_count.setZero(J, J);
         }
 
         void reset() {
             B_done = 0;
-            stable_batches = 0;
-            crit_prev_batch = std::numeric_limits<double>::infinity();
+            B_total = 0;
+            B_design = 0;
+            design_epoch = 0;
+            last_check_B_done = 0;
+            stop = false;
+            reset_good();
+        }
+        void reset_good() {
+            B_done = 0;
+            stable_checks = 0;
+            crit_prev_check = std::numeric_limits<double>::infinity();
             crit = std::numeric_limits<double>::quiet_NaN();
+            last_check_B_done = 0;
             corr_pos_count.setZero(J, J);
             corr_neg_count.setZero(J, J);
         }
@@ -2083,18 +2096,22 @@ private:
         int seed;
         int B_min;
         int B_max;
-        int B_batch;
+        int check_every;
 
         // state
         int B_done = 0;
-        int B_run = 0;
+        int B_total = 0;
+        int B_design = 0;
+        int design_epoch = 0;
+        int last_check_B_done = 0;
+        bool stop = false;
 
         Eigen::MatrixXi corr_pos_count;
         Eigen::MatrixXi corr_neg_count;
 
-        // adaptive batch
-        int stable_batches = 0;
-        double crit_prev_batch = std::numeric_limits<double>::infinity();
+        // adaptive checks
+        int stable_checks = 0;
+        double crit_prev_check = std::numeric_limits<double>::infinity();
         double crit = std::numeric_limits<double>::quiet_NaN();
 
         // early stop
@@ -2239,63 +2256,22 @@ private:
 
             auto start = std::chrono::high_resolution_clock::now();
 
-            // bootstrapping by batch
+            // streaming bootstrap
             bootstrap_state.reset();
             BootstrapTimingSummary bootstrap_timing_summary;
-            while (bootstrap_state.B_done < bootstrap_state.B_max) {
-                bootstrap_state.B_run = std::min(bootstrap_state.B_batch, bootstrap_state.B_max - bootstrap_state.B_done);
-
-                const int batch_first = bootstrap_state.B_done;
-                const int batch_last = bootstrap_state.B_done + bootstrap_state.B_run - 1;
-
-                fdapde::cout << "  batch [" << std::setw(4) << batch_first 
-                                            << ", " << std::setw(4) << batch_last << "]" 
-                                            << std::flush;
-
-                const auto batch_step_start = std::chrono::high_resolution_clock::now();
-                auto bootstrap_timing = run_bootstrap_batch_(
-                    lambda_i,
-                    bootstrap_state,
-                    thread_boot_worker,
-                    C_active,
-                    w_fit,
-                    w_min,
-                    boot_results
-                );
-                bootstrap_timing_summary.add(bootstrap_timing, bootstrap_state.B_run, bootstrap_state.n_threads);
-
-                const int B_done_after_batch = bootstrap_state.B_done + bootstrap_state.B_run;
-                int n_active_blocks = count_active_blocks_(C_active);
-                if (opt_.block_deactivation)
-                    n_active_blocks = threshold_inactive_blocks_(w_min, C_active);
-                int n_active_connections = count_active_connections_(C_active);
-                if (opt_.connection_deactivation && bootstrap_config_.aggressive_connection_deactivation)
-                    n_active_connections = threshold_inactive_connections_(
-                        lambda_i, bootstrap_state, boot_results, C_active, B_done_after_batch
-                    );
-                bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_);
-                bootstrap_state.B_done += bootstrap_state.B_run;
-
-                const auto batch_step_end = std::chrono::high_resolution_clock::now();
-                const double batch_elapsed_sec = std::chrono::duration<double>(batch_step_end - batch_step_start).count();
-                const AdaptiveStopInfo stop_info = bootstrap_config_.adaptive ?
-                    adaptive_stop_(bootstrap_state, bootstrap_config_) : AdaptiveStopInfo{};
-                print_bootstrap_batch_log_(
-                    batch_first, batch_last, batch_elapsed_sec, n_active_blocks,
-                    n_active_connections, bootstrap_state.crit, bootstrap_timing, stop_info
-                );
-                if (stop_info.stop) break;
-            }
-
+            run_bootstrap_stream_(
+                lambda_i,
+                bootstrap_state,
+                thread_boot_worker,
+                C_active,
+                w_fit,
+                w_min,
+                boot_results,
+                blocks,
+                bootstrap_timing_summary
+            );
             BoolMatrix C_lambda = C_active;
             int n_active_connections = count_active_connections_(C_lambda);
-            if (opt_.connection_deactivation) {
-                step_start = log_step_start_("  Threshold inactive connections");
-                n_active_connections = threshold_inactive_connections_(
-                    lambda_i, bootstrap_state, boot_results, C_lambda
-                );
-                log_step_end_(step_start);
-            }
             const int n_active_blocks = count_active_blocks_(C_lambda);
 
             auto end = std::chrono::high_resolution_clock::now();
@@ -2308,6 +2284,8 @@ private:
             correlation_matrix_(blocks, w_min, boot_results.corr_min_by_lambda[lambda_i]);
             boot_results.corr_min_by_lambda[lambda_i].array() *= (C_lambda.cast<double>() + Matrix::Identity(J, J)).array();
             log_step_end_(step_start);
+            if (!std::isfinite(bootstrap_state.crit))
+                bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_);
             boot_results.criterion[lambda_i] = bootstrap_state.crit;
             boot_results.B_used_by_lambda[lambda_i] = bootstrap_state.B_done;
 
@@ -2315,7 +2293,11 @@ private:
                 C_best = C_lambda;
             }
 
-            fdapde::cout << "  Bootstrap used: " << bootstrap_state.B_done;
+            const int B_discarded = bootstrap_state.B_total - bootstrap_state.B_design - bootstrap_state.B_done;
+            fdapde::cout << "  Bootstrap used: " << bootstrap_state.B_total
+                      << " total, " << bootstrap_state.B_design
+                      << " design, " << bootstrap_state.B_done
+                      << " good, " << B_discarded << " discarded";
             if (!select_lambda)
                 print_fixed_weight_lambda();
             fdapde::cout << " time=" << std::fixed << std::setprecision(3) << elapsed_sec << "s"
@@ -2380,23 +2362,6 @@ private:
         return out;
     }
 
-    struct BootstrapBatchTiming {
-        double avg_fit_time = 0.0;
-        double sd_fit_time = 0.0;
-        double wall_time = 0.0;
-        double efficiency = 0.0;
-        double task_efficiency = 0.0;
-        double setup_time = 0.0;
-        double parallel_time = 0.0;
-        double merge_time = 0.0;
-        double avg_task_time = 0.0;
-        double avg_prep_time = 0.0;
-        double avg_snapshot_time = 0.0;
-        double avg_corr_time = 0.0;
-        double avg_iters = 0.0;
-        int max_iters = 0;
-        int capped_fits = 0;
-    };
     struct BootstrapTimingSummary {
         double fit_time = 0.0;
         double parallel_capacity = 0.0;
@@ -2405,13 +2370,15 @@ private:
         int max_iters = 0;
         int n_fits = 0;
 
-        void add(const BootstrapBatchTiming& timing, const int batch_size, const int n_threads) {
-            fit_time += timing.avg_fit_time * static_cast<double>(batch_size);
-            parallel_capacity += timing.parallel_time * static_cast<double>(n_threads);
-            iters += timing.avg_iters * static_cast<double>(batch_size);
-            capped_fits += timing.capped_fits;
-            max_iters = std::max(max_iters, timing.max_iters);
-            n_fits += batch_size;
+        void add_sample(const double fit_time_sec, const int fit_iters, const bool capped) {
+            fit_time += fit_time_sec;
+            iters += static_cast<double>(fit_iters);
+            capped_fits += capped ? 1 : 0;
+            max_iters = std::max(max_iters, fit_iters);
+            ++n_fits;
+        }
+        void set_parallel_capacity(const double wall_time_sec, const int n_threads) {
+            parallel_capacity = wall_time_sec * static_cast<double>(n_threads);
         }
         [[nodiscard]] double efficiency() const {
             return parallel_capacity > 0.0 ? fit_time / parallel_capacity : 0.0;
@@ -2425,6 +2392,13 @@ private:
         double p_value = std::numeric_limits<double>::quiet_NaN();
         int B = 0;
         bool significant = true;
+    };
+    struct BootstrapSampleResult {
+        std::vector<Vector> w;
+        Matrix corr;
+        double fit_time = 0.0;
+        int fit_iters = 0;
+        bool capped = false;
     };
     void annotate_component_significance_(
         Result& result,
@@ -2516,171 +2490,250 @@ private:
 
         return out;
     }
-    BootstrapBatchTiming run_bootstrap_batch_(
-        int lambda_i, AdaptiveBootstrapState& bootstrap_state,
-        std::vector<BootstrapBlocks>& thread_boot_worker,
+    BootstrapSampleResult fit_bootstrap_sample_(
+        BootstrapBlocks& boot_blocks,
+        const int b,
+        const unsigned seed,
         const BoolMatrix& C_active,
-        const std::vector<Vector>& w_fit,
-        std::vector<Vector>& w_min,
-        BootstrapSelectionResult& boot_results
+        const std::vector<Vector>& w_fit
     ) {
-
-        const int J = static_cast<int>(w_fit.size());
-        const int n_threads = bootstrap_state.n_threads;
-        const int B_run = bootstrap_state.B_run;
-        const int B_offset = bootstrap_state.B_done;
-        const int seed = bootstrap_state.seed;
+        BootstrapSampleResult out;
         const auto active_blocks = active_blocks_from_C_(C_active);
-
-        const auto setup_start = std::chrono::high_resolution_clock::now();
-        auto bootstrap_idx = make_bootstrap_indices_(B_run, B_offset, seed);
-
-        std::vector<double> fit_times_sec(B_run, 0.0);
-        std::vector<double> task_times_sec(B_run, 0.0);
-        std::vector<double> prep_times_sec(B_run, 0.0);
-        std::vector<double> snapshot_times_sec(B_run, 0.0);
-        std::vector<double> corr_times_sec(B_run, 0.0);
-        std::vector<int> fit_iters(B_run, 0);
-        std::vector<int> capped_fits(B_run, 0);
-        const auto setup_end = std::chrono::high_resolution_clock::now();
-
-        const auto parallel_start = std::chrono::high_resolution_clock::now();
         const int fit_max_iter = bootstrap_fit_max_iter_();
 
-        parallel_for(0, B_run, 1, [&](int b) {
+        copy_weights_snapshot_(boot_blocks.refs, w_fit);
+        set_row_index_all_(boot_blocks.refs, bootstrap_index_(n_, seed + static_cast<unsigned>(b)));
 
-            const auto task_start = std::chrono::high_resolution_clock::now();
-            const int tid = this_thread_id();
-            auto& boot_blocks = thread_boot_worker[tid];
-            copy_weights_snapshot_(boot_blocks.refs, w_fit);
+        init_comp_(boot_blocks.refs, InitStrategy::WarmStart, true, &active_blocks);
+        const auto fit_start = std::chrono::high_resolution_clock::now();
+        const Result fit_result = fit_component_(boot_blocks.refs, C_active, true, fit_max_iter);
+        const auto fit_end = std::chrono::high_resolution_clock::now();
 
-            set_row_index_all_(boot_blocks.refs, bootstrap_idx[b]);
-            const auto prep_end = std::chrono::high_resolution_clock::now();
+        out.w = snapshot_weights_(boot_blocks.refs);
+        for (int j = 0; j < static_cast<int>(out.w.size()); ++j) {
+            if (out.w[j].dot(w_fit[j]) < 0.0) out.w[j] *= -1.0;
+        }
+        correlation_matrix_raw_data_(boot_blocks.refs, out.w, out.corr);
+        clear_row_index_all_(boot_blocks.refs);
 
-            const auto fit_start = std::chrono::high_resolution_clock::now();
-            init_comp_(boot_blocks.refs, InitStrategy::WarmStart, true, &active_blocks);
-            const Result fit_result = fit_component_(boot_blocks.refs, C_active, true, fit_max_iter);
-            const auto fit_end = std::chrono::high_resolution_clock::now();
+        out.fit_time = std::chrono::duration<double>(fit_end - fit_start).count();
+        out.fit_iters = fit_result.iters;
+        out.capped = fit_result.iters >= fit_max_iter;
+        return out;
+    }
+    bool same_design_(const BoolMatrix& lhs, const BoolMatrix& rhs) const {
+        if (lhs.rows() != rhs.rows() || lhs.cols() != rhs.cols()) return false;
+        for (int i = 0; i < lhs.rows(); ++i)
+            for (int j = 0; j < lhs.cols(); ++j)
+                if (lhs(i, j) != rhs(i, j)) return false;
+        return true;
+    }
+    void reset_good_bootstrap_(
+        AdaptiveBootstrapState& state,
+        std::vector<Vector>& w_min,
+        const std::vector<Vector>& w_fit,
+        const BoolMatrix& C_active
+    ) const {
+        state.B_design += state.B_done;
+        state.reset_good();
+        ++state.design_epoch;
+        w_min = w_fit;
 
-            fit_times_sec[b] = std::chrono::duration<double>(fit_end - fit_start).count();
-            fit_iters[b] = fit_result.iters;
-            capped_fits[b] = fit_result.iters >= fit_max_iter ? 1 : 0;
+        const auto active_blocks = active_blocks_from_C_(C_active);
+        for (int j = 0; j < static_cast<int>(w_min.size()); ++j) {
+            if (!active_blocks[j])
+                w_min[j].setZero();
+        }
+    }
+    bool connection_deactivation_ready_(const AdaptiveBootstrapState& state) const {
+        if (!opt_.connection_deactivation) return false;
+        if (state.B_done < bootstrap_config_.min_boots_before_connection_deactivation) return false;
+        return bootstrap_config_.aggressive_connection_deactivation || state.B_done >= state.B_min;
+    }
+    void print_bootstrap_progress_log_(
+        const AdaptiveBootstrapState& state,
+        const int n_active_blocks,
+        const int n_active_connections,
+        const AdaptiveStopInfo& stop_info
+    ) const {
+        fdapde::cout << "  progress total=" << state.B_total
+                  << ", design=" << state.B_design
+                  << ", good=" << state.B_done
+                  << " | ab=" << n_active_blocks
+                  << ", ac=" << n_active_connections
+                  << " | crit=" << std::setprecision(3) << state.crit
+                  << ", rel=";
+        if (std::isfinite(stop_info.rel_change)) {
+            fdapde::cout << std::setprecision(3) << stop_info.rel_change;
+        } else {
+            fdapde::cout << "  -  ";
+        }
+        if (stop_info.stop)
+            fdapde::cout << " | stop=" << stop_info.reason;
+        fdapde::cout << std::defaultfloat << std::endl;
+    }
+    void print_bootstrap_design_reset_log_(
+        const AdaptiveBootstrapState& state,
+        const int n_active_blocks,
+        const int n_active_connections
+    ) const {
+        fdapde::cout << "  design reset total=" << state.B_total
+                  << ", design=" << state.B_design
+                  << ", good=" << state.B_done
+                  << " | epoch=" << state.design_epoch
+                  << " | ab=" << n_active_blocks
+                  << ", ac=" << n_active_connections
+                  << std::endl;
+    }
+    void run_bootstrap_stream_(
+        int lambda_i,
+        AdaptiveBootstrapState& bootstrap_state,
+        std::vector<BootstrapBlocks>& thread_boot_worker,
+        BoolMatrix& C_active,
+        const std::vector<Vector>& w_fit,
+        std::vector<Vector>& w_min,
+        BootstrapSelectionResult& boot_results,
+        const BlockRefList& blocks,
+        BootstrapTimingSummary& timing_summary
+    ) {
+        const int J = static_cast<int>(w_fit.size());
+        const int n_threads = bootstrap_state.n_threads;
+        const unsigned seed = static_cast<unsigned>(bootstrap_state.seed);
+        std::atomic<int> next_boot {0};
+        std::atomic<bool> stop {false};
+        std::mutex merge_mutex;
 
-            auto w_b = snapshot_weights_(boot_blocks.refs);
-            const int b_global = B_offset + b;
+        const auto parallel_start = std::chrono::high_resolution_clock::now();
 
-            for (int j = 0; j < J; ++j) {
-                if (w_b[j].dot(w_fit[j]) < 0.0) w_b[j] *= -1.0;
-                boot_results.w_boot_by_lambda[lambda_i][j].col(b_global) = w_b[j];
+        parallel_for(0, n_threads, 1, [&](int) {
+            while (!stop.load(std::memory_order_acquire)) {
+                const int b = next_boot.fetch_add(1, std::memory_order_relaxed);
+
+                BoolMatrix C_snapshot;
+                int epoch = 0;
+                {
+                    std::lock_guard<std::mutex> lock(merge_mutex);
+                    if (bootstrap_state.stop || bootstrap_state.B_done >= bootstrap_state.B_max) {
+                        stop.store(true, std::memory_order_release);
+                        break;
+                    }
+                    C_snapshot = C_active;
+                    epoch = bootstrap_state.design_epoch;
+                }
+
+                const int tid = this_thread_id();
+                auto sample = fit_bootstrap_sample_(
+                    thread_boot_worker[tid], b, seed, C_snapshot, w_fit
+                );
+
+                std::lock_guard<std::mutex> lock(merge_mutex);
+                ++bootstrap_state.B_total;
+                timing_summary.add_sample(sample.fit_time, sample.fit_iters, sample.capped);
+
+                if (bootstrap_state.stop || epoch != bootstrap_state.design_epoch) {
+                    if (epoch != bootstrap_state.design_epoch)
+                        ++bootstrap_state.B_design;
+                    continue;
+                }
+
+                if (bootstrap_state.B_done >= bootstrap_state.B_max) {
+                    bootstrap_state.stop = true;
+                    stop.store(true, std::memory_order_release);
+                    continue;
+                }
+
+                const int b_good = bootstrap_state.B_done;
+                for (int j = 0; j < J; ++j) {
+                    boot_results.w_boot_by_lambda[lambda_i][j].col(b_good) = sample.w[j];
+                    update_w_min_(w_min[j], w_fit[j], sample.w[j]);
+                }
+                boot_results.corr_boot_by_lambda[lambda_i].col(b_good) =
+                    Eigen::Map<const Vector>(sample.corr.data(), J * J);
+
+                for (int j = 0; j < J; ++j) {
+                    for (int k = j + 1; k < J; ++k) {
+                        const double c = sample.corr(j, k);
+                        if (c > 0.0) {
+                            ++bootstrap_state.corr_pos_count(j, k);
+                            ++bootstrap_state.corr_pos_count(k, j);
+                        } else if (c < 0.0) {
+                            ++bootstrap_state.corr_neg_count(j, k);
+                            ++bootstrap_state.corr_neg_count(k, j);
+                        }
+                    }
+                }
+                ++bootstrap_state.B_done;
+
+                if (opt_.block_deactivation) {
+                    const BoolMatrix C_before = C_active;
+                    threshold_inactive_blocks_(w_min, C_active);
+                    if (!same_design_(C_before, C_active)) {
+                        reset_good_bootstrap_(bootstrap_state, w_min, w_fit, C_active);
+                        const int n_active_blocks = count_active_blocks_(C_active);
+                        const int n_active_connections = count_active_connections_(C_active);
+                        print_bootstrap_design_reset_log_(
+                            bootstrap_state,
+                            n_active_blocks,
+                            n_active_connections
+                        );
+                        if (n_active_connections == 0) {
+                            bootstrap_state.crit = 0.0;
+                            bootstrap_state.stop = true;
+                            stop.store(true, std::memory_order_release);
+                        }
+                        continue;
+                    }
+                }
+
+                const bool force_check = bootstrap_state.B_done >= bootstrap_state.B_max;
+                const bool due_check =
+                    force_check ||
+                    bootstrap_state.B_done - bootstrap_state.last_check_B_done >= bootstrap_state.check_every;
+                if (!due_check) continue;
+                bootstrap_state.last_check_B_done = bootstrap_state.B_done;
+
+                if (connection_deactivation_ready_(bootstrap_state)) {
+                    const BoolMatrix C_before = C_active;
+                    threshold_inactive_connections_(lambda_i, bootstrap_state, boot_results, C_active);
+                    if (!same_design_(C_before, C_active)) {
+                        reset_good_bootstrap_(bootstrap_state, w_min, w_fit, C_active);
+                        const int n_active_blocks = count_active_blocks_(C_active);
+                        const int n_active_connections = count_active_connections_(C_active);
+                        print_bootstrap_design_reset_log_(
+                            bootstrap_state,
+                            n_active_blocks,
+                            n_active_connections
+                        );
+                        if (n_active_connections == 0) {
+                            bootstrap_state.crit = 0.0;
+                            bootstrap_state.stop = true;
+                            stop.store(true, std::memory_order_release);
+                        }
+                        continue;
+                    }
+                }
+
+                bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_);
+                const AdaptiveStopInfo stop_info = bootstrap_config_.adaptive ?
+                    adaptive_stop_(bootstrap_state, bootstrap_config_) : AdaptiveStopInfo{};
+                print_bootstrap_progress_log_(
+                    bootstrap_state,
+                    count_active_blocks_(C_active),
+                    count_active_connections_(C_active),
+                    stop_info
+                );
+
+                if (stop_info.stop || bootstrap_state.B_done >= bootstrap_state.B_max) {
+                    bootstrap_state.stop = true;
+                    stop.store(true, std::memory_order_release);
+                }
             }
-            const auto snapshot_end = std::chrono::high_resolution_clock::now();
-
-            Matrix corr_b;
-            correlation_matrix_raw_data_(boot_blocks.refs, w_b, corr_b);
-            boot_results.corr_boot_by_lambda[lambda_i].col(b_global) = Eigen::Map<const Vector>(corr_b.data(), J * J);
-            const auto corr_end = std::chrono::high_resolution_clock::now();
-
-            prep_times_sec[b] = std::chrono::duration<double>(prep_end - task_start).count();
-            snapshot_times_sec[b] = std::chrono::duration<double>(snapshot_end - fit_end).count();
-            corr_times_sec[b] = std::chrono::duration<double>(corr_end - snapshot_end).count();
-            task_times_sec[b] = std::chrono::duration<double>(corr_end - task_start).count();
-
         });
 
         const auto parallel_end = std::chrono::high_resolution_clock::now();
-
-        const auto merge_start = std::chrono::high_resolution_clock::now();
-
-        for (auto& boot_worker : thread_boot_worker)
-            clear_row_index_all_(boot_worker.refs);
-
-        for (int b = 0; b < B_run; ++b) {
-            const int b_global = B_offset + b;
-            const auto corr_col = boot_results.corr_boot_by_lambda[lambda_i].col(b_global);
-
-            for (int j = 0; j < J; ++j) {
-                for (int k = j + 1; k < J; ++k) {
-                    const double c = corr_col(j + k * J);
-
-                    if (c > 0.0) {
-                        ++bootstrap_state.corr_pos_count(j, k);
-                        ++bootstrap_state.corr_pos_count(k, j);
-                    } else if (c < 0.0) {
-                        ++bootstrap_state.corr_neg_count(j, k);
-                        ++bootstrap_state.corr_neg_count(k, j);
-                    }
-                }
-            }
-        }
-
-        parallel_for(0, J, 1, [&](int j) {
-            for (int b = 0; b < B_run; ++b) {
-                const int b_global = B_offset + b;
-                const auto w_bj = boot_results.w_boot_by_lambda[lambda_i][j].col(b_global);
-                for (int r = 0; r < w_min[j].size(); ++r) {
-                    if (w_fit[j][r] > 0.0) {
-                        w_min[j][r] = std::max(0.0, std::min(w_min[j][r], w_bj[r]));
-                    } else if (w_fit[j][r] < 0.0) {
-                        w_min[j][r] = std::min(0.0, std::max(w_min[j][r], w_bj[r]));
-                    } else {
-                        w_min[j][r] = 0.0;
-                    }
-                }
-            }
-        });
-
-        const auto merge_end = std::chrono::high_resolution_clock::now();
-
-        const double setup_time = std::chrono::duration<double>(setup_end - setup_start).count();
         const double parallel_time = std::chrono::duration<double>(parallel_end - parallel_start).count();
-        const double merge_time = std::chrono::duration<double>(merge_end - merge_start).count();
-        const double wall_time = setup_time + parallel_time + merge_time;
-
-        double total_fit_time = 0.0;
-        for (double t : fit_times_sec)
-            total_fit_time += t;
-        double avg_fit_time = total_fit_time / static_cast<double>(B_run);
-        double var = 0.0;
-        for (double t : fit_times_sec) {
-            const double d = t - avg_fit_time;
-            var += d * d;
-        }
-
-        double total_task_time = 0.0;
-        double total_prep_time = 0.0;
-        double total_snapshot_time = 0.0;
-        double total_corr_time = 0.0;
-        int total_iters = 0;
-        int total_capped_fits = 0;
-        for (int b = 0; b < B_run; ++b) {
-            total_task_time += task_times_sec[b];
-            total_prep_time += prep_times_sec[b];
-            total_snapshot_time += snapshot_times_sec[b];
-            total_corr_time += corr_times_sec[b];
-            total_iters += fit_iters[b];
-            total_capped_fits += capped_fits[b];
-        }
-
-        BootstrapBatchTiming timing;
-        timing.avg_fit_time = avg_fit_time;
-        timing.sd_fit_time = std::sqrt(var / std::max(1, B_run - 1));
-        timing.wall_time = wall_time;
-        timing.efficiency = total_fit_time / (parallel_time * static_cast<double>(n_threads));
-        timing.task_efficiency = total_task_time / (parallel_time * static_cast<double>(n_threads));
-        timing.setup_time = setup_time;
-        timing.parallel_time = parallel_time;
-        timing.merge_time = merge_time;
-        timing.avg_task_time = total_task_time / static_cast<double>(B_run);
-        timing.avg_prep_time = total_prep_time / static_cast<double>(B_run);
-        timing.avg_snapshot_time = total_snapshot_time / static_cast<double>(B_run);
-        timing.avg_corr_time = total_corr_time / static_cast<double>(B_run);
-        timing.avg_iters = static_cast<double>(total_iters) / static_cast<double>(B_run);
-        timing.max_iters = *std::max_element(fit_iters.begin(), fit_iters.end());
-        timing.capped_fits = total_capped_fits;
-
-        return timing;
+        timing_summary.set_parallel_capacity(parallel_time, n_threads);
     }
-
     void ensure_bootstrap_lambda_storage_(
         BootstrapSelectionResult& boot_results,
         const int lambda_i,
@@ -2695,37 +2748,6 @@ private:
         boot_results.corr_boot_by_lambda[lambda_i].setZero(J * J, boot_results.B);
     }
 
-    void print_bootstrap_batch_log_(
-        const int batch_first,
-        const int batch_last,
-        const double elapsed_sec,
-        const int n_active_blocks,
-        const int n_active_connections,
-        const double crit,
-        const BootstrapBatchTiming& timing,
-        const AdaptiveStopInfo& stop_info
-    ) const {
-        fdapde::cout << " time=" << std::fixed << std::setprecision(3) << elapsed_sec << "s"
-                  << " fit=" << std::setprecision(3) << timing.avg_fit_time
-                  << "±" << timing.sd_fit_time << "s"
-                  << ", eff=" << std::setprecision(1) << 100.0 * timing.efficiency << "%"
-                  << " | ab=" << n_active_blocks
-                  << ", ac=" << n_active_connections
-                  << " | crit=" << std::setprecision(3) << crit
-                  << ", rel=";
-        if (std::isfinite(stop_info.rel_change)) {
-            fdapde::cout << std::setprecision(3) << stop_info.rel_change;
-        } else {
-            fdapde::cout << "  -  ";
-        }
-        fdapde::cout << " | capped=" << timing.capped_fits << "/" << (batch_last - batch_first + 1)
-                     << ", avg_iters=" << std::setprecision(1) << timing.avg_iters
-                     << ", max_iters=" << std::setprecision(1) << timing.max_iters;
-        if (stop_info.stop)
-            fdapde::cout << " | stop=" << stop_info.reason;
-        fdapde::cout << std::defaultfloat << std::endl;
-    }
-
     AdaptiveStopInfo adaptive_stop_(AdaptiveBootstrapState& state, const BootstrapConfig& config) const {
         AdaptiveStopInfo out;
         if (state.crit == 0.0) {
@@ -2734,25 +2756,25 @@ private:
             return out;
         }
 
-        if (!std::isfinite(state.crit_prev_batch)) {
-            state.crit_prev_batch = state.crit;
+        if (!std::isfinite(state.crit_prev_check)) {
+            state.crit_prev_check = state.crit;
             return out;
         }
 
         const double rel_change =
-            std::abs(state.crit_prev_batch - state.crit) /
-            (std::abs(state.crit_prev_batch) + 1e-12);
+            std::abs(state.crit_prev_check - state.crit) /
+            (std::abs(state.crit_prev_check) + 1e-12);
         out.rel_change = rel_change;
 
         if (rel_change < config.adaptive_tol) {
-            ++state.stable_batches;
+            ++state.stable_checks;
         } else {
-            state.stable_batches = 0;
+            state.stable_checks = 0;
         }
 
-        state.crit_prev_batch = state.crit;
+        state.crit_prev_check = state.crit;
 
-        if (state.stable_batches >= config.stable_batches_required && state.B_done >= state.B_min) {
+        if (state.stable_checks >= config.stable_checks_required && state.B_done >= state.B_min) {
             out.stop = true;
             out.reason = "stable";
         }
@@ -3105,15 +3127,9 @@ private:
         for (auto* b : blocks) b->clear_row_index();
     }
 
-    std::vector<typename Block::IndexVector> make_bootstrap_indices_(int B_run, int B_offset, unsigned seed) const {
-        std::vector<typename Block::IndexVector> bootstrap_idx(B_run);
-
-        for (int b = 0; b < B_run; ++b) {
-            std::mt19937_64 rng(seed + static_cast<unsigned>(B_offset + b));
-            bootstrap_idx[b] = bootstrap_indices_(n_, rng);
-        }
-
-        return bootstrap_idx;
+    typename Block::IndexVector bootstrap_index_(int n, unsigned seed) const {
+        std::mt19937_64 rng(seed);
+        return bootstrap_indices_(n, rng);
     }
     typename Block::IndexVector bootstrap_indices_(int n, std::mt19937_64& rng) const {
 
@@ -3219,12 +3235,12 @@ private:
             throw std::invalid_argument("RGCCA: bootstrap B_max must be positive");
         if (bootstrap_config_.B_min > bootstrap_config_.B_max)
             throw std::invalid_argument("RGCCA: bootstrap B_max must be greater than B_min");
-        if (bootstrap_config_.B_per_thread_per_batch <= 0)
-            throw std::invalid_argument("RGCCA: bootstrap B_per_thread_per_batch must be positive");
+        if (bootstrap_config_.check_every <= 0)
+            throw std::invalid_argument("RGCCA: bootstrap check_every must be positive");
         if (bootstrap_config_.fit_max_iter == 0 || bootstrap_config_.fit_max_iter < -1)
             throw std::invalid_argument("RGCCA: bootstrap fit_max_iter must be positive or -1");
-        if (bootstrap_config_.stable_batches_required <= 0)
-            throw std::invalid_argument("RGCCA: bootstrap stable_batches_required must be positive");
+        if (bootstrap_config_.stable_checks_required <= 0)
+            throw std::invalid_argument("RGCCA: bootstrap stable_checks_required must be positive");
         if (!(bootstrap_config_.adaptive_tol >= 0.0) || !std::isfinite(bootstrap_config_.adaptive_tol))
             throw std::invalid_argument("RGCCA: bootstrap adaptive_tol must be finite and nonnegative");
         if (!(bootstrap_config_.active_block_tol >= 0.0) || !std::isfinite(bootstrap_config_.active_block_tol))
@@ -3244,6 +3260,11 @@ private:
         ) {
             throw std::invalid_argument(
                 "RGCCA: bootstrap active_connection_min_abs_corr must be finite and nonnegative"
+            );
+        }
+        if (bootstrap_config_.min_boots_before_connection_deactivation < 0) {
+            throw std::invalid_argument(
+                "RGCCA: bootstrap min_boots_before_connection_deactivation must be nonnegative"
             );
         }
         if (
