@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <numeric>
 #include <optional>
@@ -1202,6 +1203,7 @@ public:
     using SparseMatrix = typename Block::SparseMatrix;
     using Vector = typename Block::Vector;
     using SamplingDomain = std::conditional_t<std::same_as<SamplingStrategy, TimeDependentSampling>, Triangulation<1, 1>, internals::empty_t>;
+    using ComponentCallback = std::function<void(RGCCA&, const Result&)>;
 
     struct Options {
         int max_iter;
@@ -1401,21 +1403,12 @@ public:
 
             active_blocks.resize(J);
 
-            for (std::size_t i = 0; i < n_lambda; ++i) {
-                w_boot_by_lambda[i].resize(J);
-
-                for (std::size_t j = 0; j < J; ++j) {
-                    w_boot_by_lambda[i][j].setZero(block_dims_[j], B);
-                }
-            }
-
             corr_min_by_lambda.resize(n_lambda);
             corr_boot_by_lambda.resize(n_lambda);
             corr_ci_low_by_lambda.resize(n_lambda);
             corr_ci_high_by_lambda.resize(n_lambda);
 
             for (std::size_t i = 0; i < n_lambda; ++i) {
-                corr_boot_by_lambda[i].setZero(J * J, B);
                 corr_min_by_lambda[i].setZero(J , J);
                 corr_ci_low_by_lambda[i].setZero(J, J);
                 corr_ci_high_by_lambda[i].setZero(J, J);
@@ -1550,7 +1543,7 @@ public:
     }
 
     // fit
-    std::vector<Result> fit() {
+    std::vector<Result> fit(ComponentCallback on_component = {}) {
         if (!initialized_) init();
 
         const int J = n_blocks();
@@ -1605,6 +1598,10 @@ public:
 
                 if (!significance.significant) {
                     results.push_back(std::move(component_result));
+                    if (on_component) {
+                        compute_weights_star_();
+                        on_component(*this, results.back());
+                    }
                     append_inactive_components_(results, hh + 1, J);
                     break;
                 }
@@ -1615,6 +1612,11 @@ public:
             step_start = log_step_start_("Deflate blocks");
             deflate_all_();
             log_step_end_(step_start);
+
+            if (on_component) {
+                compute_weights_star_();
+                on_component(*this, results.back());
+            }
         }
 
         // post-processing weights
@@ -1649,6 +1651,10 @@ public:
     [[nodiscard]] const Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>& C() const { return C_; }
     [[nodiscard]] const SparseMatrix& Psi_T() const { return Psi_T_; };
     [[nodiscard]] const std::vector<BootstrapSelectionResult>& bootstrap_selection_results() const { return bootstrap_selection_results_; }
+    void clear_bootstrap_selection_results() {
+        bootstrap_selection_results_.clear();
+        bootstrap_selection_results_.shrink_to_fit();
+    }
 
     [[nodiscard]] std::pair<Vector, Vector> bootstrap_weights_ci(
         const int h,
@@ -1939,6 +1945,7 @@ private:
 
         // room for results
         Result res(J);
+        res.h = h_;
         res.obj_history.reserve(max_iter);
 
         // design update according to current active blocks
@@ -2107,6 +2114,11 @@ private:
         double lambda = std::numeric_limits<double>::quiet_NaN();
         BoolMatrix C_active;
     };
+    struct AdaptiveStopInfo {
+        bool stop = false;
+        double rel_change = std::numeric_limits<double>::quiet_NaN();
+        const char* reason = "";
+    };
 
     bool bootstrap_model_selection_requested_() const {
         return opt_.block_deactivation ||
@@ -2154,9 +2166,10 @@ private:
         // init bootstrap
         auto step_start = log_step_start_("Init bootstrap");
         AdaptiveBootstrapState bootstrap_state(bootstrap_config_, n_threads, h_, J);
+        const auto block_dims = block_dims_(blocks);
         BootstrapSelectionResult boot_results(
             h_, bootstrap_state.B_max, lambda_grid,
-            block_names_(blocks), block_dims_(blocks), bootstrap_config_.ci_level
+            block_names_(blocks), block_dims, bootstrap_config_.ci_level
         );
         log_step_end_(step_start);
 
@@ -2178,6 +2191,7 @@ private:
 
         int n_lambda = static_cast<int>(lambda_grid.size());
         for (int lambda_i = n_lambda - 1; lambda_i >= 0; --lambda_i) {
+            ensure_bootstrap_lambda_storage_(boot_results, lambda_i, block_dims, J);
             const bool reuse_preliminary_fit = lambda_i == n_lambda - 1;
 
             if (select_lambda) {
@@ -2214,17 +2228,12 @@ private:
 
             // bootstrapping by batch
             bootstrap_state.reset();
+            BootstrapTimingSummary bootstrap_timing_summary;
             while (bootstrap_state.B_done < bootstrap_state.B_max) {
                 bootstrap_state.B_run = std::min(bootstrap_state.B_batch, bootstrap_state.B_max - bootstrap_state.B_done);
 
                 const int batch_first = bootstrap_state.B_done;
                 const int batch_last = bootstrap_state.B_done + bootstrap_state.B_run - 1;
-                fdapde::cout << "  "
-                          << (bootstrap_config_.adaptive ? "Adaptive" : "Bootstrap")
-                          << " batch [" << std::setw(4) << batch_first
-                          << ", " << std::setw(4) << batch_last << "] --> "
-                          << std::flush;
-
                 const auto batch_step_start = std::chrono::high_resolution_clock::now();
                 auto bootstrap_timing = run_bootstrap_batch_(
                     lambda_i,
@@ -2235,9 +2244,8 @@ private:
                     w_min,
                     boot_results
                 );
-                log_step_end_(batch_step_start);
+                bootstrap_timing_summary.add(bootstrap_timing, bootstrap_state.B_run, bootstrap_state.n_threads);
 
-                step_start = log_step_start_("    Post-batch update");
                 const int B_done_after_batch = bootstrap_state.B_done + bootstrap_state.B_run;
                 int n_active_blocks = count_active_blocks_(C_active);
                 if (opt_.block_deactivation)
@@ -2248,50 +2256,17 @@ private:
                         lambda_i, bootstrap_state, boot_results, C_active, B_done_after_batch
                     );
                 bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_);
-                log_step_end_(step_start);
-
-                fdapde::cout << "  Batch summary: avg_fit_time = " << std::fixed << std::setprecision(3) << bootstrap_timing.avg_fit_time
-                          << " ± " << bootstrap_timing.sd_fit_time << std::defaultfloat << "s";
-                fdapde::cout << ", eff = " << std::fixed << std::setprecision(1)
-                          << 100.0 * bootstrap_timing.efficiency << "%" << std::defaultfloat;
-
-                fdapde::cout << " | ab = " << n_active_blocks;
-                fdapde::cout << ", ac = " << n_active_connections;
-
-                fdapde::cout << " | crit = " << std::fixed << std::setprecision(3) <<  bootstrap_state.crit;
-                fdapde::cout << std::defaultfloat;
-
                 bootstrap_state.B_done += bootstrap_state.B_run;
 
-                auto print_bootstrap_timing_debug = [&]() {
-                    fdapde::cout << "    timing:" << std::endl;
-                    fdapde::cout << "      - wall(s): setup=" << std::fixed << std::setprecision(3)
-                              << bootstrap_timing.setup_time
-                              << ", parallel=" << bootstrap_timing.parallel_time
-                              << ", merge=" << bootstrap_timing.merge_time << std::endl;
-                    fdapde::cout << "      - efficiency: fit=" << std::fixed << std::setprecision(1)
-                              << 100.0 * bootstrap_timing.efficiency
-                              << "%, task=" << 100.0 * bootstrap_timing.task_efficiency
-                              << "%" << std::endl;
-                    fdapde::cout << "      - avg_task(s): prep=" << std::fixed << std::setprecision(3)
-                              << bootstrap_timing.avg_prep_time
-                              << ", fit=" << bootstrap_timing.avg_fit_time
-                              << ", snapshot=" << bootstrap_timing.avg_snapshot_time
-                              << ", corr=" << bootstrap_timing.avg_corr_time
-                              << ", total=" << bootstrap_timing.avg_task_time
-                              << std::defaultfloat << std::endl;
-                };
-
-                if (bootstrap_config_.adaptive) {
-                    if (adaptive_stop_(bootstrap_state, bootstrap_config_)) {
-                        print_bootstrap_timing_debug();
-                        break;
-                    }
-                    print_bootstrap_timing_debug();
-                } else {
-                    fdapde::cout << std::endl;
-                    print_bootstrap_timing_debug();
-                }
+                const auto batch_step_end = std::chrono::high_resolution_clock::now();
+                const double batch_elapsed_sec = std::chrono::duration<double>(batch_step_end - batch_step_start).count();
+                const AdaptiveStopInfo stop_info = bootstrap_config_.adaptive ?
+                    adaptive_stop_(bootstrap_state, bootstrap_config_) : AdaptiveStopInfo{};
+                print_bootstrap_batch_log_(
+                    batch_first, batch_last, batch_elapsed_sec, n_active_blocks,
+                    n_active_connections, bootstrap_state.crit, bootstrap_timing, stop_info
+                );
+                if (stop_info.stop) break;
             }
 
             BoolMatrix C_lambda = C_active;
@@ -2324,7 +2299,12 @@ private:
             fdapde::cout << "  Bootstrap used: " << bootstrap_state.B_done
                       << ", execution time: " << std::fixed << std::setprecision(3) << elapsed_sec << std::defaultfloat << "s"
                       << ", ac = " << n_active_connections
-                      << ", crit = " << bootstrap_state.crit << std::endl;
+                      << ", crit = " << bootstrap_state.crit
+                      << ", overall_eff = " << std::fixed << std::setprecision(1)
+                      << 100.0 * bootstrap_timing_summary.efficiency() << "%"
+                      << ", capped = " << bootstrap_timing_summary.capped_fits << "/" << bootstrap_timing_summary.n_fits
+                      << ", avg_iters = " << std::setprecision(1) << bootstrap_timing_summary.avg_iters()
+                      << std::defaultfloat << std::endl;
 
             // early stop
             if (early_stop_lambda_(bootstrap_state, lambda_i, bootstrap_config_)) {
@@ -2337,7 +2317,7 @@ private:
         }
 
         step_start = log_step_start_("Resize bootstrap results");
-        resize_bootstrap_results_(boot_results, static_cast<int>(lambda_grid.size()), J);
+        resize_bootstrap_results_(boot_results, static_cast<int>(lambda_grid.size()), J, block_dims);
         log_step_end_(step_start);
         step_start = log_step_start_("Compute bootstrap correlation CIs");
         compute_bootstrap_corr_cis_(boot_results, J);
@@ -2390,6 +2370,29 @@ private:
         double avg_prep_time = 0.0;
         double avg_snapshot_time = 0.0;
         double avg_corr_time = 0.0;
+        double avg_iters = 0.0;
+        int capped_fits = 0;
+    };
+    struct BootstrapTimingSummary {
+        double fit_time = 0.0;
+        double parallel_capacity = 0.0;
+        double iters = 0.0;
+        int capped_fits = 0;
+        int n_fits = 0;
+
+        void add(const BootstrapBatchTiming& timing, const int batch_size, const int n_threads) {
+            fit_time += timing.avg_fit_time * static_cast<double>(batch_size);
+            parallel_capacity += timing.parallel_time * static_cast<double>(n_threads);
+            iters += timing.avg_iters * static_cast<double>(batch_size);
+            capped_fits += timing.capped_fits;
+            n_fits += batch_size;
+        }
+        [[nodiscard]] double efficiency() const {
+            return parallel_capacity > 0.0 ? fit_time / parallel_capacity : 0.0;
+        }
+        [[nodiscard]] double avg_iters() const {
+            return n_fits > 0 ? iters / static_cast<double>(n_fits) : 0.0;
+        }
     };
     struct ComponentSignificanceResult {
         double rho_tot = std::numeric_limits<double>::quiet_NaN();
@@ -2511,9 +2514,12 @@ private:
         std::vector<double> prep_times_sec(B_run, 0.0);
         std::vector<double> snapshot_times_sec(B_run, 0.0);
         std::vector<double> corr_times_sec(B_run, 0.0);
+        std::vector<int> fit_iters(B_run, 0);
+        std::vector<int> capped_fits(B_run, 0);
         const auto setup_end = std::chrono::high_resolution_clock::now();
 
         const auto parallel_start = std::chrono::high_resolution_clock::now();
+        const int fit_max_iter = bootstrap_fit_max_iter_();
 
         parallel_for(0, B_run, 1, [&](int b) {
 
@@ -2527,10 +2533,12 @@ private:
 
             const auto fit_start = std::chrono::high_resolution_clock::now();
             init_comp_(boot_blocks.refs, InitStrategy::WarmStart, true, &active_blocks);
-            fit_component_(boot_blocks.refs, C_active, true, bootstrap_fit_max_iter_());
+            const Result fit_result = fit_component_(boot_blocks.refs, C_active, true, fit_max_iter);
             const auto fit_end = std::chrono::high_resolution_clock::now();
 
             fit_times_sec[b] = std::chrono::duration<double>(fit_end - fit_start).count();
+            fit_iters[b] = fit_result.iters;
+            capped_fits[b] = fit_result.iters >= fit_max_iter ? 1 : 0;
 
             auto w_b = snapshot_weights_(boot_blocks.refs);
             const int b_global = B_offset + b;
@@ -2616,11 +2624,15 @@ private:
         double total_prep_time = 0.0;
         double total_snapshot_time = 0.0;
         double total_corr_time = 0.0;
+        int total_iters = 0;
+        int total_capped_fits = 0;
         for (int b = 0; b < B_run; ++b) {
             total_task_time += task_times_sec[b];
             total_prep_time += prep_times_sec[b];
             total_snapshot_time += snapshot_times_sec[b];
             total_corr_time += corr_times_sec[b];
+            total_iters += fit_iters[b];
+            total_capped_fits += capped_fits[b];
         }
 
         BootstrapBatchTiming timing;
@@ -2636,27 +2648,75 @@ private:
         timing.avg_prep_time = total_prep_time / static_cast<double>(B_run);
         timing.avg_snapshot_time = total_snapshot_time / static_cast<double>(B_run);
         timing.avg_corr_time = total_corr_time / static_cast<double>(B_run);
+        timing.avg_iters = static_cast<double>(total_iters) / static_cast<double>(B_run);
+        timing.capped_fits = total_capped_fits;
 
         return timing;
     }
 
-    bool adaptive_stop_(AdaptiveBootstrapState& state, const BootstrapConfig& config) const {
+    void ensure_bootstrap_lambda_storage_(
+        BootstrapSelectionResult& boot_results,
+        const int lambda_i,
+        const std::vector<int>& block_dims,
+        const int J
+    ) const {
+        if (boot_results.corr_boot_by_lambda[lambda_i].size() != 0) return;
+
+        boot_results.w_boot_by_lambda[lambda_i].resize(J);
+        for (int j = 0; j < J; ++j)
+            boot_results.w_boot_by_lambda[lambda_i][j].setZero(block_dims[j], boot_results.B);
+        boot_results.corr_boot_by_lambda[lambda_i].setZero(J * J, boot_results.B);
+    }
+
+    void print_bootstrap_batch_log_(
+        const int batch_first,
+        const int batch_last,
+        const double elapsed_sec,
+        const int n_active_blocks,
+        const int n_active_connections,
+        const double crit,
+        const BootstrapBatchTiming& timing,
+        const AdaptiveStopInfo& stop_info
+    ) const {
+        fdapde::cout << "  batch [" << std::setw(4) << batch_first
+                  << ", " << std::setw(4) << batch_last << "]"
+                  << " time=" << std::fixed << std::setprecision(3) << elapsed_sec << "s"
+                  << " fit=" << std::setprecision(3) << timing.avg_fit_time
+                  << "+/-" << timing.sd_fit_time << "s"
+                  << " eff=" << std::setprecision(1) << 100.0 * timing.efficiency << "%"
+                  << " ab=" << n_active_blocks
+                  << " ac=" << n_active_connections
+                  << " crit=" << std::setprecision(3) << crit
+                  << " rel=";
+        if (std::isfinite(stop_info.rel_change)) {
+            fdapde::cout << std::setprecision(3) << stop_info.rel_change;
+        } else {
+            fdapde::cout << "-";
+        }
+        fdapde::cout << " capped=" << timing.capped_fits << "/" << (batch_last - batch_first + 1)
+                  << " avg_iters=" << std::setprecision(1) << timing.avg_iters;
+        if (stop_info.stop)
+            fdapde::cout << " stop=" << stop_info.reason;
+        fdapde::cout << std::defaultfloat << std::endl;
+    }
+
+    AdaptiveStopInfo adaptive_stop_(AdaptiveBootstrapState& state, const BootstrapConfig& config) const {
+        AdaptiveStopInfo out;
         if (state.crit == 0.0) {
-            fdapde::cout << ", adaptive stop (crit = 0)" << std::endl;
-            return true;
+            out.stop = true;
+            out.reason = "crit=0";
+            return out;
         }
 
         if (!std::isfinite(state.crit_prev_batch)) {
             state.crit_prev_batch = state.crit;
-            fdapde::cout << std::endl;
-            return false;
+            return out;
         }
 
         const double rel_change =
             std::abs(state.crit_prev_batch - state.crit) /
             (std::abs(state.crit_prev_batch) + 1e-12);
-
-        fdapde::cout << ", rel_change = " << std::fixed << std::setprecision(3) << rel_change;
+        out.rel_change = rel_change;
 
         if (rel_change < config.adaptive_tol) {
             ++state.stable_batches;
@@ -2667,12 +2727,11 @@ private:
         state.crit_prev_batch = state.crit;
 
         if (state.stable_batches >= config.stable_batches_required && state.B_done >= state.B_min) {
-            fdapde::cout << ", adaptive stop (stable)" << std::endl;
-            return true;
+            out.stop = true;
+            out.reason = "stable";
         }
 
-        fdapde::cout << std::endl;
-        return false;
+        return out;
     }
 
     bool early_stop_lambda_(
@@ -2937,9 +2996,22 @@ private:
             }
         }
     }
-    void resize_bootstrap_results_(BootstrapSelectionResult& boot_results, int n_lambdas, int J) const {
+    void resize_bootstrap_results_(
+        BootstrapSelectionResult& boot_results,
+        int n_lambdas,
+        int J,
+        const std::vector<int>& block_dims
+    ) const {
         for (int i = 0; i < n_lambdas; ++i) {
             const int B_eff = boot_results.B_used_by_lambda[i];
+
+            if (boot_results.corr_boot_by_lambda[i].size() == 0) {
+                boot_results.w_boot_by_lambda[i].resize(J);
+                for (int j = 0; j < J; ++j)
+                    boot_results.w_boot_by_lambda[i][j].setZero(block_dims[j], 0);
+                boot_results.corr_boot_by_lambda[i].setZero(J * J, 0);
+                continue;
+            }
 
             for (int j = 0; j < J; ++j) {
                 boot_results.w_boot_by_lambda[i][j].conservativeResize(

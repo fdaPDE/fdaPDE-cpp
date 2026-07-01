@@ -652,6 +652,41 @@ TEST(rgcca, GCCA_bootstrap_model_selection_without_lambda_grid) {
     check_multivariate_model_selection_without_lambda_grid();
 }
 
+TEST(rgcca, component_callback_can_release_bootstrap_results) {
+    const std::string data_path = "../data/models/rgcca/";
+    constexpr int n_comp_local = 2;
+
+    RGCCA<IndependentSampling>::Options options;
+    options.mode = Mode::CovMax;
+    options.block_deactivation = true;
+    options.max_iter = 2;
+
+    RGCCA<IndependentSampling> rgcca(n_obs, options, n_comp_local);
+    add_multivariate_blocks(rgcca, data_path);
+    connect_reference_design(rgcca);
+
+    RGCCA<IndependentSampling>::BootstrapConfig bootstrap_config;
+    bootstrap_config.max_threads = 1;
+    bootstrap_config.B_min = 2;
+    bootstrap_config.B_max = 2;
+    bootstrap_config.B_per_thread_per_batch = 2;
+    bootstrap_config.adaptive = false;
+    bootstrap_config.fit_max_iter = 2;
+    rgcca.set_bootstrap_config(bootstrap_config);
+
+    int callback_count = 0;
+    const auto results = rgcca.fit([&](auto& model, const Result& result) {
+        EXPECT_EQ(result.h, callback_count);
+        EXPECT_FALSE(model.bootstrap_selection_results().empty());
+        model.clear_bootstrap_selection_results();
+        ++callback_count;
+    });
+
+    EXPECT_EQ(callback_count, n_comp_local);
+    EXPECT_TRUE(rgcca.bootstrap_selection_results().empty());
+    ASSERT_EQ(static_cast<int>(results.size()), n_comp_local);
+}
+
 TEST(rgcca, F_GCCA_fem_cov_component_significance) {
     check_fem_cov_component_significance();
 }
