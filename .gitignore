@@ -11,6 +11,7 @@ test/fdapde_test
 test/.cache
 test/build/
 test/_deps/
+test/frgcca_covmax_timing.cpp
 build/
 CMakeFiles/
 .DS_Store

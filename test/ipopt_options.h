@@ -22,10 +22,7 @@ inline void write_ipopt_options() {
       << "\n"
       << "bound_push 1e-12\n"
       << "bound_frac 1e-12\n"
-      << "bound_relax_factor 0\n"
-      << "\n"
-      << "linear_solver ma57\n"
-      << "hsllib /Users/pietrodonelli/local/hsl/lib/libcoinhsl.dylib\n";
+      << "bound_relax_factor 0\n";
 }
 
 #endif // FDAPDE_TEST_IPOPT_OPTIONS_H
