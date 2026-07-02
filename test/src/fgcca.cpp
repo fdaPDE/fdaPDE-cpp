@@ -20,7 +20,10 @@
 #include <fstream>
 #include <iomanip>
 
+#include "../ipopt_options.h"
+
 using namespace fdapde;
+using namespace fdapde::rgcca;
 using fdapde::test::almost_equal;
 
 namespace {
@@ -313,8 +316,8 @@ std::string comp_suffix(int h) {
     return "_comp" + std::to_string(h + 1);
 }
 
-const RGCCA<IndependentSampling>::BootstrapSelectionResult* find_bootstrap_result(
-  const std::vector<RGCCA<IndependentSampling>::BootstrapSelectionResult>& bootstrap_results, int h) {
+const RGCCA<IndependentSampling>::BootstrapResult* find_bootstrap_result(
+  const std::vector<RGCCA<IndependentSampling>::BootstrapResult>& bootstrap_results, int h) {
     for (const auto& result : bootstrap_results) {
         if (result.h == h) return &result;
     }
@@ -603,11 +606,7 @@ TEST(rgcca, R_RGCCA) {
 
 TEST(rgcca, GCCA_NN_cov) {
 
-    std::ofstream("ipopt.opt")
-    << "print_level 0\n"
-    << "sb yes\n"
-    << "print_user_options no\n"
-    << "print_timing_statistics no\n";
+    write_ipopt_options();
 
     check_rgcca_against_first_run("nn_cov",  FunctionalDiscretization::MV, WeightSignConstraint::NonNegative);
 }
@@ -622,11 +621,7 @@ TEST(rgcca, F_GCCA_splines_cov) {
 
 TEST(rgcca, F_GCCA_NN_fem_cov) {
 
-    std::ofstream("ipopt.opt")
-    << "print_level 0\n"
-    << "sb yes\n"
-    << "print_user_options no\n"
-    << "print_timing_statistics no\n";
+    write_ipopt_options();
 
     check_rgcca_against_first_run(
       "fem_nn_cov", FunctionalDiscretization::FEM, WeightSignConstraint::NonNegative);
@@ -634,11 +629,7 @@ TEST(rgcca, F_GCCA_NN_fem_cov) {
 
 TEST(rgcca, F_GCCA_NN_splines_cov) {
 
-    std::ofstream("ipopt.opt")
-    << "print_level 0\n"
-    << "sb yes\n"
-    << "print_user_options no\n"
-    << "print_timing_statistics no\n";
+    write_ipopt_options();
 
     check_rgcca_against_first_run(
       "splines_nn_cov", FunctionalDiscretization::Splines, WeightSignConstraint::NonNegative);

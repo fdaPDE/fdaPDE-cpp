@@ -14,18 +14,16 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __FDAPDE_FUNCTIONAL_H__
-#define __FDAPDE_FUNCTIONAL_H__
+#ifndef __FDAPDE_RGCCA_H__
+#define __FDAPDE_RGCCA_H__
 
-// clang-format off
+#include "rgcca/types.h"
+#include "rgcca/gcv.h"
+#include "rgcca/linear_algebra.h"
+#include "rgcca/statistics.h"
+#include "rgcca/sampling.h"
+#include "rgcca/blocks.h"
+#include "rgcca/model.h"
+#include "rgcca/io.h"
 
-// include core
-#include <fdaPDE/core.h>
-
-#include "solvers.h"
-#include "src/models/fpca.h"
-#include "src/models/rgcca.h"
-
-// clang-format on
-
-#endif // __FDAPDE_FUNCTIONAL_H__
+#endif // __FDAPDE_RGCCA_H__

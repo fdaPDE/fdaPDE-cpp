@@ -14,1413 +14,45 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __FGCCA_H__
-#define __FGCCA_H__
 
-#include "fdaPDE/src/solvers/nonnegative_ipopt.h"
-#include "fdaPDE/src/logging.h"
+#ifndef __FDAPDE_RGCCA_MODEL_H__
+#define __FDAPDE_RGCCA_MODEL_H__
+
+#include "blocks.h"
+#include "logging.h"
+#include "statistics.h"
 #include "fdaPDE/execution.h"
-#include "header_check.h"
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <cmath>
-#include <functional>
-#include <limits>
-#include <mutex>
-#include <numeric>
-#include <optional>
-#include <random>
-#include <string_view>
 
 namespace fdapde {
 
-enum class InitStrategy { None, SVD, Uniform, WarmStart };
-enum class DesignMode {Empty, Custom, FullyConnected};
-enum class LambdaSelection {Manual, Automatic};
-enum class Mode { CorMax, Regularized, CovMax };
-enum class Deflation { None, Scores };
-enum class WeightSignConstraint { None, NonNegative };
-enum class ResamplingStrategy { Ordinary, Stationary };
-
-
-
-inline const char* to_string(InitStrategy x) {
-    switch (x) {
-    case InitStrategy::None:      return "None";
-    case InitStrategy::SVD:       return "SVD";
-    case InitStrategy::Uniform:   return "Uniform";
-    case InitStrategy::WarmStart: return "WarmStart";
-    }
-    return "Unknown";
-}
-
-inline const char* to_string(LambdaSelection x) {
-    switch (x) {
-    case LambdaSelection::Manual:    return "Manual";
-    case LambdaSelection::Automatic: return "Automatic";
-    }
-    return "Unknown";
-}
-
-inline const char* to_string(Mode x) {
-    switch (x) {
-    case Mode::CorMax:      return "CorMax";
-    case Mode::Regularized: return "Regularized";
-    case Mode::CovMax:      return "CovMax";
-    }
-    return "Unknown";
-}
-
-inline const char* to_string(WeightSignConstraint x) {
-    switch (x) {
-    case WeightSignConstraint::None:        return "None";
-    case WeightSignConstraint::NonNegative: return "NonNegative";
-    }
-    return "Unknown";
-}
-
-inline const char* to_string(Deflation x) {
-    switch (x) {
-    case Deflation::None:   return "None";
-    case Deflation::Scores: return "Scores";
-    }
-    return "Unknown";
-}
-
-inline const char* to_string(ResamplingStrategy x) {
-    switch (x) {
-    case ResamplingStrategy::Ordinary:   return "Ordinary";
-    case ResamplingStrategy::Stationary: return "Stationary";
-    }
-    return "Unknown";
-}
-
-namespace internals {
-
-void ginv(const Eigen::MatrixXd& X, Eigen::MatrixXd& ginvX, double tol = std::sqrt(std::numeric_limits<double>::epsilon())){
-    // SVD
-    Eigen::BDCSVD<Eigen::MatrixXd> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
-    const auto& d = svd.singularValues();
-    const double d1 = d(0);
-    const double thresh = std::max(tol * d1, 0.0);
-
-    // identify Positive singular values
-    std::vector<int> idx;
-    idx.reserve(d.size());
-    for (int i = 0; i < d.size(); ++i) {
-        if (d(i) > thresh) idx.push_back(i);
-    }
-
-    // compute V_pos * diag(1/d_pos) * U_pos^T * z without forming full matrices
-    Eigen::MatrixXd Upos(X.rows(), (int)idx.size());
-    Eigen::MatrixXd Vpos(X.cols(), (int)idx.size());
-    Eigen::VectorXd invd((int)idx.size());
-
-    for (int k = 0; k < (int)idx.size(); ++k) {
-        Upos.col(k) = svd.matrixU().col(idx[k]);
-        Vpos.col(k) = svd.matrixV().col(idx[k]);
-        invd(k) = 1.0 / d(idx[k]);
-    }
-
-    ginvX = Vpos * (invd.asDiagonal() * (Upos.transpose()));
-}
-
-struct empty_t {
-    template<class... Args>
-    explicit empty_t(Args&&...) noexcept {}
-};
-
-struct identity_ls {
-    using vector_t = Eigen::VectorXd;
-    using matrix_t = Eigen::MatrixXd;
-    using sparse_matrix_t = Eigen::SparseMatrix<double>;
-
-    explicit identity_ls(const int n_dofs) : n_dofs_(n_dofs) {}
-
-    // shapes / accessors used by GCV path (harmless no-ops here)
-    [[nodiscard]] int n_dofs()  const { return n_dofs_; }
-    [[nodiscard]] int n_obs()   const { return static_cast<int>(y_.size()); }
-    [[nodiscard]] int n_covs()  const { return 0; } // no param covariates in identity model
-    [[nodiscard]] double edf(int = 0, int = 0) const { return 0; } // hat-trace is 0 for identity
-
-    // data flow API
-    void analyze_data() {
-        Psi_.resize(n_dofs_, n_dofs_);
-        Psi_.setIdentity();
-    }
-
-    void update_response_and_weights(const vector_t& y, const sparse_matrix_t& /*W*/) { y_ = y; }
-
-    // identity: fitted values equal z
-    void fit(double /*lambda*/) { f_ = y_; }
-
-    // outputs
-    [[nodiscard]] const vector_t& response() const { return y_; }
-    [[nodiscard]] vector_t fn() const { return f_; }     // fitted values
-    [[nodiscard]] const vector_t& f() const { return f_; }
-    [[nodiscard]] const sparse_matrix_t& Psi() const { return Psi_; }
-    [[nodiscard]] double ftPf(double) { return 0.; }
-
-private:
-    int n_dofs_{0};
-    vector_t y_;
-    vector_t f_;
-    sparse_matrix_t Psi_;
-};
-
-}
-
-struct IndependentSampling {
-    using solver_t = internals::identity_ls;
-};
-struct TimeDependentSampling {
-    using solver_t = internals::bs_ls_elliptic;
-    using Matrix = Eigen::MatrixXd;
-    using SparseMatrix = Eigen::SparseMatrix<double>;
-    using PointEvalType = std::function<SparseMatrix(const Matrix&)>;
-
-    static void discretize(const Triangulation<1, 1>& T, solver_t& solver_) {
-        // define physic in space (same for all the blocks)
-        BsSpace Bh(T, 3);
-        TrialFunction f_T(Bh);
-        TestFunction  v_T(Bh);
-        auto a_T = integral(T)(dxx(f_T) * dxx(v_T));
-        ZeroField<1> u_T;
-        auto F_T = integral(T)(u_T * v_T);
-        auto penalty = fdapde::bs_ls_elliptic(a_T, F_T);
-        solver_.discretize(penalty.get());
-    }
-
-    static void compute_Psi(const Triangulation<1, 1>& T, const Matrix& times, SparseMatrix& Psi) {
-        // define physic in space (same for all the blocks)
-        BsSpace Bh(T, 3);
-        TrialFunction f_T(Bh);
-        TestFunction  v_T(Bh);
-        auto a_T = integral(T)(dx(f_T) * dx(v_T));
-        ZeroField<1> u_T;
-        auto F_T = integral(T)(u_T * v_T);
-        auto penalty = fdapde::bs_ls_elliptic(a_T, F_T);
-        // compute point eval functor
-        using BilinearForm = typename std::decay_t<decltype(penalty.get())>::BilinearForm;
-        const BilinearForm& bilinear_form = penalty.get().bilinear_form();
-        Psi = internals::point_basis_eval(bilinear_form.trial_space(), times);
-    }
-
-};
-
-namespace internals {
-
-template <typename SamplingStrategy> class BaseBlock;   // forward decl for operator<<
-template <typename SamplingStrategy>
-std::ostream& operator<<(std::ostream& os, const BaseBlock<SamplingStrategy>& b);
-
-inline void validate_rgcca_positive_regularization_lambda_(const double lambda, const char* name) {
-    if (!(lambda > 0.0) || !std::isfinite(lambda)) {
-        throw std::invalid_argument(std::string("RGCCA: ") + name + " must be finite and positive");
-    }
-}
-
-// GCV utils
-template<class Fun> inline std::pair<double,double> argmin_over_log_grid(Fun&& f, const double log10_min, const double log10_max, int n_grid) {
-    if(n_grid<2) n_grid=2;
-    double best_log=log10_min;
-    double best_val=std::numeric_limits<double>::infinity();
-    const double step=(log10_max-log10_min)/(n_grid-1);
-    for(int i=0;i<n_grid;++i) {
-        const double lg = log10_min+i*step;
-        double lam = std::pow(10.0,lg);
-        if (const double val = f(lam); val < best_val) {
-            best_val=val;
-            best_log=lg;
-        }
-    }
-    return{std::pow(10.0,best_log),best_val};
-}
-struct GCVConfig {
-    // log10 λ range (broad defaults; adjust if you know scale)
-    double log10_min = -9.0;
-    double log10_max = 0.0;
-    int grid = 20;
-
-    // edf() stochastic trace settings (if your solver uses Hutch++ etc.)
-    int edf_r = 100;
-    int edf_seed = 12345;
-
-    // safety
-    double eps_dof = 1e-12;  // avoid divide-by-zero in denominator
-};
-template <class Smoother> struct GCVEval {
-    Smoother* s; // must expose: fit(λ), edf(r,seed), response(), fn(), n_obs(), n_covs()
-    GCVConfig cfg;
-
-    double operator()(double lambda) {
-        s->fit(lambda); // update fit for this λ
-
-        const int n = s->n_obs();
-        const int q = s->n_covs();
-        const double trS = s->edf(cfg.edf_r, cfg.edf_seed);
-
-        const auto& y  = s->response();
-        const auto yhat = s->fn();
-        const double rss = (yhat - y).squaredNorm();
-
-        const double dor = std::max( cfg.eps_dof, static_cast<double>(n) - (static_cast<double>(q) + trS) ); // residual dof
-        double gcv_index = (static_cast<double>(n) / (dor * dor)) * rss;
-        return gcv_index;
-    }
-};
-template <typename SolverType> std::pair<bool, double> select_lambda_with_gcv(SolverType& solver, const GCVConfig& gcv_cfg) {
-    GCVEval<SolverType> gcv{ &solver, gcv_cfg };
-    auto [lambda_opt, gcv_opt] = argmin_over_log_grid(
-        [&](double lam){ return gcv(lam); },
-        gcv_cfg.log10_min, gcv_cfg.log10_max, gcv_cfg.grid
-    );
-    return {lambda_opt < std::pow(10.0, gcv_cfg.log10_max) , lambda_opt};
-}
-
-template <typename SamplingStrategy>
-class BaseBlock {
-public:
-    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
-    using Vector = Eigen::Matrix<double, Eigen::Dynamic, 1>;
-    using IndexVector = Eigen::Vector<int, Eigen::Dynamic>;
-    using SparseMatrix = Eigen::SparseMatrix<double, Eigen::ColMajor, int>;
-    using BinaryMatrixT = BinaryMatrix<Dynamic, Dynamic>;
-    using SparseSolver = eigen_sparse_solver_movable_wrap<Eigen::SimplicialLDLT<SparseMatrix>>;
-    using ComponentsSolverType = typename std::decay_t<SamplingStrategy>::solver_t;
-
-    template<typename S = SamplingStrategy>
-    requires std::same_as<S, IndependentSampling>
-    BaseBlock(const std::string& block_name, Matrix* data_ptr, const int n_dofs_weights) :
-        block_name_(block_name), data_ptr_(data_ptr), components_solver_(data_ptr->rows()), n_dofs_weights_(n_dofs_weights) {
-        // init components solver
-        init_identity_row_index_();
-        components_solver_.analyze_data();
-    }
-
-    template<typename S = SamplingStrategy>
-    requires std::same_as<SamplingStrategy, TimeDependentSampling>
-    BaseBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Vector& times, Matrix* data_ptr, const int n_dofs_weights) :
-        block_name_(block_name), times_(times), data_ptr_(data_ptr), n_dofs_weights_(n_dofs_weights) {
-        // init sparse identity
-        init_identity_row_index_();
-        I_.resize(n(), n());
-        I_.setIdentity();
-        // init components solver
-        SamplingStrategy::discretize(T, components_solver_);
-        components_solver_.analyze_data(Matrix{times}, Vector::Zero(n()), I_);
-    }
-
-    BaseBlock(const BaseBlock& other) :
-        n_dofs_weights_(other.n_dofs_weights_),
-        n_comp_(other.n_comp_),
-        times_(other.times_),
-        block_name_(other.block_name_),
-        h_(other.h_),
-        data_ptr_(other.data_ptr_),
-        row_index_(other.row_index_),
-        components_solver_(other.components_solver_),
-        tau_(other.tau_),
-        mode_(other.mode_),
-        weight_sign_constraint_(other.weight_sign_constraint_),
-        bias_(other.bias_),
-        components_gcv_cfg_(other.components_gcv_cfg_),
-        lambda_components_(other.lambda_components_),
-        weights_(other.weights_),
-        weights_star_(other.weights_star_),
-        components_(other.components_),
-        deflation_projections_(other.deflation_projections_),
-        I_(other.I_),
-        lambda_components_selection_(other.lambda_components_selection_),
-        weights_ready_(other.weights_ready_),
-        components_ready_(other.components_ready_) {
-
-        M_ready_ = false;
-        invM_ready_ = false;
-        ginvM_ready_ = false;
-        raw_data_mutable_ = false;
-
-        nn_solver_.reset();
-    }
-
-    virtual ~BaseBlock() = default;
-
-    // block initialization
-    void init() {
-        ensure_M_();
-        ensure_lc_();
-    }
-
-    // data
-    [[nodiscard]] const std::string& name() const { return block_name_; }
-    [[nodiscard]] const Matrix& raw_data() const {
-        if (!data_ptr_) throw std::logic_error("BaseBlock: Block has no data pointer");
-        return *data_ptr_;
-    }
-    bool raw_score_cache_for_weight(const Vector& a, Vector& out) const {
-        if (!raw_score_cache_ready_ || !weights_ready_ || a.size() != weights_.rows())
-            return false;
-
-        const auto current_weight = weights_.col(h_);
-        if (a.isApprox(current_weight)) {
-            out = raw_score_cache_;
-            return true;
-        }
-        if (a.isApprox(-current_weight)) {
-            out = -raw_score_cache_;
-            return true;
-        }
-        return false;
-    }
-    [[nodiscard]] auto data() const {
-        return raw_data()(row_index_, Eigen::all);
-    }
-    void set_raw_data_mutable(const bool value) { raw_data_mutable_ = value; }
-
-    // dimensions
-    [[nodiscard]] int n() const { return static_cast<int>(row_index_.size()); }
-    [[nodiscard]] int n_raw() const { return static_cast<int>(raw_data().rows()); }
-    [[nodiscard]] int m() const { return static_cast<int>(raw_data().cols()); }
-    [[nodiscard]] int n_dofs_weights() const { return n_dofs_weights_; }
-
-    // components
-    void set_n_comp(const int n_comp) {
-        if (n_comp <= 0)
-            throw std::invalid_argument("n_comp must be > 0");
-
-        n_comp_ = n_comp;
-
-        // force resize on next access
-        weights_ready_ = false;
-        components_ready_ = false;
-    }
-    [[nodiscard]] int n_comp() const { return n_comp_; }
-    void set_h(const int idx) {
-        if (idx < 0 || idx >= n_comp_)
-            throw std::out_of_range("h");
-
-        h_ = idx;
-    }
-    [[nodiscard]] int h() const { return h_; }
-    void next_component() { set_h(h_ + 1); }
-
-    // mode and shrinkage parameter
-    [[nodiscard]] double tau() const { return tau_; }
-    void select_tau_auto() { select_tau_auto_(); }
-    void set_mode(const Mode mode) {
-        mode_ = mode;
-        if (mode_ == Mode::CorMax) tau_ = 0.0;
-        if (mode_ == Mode::CovMax) tau_ = 1.0;
-        if (mode_ == Mode::Regularized) select_tau_auto_();
-        invalidate_M_();
-    }
-    [[nodiscard]] Mode mode() const { return mode_; }
-
-    // normalization matrix
-    [[nodiscard]] const SparseMatrix& M() const { ensure_M_(); return M_; }
-    [[nodiscard]] const Matrix& ginvM() const { ensure_ginvM_(); return ginvM_; }
-    [[nodiscard]] SparseSolver& invM() { ensure_invM_(); return invM_; }
-
-    // components regularization utilities
-    void set_lambda_components(const double lambda) {
-        if constexpr (std::same_as<SamplingStrategy, IndependentSampling>) return;
-        lambda_components_ = lambda;
-        lambda_components_selection_ = lambda < 0.0;
-    }
-    [[nodiscard]] double lambda_components() const {
-        if constexpr (std::same_as<SamplingStrategy, IndependentSampling>) return std::numeric_limits<double>::quiet_NaN();
-        if (lambda_components_.has_value() && *lambda_components_ > 0.0) return *lambda_components_;
-        return std::numeric_limits<double>::quiet_NaN();
-    }
-    void set_components_gcv_config(const GCVConfig& cfg) {
-        components_gcv_cfg_ = cfg;
-    }
-
-    // weights regularization utilities
-    virtual void set_lambda_weights(const double) {};
-    [[nodiscard]] virtual double lambda_weights() const {
-        return std::numeric_limits<double>::quiet_NaN();
-    }
-
-    // weight and component initialization API
-    void init_weight_uniform() {
-        ensure_lc_();
-        Vector a = Vector::Ones(n_dofs_weights_);
-        double norm2 = a.dot(Omega() * a);
-        if (norm2 <= 0) norm2 = 1.0;
-        weights_.col(h()) = a / std::sqrt(norm2);
-    }
-    void refresh_component() {
-        ensure_lc_();
-        const Vector s = data_times_(Psi_D() * weights_.col(h()));
-        components_.col(h()) = c_fit_(s);
-    }
-
-    // inner-component initialization API
-    struct InitInfo {
-        bool active{false}; Vector nu;
-    };
-    InitInfo uniform_init() const {
-        InitInfo out{true, Vector::Ones(n()) };
-        out.nu = data_times_(Psi_D() * Vector::Ones(n_dofs_weights()));
-
-        return out;
-    }
-    InitInfo svd_init() const {
-        InitInfo out{true, Vector::Zero(n()) };
-        const Matrix& X = data();
-        if (X.size() == 0) return out;
-
-        const Eigen::BDCSVD<Matrix> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
-
-        if (svd.singularValues().size() == 0) return out;
-
-        if (X.rows() >= X.cols()) out.nu = X * svd.matrixV().col(0);
-        else out.nu = svd.matrixU().col(0);
-
-        return out;
-    }
-
-    // bootstrap API
-    void set_row_index(const IndexVector& idx) {
-        if (idx.size() == 0)
-            throw std::invalid_argument("row index cannot be empty");
-
-        for (int i = 0; i < idx.size(); ++i) {
-            if (idx(i) < 0 || idx(i) >= n_raw())
-                throw std::out_of_range("invalid row index");
-        }
-
-        row_index_ = idx;
-
-        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
-            I_.resize(n(), n());
-            I_.setIdentity();
-        }
-
-        invalidate_M_after_data_change_();
-        components_ready_ = false;
-    }
-    void clear_row_index() {
-        IndexVector idx(n_raw());
-        std::iota(idx.data(), idx.data() + idx.size(), 0);
-        set_row_index(idx);
-    }
-
-    // main compute method
-    void compute(const Vector& nu_D) {
-
-        // compute the weight
-        const Vector a = w_fit_(nu_D);
-        weights().col(h()) = a;
-
-        // compute the component and regularize it (the regularization acts only in the TimeDependent sampling scenario)
-        const Vector s = data_times_(Psi_D() * a);
-        components().col(h()) = c_fit_(s);
-    }
-
-    // deflation
-    void deflate(const Deflation mode) {
-        if (h() == n_comp()) return;
-        switch (mode) {
-            case Deflation::Scores: deflate_scores_(); break;
-            case Deflation::None: default: break;
-        }
-        invalidate_M_();
-    }
-
-    // weights post-processing
-    void compute_weights_star() {
-        ensure_lc_();
-        weights_star_.setZero(weights_.rows(), weights_.cols());
-        for (int h = 0; h < n_comp_; ++h) {
-            Vector a_star = weights_.col(h);
-            if (h > 0) {
-                const Matrix A_prev = weights_star_.leftCols(h);
-                const Matrix P_prev = deflation_projections_.leftCols(h);
-                const Vector coeff = P_prev.transpose() * (Psi_D() * weights_.col(h));
-                a_star.noalias() -= A_prev * coeff;
-            }
-            weights_star_.col(h) = a_star;
-        }
-    }
-
-    // model evaluation
-    [[nodiscard]] Vector normalized_component_for_evaluation(const Vector& a, const int hh) {
-        if (hh != h())
-            throw std::logic_error("normalized_component_for_evaluation: requested component differs from current h; M may refer to current deflated data.");
-
-        // weight at locations
-        const Vector am = Psi_D() * a;
-
-        // normalization
-        // M(), not Omega()! in the evaluation, the regularization term should not be taken into account
-        double nrm2 = am.dot(M() * am);
-        if (nrm2 <= 0.0 || !std::isfinite(nrm2)) nrm2 = 1.0;
-
-        // components
-        const Vector s = data_times_(am) / std::sqrt(nrm2);
-        return c_fit_(s);
-    }
-
-    // virtual printer
-    virtual void print(std::ostream& os) const {
-        const Matrix& X = data();   // no copy
-        using Index = Eigen::Index;
-        const Index max_rows = 3, max_cols = 5;
-        const Index rows = std::min<Index>(max_rows, X.rows());
-        const Index cols = std::min<Index>(max_cols, X.cols());
-        os << name() << " Block preview (" << X.rows() << " x " << X.cols() << "):\n";
-        for (Index i = 0; i < rows; ++i) {
-            for (Index j = 0; j < cols; ++j) {
-                os << X(i, j);
-                if (j + 1 < cols) os << '\t';
-            }
-            if (X.cols() > cols) os << "\t...";
-            os << '\n';
-        }
-        if (X.rows() > rows) os << "...\n";
-        os << "tau = " << tau() << std::endl;
-    }
-
-    // setters
-    void set_bias(const bool bias) { bias_ = bias; }
-    void set_weight_sign_constraint(const WeightSignConstraint weight_sign_constraint = WeightSignConstraint::None) {
-        weight_sign_constraint_ = weight_sign_constraint;
-    }
-
-    // observers
-    [[nodiscard]] const SparseMatrix& Psi_T() const { return components_solver_.Psi(); }
-    Matrix& weights() { ensure_lc_(); return weights_; }
-    Matrix weights_m() { ensure_lc_(); return Psi_D() * weights_; }
-    Matrix& weights_star() { ensure_lc_(); return weights_star_; }
-    Matrix weights_star_m() { ensure_lc_(); return Psi_D() * weights_star_; }
-    Matrix& components() { ensure_lc_(); return components_; }
-    Matrix components_m() { ensure_lc_(); return Psi_T() * components_; }
-    [[nodiscard]] WeightSignConstraint weight_sign_constraint() const { return weight_sign_constraint_; }
-    template <typename S = SamplingStrategy> requires std::same_as<S, TimeDependentSampling> const Vector& times() { return times_; }
-    [[nodiscard]] SparseMatrix Psi_at(const Matrix& locs) const { return Psi_at_(locs); }
-    [[nodiscard]] SparseMatrix Psi_at(const BinaryMatrixT& locs) const { return Psi_at_(locs); }
-
-    // abstract methods
-    [[nodiscard]] virtual const SparseMatrix& Psi_D() const = 0;
-    [[nodiscard]] virtual const SparseMatrix& Omega() = 0; // M + regularization when present
-    virtual std::unique_ptr<BaseBlock> clone() const = 0;
-    [[nodiscard]] virtual SparseMatrix Psi_at_(const Matrix& locs) const = 0;
-    [[nodiscard]] virtual SparseMatrix Psi_at_(const BinaryMatrixT& locs) const = 0;
-
-protected:
-
-    // data utils
-    [[nodiscard]] Matrix& mutable_raw_data_() {
-        if (!data_ptr_) throw std::logic_error("BaseBlock: Block has no data pointer");
-        if (!raw_data_mutable_)
-            throw std::logic_error("BaseBlock: This block is not allowed to mutate raw data");
-        return *data_ptr_;
-    }
-    void init_identity_row_index_() {
-        row_index_.resize(raw_data().rows());
-        std::iota(row_index_.data(), row_index_.data() + row_index_.size(), 0);
-    }
-    [[nodiscard]] bool is_identity_row_index_() const {
-        if (row_index_.size() != n_raw()) return false;
-        for (int i = 0; i < row_index_.size(); ++i)
-            if (row_index_(i) != i) return false;
-        return true;
-    }
-    Vector data_times_(const Vector& x) const {
-        raw_score_cache_.resize(n_raw());
-        raw_score_cache_.noalias() = raw_data() * x;
-        raw_score_cache_ready_ = true;
-
-        if (is_identity_row_index_()) {
-            return raw_score_cache_;
-        }
-
-        Vector out(n());
-        for (int i = 0; i < row_index_.size(); ++i)
-            out[i] = raw_score_cache_[row_index_(i)];
-        return out;
-    }
-    Vector data_transpose_times_(const Vector& x) const {
-        Vector out(m());
-        if (is_identity_row_index_()) {
-            out.noalias() = raw_data().transpose() * x;
-        } else {
-            Vector raw_x = Vector::Zero(n_raw());
-            for (int i = 0; i < row_index_.size(); ++i)
-                raw_x[row_index_(i)] += x[i];
-            out.noalias() = raw_data().transpose() * raw_x;
-        }
-        return out;
-    }
-
-    // weights and components
-    void ensure_lc_() {
-        if (!weights_ready_) {
-            weights_.setZero(n_dofs_weights_, n_comp_);
-            weights_star_.setZero(n_dofs_weights_, n_comp_);
-            deflation_projections_.setZero(m(), n_comp_);
-            weights_ready_ = true;
-        }
-        if (!components_ready_) {
-            components_.setZero(components_solver_.n_dofs(), n_comp_);
-            components_ready_ = true;
-        }
-    }
-    [[nodiscard]] Vector a_() { ensure_lc_(); return weights_.col(h());}
-    [[nodiscard]] Vector eta_() { ensure_lc_(); return components_.col(h());}
-
-    // tau estimate using Schäfer–Strimmer analytic shrinkage from correlation
-    void select_tau_auto_() {
-        const int n_obs  = n();
-        const int n_vars = m();
-
-        if (n_obs < 2 || n_vars < 1) throw std::runtime_error("tau_auto: need n >= 2 and m >= 1");
-
-        Eigen::RowVectorXd mu = data().colwise().mean();
-        Matrix Xc = data().rowwise() - mu;
-        Eigen::RowVectorXd var = (Xc.array().square().colwise().sum() / static_cast<double>(n_obs - 1)).matrix();
-        Eigen::RowVectorXd sd = var.array().sqrt().matrix();
-
-        for (int j = 0; j < n_vars; ++j) {
-            if (!(sd[j] > 0.0) || !std::isfinite(sd[j])) sd[j] = 1.0;
-        }
-
-        Xc.array().rowwise() /= sd.array();
-        const Matrix XtX = Xc.transpose() * Xc;
-        const Matrix Xc2 = Xc.array().square().matrix();
-        const Matrix Xc2T_Xc2 = Xc2.transpose() * Xc2;
-
-        const double n_d = static_cast<double>(n_obs);
-        const double c = n_d / std::pow(n_d - 1.0, 3.0);
-
-        Matrix V = c * (Xc2T_Xc2 - (1.0 / n_d) * XtX.array().square().matrix());
-        V.diagonal().setZero();
-
-        const double num = V.sum();
-
-        Matrix Corm = XtX / (n_d - 1.0);
-        Matrix D = Corm;
-        D.diagonal().array() -= 1.0;
-
-        const double den = D.squaredNorm();
-
-        tau_ = (den > 0.0) ? std::clamp(num / den, 0.0, 1.0) : 0.0;
-        invalidate_M_();
-    }
-
-    // normalization matrix
-    void compute_M_() {
-        M_.resize(m(), m());
-
-        if (mode_ == Mode::CovMax) {
-            M_.setIdentity();
-        } else {
-            const double n_d = static_cast<double>(n());
-            const double den = bias_ ? n_d : std::max(1.0, n_d - 1.0);
-
-            const Matrix XtX = data().transpose() * data();
-            const Vector mu = data().colwise().mean();
-            const Matrix Sigma = (XtX - n_d * (mu * mu.transpose())) / den;
-
-            // const Matrix XtX = data().transpose() * data();
-            // const Matrix Sigma = XtX / den;
-
-            if (mode_ == Mode::CorMax) {
-                M_ = Sigma.sparseView();
-            } else {
-                SparseMatrix I(m(), m());
-                I.setIdentity();
-
-                M_ = tau_ * I;
-                M_ += ((1.0 - tau_) * Sigma).sparseView();
-            }
-        }
-
-        M_.makeCompressed();
-        M_ready_ = true;
-        ginvM_ready_ = false;
-        invM_ready_ = false;
-    }
-    void compute_invM_() {
-        invM_.compute(M_);
-        invM_ready_ = true;
-    }
-    void compute_ginvM_() {
-        if (mode_ == Mode::CovMax) {
-            ginvM_.setIdentity(m(), m());
-        } else {
-            ginvM_.resize(m(), m());
-            Eigen::MatrixXd M_dense = Eigen::MatrixXd(M());
-            ginv(M_dense, ginvM_);
-        }
-        ginvM_ready_ = true;
-    }
-    void ensure_M_() const {
-        if (!M_ready_) const_cast<BaseBlock*>(this)->compute_M_();
-    }
-    void ensure_invM_() const {
-        ensure_M_(); // sets ginvM_ready = false
-        if (!invM_ready_) const_cast<BaseBlock*>(this)->compute_invM_();
-    }
-    void ensure_ginvM_() const {
-        ensure_M_(); // sets ginvM_ready = false
-        if (!ginvM_ready_) const_cast<BaseBlock*>(this)->compute_ginvM_();
-    }
-    void invalidate_M_() {
-        M_ready_ = false;
-        invalidate_derived_caches_();
-    } // this is enough to invalidate also ginvM and invM
-    void invalidate_M_after_data_change_() {
-        raw_score_cache_ready_ = false;
-        if (mode_ != Mode::CovMax) invalidate_M_();
-    }
-    virtual void invalidate_derived_caches_() {}
-
-    // deflation
-    void deflate_scores_() {
-        ensure_lc_();
-
-        if (!is_identity_row_index_()) throw std::logic_error("deflate_scores_: raw-data deflation requires identity row_index");
-
-        const Vector y = Psi_T() * eta_();
-        const double yy = y.squaredNorm();
-
-        if (yy > 0.0) {
-            Vector p = data().transpose() * y / yy;
-
-            // Store p_h for post-processing
-            deflation_projections_.col(h()) = p;
-
-            mutable_raw_data_().noalias() -= y * p.transpose();
-        }
-
-        invalidate_M_after_data_change_();
-    }
-
-    // non-negative solver utils
-    Vector solve_nonnegative_weight_ipopt_(const Vector& z) {
-        if (!nn_solver_)
-            nn_solver_ = std::make_unique<NonNegativeWeightSolver>(
-                Psi_D(),
-                Omega()
-            );
-        return nn_solver_->solve(z);
-    }
-    void reset_nonnegative_weight_solver_() {
-        nn_solver_.reset();
-    }
-
-    // weights solver
-    virtual Vector w_fit_(const Vector& nu) = 0;
-    [[nodiscard]] Vector normalize_weight_(const Vector& a) {
-        const double rho2 = a.dot(Omega() * a);
-        if (rho2 <= 0.0 || !std::isfinite(rho2)) return a;
-        return a / std::sqrt(rho2);
-    }
-
-    // component solver
-    Vector c_fit_(const Vector& s) {
-        if constexpr (std::same_as<SamplingStrategy, IndependentSampling>) return s;
-
-        components_solver_.update_response_and_weights(s, I_);
-
-        double lambda = 1e-15;
-        if (lambda_components_selection_) {
-            auto [success, l] = select_lambda_with_gcv(components_solver_, components_gcv_cfg_);
-            lambda_components_ = l;
-            lambda_components_selection_ = false;
-        }
-        if (lambda_components_.has_value()) {
-            lambda = *lambda_components_;
-        }
-        components_solver_.fit(lambda);
-
-        return components_solver_.f();
-    }
-
-    // dimensions
-    int n_dofs_weights_ {0};
-    int n_comp_ {1};
-
-    // state
-    Vector times_{0};
-    const std::string block_name_;
-    int h_ {0};
-
-    // data
-    Matrix* data_ptr_ = nullptr;
-    IndexVector row_index_;
-    mutable Vector raw_score_cache_;
-
-    // solvers
-    ComponentsSolverType components_solver_;
-    std::unique_ptr<NonNegativeWeightSolver> nn_solver_;
-
-    // options
-    double tau_ {0.0};
-    Mode mode_ = Mode::CorMax;
-    WeightSignConstraint weight_sign_constraint_ = WeightSignConstraint::None;
-    bool bias_ = true;
-
-    // parameters
-    GCVConfig components_gcv_cfg_;
-    std::optional<double> lambda_components_;
-
-    // results
-    Matrix weights_, weights_star_, components_;
-    Matrix deflation_projections_;
-
-    // utilities
-    SparseMatrix I_;
-    SparseMatrix M_;
-    Matrix ginvM_;
-    SparseSolver invM_;
-
-    // flags
-    bool raw_data_mutable_ = false;
-    mutable bool raw_score_cache_ready_ {false};
-    bool weights_ready_ {false}, components_ready_ {false};
-    bool M_ready_ {false}, invM_ready_ {false}, ginvM_ready_ {false};
-    bool lambda_components_selection_ {false};
-};
-
-// single non-member operator<< visible to all derived classes
-template <typename SamplingStrategy>
-inline std::ostream& operator<<(std::ostream& os, const BaseBlock<SamplingStrategy>& b) {
-    b.print(os);   // virtual dispatch -> works for Multivariate/Functional too
-    return os;
-}
-
-template <typename SamplingStrategy>
-class MultivariateBlock final : public BaseBlock<SamplingStrategy> {
-public:
-    using Base = BaseBlock<SamplingStrategy>;
-    using Matrix = typename Base::Matrix;
-    using Vector = typename Base::Vector;
-    using SparseMatrix = typename Base::SparseMatrix;
-    using BinaryMatrixT = typename Base::BinaryMatrixT;
-
-    using Base::init;
-    using Base::M;
-    using Base::ginvM;
-    using Base::n;
-    using Base::m;
-    using Base::n_dofs_weights;
-    using Base::data;
-    using Base::data_transpose_times_;
-    using Base::h;
-    using Base::mode;
-    using Base::weights;
-    using Base::components;
-    using Base::weight_sign_constraint;
-
-    template<typename S = SamplingStrategy>
-    requires std::same_as<S, IndependentSampling>
-    MultivariateBlock(const std::string& block_name, Matrix* data_ptr) :
-        Base(block_name, data_ptr, static_cast<int>(data_ptr->cols())) {
-        init_multivariate_();
-    }
-
-    template<typename S = SamplingStrategy>
-    requires std::same_as<SamplingStrategy, TimeDependentSampling>
-    MultivariateBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Vector& times, Matrix* data_ptr) :
-        Base(block_name, T, times, data_ptr, static_cast<int>(data_ptr->cols())) {
-        init_multivariate_();
-    }
-
-    MultivariateBlock(const MultivariateBlock& other) : Base(other), Psi_D_(other.Psi_D_) { }
-
-    std::unique_ptr<Base> clone() const override {
-        return std::make_unique<MultivariateBlock>(*this);
-    }
-
-    // Omega
-    [[nodiscard]] const SparseMatrix& Omega() override { return M(); };
-
-    // Psi_D
-    [[nodiscard]] const SparseMatrix& Psi_D() const override { return Psi_D_; }
-    [[nodiscard]] SparseMatrix Psi_at_(const Matrix&) const override {
-        throw std::logic_error("MultivariateBlock: locations cannot define a weight basis; pass a Psi matrix explicitly");
-    }
-    [[nodiscard]] SparseMatrix Psi_at_(const BinaryMatrixT&) const override {
-        throw std::logic_error("MultivariateBlock: locations cannot define a weight basis; pass a Psi matrix explicitly");
-    }
-
-    // print
-    void print(std::ostream& os) const override {
-        Base::print(os);
-        os << "type: MultivariateBlock, n_dofs_weights = m = " << n_dofs_weights();
-        os << "\n";
-    }
-
-protected:
-    using Base::solve_nonnegative_weight_ipopt_;
-    using Base::reset_nonnegative_weight_solver_;
-    using Base::normalize_weight_;
-
-    void init_multivariate_() {
-        Psi_D_.resize(m(), n_dofs_weights()); // n_dofs_weights == m in this case
-        Psi_D_.setIdentity();
-        init();
-    }
-
-    Vector w_fit_(const Vector& nu) override {
-        assert(nu.size() == n() && "nu must have size n (rows of X)");
-        init();
-
-        Vector z = data_transpose_times_(nu);
-
-        if (weight_sign_constraint() == WeightSignConstraint::NonNegative) {
-            return solve_nonnegative_weight_ipopt_(z); // already normalized
-        }
-
-        if (mode() == Mode::CovMax) return normalize_weight_(z);
-        const Vector a_tilde = ginvM() * z;
-        return normalize_weight_(a_tilde);
-    }
-
-    void invalidate_derived_caches_() override {
-        reset_nonnegative_weight_solver_();
-    }
-
-private:
-    SparseMatrix Psi_D_; // m x m sparse identity matrix
-};
-
-template <class WeightsPenaltyType, typename SamplingStrategy>
-class FunctionalBlock final : public BaseBlock<SamplingStrategy> {
-public:
-    using Base = BaseBlock<SamplingStrategy>;
-    using Vector = typename Base::Vector;
-    using Matrix = typename Base::Matrix;
-    using SparseMatrix = typename Base::SparseMatrix;
-    using BinaryMatrixT = typename Base::BinaryMatrixT;
-    using WeightsSolverType = typename std::decay_t<WeightsPenaltyType>::solver_t;
-
-    using Base::init;
-    using Base::M;
-    using Base::n;
-    using Base::m;
-    using Base::n_dofs_weights;
-    using Base::data;
-    using Base::h;
-    using Base::weights;
-    using Base::components;
-    using Base::weight_sign_constraint;
-
-    template <typename GeoFrame>
-    requires std::same_as<SamplingStrategy, IndependentSampling>
-    FunctionalBlock(const std::string& block_name, GeoFrame& gf, Matrix* data_ptr, WeightsPenaltyType&& weights_penalty) :
-        Base(block_name, data_ptr, weights_penalty.get().bilinear_form().n_dofs()) {
-        init_functional_(gf, std::forward<WeightsPenaltyType>(weights_penalty));
-    }
-
-    template <typename GeoFrame>
-    requires std::same_as<SamplingStrategy, TimeDependentSampling>
-    FunctionalBlock(const std::string& block_name, const Triangulation<1, 1>& T, const Vector& times, GeoFrame& gf, Matrix* data_ptr, WeightsPenaltyType&& weights_penalty) :
-        Base(block_name, T, times, data_ptr, weights_penalty.get().bilinear_form().n_dofs()) {
-        init_functional_(gf, std::forward<WeightsPenaltyType>(weights_penalty));
-    }
-
-    FunctionalBlock(const FunctionalBlock& other) :
-        Base(other), weights_solver_(other.weights_solver_), lambda_weights_(other.lambda_weights_) {
-        Omega_ready_ = false;
-        weights_solver_weights_ready_ = false;
-    }
-
-    std::unique_ptr<Base> clone() const override {
-        return std::make_unique<FunctionalBlock>(*this);
-    }
-
-    // Psi_D
-    [[nodiscard]] const SparseMatrix& Psi_D() const override { return weights_solver_.Psi(); }
-    [[nodiscard]] SparseMatrix Psi_at_(const Matrix& locs) const override { return weights_solver_.eval_basis_at(locs); }
-    [[nodiscard]] SparseMatrix Psi_at_(const BinaryMatrixT& locs) const override { return weights_solver_.eval_basis_at(locs); }
-
-    // weights regularization utils
-    void set_lambda_weights(const double lambda) override {
-        validate_rgcca_positive_regularization_lambda_(lambda, "weight lambda");
-        lambda_weights_ = lambda;
-        Omega_ready_ = false;
-        reset_nonnegative_weight_solver_();
-    }
-    [[nodiscard]] double lambda_weights() const override {
-        return lambda_weights_;
-    }
-
-    // Omega matrix
-    [[nodiscard]] const SparseMatrix& Omega() override {
-        if (!Omega_ready_) {
-            Omega_ = Psi_D().transpose() * M() * Psi_D();
-            Omega_ += lambda_weights_ * weights_solver_.P();
-            Omega_ready_ = true;
-        }
-        return Omega_;
-    }
-
-    // print
-    void print(std::ostream& os) const override {
-        Base::print(os);
-        os << "type: FunctionalBlock, n_dofs_weights = " << n_dofs_weights();
-        os << ", lambda = " << lambda_weights_;
-        os << "\n";
-    }
-
-protected:
-    using Base::solve_nonnegative_weight_ipopt_;
-    using Base::reset_nonnegative_weight_solver_;
-    using Base::data_transpose_times_;
-
-    template <typename GeoFrame>
-    void init_functional_(GeoFrame& gf, WeightsPenaltyType&& weights_penalty) {
-        weights_solver_.discretize(weights_penalty.get());
-        weights_solver_.analyze_data(gf, M());
-        weights_solver_weights_ready_ = true;
-        init();
-    }
-
-    Vector w_fit_(const Vector& nu) override {
-        assert(nu.size() == n() && "nu must have size n (rows of X)");
-        init();
-
-        Vector z = data_transpose_times_(nu);
-
-        if (weight_sign_constraint() == WeightSignConstraint::NonNegative) {
-            return solve_nonnegative_weight_ipopt_(z);  // already normalized
-        }
-
-        if (!weights_solver_weights_ready_) {
-            weights_solver_.update_weights(M());
-            weights_solver_weights_ready_ = true;
-        }
-        weights_solver_.update_z(z);
-        weights_solver_.fit(lambda_weights_);
-        return weights_solver_.f(); // already normalized
-    }
-    void invalidate_derived_caches_() override {
-        Omega_ready_ = false;
-        weights_solver_weights_ready_ = false;
-        reset_nonnegative_weight_solver_();
-    }
-
-private:
-    SparseMatrix Omega_;
-    bool Omega_ready_ {false};
-    bool weights_solver_weights_ready_ {false};
-    WeightsSolverType weights_solver_;
-    double lambda_weights_ = 1e-15;
-};
-
-template <typename SamplingStrategy, typename Matrix = Eigen::Matrix<double, Dynamic, Dynamic>>
-requires std::same_as<SamplingStrategy, IndependentSampling>
-inline std::unique_ptr<internals::BaseBlock<SamplingStrategy>>
-make_multivariate_block(std::string block_name, Matrix* data_ptr) {
-    return std::make_unique<internals::MultivariateBlock<SamplingStrategy>>(block_name, data_ptr);
-}
-
-template <typename SamplingStrategy, typename Matrix = Eigen::Matrix<double, Dynamic, Dynamic>, typename Vector = Eigen::Matrix<double, Dynamic, 1>>
-requires std::same_as<SamplingStrategy, TimeDependentSampling>
-inline std::unique_ptr<internals::BaseBlock<SamplingStrategy>>
-make_multivariate_block(std::string block_name, const Triangulation<1, 1>& T, const Vector& times, Matrix* data_ptr) {
-    return std::make_unique<internals::MultivariateBlock<SamplingStrategy>>(block_name, T, times, data_ptr);
-}
-
-template <typename SamplingStrategy, typename GeoFrame, typename WeightsPenaltyType, typename Matrix = Eigen::Matrix<double, Dynamic, Dynamic>>
-requires std::same_as<SamplingStrategy, IndependentSampling>
-std::unique_ptr<internals::BaseBlock<SamplingStrategy>>
-make_functional_block(std::string block_name, GeoFrame& gf, Matrix* data_ptr, WeightsPenaltyType&& weights_penalty) {
-    return std::make_unique<internals::FunctionalBlock<WeightsPenaltyType, SamplingStrategy>>(block_name, gf, data_ptr, std::forward<WeightsPenaltyType>(weights_penalty));
-}
-
-template <typename SamplingStrategy, typename GeoFrame, typename WeightsPenaltyType, typename Vector = Eigen::Matrix<double, Dynamic, 1>, typename Matrix = Eigen::Matrix<double, Dynamic, Dynamic>>
-requires std::same_as<SamplingStrategy, TimeDependentSampling>
-std::unique_ptr<internals::BaseBlock<SamplingStrategy>>
-make_functional_block(std::string block_name, const Triangulation<1, 1>& T, const Vector& times, GeoFrame& gf, Matrix* data_ptr, WeightsPenaltyType&& weights_penalty) {
-    return std::make_unique<internals::FunctionalBlock<WeightsPenaltyType, SamplingStrategy>>(block_name, T, times, gf, data_ptr,  std::forward<WeightsPenaltyType>(weights_penalty));
-}
-
-} // namespace internals
-
-struct Scheme {
-    std::function<double(double)> g;   // g(t)
-    std::function<double(double)> w;   // w(t)
-    double phi = 1.0;
-    const char* name = "custom";
-
-    static Scheme Horst() {
-        return {[](double t) { return t; }, [](double) { return 1.0; }, 1.0, "Horst"};
-    }
-    static Scheme Centroid() {
-        return {
-            [](double t) { return std::abs(t); }, [](double t) { return t >= 0 ? 1.0 : -1.0; }, 1.0, "Centroid"};
-    }
-    static Scheme Factorial() {
-        return {[](double t) { return t * t; }, [](double t) { return t; }, 2.0, "Factorial"};
-    }
-};
-
-struct Result {
-    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
-    using BoolMatrix = Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>;
-
-    int h = 0;
-    int J = 0;
-    std::vector<double> obj_history;
-    bool monotone = true;
-    bool cancelled = false;
-    int iters = 0;
-    BoolMatrix C;
-    Matrix covariance_matrix;
-    Matrix correlation_matrix;
-    std::vector<double> tau_values;
-    std::vector<double> lambda_components_values;
-    std::vector<double> lambda_weights_values;
-    std::vector<bool> active_blocks;
-    double rho_tot = std::numeric_limits<double>::quiet_NaN();
-    double rho_tot_p_value = std::numeric_limits<double>::quiet_NaN();
-    int rho_tot_bootstrap_count = 0;
-    bool component_significant = true;
-
-    explicit Result(const int n_blocks) : J(n_blocks), C(J, J), covariance_matrix(J,J),
-    tau_values(J), lambda_components_values(J), lambda_weights_values(J), active_blocks(J) {}
-};
-
-// forward declaration of pretty printers
-std::ostream& operator<<(std::ostream& os, const Result& r);
-std::ostream& operator<<(std::ostream& os, const std::vector<Result>& results);
-
-// ===== RGCCA =====
+// RGCCA owns block wiring, component fitting, bootstrap selection, and result storage.
 template <typename SamplingStrategy>
 class RGCCA {
 public:
-    using Block = internals::BaseBlock<SamplingStrategy>;
+    using Block = rgcca::internals::BaseBlock<SamplingStrategy>;
     using BlockPtr = std::unique_ptr<Block>;
-    using BlockList = std::vector<BlockPtr>;
     using BlockRefList = std::vector<Block*>;
     using BlockOwnerList = std::vector<std::unique_ptr<Block>>;
     using Matrix = typename Block::Matrix;
     using BoolMatrix = Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>;
     using SparseMatrix = typename Block::SparseMatrix;
     using Vector = typename Block::Vector;
+    using IndependentSampling = rgcca::IndependentSampling;
+    using TimeDependentSampling = rgcca::TimeDependentSampling;
+    using InitStrategy = rgcca::InitStrategy;
+    using DesignMode = rgcca::DesignMode;
+    using LambdaSelection = rgcca::LambdaSelection;
+    using Mode = rgcca::Mode;
+    using Deflation = rgcca::Deflation;
+    using WeightSignConstraint = rgcca::WeightSignConstraint;
+    using ResamplingStrategy = rgcca::ResamplingStrategy;
+    using Scheme = rgcca::Scheme;
+    using Options = rgcca::Options;
+    using BootstrapConfig = rgcca::BootstrapConfig;
+    using Result = rgcca::Result;
+    using BootstrapResult = rgcca::BootstrapResult;
     using SamplingDomain = std::conditional_t<std::same_as<SamplingStrategy, TimeDependentSampling>, Triangulation<1, 1>, internals::empty_t>;
     using ComponentCallback = std::function<void(RGCCA&, const Result&)>;
-
-    struct Options {
-        int max_iter;
-        double tol;
-        bool verbose;
-        bool cache_covariances;
-        bool bias;
-        InitStrategy init_strategy;
-        LambdaSelection lambda_selection_weights;
-        LambdaSelection lambda_selection_components;
-        bool component_significance;
-        bool block_deactivation;
-        bool connection_deactivation;
-        Mode mode;
-        WeightSignConstraint weight_sign_constraint;
-        Deflation deflation_mode;
-        Scheme scheme;
-
-        explicit Options(
-          const int max_iter_ = 1000, const double tol_ = 1e-8, const bool bias_ = true,
-          const InitStrategy init_strategy_ = InitStrategy::SVD, const Mode mode_ = Mode::CovMax,
-          const WeightSignConstraint weight_sign_constraint_ = WeightSignConstraint::None,
-          const LambdaSelection lambda_selection_weights_ = LambdaSelection::Manual,
-          const LambdaSelection lambda_selection_components_ = LambdaSelection::Automatic,
-          const bool component_significance_ = false,
-          const Deflation deflation_mode_ = Deflation::Scores, const Scheme& scheme_ = Scheme::Factorial(),
-          const bool verbose_ = false, const bool cache_ = true,
-          const bool block_deactivation_ = false, const bool connection_deactivation_ = false) :
-            max_iter(max_iter_),
-            tol(tol_),
-            bias(bias_),
-            init_strategy(init_strategy_),
-            mode(mode_),
-            weight_sign_constraint(weight_sign_constraint_),
-            lambda_selection_weights(lambda_selection_weights_),
-            lambda_selection_components(lambda_selection_components_),
-            component_significance(component_significance_),
-            block_deactivation(block_deactivation_),
-            connection_deactivation(connection_deactivation_),
-            deflation_mode(deflation_mode_),
-            scheme(scheme_),
-            verbose(verbose_),
-            cache_covariances(cache_) { }
-
-        friend std::ostream& operator<<(std::ostream& os, const Options& opt) {
-            os << "RGCCA::Options {\n"
-               << "  max_iter                    = " << opt.max_iter << '\n'
-               << "  tol                         = " << opt.tol << '\n'
-               << "  verbose                     = " << opt.verbose << '\n'
-               << "  cache_covariances           = " << opt.cache_covariances << '\n'
-               << "  bias                        = " << opt.bias << '\n'
-               << "  init_strategy               = " << to_string(opt.init_strategy) << '\n'
-               << "  lambda_selection_weights    = " << to_string(opt.lambda_selection_weights) << '\n'
-               << "  lambda_selection_components = " << to_string(opt.lambda_selection_components) << '\n'
-               << "  component_significance      = " << opt.component_significance << '\n'
-               << "  block_deactivation          = " << opt.block_deactivation << '\n'
-               << "  connection_deactivation     = " << opt.connection_deactivation << '\n'
-               << "  mode                        = " << to_string(opt.mode) << '\n'
-               << "  weight_sign_constraint      = " << to_string(opt.weight_sign_constraint) << '\n'
-               << "  deflation_mode              = " << to_string(opt.deflation_mode) << '\n'
-               << "  scheme                      = " << opt.scheme.name << '\n'
-               << "}";
-            return os;
-        }
-    };
-    struct FitWorkspace {
-        Matrix Cov;
-        Eigen::ArrayXXi dirty;
-
-        explicit FitWorkspace(int J) {
-            Cov.setZero(J, J);
-            dirty.setOnes(J, J);
-            for (int j = 0; j < J; ++j) {
-                Cov(j, j) = 1.0;
-                dirty(j, j) = 0;
-            }
-        }
-    };
-    struct BootstrapConfig {
-
-        unsigned seed = 12345;
-        int max_threads = 12;
-
-        int B_min = 500;
-        int B_max = 1000;
-        int check_every = 50;
-        int fit_max_iter = -1; // negative means use Options::max_iter
-
-        // adaptive checks
-        bool adaptive = true;
-        double adaptive_tol = 1e-3;
-        int stable_checks_required = 3;
-
-        // block deactivation
-        double active_block_tol = 1e-8;
-
-        // connection deactivation
-        double active_connection_sign_stability = 0.95;
-        double active_connection_min_abs_corr = 0.05;
-        bool aggressive_connection_deactivation = false;
-        int min_boots_before_connection_deactivation = 100;
-
-        // confidence intervals
-        double ci_level = 0.95;
-
-        // early stop
-        int patience = 1;
-
-        ResamplingStrategy resampling_strategy = ResamplingStrategy::Ordinary;
-
-        // stationary bootstrap: expected block length = 1 / p
-        double stationary_block_length = 10.0;
-
-        // component significance test for H0: rho_tot = 0
-        int component_significance_resamples = 100;
-        double component_significance_alpha = 0.05;
-
-        friend std::ostream& operator<<(std::ostream& os, const BootstrapConfig& config) {
-            os << "RGCCA::BootstrapConfig {\n"
-               << "  seed                               = " << config.seed << '\n'
-               << "  max_threads                        = " << config.max_threads << '\n'
-               << "  B_min                              = " << config.B_min << '\n'
-               << "  B_max                              = " << config.B_max << '\n'
-               << "  check_every                        = " << config.check_every << '\n'
-               << "  fit_max_iter                       = " << config.fit_max_iter << '\n'
-               << "  adaptive                           = " << config.adaptive << '\n'
-               << "  adaptive_tol                       = " << config.adaptive_tol << '\n'
-               << "  stable_checks_required             = " << config.stable_checks_required << '\n'
-               << "  active_block_tol                   = " << config.active_block_tol << '\n'
-               << "  active_connection_sign_stability   = " << config.active_connection_sign_stability << '\n'
-               << "  active_connection_min_abs_corr     = " << config.active_connection_min_abs_corr << '\n'
-               << "  aggressive_connection_deactivation = " << config.aggressive_connection_deactivation << '\n'
-               << "  min_boots_before_connection_deactivation = " << config.min_boots_before_connection_deactivation << '\n'
-               << "  ci_level                           = " << config.ci_level << '\n'
-               << "  patience                           = " << config.patience << '\n'
-               << "  resampling_strategy                = " << to_string(config.resampling_strategy) << '\n'
-               << "  stationary_block_length            = " << config.stationary_block_length << '\n'
-               << "  component_significance_resamples   = " << config.component_significance_resamples << '\n'
-               << "  component_significance_alpha       = " << config.component_significance_alpha << '\n'
-               << "}";
-            return os;
-        }
-    };
-    struct BootstrapSelectionResult {
-        using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
-
-        int h = 0;
-        int B = 0;
-
-        std::vector<double> lambda_grid;
-        std::vector<double> criterion;
-
-        double lambda_opt = std::numeric_limits<double>::quiet_NaN();
-        int lambda_opt_index = -1;
-        double ci_level = std::numeric_limits<double>::quiet_NaN();
-
-        std::vector<std::string> block_names;
-        std::vector<bool> active_blocks;
-
-        // [lambda][block] -> vector/matrix
-        std::vector<std::vector<Vector>> w_fit_by_lambda;
-        std::vector<std::vector<Matrix>> w_boot_by_lambda;
-        std::vector<std::vector<Vector>> w_min_by_lambda;
-        std::vector<int> B_used_by_lambda;
-
-        // [lambda] -> vector/matrix
-        std::vector<Matrix> corr_boot_by_lambda;
-        std::vector<Matrix> corr_min_by_lambda;
-
-        // CI
-        std::vector<Matrix> corr_ci_low_by_lambda;    // [lambda] -> J x J
-        std::vector<Matrix> corr_ci_high_by_lambda;   // [lambda] -> J x J
-        // weight CIs are location-dependent; compute them with RGCCA::bootstrap_weights_ci(...).
-
-        BootstrapSelectionResult() = default;
-
-        BootstrapSelectionResult(
-            const int h_,
-            const int B_,
-            const std::vector<double>& lambda_grid_,
-            const std::vector<std::string>& block_names_,
-            const std::vector<int>& block_dims_,
-            const double ci_level_
-        ) :
-            h(h_),
-            B(B_),
-            lambda_grid(lambda_grid_),
-            criterion(lambda_grid_.size(), -std::numeric_limits<double>::infinity()),
-            ci_level(ci_level_),
-            block_names(block_names_)
-        {
-            const std::size_t n_lambda = lambda_grid.size();
-            const std::size_t J = block_dims_.size();
-
-            w_fit_by_lambda.resize(n_lambda);
-            w_boot_by_lambda.resize(n_lambda);
-            w_min_by_lambda.resize(n_lambda);
-            B_used_by_lambda.resize(n_lambda);
-
-            active_blocks.resize(J);
-
-            corr_min_by_lambda.resize(n_lambda);
-            corr_boot_by_lambda.resize(n_lambda);
-            corr_ci_low_by_lambda.resize(n_lambda);
-            corr_ci_high_by_lambda.resize(n_lambda);
-
-            for (std::size_t i = 0; i < n_lambda; ++i) {
-                corr_min_by_lambda[i].setZero(J , J);
-                corr_ci_low_by_lambda[i].setZero(J, J);
-                corr_ci_high_by_lambda[i].setZero(J, J);
-            }
-        }
-    };
-
     template <typename S = SamplingStrategy>
     requires std::same_as<S, IndependentSampling>
     explicit RGCCA(const int n, const Options& opt = Options(), const int n_comp = 1) : n_(n), opt_(opt), n_comp_(n_comp) {}
@@ -1450,25 +82,25 @@ public:
     requires std::same_as<S, IndependentSampling>
     int add_multivariate_block(std::string block_name, Matrix&& X) {
         data_blocks_.push_back(std::make_unique<Matrix>(std::move(X)));
-        return add_block(internals::make_multivariate_block<SamplingStrategy>(block_name, data_blocks_.back().get()));
+        return add_block(rgcca::internals::make_multivariate_block<SamplingStrategy>(block_name, data_blocks_.back().get()));
     }
     template<typename S = SamplingStrategy>
     requires std::same_as<S, TimeDependentSampling>
     int add_multivariate_block(std::string block_name, const Vector& times, Matrix&& X) {
         data_blocks_.push_back(std::make_unique<Matrix>(std::move(X)));
-        return add_block(internals::make_multivariate_block<SamplingStrategy>(block_name, T_, times, data_blocks_.back().get()));
+        return add_block(rgcca::internals::make_multivariate_block<SamplingStrategy>(block_name, T_, times, data_blocks_.back().get()));
     }
     template <typename GeoFrame, typename WeightsPenaltyType>
     requires std::same_as<SamplingStrategy, IndependentSampling>
     int add_functional_block(std::string block_name, const GeoFrame& gf, Matrix&& X, WeightsPenaltyType&& weights_penalty) {
         data_blocks_.push_back(std::make_unique<Matrix>(std::move(X)));
-        return add_block(internals::make_functional_block<SamplingStrategy>(block_name, gf, data_blocks_.back().get(), std::forward<WeightsPenaltyType>(weights_penalty)));
+        return add_block(rgcca::internals::make_functional_block<SamplingStrategy>(block_name, gf, data_blocks_.back().get(), std::forward<WeightsPenaltyType>(weights_penalty)));
     }
     template <typename GeoFrame, typename WeightsPenaltyType>
     requires std::same_as<SamplingStrategy, TimeDependentSampling>
     int add_functional_block(std::string block_name, const Vector& times, const GeoFrame& gf, Matrix&& X, WeightsPenaltyType&& weights_penalty) {
         data_blocks_.push_back(std::make_unique<Matrix>(std::move(X)));
-        return add_block(internals::make_functional_block<SamplingStrategy>(block_name, T_, times, gf, data_blocks_.back().get(), std::forward<WeightsPenaltyType>(weights_penalty)));
+        return add_block(rgcca::internals::make_functional_block<SamplingStrategy>(block_name, T_, times, gf, data_blocks_.back().get(), std::forward<WeightsPenaltyType>(weights_penalty)));
     }
     void connect(int j, int k, bool on = true) {
         ensure_design_initialized_();
@@ -1477,7 +109,7 @@ public:
         check_index_(k);
 
         if (j == k) {
-            std::cerr << "RGCCA::connect(): ignoring self-connection for block " << j << '\n';
+            fdapde::cout << "RGCCA::connect(): ignoring self-connection for block " << j << '\n';
             return;
         }
 
@@ -1498,24 +130,23 @@ public:
             design_mode_ = DesignMode::FullyConnected;
         }
 
-        compute_Psi_();
+        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) compute_Psi_T_();
 
         initialized_ = true;
     }
 
     // weights and components regularization utilities
     void set_lambda_weights_all(const double lambda) const {
-        internals::validate_rgcca_positive_regularization_lambda_(lambda, "weight lambda");
+        rgcca::internals::validate_positive_regularization_lambda(lambda, "weight lambda");
         for (auto& b : blocks_) b->set_lambda_weights(lambda);
     }
     void set_lambda_components_all(const double lambda) const {
-        internals::validate_rgcca_positive_regularization_lambda_(lambda, "component lambda");
+        rgcca::internals::validate_positive_regularization_lambda(lambda, "component lambda");
         for (auto& b : blocks_) b->set_lambda_components(lambda);
     }
     void set_lambda_grid_weights(const std::vector<double>& lambda_grid) {
         if (lambda_grid.empty())
             throw std::invalid_argument("lambda grid cannot be empty");
-
         lambda_grid_weights_.assign(n_comp(), lambda_grid);
     }
     void set_lambda_grid_weights(const std::vector<std::vector<double>>& lambda_grid) {
@@ -1554,9 +185,9 @@ public:
         const int J = n_blocks();
         if (J < 2) throw std::runtime_error("RGCCA: need ≥ 2 blocks");
         const bool run_model_selection = bootstrap_model_selection_requested_();
-        fdapde::cout << opt_ << std::endl;
+        fdapde::cout << opt_ << '\n';
         if (run_model_selection || opt_.component_significance) {
-            fdapde::cout << bootstrap_config_ << std::endl;
+            fdapde::cout << bootstrap_config_ << '\n';
         }
         if (opt_.component_significance) {
             validate_bootstrap_support_();
@@ -1590,12 +221,12 @@ public:
             }
 
             // final fit
-            auto step_start = log_step_start_("Final component fit");
+            auto step_start = print_step_start_("Final component fit");
             auto blocks = main_blocks_();
             const auto active_blocks = active_blocks_from_C_(C_active);
             init_comp_(blocks, InitStrategy::None, true, &active_blocks);
             Result component_result = fit_component_(blocks, C_active);
-            log_step_end_(step_start);
+            print_step_end_(step_start);
 
             if (opt_.component_significance) {
                 const auto significance = bootstrap_test_component_significance_(C_active);
@@ -1611,17 +242,17 @@ public:
 
             results.push_back(std::move(component_result));
 
-            step_start = log_step_start_("Deflate blocks");
+            step_start = print_step_start_("Deflate blocks");
             deflate_all_();
-            log_step_end_(step_start);
+            print_step_end_(step_start);
 
             run_component_callback_(on_component, results.back());
         }
 
         // post-processing weights
-        auto step_start = log_step_start_("Compute weights_star");
+        auto step_start = print_step_start_("Compute weights_star");
         compute_weights_star_();
-        log_step_end_(step_start);
+        print_step_end_(step_start);
 
         return results;
     }
@@ -1648,8 +279,10 @@ public:
     [[nodiscard]] const Scheme& scheme() const { return opt_.scheme; }
     [[nodiscard]] const std::vector<BlockPtr>& blocks() const { return blocks_; }
     [[nodiscard]] const Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>& C() const { return C_; }
+    template <typename S = SamplingStrategy>
+    requires std::same_as<S, TimeDependentSampling>
     [[nodiscard]] const SparseMatrix& Psi_T() const { return Psi_T_; };
-    [[nodiscard]] const std::vector<BootstrapSelectionResult>& bootstrap_selection_results() const { return bootstrap_selection_results_; }
+    [[nodiscard]] const std::vector<BootstrapResult>& bootstrap_selection_results() const { return bootstrap_selection_results_; }
     void clear_bootstrap_selection_results() {
         bootstrap_selection_results_.clear();
         bootstrap_selection_results_.shrink_to_fit();
@@ -1698,12 +331,25 @@ public:
     }
 
 private:
+    struct FitWorkspace {
+        Matrix Cov;
+        Eigen::ArrayXXi dirty;
+
+        explicit FitWorkspace(int J) {
+            Cov.setZero(J, J);
+            dirty.setOnes(J, J);
+            for (int j = 0; j < J; ++j) {
+                Cov(j, j) = 1.0;
+                dirty(j, j) = 0;
+            }
+        }
+    };
 
     // initialization utils
     void check_index_(int j) const {
         if (j < 0 || j >= static_cast<int>(blocks_.size())) throw std::out_of_range("block index");
     }
-    const BootstrapSelectionResult& bootstrap_selection_result_(const int h) const {
+    const BootstrapResult& bootstrap_selection_result_(const int h) const {
         if (bootstrap_selection_results_.empty()) {
             throw std::logic_error(
                 "RGCCA: bootstrap weight CIs require automatic weight lambda selection results"
@@ -1716,7 +362,7 @@ private:
 
         throw std::out_of_range("RGCCA: bootstrap component index");
     }
-    int bootstrap_lambda_opt_index_(const BootstrapSelectionResult& boot_results) const {
+    int bootstrap_lambda_opt_index_(const BootstrapResult& boot_results) const {
         if (
             boot_results.lambda_opt_index >= 0 &&
             boot_results.lambda_opt_index < static_cast<int>(boot_results.lambda_grid.size())
@@ -1731,7 +377,7 @@ private:
         throw std::logic_error("RGCCA: bootstrap optimal lambda index is unavailable");
     }
     std::pair<Vector, Vector> bootstrap_weights_ci_(
-        const BootstrapSelectionResult& boot_results,
+        const BootstrapResult& boot_results,
         const int lambda_i,
         const int block_j,
         const SparseMatrix& Psi
@@ -1781,8 +427,8 @@ private:
             for (int b = 0; b < B_eff; ++b)
                 values.push_back(w_eval(r, b));
 
-            ci_low[r] = empirical_quantile_(values, alpha_low);
-            ci_high[r] = empirical_quantile_(values, alpha_high);
+            ci_low[r] = internals::empirical_quantile(values, alpha_low);
+            ci_high[r] = internals::empirical_quantile(values, alpha_high);
         }
 
         return {ci_low, ci_high};
@@ -1814,16 +460,11 @@ private:
         times_.reserve(times_.size() + static_cast<size_t>(t.size()));
         times_.insert(times_.end(), t.data(), t.data() + t.size());
     }
-    void compute_Psi_() {
-        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
-            std::ranges::sort(times_);
-            times_.erase(std::ranges::unique(times_).begin(), times_.end());
-            Eigen::VectorXd times_eig = Eigen::Map<Eigen::VectorXd>(times_.data(), times_.size());
-            SamplingStrategy::compute_Psi(T_, Matrix{times_eig}, Psi_T_);
-        } else {
-            Psi_T_.resize(n(), n());
-            Psi_T_.setIdentity();
-        }
+    void compute_Psi_T_() {
+        std::ranges::sort(times_);
+        times_.erase(std::ranges::unique(times_).begin(), times_.end());
+        Eigen::VectorXd times_eig = Eigen::Map<Eigen::VectorXd>(times_.data(), times_.size());
+        SamplingStrategy::compute_Psi(T_, Matrix{times_eig}, Psi_T_);
     }
 
     // blocks utils
@@ -1961,7 +602,7 @@ private:
         // initialization
         std::vector<Vector> eta_cache = eta_(blocks);
         res.obj_history.push_back(objective_(ws, res.C, eta_cache));
-        auto a_prev = snapshot_weights_(blocks);
+        auto w_prev = snapshot_weights_(blocks);
         if (update_component_lambdas && opt_.lambda_selection_components == LambdaSelection::Automatic)
             set_lambda_components_auto_all_(blocks);
 
@@ -2013,11 +654,11 @@ private:
 
             // stopping criteria
             const double delta_obj = std::abs(f_obj - obj_prev);
-            const double delta_a = weights_variation_(blocks, a_prev);
-            if (delta_obj < opt_.tol || delta_a < opt_.tol)
+            const double delta_w = weights_variation_(blocks, w_prev);
+            if (delta_obj < opt_.tol || delta_w < opt_.tol)
                 break;
 
-            a_prev = snapshot_weights_(blocks);
+            w_prev = snapshot_weights_(blocks);
         }
 
         if (cancelled && cancelled()) {
@@ -2058,12 +699,12 @@ private:
         for (auto* b : blocks) out.push_back(b->weights().col(h_));
         return out;
     }
-    double weights_variation_(const BlockRefList& blocks, const std::vector<Vector>& a_prev) const {
+    double weights_variation_(const BlockRefList& blocks, const std::vector<Vector>& w_prev) const {
         double acc = 0.0;
 
         for (int j = 0; j < n_blocks(); ++j) {
-            const auto aj = blocks[j]->weights().col(h_);
-            acc += (aj - a_prev[j]).squaredNorm();
+            const auto wj = blocks[j]->weights().col(h_);
+            acc += (wj - w_prev[j]).squaredNorm();
         }
 
         return acc;
@@ -2167,28 +808,27 @@ private:
         return {std::numeric_limits<double>::quiet_NaN()};
     }
 
-    std::chrono::high_resolution_clock::time_point log_step_start_(std::string_view label) const {
-        fdapde::cout << label << " --> " << std::flush;
+    std::chrono::high_resolution_clock::time_point print_step_start_(std::string_view label) const {
+        fdapde::cout << label << " --> ";
         return std::chrono::high_resolution_clock::now();
     }
-    void log_step_end_(const std::chrono::high_resolution_clock::time_point start) const {
+    void print_step_end_(const std::chrono::high_resolution_clock::time_point start) const {
         const auto end = std::chrono::high_resolution_clock::now();
         const double elapsed_sec = std::chrono::duration<double>(end - start).count();
-        fdapde::cout << "<-- " << std::fixed << std::setprecision(3)
-                  << elapsed_sec << std::defaultfloat << "s" << std::endl;
+        fdapde::cout << "<-- " << std::fixed << std::setprecision(3) << elapsed_sec << std::defaultfloat << "s\n";
     }
     void run_component_callback_(const ComponentCallback& on_component, const Result& result) {
         if (!on_component) return;
         compute_weights_star_();
-        const auto step_start = log_step_start_("Component callback");
+        const auto step_start = print_step_start_("Component callback");
         on_component(*this, result);
-        log_step_end_(step_start);
+        print_step_end_(step_start);
     }
 
     ModelSelectionResult bootstrap_model_selection_() {
-        fdapde::cout << "\n=========================================" << std::endl;
-        fdapde::cout << "Bootstrap model selection for component " << h_ + 1 << std::endl;
-        fdapde::cout << "=========================================\n" << std::endl;
+        fdapde::cout << "\n=========================================\n";
+        fdapde::cout << "Bootstrap model selection for component " << h_ + 1 << '\n';
+        fdapde::cout << "=========================================\n\n";
 
         const bool select_lambda = weight_lambda_selection_requested_();
         const std::vector<double> lambda_grid = model_selection_lambda_grid_();
@@ -2203,30 +843,30 @@ private:
         BoolMatrix C_best = C_;
 
         // init bootstrap
-        auto step_start = log_step_start_("Init bootstrap");
+        auto step_start = print_step_start_("Init bootstrap");
         AdaptiveBootstrapState bootstrap_state(bootstrap_config_, n_threads, h_, J);
         const auto block_dims = block_dims_(blocks);
-        BootstrapSelectionResult boot_results(
+        BootstrapResult boot_results(
             h_, bootstrap_state.B_max, lambda_grid,
             block_names_(blocks), block_dims, bootstrap_config_.ci_level
         );
-        log_step_end_(step_start);
+        print_step_end_(step_start);
 
         // preliminary fit
-        step_start = log_step_start_("Preliminary fit");
+        step_start = print_step_start_("Preliminary fit");
         if (select_lambda)
             set_lambda_weights_all(lambda_grid.back());
         init_comp_(blocks);
         fit_component_(blocks, C_active);
         auto preliminary_w_fit = snapshot_weights_(blocks);
-        log_step_end_(step_start);
+        print_step_end_(step_start);
 
-        step_start = log_step_start_("Clone worker blocks");
+        step_start = print_step_start_("Clone worker blocks");
         std::vector<BootstrapBlocks> thread_boot_worker(n_threads);
         for (int t = 0; t < n_threads; ++t) {
             thread_boot_worker[t] = clone_blocks_();
         }
-        log_step_end_(step_start);
+        print_step_end_(step_start);
         auto print_fixed_weight_lambda = [&]() {
             double lambda_min = std::numeric_limits<double>::infinity();
             double lambda_max = -std::numeric_limits<double>::infinity();
@@ -2248,23 +888,23 @@ private:
             if (select_lambda) {
                 // current lambda
                 const double lambda = lambda_grid[lambda_i];
-                fdapde::cout << "- lambda = " << lambda << std::endl;
+                fdapde::cout << "- lambda = " << lambda << '\n';
                 if (!reuse_preliminary_fit) {
                     set_lambda_weights_all(lambda);
                     for (auto& worker : thread_boot_worker)
                         set_lambda_weights_all_(worker.refs, lambda);
                 }
             } else {
-                fdapde::cout << "- fixed weight regularization" << std::endl;
+                fdapde::cout << "- fixed weight regularization\n";
             }
 
             // init warm start at lambda
             std::vector<Vector> w_fit;
             if (reuse_preliminary_fit) {
-                step_start = log_step_start_("  Warm-start fit (reuse preliminary)");
+                step_start = print_step_start_("  Warm-start fit (reuse preliminary)");
                 w_fit = preliminary_w_fit;
             } else {
-                step_start = log_step_start_("  Warm-start fit");
+                step_start = print_step_start_("  Warm-start fit");
                 const auto active_blocks = active_blocks_from_C_(C_active);
                 init_comp_(blocks, InitStrategy::WarmStart, true, &active_blocks);
                 fit_component_(blocks, C_active);
@@ -2273,7 +913,7 @@ private:
             auto w_min = w_fit;
             if (opt_.block_deactivation)
                 threshold_inactive_blocks_(w_min, C_active);
-            log_step_end_(step_start);
+            print_step_end_(step_start);
 
             auto start = std::chrono::high_resolution_clock::now();
 
@@ -2301,10 +941,10 @@ private:
 
             boot_results.w_fit_by_lambda[lambda_i] = w_fit;
             boot_results.w_min_by_lambda[lambda_i] = w_min;
-            step_start = log_step_start_("  Final lambda correlation");
+            step_start = print_step_start_("  Final lambda correlation");
             correlation_matrix_(blocks, w_min, boot_results.corr_min_by_lambda[lambda_i]);
             boot_results.corr_min_by_lambda[lambda_i].array() *= (C_lambda.cast<double>() + Matrix::Identity(J, J)).array();
-            log_step_end_(step_start);
+            print_step_end_(step_start);
             if (!std::isfinite(bootstrap_state.crit))
                 bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_);
             boot_results.criterion[lambda_i] = bootstrap_state.crit;
@@ -2321,23 +961,23 @@ private:
                 bootstrap_state.B_cancelled -
                 bootstrap_state.B_done;
             fdapde::cout << "  Bootstrap used: " << bootstrap_state.B_total
-                      << " total, " << bootstrap_state.B_design
-                      << " design, " << bootstrap_state.B_stale
-                      << " stale, " << bootstrap_state.B_cancelled
-                      << " cancelled, " << bootstrap_state.B_done
-                      << " good, " << B_discarded << " discarded";
+                         << " total, " << bootstrap_state.B_design
+                         << " design, " << bootstrap_state.B_stale
+                         << " stale, " << bootstrap_state.B_cancelled
+                         << " cancelled, " << bootstrap_state.B_done
+                         << " good, " << B_discarded << " discarded";
             if (!select_lambda)
                 print_fixed_weight_lambda();
             fdapde::cout << " time=" << std::fixed << std::setprecision(3) << elapsed_sec << "s"
-                      << " | ab=" << n_active_blocks
-                      << ", ac=" << n_active_connections
-                      << " | crit=" << std::setprecision(3) << bootstrap_state.crit
-                      << " | overall_eff=" << std::setprecision(1)
-                      << 100.0 * bootstrap_timing_summary.efficiency() << "%"
-                      << ", capped=" << bootstrap_timing_summary.capped_fits << "/" << bootstrap_timing_summary.n_fits
-                      << ", avg_iters=" << std::setprecision(1) << bootstrap_timing_summary.avg_iters()
-                      << ", max_iters=" << bootstrap_timing_summary.max_iters
-                      << std::defaultfloat << std::endl << std::endl;
+                         << " | ab=" << n_active_blocks
+                         << ", ac=" << n_active_connections
+                         << " | crit=" << std::setprecision(3) << bootstrap_state.crit
+                         << " | overall_eff=" << std::setprecision(1)
+                         << 100.0 * bootstrap_timing_summary.efficiency() << "%"
+                         << ", capped=" << bootstrap_timing_summary.capped_fits << "/" << bootstrap_timing_summary.n_fits
+                         << ", avg_iters=" << std::setprecision(1) << bootstrap_timing_summary.avg_iters()
+                         << ", max_iters=" << bootstrap_timing_summary.max_iters
+                         << std::defaultfloat << "\n\n";
 
             // early stop
             if (early_stop_lambda_(bootstrap_state, lambda_i, bootstrap_config_)) {
@@ -2349,12 +989,12 @@ private:
 
         }
 
-        step_start = log_step_start_("Resize bootstrap results");
+        step_start = print_step_start_("Resize bootstrap results");
         resize_bootstrap_results_(boot_results, static_cast<int>(lambda_grid.size()), J, block_dims);
-        log_step_end_(step_start);
-        step_start = log_step_start_("Compute bootstrap correlation CIs");
+        print_step_end_(step_start);
+        step_start = print_step_start_("Compute bootstrap correlation CIs");
         compute_bootstrap_corr_cis_(boot_results, J);
-        log_step_end_(step_start);
+        print_step_end_(step_start);
 
         if (bootstrap_state.best_i < 0)
             throw std::runtime_error("No model candidate was evaluated during bootstrap selection");
@@ -2362,24 +1002,24 @@ private:
         boot_results.lambda_opt_index = bootstrap_state.best_i;
         if (select_lambda) {
             boot_results.lambda_opt = lambda_grid[bootstrap_state.best_i];
-            fdapde::cout << "\nOptimal lambda: " << boot_results.lambda_opt << std::endl;
+            fdapde::cout << "\nOptimal lambda: " << boot_results.lambda_opt << '\n';
         } else {
-            fdapde::cout << "\nNo weight lambda selection requested" << std::endl;
+            fdapde::cout << "\nNo weight lambda selection requested\n";
         }
 
 
         boot_results.active_blocks = active_blocks_from_C_(C_best);
-        fdapde::cout << "\nBlock deactivation:" << std::endl;
+        fdapde::cout << "\nBlock deactivation:\n";
         for (int j = 0; j < J; ++j) {
             const double nrm = boot_results.w_min_by_lambda[bootstrap_state.best_i][j].norm();
             fdapde::cout << "  - block[" << std::setw(2) << j << "]: "
-                      << "||w_min|| = " << std::fixed << std::setprecision(4) << nrm
-                      << std::defaultfloat
-                      << ", active = " << (boot_results.active_blocks[j] ? "yes" : "no")
-                      << std::endl;
+                         << "||w_min|| = " << std::fixed << std::setprecision(4) << nrm
+                         << std::defaultfloat
+                         << ", active = " << (boot_results.active_blocks[j] ? "yes" : "no")
+                         << '\n';
         }
-        fdapde::cout << "\nUpdated design matrix:" << std::endl;
-        fdapde::cout << C_best << std::endl << std::endl;
+        fdapde::cout << "\nUpdated design matrix:\n";
+        fdapde::cout << C_best << "\n\n";
 
         bootstrap_selection_results_.push_back(std::move(boot_results));
 
@@ -2452,9 +1092,9 @@ private:
 
         for (int hh = from_h; hh < n_comp(); ++hh) {
             set_h_(hh);
-            const auto step_start = log_step_start_("Inactive component fit");
+            const auto step_start = print_step_start_("Inactive component fit");
             Result inactive_result = fit_component_(C_inactive);
-            log_step_end_(step_start);
+            print_step_end_(step_start);
             annotate_component_significance_(inactive_result, significance);
             results.push_back(std::move(inactive_result));
         }
@@ -2477,17 +1117,17 @@ private:
         const int n_threads = bootstrap_n_threads_();
         out.B = B;
 
-        auto step_start = log_step_start_("  Clone significance worker blocks");
+        auto step_start = print_step_start_("  Clone significance worker blocks");
         std::vector<BootstrapBlocks> thread_boot_worker(n_threads);
         for (int t = 0; t < n_threads; ++t)
             thread_boot_worker[t] = clone_blocks_();
-        log_step_end_(step_start);
+        print_step_end_(step_start);
 
         std::vector<int> thread_ge_count(n_threads, 0);
         const unsigned seed = bootstrap_config_.seed + static_cast<unsigned>(1000003 * (h_ + 1));
         const auto active_blocks = active_blocks_from_C_(C_active);
 
-        step_start = log_step_start_("  Significance bootstrap");
+        step_start = print_step_start_("  Significance bootstrap");
         parallel_for(0, B, 1, [&](int b) {
             const int tid = this_thread_id();
             auto& boot_blocks = thread_boot_worker[tid];
@@ -2506,16 +1146,16 @@ private:
 
             clear_row_index_all_(boot_blocks.refs);
         });
-        log_step_end_(step_start);
+        print_step_end_(step_start);
 
         const int ge_count = std::accumulate(thread_ge_count.begin(), thread_ge_count.end(), 0);
         out.p_value = static_cast<double>(ge_count) / static_cast<double>(B);
         out.significant = out.p_value <= bootstrap_config_.component_significance_alpha;
 
-        fdapde::cout << "\nSignificance:" << std::endl
-                  << "  - rho_tot = " << out.rho_tot << std::endl
-                  << "  - p-value = " << out.p_value << std::endl
-                  << "  - significant = " << out.significant << std::endl;
+        fdapde::cout << "\nSignificance:\n"
+                     << "  - rho_tot = " << out.rho_tot << '\n'
+                     << "  - p-value = " << out.p_value << '\n'
+                     << "  - significant = " << out.significant << '\n';
 
         return out;
     }
@@ -2598,21 +1238,21 @@ private:
         if (state.B_done < bootstrap_config_.min_boots_before_connection_deactivation) return false;
         return bootstrap_config_.aggressive_connection_deactivation || state.B_done >= state.B_min;
     }
-    void print_bootstrap_progress_log_(
+    void print_bootstrap_progress_(
         const AdaptiveBootstrapState& state,
         const int n_active_blocks,
         const int n_active_connections,
         const AdaptiveStopInfo& stop_info
     ) const {
         fdapde::cout << "  progress total=" << state.B_total
-                  << ", design=" << state.B_design
-                  << ", stale=" << state.B_stale
-                  << ", cancelled=" << state.B_cancelled
-                  << ", good=" << state.B_done
-                  << " | ab=" << n_active_blocks
-                  << ", ac=" << n_active_connections
-                  << " | crit=" << std::setprecision(3) << state.crit
-                  << ", rel=";
+                     << ", design=" << state.B_design
+                     << ", stale=" << state.B_stale
+                     << ", cancelled=" << state.B_cancelled
+                     << ", good=" << state.B_done
+                     << " | ab=" << n_active_blocks
+                     << ", ac=" << n_active_connections
+                     << " | crit=" << std::setprecision(3) << state.crit
+                     << ", rel=";
         if (std::isfinite(stop_info.rel_change)) {
             fdapde::cout << std::setprecision(3) << stop_info.rel_change;
         } else {
@@ -2620,22 +1260,22 @@ private:
         }
         if (stop_info.stop)
             fdapde::cout << " | stop=" << stop_info.reason;
-        fdapde::cout << std::defaultfloat << std::endl;
+        fdapde::cout << std::defaultfloat << '\n';
     }
-    void print_bootstrap_design_reset_log_(
+    void print_bootstrap_design_reset_(
         const AdaptiveBootstrapState& state,
         const int n_active_blocks,
         const int n_active_connections
     ) const {
         fdapde::cout << "  design reset total=" << state.B_total
-                  << ", design=" << state.B_design
-                  << ", stale=" << state.B_stale
-                  << ", cancelled=" << state.B_cancelled
-                  << ", good=" << state.B_done
-                  << " | epoch=" << state.design_epoch
-                  << " | ab=" << n_active_blocks
-                  << ", ac=" << n_active_connections
-                  << std::endl;
+                     << ", design=" << state.B_design
+                     << ", stale=" << state.B_stale
+                     << ", cancelled=" << state.B_cancelled
+                     << ", good=" << state.B_done
+                     << " | epoch=" << state.design_epoch
+                     << " | ab=" << n_active_blocks
+                     << ", ac=" << n_active_connections
+                     << '\n';
     }
     void run_bootstrap_stream_(
         int lambda_i,
@@ -2644,7 +1284,7 @@ private:
         BoolMatrix& C_active,
         const std::vector<Vector>& w_fit,
         std::vector<Vector>& w_min,
-        BootstrapSelectionResult& boot_results,
+        BootstrapResult& boot_results,
         const BlockRefList& blocks,
         BootstrapTimingSummary& timing_summary
     ) {
@@ -2732,7 +1372,7 @@ private:
                         reset_good_bootstrap_(bootstrap_state, w_min, w_fit, C_active);
                         const int n_active_blocks = count_active_blocks_(C_active);
                         const int n_active_connections = count_active_connections_(C_active);
-                        print_bootstrap_design_reset_log_(
+                        print_bootstrap_design_reset_(
                             bootstrap_state,
                             n_active_blocks,
                             n_active_connections
@@ -2760,7 +1400,7 @@ private:
                         reset_good_bootstrap_(bootstrap_state, w_min, w_fit, C_active);
                         const int n_active_blocks = count_active_blocks_(C_active);
                         const int n_active_connections = count_active_connections_(C_active);
-                        print_bootstrap_design_reset_log_(
+                        print_bootstrap_design_reset_(
                             bootstrap_state,
                             n_active_blocks,
                             n_active_connections
@@ -2777,7 +1417,7 @@ private:
                 bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_);
                 const AdaptiveStopInfo stop_info = bootstrap_config_.adaptive ?
                     adaptive_stop_(bootstrap_state, bootstrap_config_) : AdaptiveStopInfo{};
-                print_bootstrap_progress_log_(
+                print_bootstrap_progress_(
                     bootstrap_state,
                     count_active_blocks_(C_active),
                     count_active_connections_(C_active),
@@ -2796,7 +1436,7 @@ private:
         timing_summary.set_parallel_capacity(parallel_time, n_threads);
     }
     void ensure_bootstrap_lambda_storage_(
-        BootstrapSelectionResult& boot_results,
+        BootstrapResult& boot_results,
         const int lambda_i,
         const std::vector<int>& block_dims,
         const int J
@@ -2858,8 +1498,8 @@ private:
 
         if (state.no_improve >= config.patience) {
             fdapde::cout << "  early stop: no improvement for "
-                      << config.patience
-                      << " consecutive lambdas" << std::endl;
+                         << config.patience
+                         << " consecutive lambdas\n";
             return true;
         }
 
@@ -2907,7 +1547,7 @@ private:
     int threshold_inactive_connections_(
         int lambda_i,
         AdaptiveBootstrapState& state,
-        const BootstrapSelectionResult& boot_results,
+        const BootstrapResult& boot_results,
         BoolMatrix& C_active,
         const int B_eff_override = -1
     ) {
@@ -2936,7 +1576,7 @@ private:
                     static_cast<double>(std::max(n_pos, n_neg)) / static_cast<double>(B_eff) :
                     0.0;
 
-                const double med_abs_corr = median_(abs_corr);
+                const double med_abs_corr = internals::median(abs_corr);
 
                 const bool active =
                     sign_stability >= bootstrap_config_.active_connection_sign_stability &&
@@ -2971,46 +1611,6 @@ private:
 
         return C_reset;
     }
-    double median_(std::vector<double>& x) const {
-        if (x.empty())
-            return 0.0;
-
-        const std::size_t n = x.size();
-        const std::size_t mid = n / 2;
-
-        std::nth_element(x.begin(), x.begin() + mid, x.end());
-
-        if (n % 2 == 1)
-            return x[mid];
-
-        const double upper = x[mid];
-
-        std::nth_element(x.begin(), x.begin() + mid - 1, x.end());
-        const double lower = x[mid - 1];
-
-        return 0.5 * (lower + upper);
-    }
-    double empirical_quantile_(std::vector<double>& x, const double p) const {
-        x.erase(
-            std::remove_if(x.begin(), x.end(), [](const double v) { return !std::isfinite(v); }),
-            x.end()
-        );
-
-        if (x.empty())
-            return std::numeric_limits<double>::quiet_NaN();
-
-        std::sort(x.begin(), x.end());
-
-        if (x.size() == 1)
-            return x.front();
-
-        const double pos = std::clamp(p, 0.0, 1.0) * static_cast<double>(x.size() - 1);
-        const std::size_t lo = static_cast<std::size_t>(std::floor(pos));
-        const std::size_t hi = static_cast<std::size_t>(std::ceil(pos));
-        const double frac = pos - static_cast<double>(lo);
-
-        return (1.0 - frac) * x[lo] + frac * x[hi];
-    }
     std::pair<double, double> fisher_z_corr_ci_(
         const Matrix& corr_boot,
         const int row,
@@ -3031,8 +1631,8 @@ private:
             z_values.push_back(std::atanh(corr_clamped));
         }
 
-        const double z_low = empirical_quantile_(z_values, alpha_low);
-        const double z_high = empirical_quantile_(z_values, alpha_high);
+        const double z_low = internals::empirical_quantile(z_values, alpha_low);
+        const double z_high = internals::empirical_quantile(z_values, alpha_high);
 
         if (!std::isfinite(z_low) || !std::isfinite(z_high)) {
             const double nan = std::numeric_limits<double>::quiet_NaN();
@@ -3106,7 +1706,7 @@ private:
         }
     }
     void resize_bootstrap_results_(
-        BootstrapSelectionResult& boot_results,
+        BootstrapResult& boot_results,
         int n_lambdas,
         int J,
         const std::vector<int>& block_dims
@@ -3133,7 +1733,7 @@ private:
             );
         }
     }
-    void compute_bootstrap_corr_cis_(BootstrapSelectionResult& boot_results, int J) const {
+    void compute_bootstrap_corr_cis_(BootstrapResult& boot_results, int J) const {
         const double alpha_low = (1.0 - boot_results.ci_level) / 2.0;
         const double alpha_high = 1.0 - alpha_low;
         const double nan = std::numeric_limits<double>::quiet_NaN();
@@ -3282,7 +1882,7 @@ private:
         if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
             throw std::runtime_error(
                 "RGCCA: bootstrap is not supported "
-                "for TimeDependentSampling"
+                "for rgcca::TimeDependentSampling"
             );
         }
     }
@@ -3437,7 +2037,7 @@ private:
     Vector eta_(Block& b) const {
         // using the RGCCA own Psi_T (or components_m for independent)
         if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
-            return Psi_T() * b.components().col(h_);
+            return Psi_T_ * b.components().col(h_);
         } else {
             return b.components().col(h_);
         }
@@ -3493,7 +2093,7 @@ private:
             // Evaluation normalizes with M, not Omega, so the penalty does not affect the reported component.
             Vector eta = blocks[j]->normalized_component_for_evaluation(weights[j], h_);
             if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) {
-                eta = Psi_T() * eta;
+                eta = Psi_T_ * eta;
             }
             out.push_back(std::move(eta));
         }
@@ -3675,104 +2275,27 @@ private:
     Options opt_;
     DesignMode design_mode_ {DesignMode::Empty};
 
-    int J_ {0};
+    int J_ {0}; // number of blocks
     int n_ {0}; // global number of observations
 
     std::vector<double> times_;
     SamplingDomain T_; // only used by TimeDependentSampling
-    SparseMatrix Psi_T_;
+    SparseMatrix Psi_T_; // only used by TimeDependentSampling
 
-    int h_ {0};   // current component index
+    int h_ {0}; // current component index
     int n_comp_{1};
 
     std::vector<std::unique_ptr<Matrix>> data_blocks_;
     std::vector<BlockPtr> blocks_;
 
     BootstrapConfig bootstrap_config_;
-    std::vector<BootstrapSelectionResult> bootstrap_selection_results_;
+    std::vector<BootstrapResult> bootstrap_selection_results_;
     std::vector<std::vector<double>> lambda_grid_weights_;
 
     bool initialized_ {false};
     BoolMatrix C_;
 };
 
+} // namespace fdapde
 
-// pretty printer for a single Result
-inline std::ostream& operator<<(std::ostream& os, const Result& r) {
-    const bool minimal = false;
-    if (!minimal) {
-        os << "shrinkage parameters used : " << std::endl;
-        for (size_t i = 0; i < r.tau_values.size(); ++i) {
-            os << "- Block " << i+1  << ": tau = "<< r.tau_values[i] << "\n";
-        }
-        os << std::endl;
-        os << "active blocks :\n";
-        for (size_t i = 0; i < r.active_blocks.size(); ++i) {
-            os << "- Block " << i+1  << ": " << (r.active_blocks[i] ? "active    " : "non-active" ) << "\n";
-        }
-        os << std::endl;
-        os << "(updated) connections matrix :\n";
-        os << r.C << std::endl;
-        os << std::endl;
-
-        os << "regularization parameters used : " << std::endl;
-        os << std::scientific;
-        for (size_t i = 0; i < r.tau_values.size(); ++i) {
-            os << "- Block " << i+1  << ": lambda_c = "<< r.lambda_components_values[i]
-               << ", lambda_l = "<< r.lambda_weights_values[i] << "\n";
-        }
-        os << std::fixed;
-        os << std::endl;
-    }
-    os << "n_iters: " << r.iters << "\n";
-    os << "monotone: " << (r.monotone ? "yes" : "no") << "\n";
-    os << std::endl;
-    os << "objective :\n";
-    double prev_obj = r.obj_history[0];
-    for (size_t i = 1; i < r.obj_history.size(); ++i) {
-        const double obj = r.obj_history[i];
-        os << "- iter " << std::setw(3) << (i)
-           << "   |   fit = " << std::setw(12) << std::setprecision(8) << std::fixed << obj
-           << "   |   overall diff = " << std::setw(7) << (obj - prev_obj) << "\n";
-        os << std::fixed << std::setprecision(8);
-        prev_obj = obj;
-    }
-    os << std::endl;
-    if (!minimal) {
-        os << "covariance matrix :\n";
-        os << std::fixed << std::setprecision(2);
-        os << r.covariance_matrix << std::endl;
-        os << std::fixed << std::setprecision(8);
-        os << "\ncorrelation matrix :\n";
-        os << std::fixed << std::setprecision(2);
-        os << r.correlation_matrix << std::endl;
-        os << std::fixed << std::setprecision(8);
-    }
-    os << std::endl;
-    if (std::isfinite(r.rho_tot_p_value)) {
-        os << "significance:\n";
-        os << "- rho_tot: " << std::fixed << r.rho_tot << "\n";
-        os << "- p-value: " << std::fixed << r.rho_tot_p_value
-           << " (" << r.rho_tot_bootstrap_count << " resamples)\n";
-        os << "- signif.: " << (r.component_significant ? "yes" : "no") << "\n";
-    }
-
-    return os;
-}
-
-// pretty printer for a vector of Result (components)
-inline std::ostream& operator<<(std::ostream& os, const std::vector<Result>& results) {
-    for (size_t h = 0; h < results.size(); ++h) {
-        os << "\n";
-        os << "========================================\n";
-        os << "Component " << (h + 1) << "\n";
-        os << "----------------------------------------\n";
-        os << results[h]; // delegate to the single-result printer
-    }
-    os << "\n";
-    return os;
-}
-
-}
-
-#endif   // __FGCCA_H__
+#endif // __FDAPDE_RGCCA_MODEL_H__

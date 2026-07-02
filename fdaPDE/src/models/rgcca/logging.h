@@ -14,9 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __FDAPDE_LOGGING_H__
-#define __FDAPDE_LOGGING_H__
+#ifndef __FDAPDE_RGCCA_LOGGING_H__
+#define __FDAPDE_RGCCA_LOGGING_H__
 
+#include "../header_check.h"
 #include <ios>
 #include <iostream>
 #include <ostream>
@@ -57,4 +58,4 @@ inline constexpr null_ostream cout {};
 
 }   // namespace fdapde
 
-#endif   // __FDAPDE_LOGGING_H__
+#endif   // __FDAPDE_RGCCA_LOGGING_H__

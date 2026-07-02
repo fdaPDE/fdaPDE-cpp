@@ -1,3 +1,22 @@
+// This file is part of fdaPDE, a C++ library for physics-informed
+// spatial and functional data analysis.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+#ifndef __FDAPDE_NONNEGATIVE_WEIGHT_IPOPT_H__
+#define __FDAPDE_NONNEGATIVE_WEIGHT_IPOPT_H__
+
 #include <cassert>
 #include <algorithm>
 #include <cmath>
@@ -13,11 +32,15 @@
 
 #include "IpIpoptApplication.hpp"
 #include "IpTNLP.hpp"
+#include "header_check.h"
+
+namespace fdapde {
+namespace internals {
 
 using Vector = Eigen::VectorXd;
-using Matrix = Eigen::MatrixXd;
 using SparseMatrix = Eigen::SparseMatrix<double, Eigen::ColMajor, int>;
 
+// Ipopt problem for one signed non-negative weight solve
 class NonNegativeWeightProblem : public Ipopt::TNLP {
 public:
     NonNegativeWeightProblem(
@@ -290,6 +313,7 @@ private:
 };
 
 
+// Reuses Ipopt state and warm starts across repeated RGCCA block updates.
 class NonNegativeWeightSolver {
 public:
     NonNegativeWeightSolver(
@@ -354,6 +378,10 @@ public:
     NonNegativeWeightSolver& operator=(const NonNegativeWeightSolver&) = delete;
 
     Vector solve(const Vector& z) {
+        // The RGCCA weight has a free sign, while the Ipopt subproblem enforces w >= 0.
+        // Solve the positive and negative orientations only when needed, use direct Omega^{-1}
+        // candidates when already feasible, and warm-start Ipopt from the previous accepted
+        // side to keep repeated block updates cheap.
         const double z_norm2 = z.squaredNorm();
         const double scale = static_cast<double>(z.size() > 0 ? z.size() : 1);
         const double zero_tol = std::numeric_limits<double>::epsilon() * scale;
@@ -535,3 +563,8 @@ private:
     Ipopt::SmartPtr<Ipopt::TNLP> problem_neg_;
     Ipopt::SmartPtr<Ipopt::IpoptApplication> app_;
 };
+
+} // namespace internals
+} // namespace fdapde
+
+#endif // __FDAPDE_NONNEGATIVE_WEIGHT_IPOPT_H__

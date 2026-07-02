@@ -22,7 +22,10 @@
 #include <string_view>
 #include <vector>
 
+#include "ipopt_options.h"
+
 using namespace fdapde;
+using namespace fdapde::rgcca;
 
 namespace {
 
@@ -420,6 +423,7 @@ int main(int argc, char** argv) {
         }
 
         const bool run_bootstrap = cfg.bootstrap_lambda_selection || cfg.block_deactivation || cfg.connection_deactivation;
+        if (cfg.nonnegative) write_ipopt_options();
         Timeline timeline;
 
         std::cout << "FRGCCA CovMax timing run\n"
