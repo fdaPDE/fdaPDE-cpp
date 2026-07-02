@@ -1170,6 +1170,7 @@ struct Result {
     int J = 0;
     std::vector<double> obj_history;
     bool monotone = true;
+    bool cancelled = false;
     int iters = 0;
     BoolMatrix C;
     Matrix covariance_matrix;
@@ -1935,7 +1936,8 @@ private:
         const BlockRefList& blocks,
         const BoolMatrix& C_active,
         const bool update_component_lambdas = true,
-        const int max_iter_override = -1
+        const int max_iter_override = -1,
+        const std::function<bool()>& cancelled = {}
     ) {
         const int J = n_blocks();
         const int max_iter = max_iter_override > 0 ? max_iter_override : opt_.max_iter;
@@ -1965,7 +1967,15 @@ private:
 
         // main loop
         for (int s = 0; s < max_iter; ++s) {
+            if (cancelled && cancelled()) {
+                res.cancelled = true;
+                return res;
+            }
             for (int l = 0; l < J; ++l) {
+                if (cancelled && cancelled()) {
+                    res.cancelled = true;
+                    return res;
+                }
 
                 // skip deactivated blocks
                 if (!res.active_blocks[l]) continue;
@@ -2008,6 +2018,11 @@ private:
                 break;
 
             a_prev = snapshot_weights_(blocks);
+        }
+
+        if (cancelled && cancelled()) {
+            res.cancelled = true;
+            return res;
         }
 
         // save results
@@ -2075,7 +2090,10 @@ private:
             B_done = 0;
             B_total = 0;
             B_design = 0;
+            B_stale = 0;
+            B_cancelled = 0;
             design_epoch = 0;
+            design_epoch_signal.store(0, std::memory_order_release);
             last_check_B_done = 0;
             stop = false;
             reset_good();
@@ -2102,7 +2120,10 @@ private:
         int B_done = 0;
         int B_total = 0;
         int B_design = 0;
+        int B_stale = 0;
+        int B_cancelled = 0;
         int design_epoch = 0;
+        std::atomic<int> design_epoch_signal {0};
         int last_check_B_done = 0;
         bool stop = false;
 
@@ -2293,10 +2314,17 @@ private:
                 C_best = C_lambda;
             }
 
-            const int B_discarded = bootstrap_state.B_total - bootstrap_state.B_design - bootstrap_state.B_done;
+            const int B_discarded =
+                bootstrap_state.B_total -
+                bootstrap_state.B_design -
+                bootstrap_state.B_stale -
+                bootstrap_state.B_cancelled -
+                bootstrap_state.B_done;
             fdapde::cout << "  Bootstrap used: " << bootstrap_state.B_total
                       << " total, " << bootstrap_state.B_design
-                      << " design, " << bootstrap_state.B_done
+                      << " design, " << bootstrap_state.B_stale
+                      << " stale, " << bootstrap_state.B_cancelled
+                      << " cancelled, " << bootstrap_state.B_done
                       << " good, " << B_discarded << " discarded";
             if (!select_lambda)
                 print_fixed_weight_lambda();
@@ -2399,6 +2427,7 @@ private:
         double fit_time = 0.0;
         int fit_iters = 0;
         bool capped = false;
+        bool cancelled = false;
     };
     void annotate_component_significance_(
         Result& result,
@@ -2495,19 +2524,40 @@ private:
         const int b,
         const unsigned seed,
         const BoolMatrix& C_active,
-        const std::vector<Vector>& w_fit
+        const std::vector<Vector>& w_fit,
+        const std::function<bool()>& cancelled = {}
     ) {
         BootstrapSampleResult out;
         const auto active_blocks = active_blocks_from_C_(C_active);
         const int fit_max_iter = bootstrap_fit_max_iter_();
 
+        if (cancelled && cancelled()) {
+            out.cancelled = true;
+            return out;
+        }
+
         copy_weights_snapshot_(boot_blocks.refs, w_fit);
         set_row_index_all_(boot_blocks.refs, bootstrap_index_(n_, seed + static_cast<unsigned>(b)));
 
         init_comp_(boot_blocks.refs, InitStrategy::WarmStart, true, &active_blocks);
+        if (cancelled && cancelled()) {
+            out.cancelled = true;
+            clear_row_index_all_(boot_blocks.refs);
+            return out;
+        }
+
         const auto fit_start = std::chrono::high_resolution_clock::now();
-        const Result fit_result = fit_component_(boot_blocks.refs, C_active, true, fit_max_iter);
+        const Result fit_result = fit_component_(boot_blocks.refs, C_active, true, fit_max_iter, cancelled);
         const auto fit_end = std::chrono::high_resolution_clock::now();
+
+        out.fit_time = std::chrono::duration<double>(fit_end - fit_start).count();
+        out.fit_iters = fit_result.iters;
+        out.capped = fit_result.iters >= fit_max_iter;
+        out.cancelled = fit_result.cancelled;
+        if (out.cancelled) {
+            clear_row_index_all_(boot_blocks.refs);
+            return out;
+        }
 
         out.w = snapshot_weights_(boot_blocks.refs);
         for (int j = 0; j < static_cast<int>(out.w.size()); ++j) {
@@ -2516,9 +2566,6 @@ private:
         correlation_matrix_raw_data_(boot_blocks.refs, out.w, out.corr);
         clear_row_index_all_(boot_blocks.refs);
 
-        out.fit_time = std::chrono::duration<double>(fit_end - fit_start).count();
-        out.fit_iters = fit_result.iters;
-        out.capped = fit_result.iters >= fit_max_iter;
         return out;
     }
     bool same_design_(const BoolMatrix& lhs, const BoolMatrix& rhs) const {
@@ -2537,6 +2584,7 @@ private:
         state.B_design += state.B_done;
         state.reset_good();
         ++state.design_epoch;
+        state.design_epoch_signal.store(state.design_epoch, std::memory_order_release);
         w_min = w_fit;
 
         const auto active_blocks = active_blocks_from_C_(C_active);
@@ -2558,6 +2606,8 @@ private:
     ) const {
         fdapde::cout << "  progress total=" << state.B_total
                   << ", design=" << state.B_design
+                  << ", stale=" << state.B_stale
+                  << ", cancelled=" << state.B_cancelled
                   << ", good=" << state.B_done
                   << " | ab=" << n_active_blocks
                   << ", ac=" << n_active_connections
@@ -2579,6 +2629,8 @@ private:
     ) const {
         fdapde::cout << "  design reset total=" << state.B_total
                   << ", design=" << state.B_design
+                  << ", stale=" << state.B_stale
+                  << ", cancelled=" << state.B_cancelled
                   << ", good=" << state.B_done
                   << " | epoch=" << state.design_epoch
                   << " | ab=" << n_active_blocks
@@ -2622,17 +2674,26 @@ private:
                 }
 
                 const int tid = this_thread_id();
+                auto cancelled = [&]() {
+                    return stop.load(std::memory_order_acquire) ||
+                        epoch != bootstrap_state.design_epoch_signal.load(std::memory_order_acquire);
+                };
                 auto sample = fit_bootstrap_sample_(
-                    thread_boot_worker[tid], b, seed, C_snapshot, w_fit
+                    thread_boot_worker[tid], b, seed, C_snapshot, w_fit, cancelled
                 );
 
                 std::lock_guard<std::mutex> lock(merge_mutex);
                 ++bootstrap_state.B_total;
                 timing_summary.add_sample(sample.fit_time, sample.fit_iters, sample.capped);
 
+                if (sample.cancelled) {
+                    ++bootstrap_state.B_cancelled;
+                    continue;
+                }
+
                 if (bootstrap_state.stop || epoch != bootstrap_state.design_epoch) {
                     if (epoch != bootstrap_state.design_epoch)
-                        ++bootstrap_state.B_design;
+                        ++bootstrap_state.B_stale;
                     continue;
                 }
 
