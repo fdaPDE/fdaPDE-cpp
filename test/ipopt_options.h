@@ -10,7 +10,7 @@ inline void write_ipopt_options() {
       << "print_user_options no\n"
       << "print_timing_statistics no\n"
       << "\n"
-      << "hessian_approximation exact\n"
+      /*<< "hessian_approximation exact\n"
       << "nlp_scaling_method none\n"
       << "\n"
       << "mu_strategy adaptive\n"
@@ -22,7 +22,7 @@ inline void write_ipopt_options() {
       << "\n"
       << "bound_push 1e-12\n"
       << "bound_frac 1e-12\n"
-      << "bound_relax_factor 0\n";
+      << "bound_relax_factor 0\n"*/;
 }
 
 #endif // FDAPDE_TEST_IPOPT_OPTIONS_H
