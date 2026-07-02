@@ -29,7 +29,6 @@ inline std::ostream& operator<<(std::ostream& os, const Options& opt) {
     os << "RGCCA::Options {\n"
        << "  max_iter                    = " << opt.max_iter << '\n'
        << "  tol                         = " << opt.tol << '\n'
-       << "  verbose                     = " << bool_text_(opt.verbose) << '\n'
        << "  cache_covariances           = " << bool_text_(opt.cache_covariances) << '\n'
        << "  bias                        = " << bool_text_(opt.bias) << '\n'
        << "  init_strategy               = " << to_string(opt.init_strategy) << '\n'

@@ -128,7 +128,6 @@ struct Scheme {
 struct Options {
     int max_iter;
     double tol;
-    bool verbose;
     bool cache_covariances;
     bool bias;
     InitStrategy init_strategy;
@@ -150,11 +149,10 @@ struct Options {
       const LambdaSelection lambda_selection_components_ = LambdaSelection::Automatic,
       const bool component_significance_ = false,
       const Deflation deflation_mode_ = Deflation::Scores, const Scheme& scheme_ = Scheme::Factorial(),
-      const bool verbose_ = false, const bool cache_ = true,
+      const bool cache_ = true,
       const bool block_deactivation_ = false, const bool connection_deactivation_ = false) :
         max_iter(max_iter_),
         tol(tol_),
-        verbose(verbose_),
         cache_covariances(cache_),
         bias(bias_),
         init_strategy(init_strategy_),
