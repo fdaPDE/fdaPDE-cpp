@@ -1,18 +1,18 @@
 // This file is part of fdaPDE, a C++ library for physics-informed
-// spatial and functional data analysis.
+// spatial and functional data analysis
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
+// (at your option) any later version
 //
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
+// GNU General Public License for more details
 //
 // You should have received a copy of the GNU General Public License
-// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// along with this program.  If not, see <http://www.gnu.org/licenses/>
 
 
 #ifndef __FDAPDE_RGCCA_BLOCKS_H__
@@ -27,14 +27,14 @@ namespace fdapde {
 namespace rgcca {
 namespace internals {
 
-// Blocks adapt raw data matrices to the RGCCA weight/component update API.
+// blocks adapt raw data matrices to the rgcca weight/component update api
 template <typename SamplingStrategy>
 class BaseBlock {
 public:
-    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
-    using Vector = Eigen::Matrix<double, Eigen::Dynamic, 1>;
-    using IndexVector = Eigen::Vector<int, Eigen::Dynamic>;
-    using SparseMatrix = Eigen::SparseMatrix<double, Eigen::ColMajor, int>;
+    using Matrix = ::fdapde::rgcca::Matrix;
+    using Vector = ::fdapde::rgcca::Vector;
+    using IndexVector = ::fdapde::rgcca::IndexVector;
+    using SparseMatrix = ::fdapde::rgcca::SparseMatrix;
     using BinaryMatrixT = BinaryMatrix<Dynamic, Dynamic>;
     using SparseSolver = ::fdapde::internals::eigen_sparse_solver_movable_wrap<Eigen::SimplicialLDLT<SparseMatrix>>;
     using ComponentsSolverType = typename std::decay_t<SamplingStrategy>::solver_t;
@@ -877,29 +877,29 @@ private:
     double lambda_weights_ = 1e-15;
 };
 
-// Factory helpers keep RGCCA::add_* independent from concrete block classes.
-template <typename SamplingStrategy, typename Matrix = Eigen::Matrix<double, Dynamic, Dynamic>>
+// factory helpers keep RGCCA::add_* independent from concrete block classes
+template <typename SamplingStrategy, typename Matrix = ::fdapde::rgcca::Matrix>
 requires std::same_as<SamplingStrategy, ::fdapde::rgcca::IndependentSampling>
 inline std::unique_ptr<BaseBlock<SamplingStrategy>>
 make_multivariate_block(std::string block_name, Matrix* data_ptr) {
     return std::make_unique<MultivariateBlock<SamplingStrategy>>(block_name, data_ptr);
 }
 
-template <typename SamplingStrategy, typename Matrix = Eigen::Matrix<double, Dynamic, Dynamic>, typename Vector = Eigen::Matrix<double, Dynamic, 1>>
+template <typename SamplingStrategy, typename Matrix = ::fdapde::rgcca::Matrix, typename Vector = ::fdapde::rgcca::Vector>
 requires std::same_as<SamplingStrategy, ::fdapde::rgcca::TimeDependentSampling>
 inline std::unique_ptr<BaseBlock<SamplingStrategy>>
 make_multivariate_block(std::string block_name, const Triangulation<1, 1>& T, const Vector& times, Matrix* data_ptr) {
     return std::make_unique<MultivariateBlock<SamplingStrategy>>(block_name, T, times, data_ptr);
 }
 
-template <typename SamplingStrategy, typename GeoFrame, typename WeightsPenaltyType, typename Matrix = Eigen::Matrix<double, Dynamic, Dynamic>>
+template <typename SamplingStrategy, typename GeoFrame, typename WeightsPenaltyType, typename Matrix = ::fdapde::rgcca::Matrix>
 requires std::same_as<SamplingStrategy, ::fdapde::rgcca::IndependentSampling>
 std::unique_ptr<BaseBlock<SamplingStrategy>>
 make_functional_block(std::string block_name, GeoFrame& gf, Matrix* data_ptr, WeightsPenaltyType&& weights_penalty) {
     return std::make_unique<FunctionalBlock<WeightsPenaltyType, SamplingStrategy>>(block_name, gf, data_ptr, std::forward<WeightsPenaltyType>(weights_penalty));
 }
 
-template <typename SamplingStrategy, typename GeoFrame, typename WeightsPenaltyType, typename Vector = Eigen::Matrix<double, Dynamic, 1>, typename Matrix = Eigen::Matrix<double, Dynamic, Dynamic>>
+template <typename SamplingStrategy, typename GeoFrame, typename WeightsPenaltyType, typename Vector = ::fdapde::rgcca::Vector, typename Matrix = ::fdapde::rgcca::Matrix>
 requires std::same_as<SamplingStrategy, ::fdapde::rgcca::TimeDependentSampling>
 std::unique_ptr<BaseBlock<SamplingStrategy>>
 make_functional_block(std::string block_name, const Triangulation<1, 1>& T, const Vector& times, GeoFrame& gf, Matrix* data_ptr, WeightsPenaltyType&& weights_penalty) {
@@ -911,3 +911,171 @@ make_functional_block(std::string block_name, const Triangulation<1, 1>& T, cons
 } // namespace fdapde
 
 #endif // __FDAPDE_RGCCA_BLOCKS_H__
+
+#ifdef __FDAPDE_RGCCA_DEFINE_MODEL_BLOCKS__
+#ifndef __FDAPDE_RGCCA_MODEL_BLOCKS_H__
+#define __FDAPDE_RGCCA_MODEL_BLOCKS_H__
+
+namespace fdapde {
+
+// registers a block and synchronizes model-level options into it
+template <typename SamplingStrategy>
+int RGCCA<SamplingStrategy>::add_block(typename RGCCA<SamplingStrategy>::BlockPtr b) {
+    if (!b) throw std::invalid_argument("RGCCA/add_block: null block");
+
+    // sampling-specific consistency
+    if constexpr (std::same_as<SamplingStrategy, rgcca::IndependentSampling>) {
+        if (b->n() != n()) throw std::invalid_argument("RGCCA/add_block: n mismatch");
+    } else {
+        add_times_(b->times());
+    }
+
+    // block state owned by the model
+    b->set_bias(opt_.bias);
+    b->set_raw_data_mutable(true);
+    b->set_mode(opt_.mode);
+    b->set_weight_sign_constraint(opt_.weight_sign_constraint);
+    b->set_n_comp(n_comp());
+    blocks_.emplace_back(std::move(b));
+    initialized_ = false;
+    return ++J_;
+}
+
+// adds a multivariate block for independent sampling
+template <typename SamplingStrategy>
+template <typename S>
+requires std::same_as<S, rgcca::IndependentSampling>
+int RGCCA<SamplingStrategy>::add_multivariate_block(std::string block_name, rgcca::Matrix&& X) {
+    data_blocks_.push_back(std::make_unique<rgcca::Matrix>(std::move(X)));
+    return add_block(
+        rgcca::internals::make_multivariate_block<SamplingStrategy>(
+            block_name, data_blocks_.back().get()
+        )
+    );
+}
+
+// adds a multivariate block for time-dependent sampling
+template <typename SamplingStrategy>
+template <typename S>
+requires std::same_as<S, rgcca::TimeDependentSampling>
+int RGCCA<SamplingStrategy>::add_multivariate_block(
+    std::string block_name,
+    const rgcca::Vector& times,
+    rgcca::Matrix&& X
+) {
+    data_blocks_.push_back(std::make_unique<rgcca::Matrix>(std::move(X)));
+    return add_block(
+        rgcca::internals::make_multivariate_block<SamplingStrategy>(
+            block_name, T_, times, data_blocks_.back().get()
+        )
+    );
+}
+
+// adds a functional block for independent sampling
+template <typename SamplingStrategy>
+template <typename GeoFrame, typename WeightsPenaltyType>
+requires std::same_as<SamplingStrategy, rgcca::IndependentSampling>
+int RGCCA<SamplingStrategy>::add_functional_block(
+    std::string block_name,
+    const GeoFrame& gf,
+    rgcca::Matrix&& X,
+    WeightsPenaltyType&& weights_penalty
+) {
+    data_blocks_.push_back(std::make_unique<rgcca::Matrix>(std::move(X)));
+    return add_block(
+        rgcca::internals::make_functional_block<SamplingStrategy>(
+            block_name,
+            gf,
+            data_blocks_.back().get(),
+            std::forward<WeightsPenaltyType>(weights_penalty)
+        )
+    );
+}
+
+// adds a functional block for time-dependent sampling
+template <typename SamplingStrategy>
+template <typename GeoFrame, typename WeightsPenaltyType>
+requires std::same_as<SamplingStrategy, rgcca::TimeDependentSampling>
+int RGCCA<SamplingStrategy>::add_functional_block(
+    std::string block_name,
+    const rgcca::Vector& times,
+    const GeoFrame& gf,
+    rgcca::Matrix&& X,
+    WeightsPenaltyType&& weights_penalty
+) {
+    data_blocks_.push_back(std::make_unique<rgcca::Matrix>(std::move(X)));
+    return add_block(
+        rgcca::internals::make_functional_block<SamplingStrategy>(
+            block_name,
+            T_,
+            times,
+            gf,
+            data_blocks_.back().get(),
+            std::forward<WeightsPenaltyType>(weights_penalty)
+        )
+    );
+}
+
+// returns non-owning references to the model blocks
+template <typename SamplingStrategy>
+auto RGCCA<SamplingStrategy>::main_blocks_() const
+    -> typename RGCCA<SamplingStrategy>::BlockRefList {
+    typename RGCCA<SamplingStrategy>::BlockRefList out;
+    out.reserve(blocks_.size());
+    for (const auto& b : blocks_)
+        out.push_back(b.get());
+    return out;
+}
+
+// clones blocks for bootstrap workers
+template <typename SamplingStrategy>
+auto RGCCA<SamplingStrategy>::clone_blocks_() const
+    -> typename RGCCA<SamplingStrategy>::BootstrapBlocks {
+    typename RGCCA<SamplingStrategy>::BootstrapBlocks out;
+    out.owners.reserve(blocks_.size());
+    out.refs.reserve(blocks_.size());
+
+    for (const auto& b : blocks_) {
+        // worker clones must not mutate shared raw data
+        auto copy = b->clone();
+        copy->set_raw_data_mutable(false);
+
+        out.refs.push_back(copy.get());
+        out.owners.push_back(std::move(copy));
+    }
+
+    return out;
+}
+
+// returns block names in model order
+template <typename SamplingStrategy>
+std::vector<std::string> RGCCA<SamplingStrategy>::block_names_(
+    const typename RGCCA<SamplingStrategy>::BlockRefList& blocks
+) const {
+    std::vector<std::string> out;
+    out.reserve(blocks.size());
+
+    for (auto* b : blocks)
+        out.push_back(b->name());
+
+    return out;
+}
+
+// returns block weight dimensions in model order
+template <typename SamplingStrategy>
+std::vector<int> RGCCA<SamplingStrategy>::block_dims_(
+    const typename RGCCA<SamplingStrategy>::BlockRefList& blocks
+) const {
+    std::vector<int> out;
+    out.reserve(blocks.size());
+
+    for (auto* b : blocks)
+        out.push_back(b->n_dofs_weights());
+
+    return out;
+}
+
+} // namespace fdapde
+
+#endif // __FDAPDE_RGCCA_MODEL_BLOCKS_H__
+#endif // __FDAPDE_RGCCA_DEFINE_MODEL_BLOCKS__

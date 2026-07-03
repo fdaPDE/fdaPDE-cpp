@@ -35,19 +35,18 @@
 #include <utility>
 #include <vector>
 
+#include "validation.h"
+
 namespace fdapde {
 namespace rgcca {
-namespace internals {
 
-inline void validate_positive_regularization_lambda(const double lambda, const char* name) {
-    if (!(lambda > 0.0) || !std::isfinite(lambda)) {
-        throw std::invalid_argument(std::string("RGCCA: ") + name + " must be finite and positive");
-    }
-}
+using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+using Vector = Eigen::Matrix<double, Eigen::Dynamic, 1>;
+using BoolMatrix = Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>;
+using IndexVector = Eigen::Vector<int, Eigen::Dynamic>;
+using SparseMatrix = Eigen::SparseMatrix<double, Eigen::ColMajor, int>;
 
-} // namespace internals
-
-// Public RGCCA options shared by blocks, model fitting, and bootstrap.
+// Public RGCCA options shared by blocks, model fitting, and bootstrap
 enum class InitStrategy { None, SVD, Uniform, WarmStart };
 enum class DesignMode { Empty, Custom, FullyConnected };
 enum class LambdaSelection { Manual, Automatic };
@@ -201,8 +200,8 @@ std::ostream& operator<<(std::ostream& os, const Options& opt);
 std::ostream& operator<<(std::ostream& os, const BootstrapConfig& config);
 
 struct Result {
-    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
-    using BoolMatrix = Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>;
+    using Matrix = fdapde::rgcca::Matrix;
+    using BoolMatrix = fdapde::rgcca::BoolMatrix;
 
     int h = 0;
     int J = 0;
@@ -227,8 +226,8 @@ struct Result {
 };
 
 struct BootstrapResult {
-    using Matrix = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
-    using Vector = Eigen::Matrix<double, Eigen::Dynamic, 1>;
+    using Matrix = fdapde::rgcca::Matrix;
+    using Vector = fdapde::rgcca::Vector;
 
     int h = 0;
     int B = 0;
@@ -253,7 +252,7 @@ struct BootstrapResult {
     std::vector<Matrix> corr_boot_by_lambda;
     std::vector<Matrix> corr_min_by_lambda;
 
-    // [lambda] -> J x J confidence intervals.
+    // [lambda] -> J x J confidence intervals
     std::vector<Matrix> corr_ci_low_by_lambda;
     std::vector<Matrix> corr_ci_high_by_lambda;
 

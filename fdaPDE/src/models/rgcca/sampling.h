@@ -28,9 +28,9 @@ struct empty_t {
 };
 
 struct identity_ls {
-    using vector_t = Eigen::VectorXd;
-    using matrix_t = Eigen::MatrixXd;
-    using sparse_matrix_t = Eigen::SparseMatrix<double>;
+    using vector_t = rgcca::Vector;
+    using matrix_t = rgcca::Matrix;
+    using sparse_matrix_t = rgcca::SparseMatrix;
 
     explicit identity_ls(const int n_dofs) : n_dofs_(n_dofs) {}
 
@@ -72,8 +72,8 @@ struct IndependentSampling {
 
 struct TimeDependentSampling {
     using solver_t = ::fdapde::internals::bs_ls_elliptic;
-    using Matrix = Eigen::MatrixXd;
-    using SparseMatrix = Eigen::SparseMatrix<double>;
+    using Matrix = rgcca::Matrix;
+    using SparseMatrix = rgcca::SparseMatrix;
 
     static void discretize(const Triangulation<1, 1>& T, solver_t& solver_) {
         BsSpace Bh(T, 3);
