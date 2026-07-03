@@ -85,8 +85,12 @@ inline std::ostream& operator<<(std::ostream& os, const Result& r) {
             os << "- Block " << i+1  << ": " << (r.active_blocks[i] ? "active    " : "non-active" ) << "\n";
         }
         os << std::endl;
-        os << "(updated) connections matrix :\n";
-        os << r.C << std::endl;
+        if (r.C.rows() <= 20) {
+            os << "Updated design matrix:\n";
+            os << r.C << std::endl;
+        } else {
+            os << "Updated design matrix: skipped (" << r.C.rows() << " blocks)\n";
+        }
         os << std::endl;
 
         os << "regularization parameters used : " << std::endl;

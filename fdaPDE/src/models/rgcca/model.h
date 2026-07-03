@@ -867,17 +867,19 @@ private:
             thread_boot_worker[t] = clone_blocks_();
         }
         print_step_end_(step_start);
-        auto print_fixed_weight_lambda = [&]() {
-            double lambda_min = std::numeric_limits<double>::infinity();
-            double lambda_max = -std::numeric_limits<double>::infinity();
+        auto fixed_weight_lambda = [&]() {
             for (const auto& block : blocks) {
                 const double lambda = block->lambda_weights();
-                lambda_min = std::min(lambda_min, lambda);
-                lambda_max = std::max(lambda_max, lambda);
+                if (std::isfinite(lambda)) return lambda;
             }
-            fdapde::cout << " lambda=" << lambda_min;
-            if (lambda_min != lambda_max)
-                fdapde::cout << ".." << lambda_max;
+            return std::numeric_limits<double>::quiet_NaN();
+        };
+        auto print_weight_lambda = [](const double lambda) {
+            fdapde::cout << "lambda=";
+            if (std::isfinite(lambda))
+                fdapde::cout << lambda;
+            else
+                fdapde::cout << "none";
         };
 
         int n_lambda = static_cast<int>(lambda_grid.size());
@@ -895,7 +897,9 @@ private:
                         set_lambda_weights_all_(worker.refs, lambda);
                 }
             } else {
-                fdapde::cout << "- fixed weight regularization\n";
+                fdapde::cout << "- fixed weight regularization ";
+                print_weight_lambda(fixed_weight_lambda());
+                fdapde::cout << '\n';
             }
 
             // init warm start at lambda
@@ -960,24 +964,27 @@ private:
                 bootstrap_state.B_stale -
                 bootstrap_state.B_cancelled -
                 bootstrap_state.B_done;
-            fdapde::cout << "  Bootstrap used: " << bootstrap_state.B_total
-                         << " total, " << bootstrap_state.B_design
-                         << " design, " << bootstrap_state.B_stale
-                         << " stale, " << bootstrap_state.B_cancelled
-                         << " cancelled, " << bootstrap_state.B_done
-                         << " good, " << B_discarded << " discarded";
-            if (!select_lambda)
-                print_fixed_weight_lambda();
-            fdapde::cout << " time=" << std::fixed << std::setprecision(3) << elapsed_sec << "s"
-                         << " | ab=" << n_active_blocks
-                         << ", ac=" << n_active_connections
-                         << " | crit=" << std::setprecision(3) << bootstrap_state.crit
-                         << " | overall_eff=" << std::setprecision(1)
-                         << 100.0 * bootstrap_timing_summary.efficiency() << "%"
-                         << ", capped=" << bootstrap_timing_summary.capped_fits << "/" << bootstrap_timing_summary.n_fits
-                         << ", avg_iters=" << std::setprecision(1) << bootstrap_timing_summary.avg_iters()
-                         << ", max_iters=" << bootstrap_timing_summary.max_iters
-                         << std::defaultfloat << "\n\n";
+            fdapde::cout << "  Bootstrap used: total=" << bootstrap_state.B_total
+                         << ", design=" << bootstrap_state.B_design
+                         << ", stale=" << bootstrap_state.B_stale
+                         << ", cancelled=" << bootstrap_state.B_cancelled
+                         << ", good=" << bootstrap_state.B_done
+                         << ", discarded=" << B_discarded << '\n';
+            fdapde::cout << "  Time: total=" << std::fixed << std::setprecision(3) << elapsed_sec
+                         << "s, avg_fit=" << bootstrap_timing_summary.avg_fit_time()
+                         << " ± " << bootstrap_timing_summary.sd_fit_time()
+                         << "s, efficiency=" << std::setprecision(1)
+                         << 100.0 * bootstrap_timing_summary.efficiency() << "%\n";
+            fdapde::cout << "  Iters: avg=" << std::setprecision(1) << bootstrap_timing_summary.avg_iters()
+                         << ", max=" << bootstrap_timing_summary.max_iters
+                         << ", capped=" << bootstrap_timing_summary.capped_fits
+                         << "/" << bootstrap_timing_summary.n_fits << '\n';
+            fdapde::cout << "  Design: active_blocks=" << n_active_blocks
+                         << ", active_connections=" << n_active_connections
+                         << ", crit=" << std::setprecision(3) << bootstrap_state.crit
+                         << std::defaultfloat << ", ";
+            print_weight_lambda(select_lambda ? lambda_grid[lambda_i] : fixed_weight_lambda());
+            fdapde::cout << std::defaultfloat << "\n\n";
 
             // early stop
             if (early_stop_lambda_(bootstrap_state, lambda_i, bootstrap_config_)) {
@@ -1018,8 +1025,12 @@ private:
                          << ", active = " << (boot_results.active_blocks[j] ? "yes" : "no")
                          << '\n';
         }
-        fdapde::cout << "\nUpdated design matrix:\n";
-        fdapde::cout << C_best << "\n\n";
+        if (J <= 20) {
+            fdapde::cout << "\nUpdated design matrix:\n";
+            fdapde::cout << C_best << "\n\n";
+        } else {
+            fdapde::cout << "\nUpdated design matrix: skipped (" << J << " blocks)\n\n";
+        }
 
         bootstrap_selection_results_.push_back(std::move(boot_results));
 
@@ -1032,14 +1043,17 @@ private:
 
     struct BootstrapTimingSummary {
         double fit_time = 0.0;
+        double fit_time_sq = 0.0;
         double parallel_capacity = 0.0;
         double iters = 0.0;
         int capped_fits = 0;
         int max_iters = 0;
         int n_fits = 0;
 
-        void add_sample(const double fit_time_sec, const int fit_iters, const bool capped) {
+        void add_sample(const double fit_time_sec, const int fit_iters, const bool capped, const bool fit_started) {
+            if (!fit_started) return;
             fit_time += fit_time_sec;
+            fit_time_sq += fit_time_sec * fit_time_sec;
             iters += static_cast<double>(fit_iters);
             capped_fits += capped ? 1 : 0;
             max_iters = std::max(max_iters, fit_iters);
@@ -1050,6 +1064,16 @@ private:
         }
         [[nodiscard]] double efficiency() const {
             return parallel_capacity > 0.0 ? fit_time / parallel_capacity : 0.0;
+        }
+        [[nodiscard]] double avg_fit_time() const {
+            return n_fits > 0 ? fit_time / static_cast<double>(n_fits) : 0.0;
+        }
+        [[nodiscard]] double sd_fit_time() const {
+            if (n_fits < 2) return 0.0;
+            const double mean = avg_fit_time();
+            const double var = (fit_time_sq - static_cast<double>(n_fits) * mean * mean) /
+                static_cast<double>(n_fits - 1);
+            return std::sqrt(std::max(0.0, var));
         }
         [[nodiscard]] double avg_iters() const {
             return n_fits > 0 ? iters / static_cast<double>(n_fits) : 0.0;
@@ -1068,6 +1092,7 @@ private:
         int fit_iters = 0;
         bool capped = false;
         bool cancelled = false;
+        bool fit_started = false;
     };
     void annotate_component_significance_(
         Result& result,
@@ -1187,6 +1212,7 @@ private:
         }
 
         const auto fit_start = std::chrono::high_resolution_clock::now();
+        out.fit_started = true;
         const Result fit_result = fit_component_(boot_blocks.refs, C_active, true, fit_max_iter, cancelled);
         const auto fit_end = std::chrono::high_resolution_clock::now();
 
@@ -1242,15 +1268,20 @@ private:
         const AdaptiveBootstrapState& state,
         const int n_active_blocks,
         const int n_active_connections,
-        const AdaptiveStopInfo& stop_info
+        const AdaptiveStopInfo& stop_info,
+        const double elapsed_since_last_log
     ) const {
-        fdapde::cout << "  progress total=" << state.B_total
-                     << ", design=" << state.B_design
-                     << ", stale=" << state.B_stale
-                     << ", cancelled=" << state.B_cancelled
-                     << ", good=" << state.B_done
-                     << " | ab=" << n_active_blocks
-                     << ", ac=" << n_active_connections
+        fdapde::cout << "  " << std::left << std::setw(13) << "progress" << std::right
+                     << " total=" << std::setw(6) << state.B_total
+                     << " design=" << std::setw(6) << state.B_design
+                     << " stale=" << std::setw(4) << state.B_stale
+                     << " cancelled=" << std::setw(6) << state.B_cancelled
+                     << " good=" << std::setw(6) << state.B_done
+                     << " | dt=" << std::fixed << std::setprecision(3) << std::setw(8)
+                     << elapsed_since_last_log << "s"
+                     << std::defaultfloat
+                     << " | ab=" << std::setw(4) << n_active_blocks
+                     << ", ac=" << std::setw(6) << n_active_connections
                      << " | crit=" << std::setprecision(3) << state.crit
                      << ", rel=";
         if (std::isfinite(stop_info.rel_change)) {
@@ -1265,16 +1296,22 @@ private:
     void print_bootstrap_design_reset_(
         const AdaptiveBootstrapState& state,
         const int n_active_blocks,
-        const int n_active_connections
+        const int n_active_connections,
+        const double elapsed_since_last_log
     ) const {
-        fdapde::cout << "  design reset total=" << state.B_total
-                     << ", design=" << state.B_design
-                     << ", stale=" << state.B_stale
-                     << ", cancelled=" << state.B_cancelled
-                     << ", good=" << state.B_done
+        fdapde::cout << "  " << std::left << std::setw(13) << "design reset" << std::right
+                     << " total=" << std::setw(6) << state.B_total
+                     << " design=" << std::setw(6) << state.B_design
+                     << " stale=" << std::setw(4) << state.B_stale
+                     << " cancelled=" << std::setw(6) << state.B_cancelled
+                     << " good=" << std::setw(6) << state.B_done
+                     << " | dt=" << std::fixed << std::setprecision(3) << std::setw(8)
+                     << elapsed_since_last_log << "s"
+                     << std::defaultfloat
                      << " | epoch=" << state.design_epoch
-                     << " | ab=" << n_active_blocks
-                     << ", ac=" << n_active_connections
+                     << " | ab=" << std::setw(4) << n_active_blocks
+                     << ", ac=" << std::setw(6) << n_active_connections
+                     << std::defaultfloat
                      << '\n';
     }
     void run_bootstrap_stream_(
@@ -1296,6 +1333,13 @@ private:
         std::mutex merge_mutex;
 
         const auto parallel_start = std::chrono::high_resolution_clock::now();
+        auto last_log_time = parallel_start;
+        auto elapsed_since_last_log = [&]() {
+            const auto now = std::chrono::high_resolution_clock::now();
+            const double elapsed = std::chrono::duration<double>(now - last_log_time).count();
+            last_log_time = now;
+            return elapsed;
+        };
 
         parallel_for(0, n_threads, 1, [&](int) {
             while (!stop.load(std::memory_order_acquire)) {
@@ -1324,7 +1368,7 @@ private:
 
                 std::lock_guard<std::mutex> lock(merge_mutex);
                 ++bootstrap_state.B_total;
-                timing_summary.add_sample(sample.fit_time, sample.fit_iters, sample.capped);
+                timing_summary.add_sample(sample.fit_time, sample.fit_iters, sample.capped, sample.fit_started);
 
                 if (sample.cancelled) {
                     ++bootstrap_state.B_cancelled;
@@ -1375,7 +1419,8 @@ private:
                         print_bootstrap_design_reset_(
                             bootstrap_state,
                             n_active_blocks,
-                            n_active_connections
+                            n_active_connections,
+                            elapsed_since_last_log()
                         );
                         if (n_active_connections == 0) {
                             bootstrap_state.crit = 0.0;
@@ -1403,7 +1448,8 @@ private:
                         print_bootstrap_design_reset_(
                             bootstrap_state,
                             n_active_blocks,
-                            n_active_connections
+                            n_active_connections,
+                            elapsed_since_last_log()
                         );
                         if (n_active_connections == 0) {
                             bootstrap_state.crit = 0.0;
@@ -1421,7 +1467,8 @@ private:
                     bootstrap_state,
                     count_active_blocks_(C_active),
                     count_active_connections_(C_active),
-                    stop_info
+                    stop_info,
+                    elapsed_since_last_log()
                 );
 
                 if (stop_info.stop || bootstrap_state.B_done >= bootstrap_state.B_max) {
