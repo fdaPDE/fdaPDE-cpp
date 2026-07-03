@@ -1341,8 +1341,7 @@ private:
                 const double corr_jk = Corr(j, k);
                 if (!std::isfinite(corr_jk)) continue;
 
-                if (std::string_view(opt_.scheme.name) == "Horst") num += corr_jk;
-                else num += std::abs(corr_jk);
+                num += opt_.scheme.sign_invariant ? std::abs(corr_jk) : corr_jk;
                 den += 1.0;
             }
         }

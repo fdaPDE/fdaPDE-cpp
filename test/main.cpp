@@ -28,9 +28,17 @@ template <typename Scalar>
 bool almost_equal(
   const Eigen::Matrix<Scalar, Dynamic, Dynamic>& op1, const Eigen::Matrix<Scalar, Dynamic, Dynamic>& op2,
   double epsilon) {
-    return (op1 - op2).template lpNorm<Eigen::Infinity>() < epsilon ||
-           (op1 - op2).template lpNorm<Eigen::Infinity>() <
-      (std::max(op1.template lpNorm<Eigen::Infinity>(), op2.template lpNorm<Eigen::Infinity>()) * epsilon);
+    const auto diff = op1 - op2;
+    const double diff_inf = diff.template lpNorm<Eigen::Infinity>();
+    const double scale = std::max(op1.template lpNorm<Eigen::Infinity>(), op2.template lpNorm<Eigen::Infinity>());
+    const bool equal = diff_inf < epsilon || diff_inf < scale * epsilon;
+    if (!equal) {
+        std::cerr << "almost_equal failed: diff_inf=" << diff_inf
+                  << ", diff_norm=" << diff.norm()
+                  << ", rel_inf=" << (scale > 0.0 ? diff_inf / scale : diff_inf)
+                  << ", epsilon=" << epsilon << '\n';
+    }
+    return equal;
 }
 template <typename Scalar>
 bool almost_equal(

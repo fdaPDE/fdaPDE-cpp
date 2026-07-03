@@ -111,16 +111,17 @@ struct Scheme {
     std::function<double(double)> w;   // w(t)
     double phi = 1.0;
     const char* name = "custom";
+    bool sign_invariant = false;
 
     static Scheme Horst() {
-        return {[](double t) { return t; }, [](double) { return 1.0; }, 1.0, "Horst"};
+        return {[](double t) { return t; }, [](double) { return 1.0; }, 1.0, "Horst", false};
     }
     static Scheme Centroid() {
         return {
-            [](double t) { return std::abs(t); }, [](double t) { return t >= 0 ? 1.0 : -1.0; }, 1.0, "Centroid"};
+            [](double t) { return std::abs(t); }, [](double t) { return t >= 0 ? 1.0 : -1.0; }, 1.0, "Centroid", true};
     }
     static Scheme Factorial() {
-        return {[](double t) { return t * t; }, [](double t) { return t; }, 2.0, "Factorial"};
+        return {[](double t) { return t * t; }, [](double t) { return t; }, 2.0, "Factorial", true};
     }
 };
 

@@ -318,15 +318,20 @@ class NonNegativeWeightSolver {
 public:
     NonNegativeWeightSolver(
         const SparseMatrix& Psi,
-        const SparseMatrix& Omega
-    ) : Psi_(Psi), Omega_(Omega) {
+        const SparseMatrix& Omega,
+        const bool objective_sign_invariant = true,
+        const bool use_closed_form_solution = false
+    ) : Psi_(Psi),
+        Omega_(Omega),
+        objective_sign_invariant_(objective_sign_invariant),
+        use_closed_form_solution_(use_closed_form_solution) {
 
         Psi_.makeCompressed();
         Omega_.makeCompressed();
-        omega_solver_.compute(Omega_);
-        omega_solver_ready_ = omega_solver_.info() == Eigen::Success;
-
-        app_ = IpoptApplicationFactory();
+        if (!use_closed_form_solution_) {
+            omega_solver_.compute(Omega_);
+            omega_solver_ready_ = omega_solver_.info() == Eigen::Success;
+        }
 
         // dimensions
         const int n = static_cast<Ipopt::Index>(Psi_.cols());
@@ -334,13 +339,17 @@ public:
 
         // starting point
         x_init_ = Vector::Ones(n);
-        x_init_ = normalize_convex_comb_(x_init_, x_init_, 0);
+        if (use_closed_form_solution_) x_init_ /= x_init_.norm();
+        else x_init_ = normalize_convex_comb_(x_init_, x_init_, 0);
 
         last_solution_ = x_init_;
         last_solution_pos_ = x_init_;
         last_solution_neg_ = x_init_;
 
         last_z_ = Vector::Zero(m);
+        if (use_closed_form_solution_) return;
+
+        app_ = IpoptApplicationFactory();
         problem_pos_raw_ = new NonNegativeWeightProblem(Omega_, Vector::Zero(n), x_init_);
         problem_neg_raw_ = new NonNegativeWeightProblem(Omega_, Vector::Zero(n), x_init_);
         problem_pos_ = problem_pos_raw_;
@@ -353,6 +362,8 @@ public:
     NonNegativeWeightSolver(const NonNegativeWeightSolver& other)
     : Psi_(other.Psi_),
       Omega_(other.Omega_),
+      objective_sign_invariant_(other.objective_sign_invariant_),
+      use_closed_form_solution_(other.use_closed_form_solution_),
       x_init_(other.x_init_),
       last_solution_(other.last_solution_),
       last_solution_pos_(other.last_solution_pos_),
@@ -362,8 +373,12 @@ public:
     {
         Psi_.makeCompressed();
         Omega_.makeCompressed();
-        omega_solver_.compute(Omega_);
-        omega_solver_ready_ = omega_solver_.info() == Eigen::Success;
+        if (!use_closed_form_solution_) {
+            omega_solver_.compute(Omega_);
+            omega_solver_ready_ = omega_solver_.info() == Eigen::Success;
+        }
+
+        if (use_closed_form_solution_) return;
 
         app_ = IpoptApplicationFactory();
         problem_pos_raw_ = new NonNegativeWeightProblem(Omega_, Vector::Zero(Omega_.rows()), x_init_);
@@ -378,8 +393,8 @@ public:
     NonNegativeWeightSolver& operator=(const NonNegativeWeightSolver&) = delete;
 
     Vector solve(const Vector& z) {
-        // The RGCCA weight has a free sign, while the Ipopt subproblem enforces w >= 0.
-        // Solve the positive and negative orientations only when needed, use direct Omega^{-1}
+        // The Ipopt subproblem enforces w >= 0. For sign-invariant objectives, try both
+        // orientations; otherwise keep the positive orientation only. Use direct Omega^{-1}
         // candidates when already feasible, and warm-start Ipopt from the previous accepted
         // side to keep repeated block updates cheap.
         const double z_norm2 = z.squaredNorm();
@@ -409,6 +424,11 @@ public:
 
         auto solve_pos = [&]() {
             Vector x_direct_pos;
+            if (use_closed_form_solution_) {
+                last_solution_pos_ = closed_form_solution_(p);
+                pos_ok = true;
+                return;
+            }
             if (try_direct_solution_(p, last_solution_pos_, &x_direct_pos)) {
                 pos_ok = true;
                 return;
@@ -427,6 +447,11 @@ public:
 
         auto solve_neg = [&]() {
             Vector x_direct_neg;
+            if (use_closed_form_solution_) {
+                last_solution_neg_ = closed_form_solution_(-p);
+                neg_ok = true;
+                return;
+            }
             if (try_direct_solution_(-p, last_solution_neg_, &x_direct_neg)) {
                 neg_ok = true;
                 return;
@@ -443,7 +468,9 @@ public:
             if (neg_ok) last_solution_neg_ = problem_neg_raw_->solution();
         };
 
-        if (positive_side_only) {
+        if (!objective_sign_invariant_) {
+            solve_pos();
+        } else if (positive_side_only) {
             solve_pos();
             if (!pos_ok) solve_neg();
         } else if (negative_side_only) {
@@ -492,6 +519,12 @@ public:
     }
 
 private:
+    Vector closed_form_solution_(const Vector& c) const {
+        Vector x = c.cwiseMax(0.0);
+        const double norm = x.norm();
+        if (norm > 0.0 && std::isfinite(norm)) return x / norm;
+        return Vector::Zero(c.size());
+    }
     bool try_direct_solution_(const Vector& c, Vector& out, Vector* thresholded_out = nullptr) const {
         if (!omega_solver_ready_)
             return false;
@@ -546,6 +579,8 @@ private:
 
     SparseMatrix Psi_;
     SparseMatrix Omega_;
+    bool objective_sign_invariant_ = true;
+    bool use_closed_form_solution_ = false;
     Eigen::SimplicialLDLT<SparseMatrix> omega_solver_;
     bool omega_solver_ready_ = false;
 

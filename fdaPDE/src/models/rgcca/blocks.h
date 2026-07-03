@@ -73,6 +73,7 @@ public:
         tau_(other.tau_),
         mode_(other.mode_),
         weight_sign_constraint_(other.weight_sign_constraint_),
+        objective_sign_invariant_(other.objective_sign_invariant_),
         bias_(other.bias_),
         components_gcv_cfg_(other.components_gcv_cfg_),
         lambda_components_(other.lambda_components_),
@@ -352,6 +353,11 @@ public:
     void set_bias(const bool bias) { bias_ = bias; }
     void set_weight_sign_constraint(const ::fdapde::rgcca::WeightSignConstraint weight_sign_constraint = ::fdapde::rgcca::WeightSignConstraint::None) {
         weight_sign_constraint_ = weight_sign_constraint;
+        reset_nonnegative_weight_solver_();
+    }
+    void set_objective_sign_invariant(const bool value) {
+        objective_sign_invariant_ = value;
+        reset_nonnegative_weight_solver_();
     }
 
     // observers
@@ -572,11 +578,13 @@ protected:
     }
 
     // non-negative solver utils
-    Vector solve_nonnegative_weight_ipopt_(const Vector& z) {
+    Vector solve_nonnegative_weight_ipopt_(const Vector& z, const bool use_closed_form_solution = false) {
         if (!nn_weights_solver_)
             nn_weights_solver_ = std::make_unique<::fdapde::internals::NonNegativeWeightSolver>(
                 Psi_D(),
-                Omega()
+                Omega(),
+                objective_sign_invariant_,
+                use_closed_form_solution
             );
         return nn_weights_solver_->solve(z);
     }
@@ -634,6 +642,7 @@ protected:
     double tau_ {0.0};
     ::fdapde::rgcca::Mode mode_ = ::fdapde::rgcca::Mode::CorMax;
     ::fdapde::rgcca::WeightSignConstraint weight_sign_constraint_ = ::fdapde::rgcca::WeightSignConstraint::None;
+    bool objective_sign_invariant_ = true;
     bool bias_ = true;
 
     // parameters
@@ -742,7 +751,7 @@ protected:
         Vector z = data_transpose_times_(nu);
 
         if (weight_sign_constraint() == ::fdapde::rgcca::WeightSignConstraint::NonNegative) {
-            return solve_nonnegative_weight_ipopt_(z); // already normalized
+            return solve_nonnegative_weight_ipopt_(z, mode() == ::fdapde::rgcca::Mode::CovMax); // already normalized
         }
 
         if (mode() == ::fdapde::rgcca::Mode::CovMax) return normalize_weight_(z);
@@ -935,6 +944,7 @@ int RGCCA<SamplingStrategy>::add_block(typename RGCCA<SamplingStrategy>::BlockPt
     b->set_raw_data_mutable(true);
     b->set_mode(opt_.mode);
     b->set_weight_sign_constraint(opt_.weight_sign_constraint);
+    b->set_objective_sign_invariant(opt_.scheme.sign_invariant);
     b->set_n_comp(n_comp());
     blocks_.emplace_back(std::move(b));
     initialized_ = false;
