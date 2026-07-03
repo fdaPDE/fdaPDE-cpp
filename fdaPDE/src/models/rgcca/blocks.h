@@ -199,6 +199,7 @@ public:
         double norm2 = w.dot(Omega() * w);
         if (norm2 <= 0) norm2 = 1.0;
         weights_.col(h()) = w / std::sqrt(norm2);
+        weights_star_computed_until_ = std::min(weights_star_computed_until_, h() - 1);
     }
     void refresh_component() {
         ensure_lc_();
@@ -263,6 +264,7 @@ public:
         // compute the weight
         const Vector w = w_fit_(nu_D);
         weights().col(h()) = w;
+        weights_star_computed_until_ = std::min(weights_star_computed_until_, h() - 1);
 
         // compute the component and regularize it (the regularization acts only in the TimeDependent sampling scenario)
         const Vector s = data_times_(Psi_D() * w);
@@ -280,19 +282,32 @@ public:
     }
 
     // weights post-processing
+    void compute_weights_star(const int h) {
+        ensure_lc_();
+        if (h < 0 || h >= n_comp_)
+            throw std::out_of_range("weights_star component index");
+
+        if (h > weights_star_computed_until_ + 1) {
+            compute_weights_star();
+            return;
+        }
+
+        Vector w_star = weights_.col(h);
+        if (h > 0) {
+            const Matrix W_prev = weights_star_.leftCols(h);
+            const Matrix P_prev = deflation_projections_.leftCols(h);
+            const Vector coeff = P_prev.transpose() * (Psi_D() * weights_.col(h));
+            w_star.noalias() -= W_prev * coeff;
+        }
+        weights_star_.col(h) = w_star;
+        weights_star_computed_until_ = std::max(weights_star_computed_until_, h);
+    }
     void compute_weights_star() {
         ensure_lc_();
         weights_star_.setZero(weights_.rows(), weights_.cols());
-        for (int h = 0; h < n_comp_; ++h) {
-            Vector w_star = weights_.col(h);
-            if (h > 0) {
-                const Matrix W_prev = weights_star_.leftCols(h);
-                const Matrix P_prev = deflation_projections_.leftCols(h);
-                const Vector coeff = P_prev.transpose() * (Psi_D() * weights_.col(h));
-                w_star.noalias() -= W_prev * coeff;
-            }
-            weights_star_.col(h) = w_star;
-        }
+        weights_star_computed_until_ = -1;
+        for (int h = 0; h < n_comp_; ++h)
+            compute_weights_star(h);
     }
 
     // model evaluation
@@ -415,6 +430,7 @@ protected:
             weights_.setZero(n_dofs_weights_, n_comp_);
             weights_star_.setZero(n_dofs_weights_, n_comp_);
             deflation_projections_.setZero(m(), n_comp_);
+            weights_star_computed_until_ = -1;
             weights_ready_ = true;
         }
         if (!components_ready_) {
@@ -627,6 +643,7 @@ protected:
     // results
     Matrix weights_, weights_star_, components_;
     Matrix deflation_projections_;
+    int weights_star_computed_until_ {-1};
 
     // utilities
     SparseMatrix I_;
