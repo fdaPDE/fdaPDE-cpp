@@ -179,6 +179,16 @@ public:
             Result component_result = fit_component_(blocks, C_active);
             log_step_end_(step_start);
 
+            // structural stop: no active design left, independent of significance testing
+            if (count_active_connections_(C_active) == 0) {
+                annotate_component_significance_(component_result, inactive_component_significance_());
+                results.push_back(std::move(component_result));
+                run_component_callback_(on_component, results.back());
+                append_inactive_components_(results, hh + 1, J);
+                completed_components = false;
+                break;
+            }
+
             // bootstrap component significance
             if (opt_.component_significance) {
                 const auto significance = bootstrap_test_component_significance_(C_active);

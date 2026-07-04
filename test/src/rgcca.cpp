@@ -643,6 +643,46 @@ TEST(rgcca, GCCA_bootstrap_model_selection_without_lambda_grid) {
     check_multivariate_model_selection_without_lambda_grid();
 }
 
+TEST(rgcca, inactive_design_stops_remaining_components_without_significance) {
+    constexpr int n = 4;
+    constexpr int n_comp_local = 3;
+
+    RGCCA<IndependentSampling>::Options options;
+    options.mode = Mode::CovMax;
+    options.component_significance = false;
+
+    RGCCA<IndependentSampling> rgcca(n, options, n_comp_local);
+    Eigen::Matrix<double, Dynamic, Dynamic> X1(n, 2);
+    Eigen::Matrix<double, Dynamic, Dynamic> X2(n, 2);
+    X1 << 1.0, 0.0,
+          0.0, 1.0,
+          1.0, 1.0,
+          0.0, 0.0;
+    X2 << 0.0, 1.0,
+          1.0, 0.0,
+          1.0, 1.0,
+          0.0, 0.0;
+    rgcca.add_multivariate_block("X1", std::move(X1));
+    rgcca.add_multivariate_block("X2", std::move(X2));
+    rgcca.connect(0, 1, false);
+
+    int callback_count = 0;
+    const auto results = rgcca.fit([&](auto&, const Result& result) {
+        EXPECT_EQ(result.h, callback_count);
+        ++callback_count;
+    });
+
+    EXPECT_EQ(callback_count, 1);
+    ASSERT_EQ(static_cast<int>(results.size()), n_comp_local);
+    for (const auto& result : results) {
+        EXPECT_FALSE(result.component_significant);
+        EXPECT_DOUBLE_EQ(result.rho_tot, 0.0);
+        EXPECT_DOUBLE_EQ(result.rho_tot_p_value, 1.0);
+        for (bool active : result.active_blocks)
+            EXPECT_FALSE(active);
+    }
+}
+
 TEST(rgcca, component_callback_can_release_bootstrap_results) {
     const std::string data_path = "../data/models/rgcca/";
     constexpr int n_comp_local = 2;
