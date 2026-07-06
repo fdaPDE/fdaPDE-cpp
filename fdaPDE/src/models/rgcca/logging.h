@@ -119,9 +119,9 @@ void RGCCA<SamplingStrategy>::log_bootstrap_model_selection_header_() const {
 // logs the component-significance bootstrap section header
 template <typename SamplingStrategy>
 void RGCCA<SamplingStrategy>::log_bootstrap_component_significance_header_() const {
-    fdapde::cout << "\n=========================================\n";
+    fdapde::cout << "\n================================================\n";
     fdapde::cout << "Bootstrap component significance for component " << h_ + 1 << '\n';
-    fdapde::cout << "=========================================\n\n";
+    fdapde::cout << "================================================\n\n";
 }
 
 // logs the lambda candidate currently being evaluated
@@ -287,10 +287,10 @@ void RGCCA<SamplingStrategy>::log_bootstrap_design_reset_(
                  << " | dt=" << std::fixed << std::setprecision(3) << std::setw(8)
                  << elapsed_since_last_log << "s"
                  << std::defaultfloat
-                 << " | epoch=" << state.design_epoch
                  << " | ab=" << std::setw(4) << n_active_blocks
                  << ", ac=" << std::setw(6) << n_active_connections
                  << std::defaultfloat
+                 << " | epoch=" << state.design_epoch
                  << '\n';
 }
 

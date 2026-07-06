@@ -59,7 +59,6 @@ inline std::ostream& operator<<(std::ostream& os, const BootstrapConfig& config)
        << "  active_block_tol                   = " << config.active_block_tol << '\n'
        << "  active_connection_sign_stability   = " << config.active_connection_sign_stability << '\n'
        << "  active_connection_min_abs_corr     = " << config.active_connection_min_abs_corr << '\n'
-       << "  aggressive_connection_deactivation = " << bool_text_(config.aggressive_connection_deactivation) << '\n'
        << "  min_boots_before_connection_deactivation = " << config.min_boots_before_connection_deactivation << '\n'
        << "  ci_level                           = " << config.ci_level << '\n'
        << "  patience                           = " << config.patience << '\n'
@@ -67,6 +66,9 @@ inline std::ostream& operator<<(std::ostream& os, const BootstrapConfig& config)
        << "  stationary_block_length            = " << config.stationary_block_length << '\n'
        << "  component_significance_resamples   = " << config.component_significance_resamples << '\n'
        << "  component_significance_alpha       = " << config.component_significance_alpha << '\n'
+       << "  inactive_block_signal_test         = " << bool_text_(config.inactive_block_signal_test) << '\n'
+       << "  inactive_block_signal_resamples    = " << config.inactive_block_signal_resamples << '\n'
+       << "  inactive_block_signal_alpha        = " << config.inactive_block_signal_alpha << '\n'
        << "}";
     return os;
 }

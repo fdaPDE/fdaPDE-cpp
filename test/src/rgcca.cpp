@@ -96,6 +96,62 @@ void connect_reference_design(RGCCA<IndependentSampling>& rgcca) {
     rgcca.connect(2, 3);
 }
 
+Eigen::VectorXd centered_wave(const int n, const double frequency) {
+    Eigen::VectorXd out(n);
+    for (int i = 0; i < n; ++i)
+        out[i] = std::sin(frequency * static_cast<double>(i));
+    out.array() -= out.mean();
+    out.normalize();
+    return out;
+}
+
+Eigen::Matrix<double, Dynamic, Dynamic> two_column_block(
+    const Eigen::VectorXd& first,
+    const Eigen::VectorXd& second
+) {
+    Eigen::Matrix<double, Dynamic, Dynamic> out(first.size(), 2);
+    out.col(0) = first;
+    out.col(1) = second;
+    return out;
+}
+
+std::vector<Result> fit_inactive_block_signal_gate_scenario(const bool candidate_has_signal) {
+    constexpr int n = 80;
+    constexpr int n_comp_local = 3;
+
+    const Eigen::VectorXd signal = centered_wave(n, 0.17);
+    const Eigen::VectorXd residual_signal = centered_wave(n, 0.71);
+    const Eigen::VectorXd zero = Eigen::VectorXd::Zero(n);
+    const Eigen::VectorXd strong_signal = 10.0 * signal;
+    const Eigen::VectorXd weak_residual_signal = 4.0 * residual_signal;
+    Eigen::VectorXd candidate_signal = zero;
+    if (candidate_has_signal) candidate_signal = weak_residual_signal;
+
+    RGCCA<IndependentSampling>::Options options;
+    options.mode = Mode::CovMax;
+
+    RGCCA<IndependentSampling> rgcca(n, options, n_comp_local);
+    rgcca.add_multivariate_block("active_with_residual", two_column_block(strong_signal, weak_residual_signal));
+    rgcca.add_multivariate_block("candidate_1", two_column_block(candidate_signal, zero));
+    rgcca.add_multivariate_block("candidate_2", two_column_block(candidate_signal, zero));
+    rgcca.add_multivariate_block("active_anchor", two_column_block(strong_signal, zero));
+
+    rgcca.connect(0, 3);
+
+    RGCCA<IndependentSampling>::BootstrapConfig bootstrap_config;
+    bootstrap_config.inactive_block_signal_test = true;
+    bootstrap_config.inactive_block_signal_resamples = 19;
+    bootstrap_config.inactive_block_signal_alpha = 0.1;
+    rgcca.set_bootstrap_config(bootstrap_config);
+
+    return rgcca.fit([](auto& model, const Result& result) {
+        if (result.h == 0) {
+            model.connect(0, 1);
+            model.connect(0, 2);
+        }
+    });
+}
+
 void check_tau(
   const std::vector<Result>& results, const std::string& reference_path, int n_blocks, int n_comp) {
     Eigen::Matrix<double, Dynamic, Dynamic> actual_tau(n_blocks * n_comp, 1);
@@ -681,6 +737,46 @@ TEST(rgcca, inactive_design_stops_remaining_components_without_significance) {
         for (bool active : result.active_blocks)
             EXPECT_FALSE(active);
     }
+}
+
+TEST(rgcca, inactive_block_signal_test_deactivates_noise_blocks) {
+    const auto results = fit_inactive_block_signal_gate_scenario(false);
+
+    ASSERT_EQ(static_cast<int>(results.size()), 3);
+    EXPECT_TRUE(results[0].active_blocks[0]);
+    EXPECT_FALSE(results[0].active_blocks[1]);
+    EXPECT_FALSE(results[0].active_blocks[2]);
+    EXPECT_TRUE(results[0].active_blocks[3]);
+
+    EXPECT_TRUE(results[1].active_blocks[0]);
+    EXPECT_FALSE(results[1].active_blocks[1]);
+    EXPECT_FALSE(results[1].active_blocks[2]);
+    EXPECT_TRUE(results[1].active_blocks[3]);
+
+    EXPECT_TRUE(results[2].active_blocks[0]);
+    EXPECT_FALSE(results[2].active_blocks[1]);
+    EXPECT_FALSE(results[2].active_blocks[2]);
+    EXPECT_TRUE(results[2].active_blocks[3]);
+}
+
+TEST(rgcca, inactive_block_signal_test_preserves_residual_signal_blocks) {
+    const auto results = fit_inactive_block_signal_gate_scenario(true);
+
+    ASSERT_EQ(static_cast<int>(results.size()), 3);
+    EXPECT_TRUE(results[0].active_blocks[0]);
+    EXPECT_FALSE(results[0].active_blocks[1]);
+    EXPECT_FALSE(results[0].active_blocks[2]);
+    EXPECT_TRUE(results[0].active_blocks[3]);
+
+    EXPECT_TRUE(results[1].active_blocks[0]);
+    EXPECT_TRUE(results[1].active_blocks[1]);
+    EXPECT_TRUE(results[1].active_blocks[2]);
+    EXPECT_TRUE(results[1].active_blocks[3]);
+
+    EXPECT_TRUE(results[2].active_blocks[0]);
+    EXPECT_TRUE(results[2].active_blocks[1]);
+    EXPECT_TRUE(results[2].active_blocks[2]);
+    EXPECT_TRUE(results[2].active_blocks[3]);
 }
 
 TEST(rgcca, component_callback_can_release_bootstrap_results) {

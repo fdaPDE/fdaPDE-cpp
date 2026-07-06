@@ -184,7 +184,6 @@ struct BootstrapConfig {
 
     double active_connection_sign_stability = 0.95;
     double active_connection_min_abs_corr = 0.05;
-    bool aggressive_connection_deactivation = false;
     int min_boots_before_connection_deactivation = 100;
 
     double ci_level = 0.95;
@@ -195,6 +194,10 @@ struct BootstrapConfig {
 
     int component_significance_resamples = 100;
     double component_significance_alpha = 0.05;
+
+    bool inactive_block_signal_test = false;
+    int inactive_block_signal_resamples = 100;
+    double inactive_block_signal_alpha = 0.05;
 };
 
 std::ostream& operator<<(std::ostream& os, const Options& opt);

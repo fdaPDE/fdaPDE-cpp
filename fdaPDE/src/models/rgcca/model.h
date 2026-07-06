@@ -139,6 +139,10 @@ public:
     }
     void set_bootstrap_config(const BootstrapConfig bootstrap_config) {
         bootstrap_config_ = bootstrap_config;
+        if (!bootstrap_config_.adaptive) {
+            bootstrap_config_.B_max = bootstrap_config_.B_min;
+            bootstrap_config_.check_every = bootstrap_config_.B_min;
+        }
     }
 
     // fit
@@ -159,13 +163,19 @@ public:
 
         // components loop
         bool completed_components = true;
+        std::vector<bool> previous_active_blocks;
+        std::vector<bool> carried_inactive_blocks(J, false);
         for (int hh = 0; hh < n_comp(); ++hh) {
             set_h_(hh);
 
             // bootstrap model selection
             BoolMatrix C_active = C_;
-            if (run_model_selection) {
-                auto selection = bootstrap_model_selection_();
+            if (inactive_block_signal_test_requested_() && !previous_active_blocks.empty()) {
+                auto blocks = main_blocks_();
+                apply_inactive_block_signal_test_(blocks, previous_active_blocks, carried_inactive_blocks, C_active);
+            }
+            if (run_model_selection && count_active_connections_(C_active) > 0) {
+                auto selection = bootstrap_model_selection_(C_active);
                 C_active = std::move(selection.C_active);
                 if (selection.lambda_selected)
                     set_lambda_weights_all(selection.lambda);
@@ -215,6 +225,8 @@ public:
             step_start = log_step_start_("Component callback");
             run_component_callback_(on_component, results.back());
             log_step_end_(step_start);
+
+            previous_active_blocks = results.back().active_blocks;
         }
 
         // post-processing weights
@@ -301,8 +313,8 @@ private:
         ) : n_threads(n_threads_), J(J_) {
             seed = bootstrap_config.seed + static_cast<unsigned>(h);
             B_min = bootstrap_config.B_min;
-            B_max = bootstrap_config.B_max;
-            check_every = bootstrap_config.check_every;
+            B_max = bootstrap_config.adaptive ? bootstrap_config.B_max : B_min;
+            check_every = bootstrap_config.adaptive ? bootstrap_config.check_every : B_min;
             corr_pos_count.setZero(J, J);
             corr_neg_count.setZero(J, J);
         }
@@ -592,8 +604,125 @@ private:
         return fit_component_(blocks, C_);
     }
 
+    void apply_inactive_block_signal_test_(
+        const BlockRefList& blocks,
+        const std::vector<bool>& previous_active_blocks,
+        std::vector<bool>& carried_inactive_blocks,
+        BoolMatrix& C_active
+    ) {
+        const int J = static_cast<int>(blocks.size());
+        if (static_cast<int>(previous_active_blocks.size()) != J)
+            throw std::logic_error("inactive block signal test: active block size mismatch");
+        if (static_cast<int>(carried_inactive_blocks.size()) != J)
+            throw std::logic_error("inactive block signal test: carried block size mismatch");
+
+        for (int j = 0; j < J; ++j) {
+            if (previous_active_blocks[j])
+                carried_inactive_blocks[j] = false;
+            if (carried_inactive_blocks[j]) {
+                C_active.row(j).setConstant(false);
+                C_active.col(j).setConstant(false);
+            }
+        }
+
+        std::vector<Vector> active_scores(J);
+        for (int k = 0; k < J; ++k) {
+            if (previous_active_blocks[k])
+                active_scores[k] = blocks[k]->svd_init().nu;
+        }
+
+        for (int j = 0; j < J; ++j) {
+            if (previous_active_blocks[j]) continue;
+            if (carried_inactive_blocks[j]) continue;
+            const bool has_active_neighbor = inactive_block_has_active_neighbor_(previous_active_blocks, C_active, j);
+            if (!inactive_block_has_residual_signal_(blocks, active_scores, previous_active_blocks, C_active, j)) {
+                C_active.row(j).setConstant(false);
+                C_active.col(j).setConstant(false);
+                if (has_active_neighbor)
+                    carried_inactive_blocks[j] = true;
+            }
+        }
+    }
+
+    bool inactive_block_has_active_neighbor_(
+        const std::vector<bool>& active_blocks,
+        const BoolMatrix& C_active,
+        const int candidate
+    ) const {
+        const int J = static_cast<int>(active_blocks.size());
+        for (int k = 0; k < J; ++k)
+            if (active_blocks[k] && C_active(candidate, k))
+                return true;
+        return false;
+    }
+
+    bool inactive_block_has_residual_signal_(
+        const BlockRefList& blocks,
+        const std::vector<Vector>& active_scores,
+        const std::vector<bool>& active_blocks,
+        const BoolMatrix& C_active,
+        const int candidate
+    ) const {
+        std::vector<int> active_neighbors;
+        const int J = static_cast<int>(active_blocks.size());
+        for (int k = 0; k < J; ++k) {
+            if (active_blocks[k] && C_active(candidate, k))
+                active_neighbors.push_back(k);
+        }
+        if (active_neighbors.empty()) return false;
+
+        const Vector candidate_score = blocks[candidate]->svd_init().nu;
+        const double observed = residual_signal_stat_(candidate_score, active_scores, active_neighbors);
+        if (!(observed > 0.0) || !std::isfinite(observed)) return false;
+
+        const int B = bootstrap_config_.inactive_block_signal_resamples;
+        int ge_count = 0;
+        std::mt19937_64 rng(
+            bootstrap_config_.seed +
+            static_cast<unsigned>(1000003 * (h_ + 1)) +
+            static_cast<unsigned>(9176 * (candidate + 1))
+        );
+        for (int b = 0; b < B; ++b) {
+            const IndexVector idx = inactive_block_signal_null_indices_(candidate_score.size(), rng);
+            Vector null_score(idx.size());
+            for (int i = 0; i < idx.size(); ++i)
+                null_score[i] = candidate_score[idx[i]];
+
+            const double null_stat = residual_signal_stat_(null_score, active_scores, active_neighbors);
+            if (std::isfinite(null_stat) && null_stat >= observed)
+                ++ge_count;
+        }
+
+        const double p_value = static_cast<double>(ge_count + 1) / static_cast<double>(B + 1);
+        return p_value <= bootstrap_config_.inactive_block_signal_alpha;
+    }
+
+    double residual_signal_stat_(
+        const Vector& candidate_score,
+        const std::vector<Vector>& active_scores,
+        const std::vector<int>& active_neighbors
+    ) const {
+        const double candidate_var = cov_(candidate_score, candidate_score);
+        if (!(candidate_var > 0.0) || !std::isfinite(candidate_var)) return 0.0;
+
+        double stat = 0.0;
+        for (const int k : active_neighbors) {
+            const double active_var = cov_(active_scores[k], active_scores[k]);
+            if (!(active_var > 0.0) || !std::isfinite(active_var)) continue;
+            const double corr = cov_(candidate_score, active_scores[k]) / std::sqrt(candidate_var * active_var);
+            if (std::isfinite(corr)) stat = std::max(stat, std::abs(corr));
+        }
+        return stat;
+    }
+
+    IndexVector inactive_block_signal_null_indices_(const int n, std::mt19937_64& rng) const {
+        if (bootstrap_config_.resampling_strategy == ResamplingStrategy::Stationary)
+            return stationary_bootstrap_indices_(n, bootstrap_config_.stationary_block_length, rng);
+        return permutation_indices_(n, rng);
+    }
+
     // bootstrap model selection
-    ModelSelectionResult bootstrap_model_selection_() {
+    ModelSelectionResult bootstrap_model_selection_(const BoolMatrix& C_initial) {
         log_bootstrap_model_selection_header_();
 
         // lambda selection
@@ -606,8 +735,8 @@ private:
         // original blocks
         auto blocks = main_blocks_();
         const int J = static_cast<int>(blocks.size());
-        BoolMatrix C_active = C_;
-        BoolMatrix C_best = C_;
+        BoolMatrix C_active = C_initial;
+        BoolMatrix C_best = C_initial;
 
         // init bootstrap
         auto step_start = log_step_start_("Init bootstrap");
@@ -623,7 +752,8 @@ private:
         step_start = log_step_start_("Preliminary fit");
         if (select_lambda)
             set_lambda_weights_all(lambda_grid.back());
-        init_comp_(blocks);
+        const auto preliminary_active_blocks = active_blocks_from_C_(C_active);
+        init_comp_(blocks, InitStrategy::None, true, &preliminary_active_blocks);
         fit_component_(blocks, C_active);
         auto preliminary_w_fit = snapshot_weights_(blocks);
         log_step_end_(step_start);
@@ -713,7 +843,7 @@ private:
             boot_results.corr_min_by_lambda[lambda_i].array() *= (C_lambda.cast<double>() + Matrix::Identity(J, J)).array();
             log_step_end_(step_start);
             if (!std::isfinite(bootstrap_state.crit))
-                bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_);
+                bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_initial);
             boot_results.criterion[lambda_i] = bootstrap_state.crit;
             boot_results.B_used_by_lambda[lambda_i] = bootstrap_state.B_done;
 
@@ -738,7 +868,7 @@ private:
             }
 
             // reset connections, but keep fully deactivated blocks off
-            C_active = reset_connections_keep_inactive_blocks_(C_, C_active);
+            C_active = reset_connections_keep_inactive_blocks_(C_initial, C_active);
 
         }
 
@@ -792,7 +922,7 @@ private:
         out.B = B;
 
         // each worker owns a mutable clone with its own row permutation
-        auto step_start = log_step_start_("  Clone significance worker blocks");
+        auto step_start = log_step_start_("Clone significance worker blocks");
         std::vector<BootstrapBlocks> thread_boot_worker(n_threads);
         for (int t = 0; t < n_threads; ++t)
             thread_boot_worker[t] = clone_blocks_();
@@ -803,7 +933,7 @@ private:
         const auto active_blocks = active_blocks_from_C_(C_active);
 
         // permutation null: break row alignment within each block, then refit
-        step_start = log_step_start_("  Significance bootstrap");
+        step_start = log_step_start_("Significance bootstrap");
         parallel_for(0, B, 1, [&](int b) {
             const int tid = this_thread_id();
             auto& boot_blocks = thread_boot_worker[tid];
@@ -825,9 +955,9 @@ private:
         });
         log_step_end_(step_start);
 
-        // empirical upper-tail p-value
+        // corrected empirical upper-tail p-value
         const int ge_count = std::accumulate(thread_ge_count.begin(), thread_ge_count.end(), 0);
-        out.p_value = static_cast<double>(ge_count) / static_cast<double>(B);
+        out.p_value = static_cast<double>(ge_count + 1) / static_cast<double>(B + 1);
         out.significant = out.p_value <= bootstrap_config_.component_significance_alpha;
 
         log_component_significance_(out);
@@ -915,6 +1045,9 @@ private:
         return opt_.block_deactivation ||
             opt_.connection_deactivation ||
             opt_.lambda_selection_weights == LambdaSelection::Automatic;
+    }
+    bool inactive_block_signal_test_requested_() const {
+        return bootstrap_config_.inactive_block_signal_test;
     }
     bool weight_lambda_selection_requested_() const {
         return opt_.lambda_selection_weights == LambdaSelection::Automatic;

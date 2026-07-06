@@ -336,9 +336,11 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
                 }
             }
             ++bootstrap_state.B_done;
+            const bool force_check = bootstrap_state.B_done >= bootstrap_state.B_max;
+            const bool allow_design_deactivation = bootstrap_config_.adaptive || force_check;
 
             // block deactivation invalidates previously accepted samples
-            if (opt_.block_deactivation) {
+            if (opt_.block_deactivation && allow_design_deactivation) {
                 const rgcca::BoolMatrix C_before = C_active;
                 threshold_inactive_blocks_(w_min, C_active);
                 if (!same_design_(C_before, C_active)) {
@@ -361,7 +363,6 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
             }
 
             // expensive checks run only at configured checkpoints
-            const bool force_check = bootstrap_state.B_done >= bootstrap_state.B_max;
             const bool due_check =
                 force_check ||
                 bootstrap_state.B_done - bootstrap_state.last_check_B_done >= bootstrap_state.check_every;
@@ -458,7 +459,7 @@ bool RGCCA<SamplingStrategy>::connection_deactivation_ready_(
 ) const {
     if (!opt_.connection_deactivation) return false;
     if (state.B_done < bootstrap_config_.min_boots_before_connection_deactivation) return false;
-    return bootstrap_config_.aggressive_connection_deactivation || state.B_done >= state.B_min;
+    return true;
 }
 
 // allocates bootstrap result matrices for one lambda when first needed
