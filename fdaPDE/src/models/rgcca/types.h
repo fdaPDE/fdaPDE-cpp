@@ -192,6 +192,8 @@ struct BootstrapConfig {
     int B_min = 500;
     int B_max = 1000;
     int check_every = 50;
+    int check_every_block_deactivation = 1;
+    int check_every_connection_deactivation = 100;
     int fit_max_iter = -1; // negative means use Options::max_iter
 
     bool adaptive = true;
@@ -202,7 +204,6 @@ struct BootstrapConfig {
 
     double active_connection_sign_stability = 0.95;
     double active_connection_min_abs_corr = 0.05;
-    int min_boots_before_connection_deactivation = 100;
 
     double ci_level = 0.95;
     int patience = 1;

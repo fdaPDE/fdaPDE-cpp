@@ -84,6 +84,10 @@ void RGCCA<SamplingStrategy>::validate_bootstrap_config_() const {
         throw std::invalid_argument("RGCCA: bootstrap B_max must be greater than B_min");
     if (bootstrap_config_.check_every <= 0)
         throw std::invalid_argument("RGCCA: bootstrap check_every must be positive");
+    if (bootstrap_config_.check_every_block_deactivation <= 0)
+        throw std::invalid_argument("RGCCA: bootstrap check_every_block_deactivation must be positive");
+    if (bootstrap_config_.check_every_connection_deactivation <= 0)
+        throw std::invalid_argument("RGCCA: bootstrap check_every_connection_deactivation must be positive");
     if (bootstrap_config_.fit_max_iter == 0 || bootstrap_config_.fit_max_iter < -1)
         throw std::invalid_argument("RGCCA: bootstrap fit_max_iter must be positive or -1");
 
@@ -111,12 +115,6 @@ void RGCCA<SamplingStrategy>::validate_bootstrap_config_() const {
             "RGCCA: bootstrap active_connection_min_abs_corr must be finite and nonnegative"
         );
     }
-    if (bootstrap_config_.min_boots_before_connection_deactivation < 0) {
-        throw std::invalid_argument(
-            "RGCCA: bootstrap min_boots_before_connection_deactivation must be nonnegative"
-        );
-    }
-
     // confidence intervals and lambda-level stopping
     if (
         !(bootstrap_config_.ci_level > 0.0) ||

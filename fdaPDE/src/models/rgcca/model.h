@@ -131,6 +131,8 @@ public:
         if (!bootstrap_config_.adaptive) {
             bootstrap_config_.B_max = bootstrap_config_.B_min;
             bootstrap_config_.check_every = bootstrap_config_.B_min;
+            bootstrap_config_.check_every_block_deactivation = bootstrap_config_.B_min;
+            bootstrap_config_.check_every_connection_deactivation = bootstrap_config_.B_min;
         }
     }
 
@@ -326,6 +328,10 @@ private:
             B_min = bootstrap_config.B_min;
             B_max = bootstrap_config.adaptive ? bootstrap_config.B_max : B_min;
             check_every = bootstrap_config.adaptive ? bootstrap_config.check_every : B_min;
+            check_every_block_deactivation =
+                bootstrap_config.adaptive ? bootstrap_config.check_every_block_deactivation : B_min;
+            check_every_connection_deactivation =
+                bootstrap_config.adaptive ? bootstrap_config.check_every_connection_deactivation : B_min;
             corr_pos_count.setZero(n_blocks, n_blocks);
             corr_neg_count.setZero(n_blocks, n_blocks);
         }
@@ -339,6 +345,8 @@ private:
             design_epoch = 0;
             design_epoch_signal.store(0, std::memory_order_release);
             last_check_B_done = 0;
+            last_block_deactivation_check_B_done = 0;
+            last_connection_deactivation_check_B_done = 0;
             stop = false;
             reset_good();
         }
@@ -348,6 +356,8 @@ private:
             crit_prev_check = std::numeric_limits<double>::infinity();
             crit = std::numeric_limits<double>::quiet_NaN();
             last_check_B_done = 0;
+            last_block_deactivation_check_B_done = 0;
+            last_connection_deactivation_check_B_done = 0;
             corr_pos_count.setZero(n_blocks, n_blocks);
             corr_neg_count.setZero(n_blocks, n_blocks);
         }
@@ -359,6 +369,8 @@ private:
         int B_min;
         int B_max;
         int check_every;
+        int check_every_block_deactivation;
+        int check_every_connection_deactivation;
 
         // state
         int B_done = 0;
@@ -369,6 +381,8 @@ private:
         int design_epoch = 0;
         std::atomic<int> design_epoch_signal {0};
         int last_check_B_done = 0;
+        int last_block_deactivation_check_B_done = 0;
+        int last_connection_deactivation_check_B_done = 0;
         bool stop = false;
 
         Eigen::MatrixXi corr_pos_count;
@@ -1162,8 +1176,6 @@ private:
         const std::vector<Vector>& w_fit,
         const BoolMatrix& C_active
     ) const;
-    bool connection_deactivation_ready_(const AdaptiveBootstrapState& state) const;
-
     // bootstrap logging helpers
     void log_bootstrap_progress_(
         const AdaptiveBootstrapState& state,

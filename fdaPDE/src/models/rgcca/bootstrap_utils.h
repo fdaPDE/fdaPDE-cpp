@@ -343,9 +343,18 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
             // adaptive mode can change the design mid-stream; non-adaptive mode waits until B_max
             const bool force_check = bootstrap_state.B_done >= bootstrap_state.B_max;
             const bool allow_design_deactivation = bootstrap_config_.adaptive || force_check;
+            const bool due_block_deactivation =
+                force_check ||
+                bootstrap_state.B_done - bootstrap_state.last_block_deactivation_check_B_done >=
+                    bootstrap_state.check_every_block_deactivation;
+            const bool due_connection_deactivation =
+                force_check ||
+                bootstrap_state.B_done - bootstrap_state.last_connection_deactivation_check_B_done >=
+                    bootstrap_state.check_every_connection_deactivation;
 
             // block deactivation invalidates previously accepted samples
-            if (opt_.block_deactivation && allow_design_deactivation) {
+            if (opt_.block_deactivation && allow_design_deactivation && due_block_deactivation) {
+                bootstrap_state.last_block_deactivation_check_B_done = bootstrap_state.B_done;
                 const rgcca::BoolMatrix C_before = C_active;
                 threshold_inactive_blocks_(w_min, C_active);
                 if (!same_design_(C_before, C_active)) {
@@ -367,15 +376,14 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
                 }
             }
 
-            // expensive checks barrier: next run only at configured checkpoints
-            const bool due_check =
+            // expensive adaptive checks run only at configured checkpoints
+            const bool due_adaptive_check =
                 force_check ||
                 bootstrap_state.B_done - bootstrap_state.last_check_B_done >= bootstrap_state.check_every;
-            if (!due_check) continue;
-            bootstrap_state.last_check_B_done = bootstrap_state.B_done;
 
             // connection deactivation also restarts the accepted-sample stream
-            if (connection_deactivation_ready_(bootstrap_state)) {
+            if (opt_.connection_deactivation && allow_design_deactivation && due_connection_deactivation) {
+                bootstrap_state.last_connection_deactivation_check_B_done = bootstrap_state.B_done;
                 const rgcca::BoolMatrix C_before = C_active;
                 threshold_inactive_connections_(lambda_i, bootstrap_state, boot_results, C_active);
                 if (!same_design_(C_before, C_active)) {
@@ -396,6 +404,9 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
                     continue;
                 }
             }
+
+            if (!due_adaptive_check) continue;
+            bootstrap_state.last_check_B_done = bootstrap_state.B_done;
 
             // criterion and adaptive stopping use the current minimum-weight envelope
             bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_);
@@ -523,16 +534,6 @@ void RGCCA<SamplingStrategy>::reset_good_bootstrap_(
         if (!active_blocks[j])
             w_min[j].setZero();
     }
-}
-
-// checks whether connection deactivation can run for the current bootstrap state
-template <typename SamplingStrategy>
-bool RGCCA<SamplingStrategy>::connection_deactivation_ready_(
-    const typename RGCCA<SamplingStrategy>::AdaptiveBootstrapState& state
-) const {
-    if (!opt_.connection_deactivation) return false;
-    if (state.B_done < bootstrap_config_.min_boots_before_connection_deactivation) return false;
-    return true;
 }
 
 // decides whether adaptive bootstrap stopping has stabilized
