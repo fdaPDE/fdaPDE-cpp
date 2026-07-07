@@ -540,6 +540,32 @@ bool RGCCA<SamplingStrategy>::early_stop_lambda_(
     return false;
 }
 
+// scores a fitted minimum-weight design for model selection
+template <typename SamplingStrategy>
+double RGCCA<SamplingStrategy>::criterion_score_with_weights_(
+    const typename RGCCA<SamplingStrategy>::BlockRefList& blocks,
+    const std::vector<rgcca::Vector>& weights,
+    const rgcca::BoolMatrix& C
+) {
+    const int J = n_blocks();
+
+    double num = 0.0;
+    double den = 0.0;
+
+    const std::vector<rgcca::Vector> eta = eta_with_weights_for_evaluation_(blocks, weights);
+    for (int j = 0; j < J; ++j) {
+        for (int k = j + 1; k < J; ++k) {
+            if (!C(j, k)) continue;
+
+            const double cov_jk = cov_(eta[j], eta[k]);
+            num += opt_.scheme.g(cov_jk);
+            den += 1.0;
+        }
+    }
+
+    return den > 0.0 ? num / den : 0.0;
+}
+
 // deactivates blocks whose minimum bootstrap weights are below tolerance
 template <typename SamplingStrategy>
 int RGCCA<SamplingStrategy>::threshold_inactive_blocks_(
@@ -727,6 +753,261 @@ std::vector<bool> RGCCA<SamplingStrategy>::active_blocks_from_C_(
     return active_blocks;
 }
 
+// stores component-significance output in the public component result
+template <typename SamplingStrategy>
+void RGCCA<SamplingStrategy>::annotate_component_significance_(
+    typename RGCCA<SamplingStrategy>::Result& result,
+    const typename RGCCA<SamplingStrategy>::ComponentSignificanceResult& significance
+) const {
+    result.rho_tot = significance.rho_tot;
+    result.rho_tot_p_value = significance.p_value;
+    result.rho_tot_bootstrap_count = significance.B;
+    result.component_significant = significance.significant;
+}
+
+// builds the inactive-component significance marker
+template <typename SamplingStrategy>
+auto RGCCA<SamplingStrategy>::inactive_component_significance_() const
+    -> typename RGCCA<SamplingStrategy>::ComponentSignificanceResult {
+    typename RGCCA<SamplingStrategy>::ComponentSignificanceResult out;
+    out.rho_tot = 0.0;
+    out.p_value = 1.0;
+    out.B = 0;
+    out.significant = false;
+    return out;
+}
+
+// appends zero-design components after structural or significance stopping
+template <typename SamplingStrategy>
+void RGCCA<SamplingStrategy>::append_inactive_components_(
+    std::vector<typename RGCCA<SamplingStrategy>::Result>& results,
+    const int from_h,
+    const int J
+) {
+    const rgcca::BoolMatrix C_inactive = inactive_design_(J);
+    const typename RGCCA<SamplingStrategy>::ComponentSignificanceResult significance =
+        inactive_component_significance_();
+
+    for (int hh = from_h; hh < n_comp(); ++hh) {
+        set_h_(hh);
+        const auto step_start = log_step_start_("Inactive component fit");
+        typename RGCCA<SamplingStrategy>::Result inactive_result = fit_component_(C_inactive);
+        log_step_end_(step_start);
+        annotate_component_significance_(inactive_result, significance);
+        results.push_back(std::move(inactive_result));
+    }
+}
+
+// computes design-normalized maxvar total correlation
+template <typename SamplingStrategy>
+double RGCCA<SamplingStrategy>::rho_tot_maxvar_(
+    const typename RGCCA<SamplingStrategy>::BlockRefList& blocks,
+    const rgcca::BoolMatrix& C
+) const {
+    rgcca::Matrix Corr;
+    correlation_matrix_(blocks, Corr);
+
+    const auto active_blocks = active_blocks_from_C_(C);
+    std::vector<int> active;
+    for (int j = 0; j < static_cast<int>(active_blocks.size()); ++j)
+        if (active_blocks[j])
+            active.push_back(j);
+
+    const int m = static_cast<int>(active.size());
+    if (m < 2) return 0.0;
+
+    rgcca::Matrix R(m, m), Design(m, m);
+    R.setIdentity();
+    Design.setIdentity();
+    for (int a = 0; a < m; ++a) {
+        for (int b = a + 1; b < m; ++b) {
+            if (!C(active[a], active[b])) continue;
+
+            double corr = Corr(active[a], active[b]);
+            if (!std::isfinite(corr)) corr = 0.0;
+            if (opt_.scheme.sign_invariant) corr = std::abs(corr);
+            R(a, b) = corr;
+            R(b, a) = corr;
+            Design(a, b) = 1.0;
+            Design(b, a) = 1.0;
+        }
+    }
+
+    Eigen::SelfAdjointEigenSolver<rgcca::Matrix> solver(R, Eigen::EigenvaluesOnly);
+    if (solver.info() != Eigen::Success) return std::numeric_limits<double>::quiet_NaN();
+    Eigen::SelfAdjointEigenSolver<rgcca::Matrix> design_solver(Design, Eigen::EigenvaluesOnly);
+    if (design_solver.info() != Eigen::Success) return std::numeric_limits<double>::quiet_NaN();
+
+    const double lambda = solver.eigenvalues().maxCoeff();
+    const double lambda_max = design_solver.eigenvalues().maxCoeff();
+    if (!std::isfinite(lambda)) return std::numeric_limits<double>::quiet_NaN();
+    if (!std::isfinite(lambda_max) || lambda_max <= 1.0) return 0.0;
+    return std::clamp((lambda - 1.0) / (lambda_max - 1.0), 0.0, 1.0);
+}
+
+// stores block-importance output in the public component result
+template <typename SamplingStrategy>
+void RGCCA<SamplingStrategy>::annotate_block_importance_(
+    typename RGCCA<SamplingStrategy>::Result& result,
+    const typename RGCCA<SamplingStrategy>::BlockImportanceResult& importance
+) const {
+    result.block_importance = importance.rho;
+    result.block_importance_p_values = importance.p_value;
+    result.block_importance_significant = importance.significant;
+    result.block_importance_bootstrap_count = importance.B;
+}
+
+// computes maxvar block weights used by Deleus-style block importance
+template <typename SamplingStrategy>
+bool RGCCA<SamplingStrategy>::block_importance_weights_(
+    const std::vector<rgcca::Vector>& eta,
+    const rgcca::BoolMatrix& C_active,
+    rgcca::Vector& v
+) const {
+    const int J = static_cast<int>(eta.size());
+    const auto active_blocks = active_blocks_from_C_(C_active);
+    std::vector<int> active;
+    for (int j = 0; j < J; ++j)
+        if (active_blocks[j])
+            active.push_back(j);
+
+    const int m = static_cast<int>(active.size());
+    v.setZero(J);
+    if (m < 2) return false;
+
+    rgcca::Matrix R(m, m);
+    R.setIdentity();
+    for (int a = 0; a < m; ++a) {
+        for (int b = a + 1; b < m; ++b) {
+            if (!C_active(active[a], active[b])) continue;
+            double corr = corr_(eta[active[a]], eta[active[b]]);
+            if (opt_.scheme.sign_invariant) corr = std::abs(corr);
+            R(a, b) = corr;
+            R(b, a) = corr;
+        }
+    }
+
+    Eigen::SelfAdjointEigenSolver<rgcca::Matrix> solver(R);
+    if (solver.info() != Eigen::Success) return false;
+
+    rgcca::Vector v_active = solver.eigenvectors().col(m - 1);
+    if (opt_.scheme.sign_invariant)
+        v_active = v_active.cwiseAbs();
+    else if (v_active.sum() < 0.0)
+        v_active *= -1.0;
+
+    for (int a = 0; a < m; ++a)
+        v[active[a]] = v_active[a];
+    return true;
+}
+
+// builds the aggregate signal from blocks connected to one candidate block
+template <typename SamplingStrategy>
+auto RGCCA<SamplingStrategy>::block_importance_target_(
+    const std::vector<rgcca::Vector>& eta,
+    const rgcca::BoolMatrix& C_active,
+    const rgcca::Vector& v,
+    const int j
+) const -> rgcca::Vector {
+    rgcca::Vector target = rgcca::Vector::Zero(eta[j].size());
+    for (int k = 0; k < static_cast<int>(eta.size()); ++k) {
+        if (j == k || !C_active(j, k) || v[k] == 0.0) continue;
+        target.noalias() += v[k] * eta[k];
+    }
+    return target;
+}
+
+// computes Deleus-style block importance rho
+template <typename SamplingStrategy>
+double RGCCA<SamplingStrategy>::block_importance_rho_(
+    const rgcca::Vector& z,
+    const rgcca::Vector& s
+) const {
+    const double rho = corr_(z, s);
+    return opt_.scheme.sign_invariant ? std::abs(rho) : rho;
+}
+
+// checks whether a block is connected to at least one active block
+template <typename SamplingStrategy>
+bool RGCCA<SamplingStrategy>::inactive_block_has_active_neighbor_(
+    const std::vector<bool>& active_blocks,
+    const rgcca::BoolMatrix& C_active,
+    const int candidate
+) const {
+    const int J = static_cast<int>(active_blocks.size());
+    for (int k = 0; k < J; ++k)
+        if (active_blocks[k] && C_active(candidate, k))
+            return true;
+    return false;
+}
+
+// tests whether a block has residual signal against its active neighbors
+template <typename SamplingStrategy>
+bool RGCCA<SamplingStrategy>::inactive_block_has_residual_signal_(
+    const typename RGCCA<SamplingStrategy>::BlockRefList& blocks,
+    const std::vector<rgcca::Vector>& active_scores,
+    const std::vector<bool>& active_blocks,
+    const rgcca::BoolMatrix& C_active,
+    const int candidate,
+    double* observed_out,
+    double* p_value_out
+) const {
+    std::vector<int> active_neighbors;
+    const int J = static_cast<int>(active_blocks.size());
+    for (int k = 0; k < J; ++k) {
+        if (active_blocks[k] && C_active(candidate, k))
+            active_neighbors.push_back(k);
+    }
+    if (active_neighbors.empty()) return false;
+
+    const rgcca::Vector candidate_score = blocks[candidate]->svd_init().nu;
+    const double observed = residual_signal_stat_(candidate_score, active_scores, active_neighbors);
+    if (observed_out != nullptr) *observed_out = observed;
+    if (!(observed > 0.0) || !std::isfinite(observed)) return false;
+
+    const int B = bootstrap_config_.inactive_block_signal_resamples;
+    int ge_count = 0;
+    std::mt19937_64 rng(
+        bootstrap_config_.seed +
+        static_cast<unsigned>(1000003 * (h_ + 1)) +
+        static_cast<unsigned>(9176 * (candidate + 1))
+    );
+    for (int b = 0; b < B; ++b) {
+        const rgcca::IndexVector idx = single_block_null_indices_(candidate_score.size(), rng);
+        rgcca::Vector null_score(idx.size());
+        for (int i = 0; i < idx.size(); ++i)
+            null_score[i] = candidate_score[idx[i]];
+
+        const double null_stat = residual_signal_stat_(null_score, active_scores, active_neighbors);
+        if (std::isfinite(null_stat) && null_stat >= observed)
+            ++ge_count;
+    }
+
+    const double p_value = static_cast<double>(ge_count + 1) / static_cast<double>(B + 1);
+    if (p_value_out != nullptr) *p_value_out = p_value;
+    return p_value <= bootstrap_config_.inactive_block_signal_alpha;
+}
+
+// computes max absolute correlation between one score and active neighbor scores
+template <typename SamplingStrategy>
+double RGCCA<SamplingStrategy>::residual_signal_stat_(
+    const rgcca::Vector& candidate_score,
+    const std::vector<rgcca::Vector>& active_scores,
+    const std::vector<int>& active_neighbors
+) const {
+    const double candidate_var = cov_(candidate_score, candidate_score);
+    if (!(candidate_var > 0.0) || !std::isfinite(candidate_var)) return 0.0;
+
+    double stat = 0.0;
+    for (const int k : active_neighbors) {
+        const double active_var = cov_(active_scores[k], active_scores[k]);
+        if (!(active_var > 0.0) || !std::isfinite(active_var)) continue;
+        const double corr = cov_(candidate_score, active_scores[k]) / std::sqrt(candidate_var * active_var);
+        if (std::isfinite(corr)) stat = std::max(stat, std::abs(corr));
+    }
+    return stat;
+}
+
 // computes a Fisher z confidence interval for one bootstrap correlation row
 template <typename SamplingStrategy>
 std::pair<double, double> RGCCA<SamplingStrategy>::fisher_z_corr_ci_(
@@ -864,15 +1145,21 @@ void RGCCA<SamplingStrategy>::set_row_index_all_(
     for (auto* b : blocks) b->set_row_index(idx);
 }
 
-// applies independent permutation row indices to all block views
+// applies independent null row indices to all block views for component significance
 template <typename SamplingStrategy>
-void RGCCA<SamplingStrategy>::set_permuted_row_index_all_(
+void RGCCA<SamplingStrategy>::set_component_significance_row_index_all_(
     const typename RGCCA<SamplingStrategy>::BlockRefList& blocks,
     const unsigned seed
 ) {
     for (int j = 0; j < static_cast<int>(blocks.size()); ++j) {
         std::mt19937_64 rng(seed + static_cast<unsigned>(104729 * (j + 1)));
-        blocks[j]->set_row_index(permutation_indices_(blocks[j]->n_raw(), rng));
+        if (bootstrap_config_.resampling_strategy == rgcca::ResamplingStrategy::Stationary) {
+            blocks[j]->set_row_index(
+                stationary_bootstrap_indices_(blocks[j]->n_raw(), bootstrap_config_.stationary_block_length, rng)
+            );
+        } else {
+            blocks[j]->set_row_index(permutation_indices_(blocks[j]->n_raw(), rng));
+        }
     }
 }
 
@@ -908,6 +1195,17 @@ auto RGCCA<SamplingStrategy>::bootstrap_indices_(
     }
 
     throw std::logic_error("unsupported resampling strategy");
+}
+
+// dispatches the single-block null resampling scheme
+template <typename SamplingStrategy>
+auto RGCCA<SamplingStrategy>::single_block_null_indices_(
+    const int n,
+    std::mt19937_64& rng
+) const -> rgcca::IndexVector {
+    if (bootstrap_config_.resampling_strategy == rgcca::ResamplingStrategy::Stationary)
+        return stationary_bootstrap_indices_(n, bootstrap_config_.stationary_block_length, rng);
+    return permutation_indices_(n, rng);
 }
 
 // samples ordinary bootstrap indices with replacement

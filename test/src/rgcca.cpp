@@ -129,6 +129,7 @@ std::vector<Result> fit_inactive_block_signal_gate_scenario(const bool candidate
 
     RGCCA<IndependentSampling>::Options options;
     options.mode = Mode::CovMax;
+    options.inactive_block_signal_test = true;
 
     RGCCA<IndependentSampling> rgcca(n, options, n_comp_local);
     rgcca.add_multivariate_block("active_with_residual", two_column_block(strong_signal, weak_residual_signal));
@@ -139,7 +140,6 @@ std::vector<Result> fit_inactive_block_signal_gate_scenario(const bool candidate
     rgcca.connect(0, 3);
 
     RGCCA<IndependentSampling>::BootstrapConfig bootstrap_config;
-    bootstrap_config.inactive_block_signal_test = true;
     bootstrap_config.inactive_block_signal_resamples = 19;
     bootstrap_config.inactive_block_signal_alpha = 0.1;
     rgcca.set_bootstrap_config(bootstrap_config);
@@ -748,15 +748,19 @@ TEST(rgcca, inactive_block_signal_test_deactivates_noise_blocks) {
     EXPECT_FALSE(results[0].active_blocks[2]);
     EXPECT_TRUE(results[0].active_blocks[3]);
 
-    EXPECT_TRUE(results[1].active_blocks[0]);
+    EXPECT_FALSE(results[1].active_blocks[0]);
     EXPECT_FALSE(results[1].active_blocks[1]);
     EXPECT_FALSE(results[1].active_blocks[2]);
-    EXPECT_TRUE(results[1].active_blocks[3]);
+    EXPECT_FALSE(results[1].active_blocks[3]);
+    EXPECT_EQ(results[1].inactive_block_signal_actions[0], InactiveBlockSignalAction::Deactivated);
+    EXPECT_EQ(results[1].inactive_block_signal_actions[1], InactiveBlockSignalAction::KeptInactive);
+    EXPECT_EQ(results[1].inactive_block_signal_actions[2], InactiveBlockSignalAction::KeptInactive);
+    EXPECT_EQ(results[1].inactive_block_signal_actions[3], InactiveBlockSignalAction::Deactivated);
 
-    EXPECT_TRUE(results[2].active_blocks[0]);
+    EXPECT_FALSE(results[2].active_blocks[0]);
     EXPECT_FALSE(results[2].active_blocks[1]);
     EXPECT_FALSE(results[2].active_blocks[2]);
-    EXPECT_TRUE(results[2].active_blocks[3]);
+    EXPECT_FALSE(results[2].active_blocks[3]);
 }
 
 TEST(rgcca, inactive_block_signal_test_preserves_residual_signal_blocks) {
@@ -771,12 +775,49 @@ TEST(rgcca, inactive_block_signal_test_preserves_residual_signal_blocks) {
     EXPECT_TRUE(results[1].active_blocks[0]);
     EXPECT_TRUE(results[1].active_blocks[1]);
     EXPECT_TRUE(results[1].active_blocks[2]);
-    EXPECT_TRUE(results[1].active_blocks[3]);
+    EXPECT_FALSE(results[1].active_blocks[3]);
+    EXPECT_EQ(results[1].inactive_block_signal_actions[0], InactiveBlockSignalAction::KeptActive);
+    EXPECT_EQ(results[1].inactive_block_signal_actions[1], InactiveBlockSignalAction::Reactivated);
+    EXPECT_EQ(results[1].inactive_block_signal_actions[2], InactiveBlockSignalAction::Reactivated);
+    EXPECT_EQ(results[1].inactive_block_signal_actions[3], InactiveBlockSignalAction::Deactivated);
 
-    EXPECT_TRUE(results[2].active_blocks[0]);
-    EXPECT_TRUE(results[2].active_blocks[1]);
-    EXPECT_TRUE(results[2].active_blocks[2]);
-    EXPECT_TRUE(results[2].active_blocks[3]);
+    EXPECT_FALSE(results[2].active_blocks[0]);
+    EXPECT_FALSE(results[2].active_blocks[1]);
+    EXPECT_FALSE(results[2].active_blocks[2]);
+    EXPECT_FALSE(results[2].active_blocks[3]);
+}
+
+TEST(rgcca, block_importance_detects_current_component_blocks) {
+    constexpr int n = 80;
+
+    const Eigen::VectorXd signal = centered_wave(n, 0.17);
+    Eigen::VectorXd noise = centered_wave(n, 0.71);
+    noise -= signal * signal.dot(noise);
+    noise.normalize();
+
+    RGCCA<IndependentSampling>::Options options;
+    options.mode = Mode::CovMax;
+    options.block_importance = true;
+
+    RGCCA<IndependentSampling> rgcca(n, options, 1);
+    rgcca.add_multivariate_block("signal_1", two_column_block(10.0 * signal, Eigen::VectorXd::Zero(n)));
+    rgcca.add_multivariate_block("signal_2", two_column_block(10.0 * signal, Eigen::VectorXd::Zero(n)));
+    rgcca.add_multivariate_block("noise", two_column_block(10.0 * noise, Eigen::VectorXd::Zero(n)));
+
+    RGCCA<IndependentSampling>::BootstrapConfig bootstrap_config;
+    bootstrap_config.max_threads = 1;
+    bootstrap_config.block_importance_resamples = 19;
+    bootstrap_config.block_importance_alpha = 0.1;
+    rgcca.set_bootstrap_config(bootstrap_config);
+
+    const auto results = rgcca.fit();
+
+    ASSERT_EQ(static_cast<int>(results.size()), 1);
+    EXPECT_EQ(results[0].block_importance_bootstrap_count, 19);
+    ASSERT_EQ(static_cast<int>(results[0].block_importance.size()), 3);
+    EXPECT_TRUE(results[0].block_importance_significant[0]);
+    EXPECT_TRUE(results[0].block_importance_significant[1]);
+    EXPECT_FALSE(results[0].block_importance_significant[2]);
 }
 
 TEST(rgcca, component_callback_can_release_bootstrap_results) {

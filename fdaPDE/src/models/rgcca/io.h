@@ -35,6 +35,8 @@ inline std::ostream& operator<<(std::ostream& os, const Options& opt) {
        << "  lambda_selection_weights    = " << to_string(opt.lambda_selection_weights) << '\n'
        << "  lambda_selection_components = " << to_string(opt.lambda_selection_components) << '\n'
        << "  component_significance      = " << bool_text_(opt.component_significance) << '\n'
+       << "  block_importance            = " << bool_text_(opt.block_importance) << '\n'
+       << "  inactive_block_signal_test  = " << bool_text_(opt.inactive_block_signal_test) << '\n'
        << "  block_deactivation          = " << bool_text_(opt.block_deactivation) << '\n'
        << "  connection_deactivation     = " << bool_text_(opt.connection_deactivation) << '\n'
        << "  mode                        = " << to_string(opt.mode) << '\n'
@@ -66,7 +68,8 @@ inline std::ostream& operator<<(std::ostream& os, const BootstrapConfig& config)
        << "  stationary_block_length            = " << config.stationary_block_length << '\n'
        << "  component_significance_resamples   = " << config.component_significance_resamples << '\n'
        << "  component_significance_alpha       = " << config.component_significance_alpha << '\n'
-       << "  inactive_block_signal_test         = " << bool_text_(config.inactive_block_signal_test) << '\n'
+       << "  block_importance_resamples         = " << config.block_importance_resamples << '\n'
+       << "  block_importance_alpha             = " << config.block_importance_alpha << '\n'
        << "  inactive_block_signal_resamples    = " << config.inactive_block_signal_resamples << '\n'
        << "  inactive_block_signal_alpha        = " << config.inactive_block_signal_alpha << '\n'
        << "}";
@@ -135,6 +138,23 @@ inline std::ostream& operator<<(std::ostream& os, const Result& r) {
         os << "- p-value: " << std::fixed << r.rho_tot_p_value
            << " (" << r.rho_tot_bootstrap_count << " resamples)\n";
         os << "- signif.: " << (r.component_significant ? "yes" : "no") << "\n";
+    }
+    if (r.block_importance_bootstrap_count > 0) {
+        os << "\nblock importance:\n";
+        for (size_t j = 0; j < r.block_importance.size(); ++j) {
+            os << "- Block " << j + 1 << ": rho = " << r.block_importance[j]
+               << ", p-value = " << r.block_importance_p_values[j]
+               << ", signif. = " << (r.block_importance_significant[j] ? "yes" : "no") << "\n";
+        }
+    }
+    if (std::any_of(
+            r.inactive_block_signal_actions.begin(),
+            r.inactive_block_signal_actions.end(),
+            [](InactiveBlockSignalAction action) { return action != InactiveBlockSignalAction::None; }
+        )) {
+        os << "\ninactive block signal gate:\n";
+        for (size_t j = 0; j < r.inactive_block_signal_actions.size(); ++j)
+            os << "- Block " << j + 1 << ": " << to_string(r.inactive_block_signal_actions[j]) << "\n";
     }
 
     return os;

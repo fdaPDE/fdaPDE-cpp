@@ -54,6 +54,7 @@ enum class Mode { CorMax, Regularized, CovMax };
 enum class Deflation { None, Scores };
 enum class WeightSignConstraint { None, NonNegative };
 enum class ResamplingStrategy { Ordinary, Stationary };
+enum class InactiveBlockSignalAction { None, KeptInactive, Deactivated, KeptActive, Reactivated };
 
 inline const char* to_string(InitStrategy x) {
     switch (x) {
@@ -106,6 +107,17 @@ inline const char* to_string(ResamplingStrategy x) {
     return "Unknown";
 }
 
+inline const char* to_string(InactiveBlockSignalAction x) {
+    switch (x) {
+    case InactiveBlockSignalAction::None:         return "none";
+    case InactiveBlockSignalAction::KeptInactive: return "kept inactive";
+    case InactiveBlockSignalAction::Deactivated:  return "deactivated";
+    case InactiveBlockSignalAction::KeptActive:   return "kept active";
+    case InactiveBlockSignalAction::Reactivated:  return "reactivated";
+    }
+    return "unknown";
+}
+
 struct Scheme {
     std::function<double(double)> g;   // g(t)
     std::function<double(double)> w;   // w(t)
@@ -134,6 +146,8 @@ struct Options {
     LambdaSelection lambda_selection_weights;
     LambdaSelection lambda_selection_components;
     bool component_significance;
+    bool block_importance;
+    bool inactive_block_signal_test;
     bool block_deactivation;
     bool connection_deactivation;
     Mode mode;
@@ -150,7 +164,9 @@ struct Options {
       const bool component_significance_ = false,
       const Deflation deflation_mode_ = Deflation::Scores, const Scheme& scheme_ = Scheme::Factorial(),
       const bool cache_ = true,
-      const bool block_deactivation_ = false, const bool connection_deactivation_ = false) :
+      const bool block_deactivation_ = false, const bool connection_deactivation_ = false,
+      const bool block_importance_ = false,
+      const bool inactive_block_signal_test_ = false) :
         max_iter(max_iter_),
         tol(tol_),
         cache_covariances(cache_),
@@ -159,6 +175,8 @@ struct Options {
         lambda_selection_weights(lambda_selection_weights_),
         lambda_selection_components(lambda_selection_components_),
         component_significance(component_significance_),
+        block_importance(block_importance_),
+        inactive_block_signal_test(inactive_block_signal_test_),
         block_deactivation(block_deactivation_),
         connection_deactivation(connection_deactivation_),
         mode(mode_),
@@ -194,8 +212,9 @@ struct BootstrapConfig {
 
     int component_significance_resamples = 100;
     double component_significance_alpha = 0.05;
+    int block_importance_resamples = 100;
+    double block_importance_alpha = 0.05;
 
-    bool inactive_block_signal_test = false;
     int inactive_block_signal_resamples = 100;
     double inactive_block_signal_alpha = 0.05;
 };
@@ -224,9 +243,18 @@ struct Result {
     double rho_tot_p_value = std::numeric_limits<double>::quiet_NaN();
     int rho_tot_bootstrap_count = 0;
     bool component_significant = true;
+    std::vector<double> block_importance;
+    std::vector<double> block_importance_p_values;
+    std::vector<bool> block_importance_significant;
+    int block_importance_bootstrap_count = 0;
+    std::vector<InactiveBlockSignalAction> inactive_block_signal_actions;
 
     explicit Result(const int n_blocks) : J(n_blocks), C(J, J), covariance_matrix(J, J),
-    tau_values(J), lambda_components_values(J), lambda_weights_values(J), active_blocks(J) {}
+    tau_values(J), lambda_components_values(J), lambda_weights_values(J), active_blocks(J),
+    block_importance(J, std::numeric_limits<double>::quiet_NaN()),
+    block_importance_p_values(J, std::numeric_limits<double>::quiet_NaN()),
+    block_importance_significant(J, false),
+    inactive_block_signal_actions(J, InactiveBlockSignalAction::None) {}
 };
 
 struct BootstrapResult {

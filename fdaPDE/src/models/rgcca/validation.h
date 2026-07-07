@@ -47,12 +47,14 @@ void RGCCA<SamplingStrategy>::validate_fit_() const {
 
     // bootstrap-backed workflows share the same sampling restriction
     const bool run_model_selection = bootstrap_model_selection_requested_();
-    if (run_model_selection || opt_.component_significance || inactive_block_signal_test_requested_())
+    if (run_model_selection || opt_.component_significance || opt_.block_importance || inactive_block_signal_test_requested_())
         validate_bootstrap_support_();
     if (run_model_selection || inactive_block_signal_test_requested_())
         validate_bootstrap_config_();
     if (opt_.component_significance)
         validate_component_significance_config_();
+    if (opt_.block_importance)
+        validate_block_importance_config_();
     if (opt_.lambda_selection_weights == rgcca::LambdaSelection::Automatic)
         validate_lambda_grid_weights_();
 }
@@ -160,6 +162,38 @@ void RGCCA<SamplingStrategy>::validate_component_significance_config_() const {
         throw std::invalid_argument(
             "RGCCA: component significance alpha must be finite and in (0, 1)"
         );
+    }
+    if (
+        bootstrap_config_.resampling_strategy == rgcca::ResamplingStrategy::Stationary &&
+        (!(bootstrap_config_.stationary_block_length > 0.0) ||
+         !std::isfinite(bootstrap_config_.stationary_block_length))
+    ) {
+        throw std::invalid_argument("RGCCA: component significance stationary_block_length must be finite and positive");
+    }
+}
+
+// validates the bootstrap used for block importance
+template <typename SamplingStrategy>
+void RGCCA<SamplingStrategy>::validate_block_importance_config_() const {
+    if (bootstrap_config_.max_threads <= 0)
+        throw std::invalid_argument("RGCCA: block importance max_threads must be positive");
+    if (bootstrap_config_.block_importance_resamples <= 0)
+        throw std::invalid_argument("RGCCA: block importance resamples must be positive");
+    if (
+        !(bootstrap_config_.block_importance_alpha > 0.0) ||
+        bootstrap_config_.block_importance_alpha >= 1.0 ||
+        !std::isfinite(bootstrap_config_.block_importance_alpha)
+    ) {
+        throw std::invalid_argument(
+            "RGCCA: block importance alpha must be finite and in (0, 1)"
+        );
+    }
+    if (
+        bootstrap_config_.resampling_strategy == rgcca::ResamplingStrategy::Stationary &&
+        (!(bootstrap_config_.stationary_block_length > 0.0) ||
+         !std::isfinite(bootstrap_config_.stationary_block_length))
+    ) {
+        throw std::invalid_argument("RGCCA: block importance stationary_block_length must be finite and positive");
     }
 }
 

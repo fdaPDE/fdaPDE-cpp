@@ -24,6 +24,8 @@
 #include <ios>
 #include <iostream>
 #include <ostream>
+#include <string>
+#include <string_view>
 
 namespace fdapde {
 
@@ -69,6 +71,14 @@ inline constexpr null_ostream cout {};
 
 namespace fdapde {
 
+inline void log_header_(const std::string_view title) {
+    fdapde::cout << '\n';
+    for (std::size_t i = 0; i < title.size(); ++i) fdapde::cout << '=';
+    fdapde::cout << '\n' << title << '\n';
+    for (std::size_t i = 0; i < title.size(); ++i) fdapde::cout << '=';
+    fdapde::cout << "\n\n";
+}
+
 // starts a timed log step and returns its start time
 template <typename SamplingStrategy>
 auto RGCCA<SamplingStrategy>::log_step_start_(std::string_view label) const
@@ -100,28 +110,34 @@ void RGCCA<SamplingStrategy>::log_weight_lambda_(const double lambda) const {
 // logs the fit entry header and active configuration
 template <typename SamplingStrategy>
 void RGCCA<SamplingStrategy>::log_fit_header_(const bool run_model_selection) const {
-    fdapde::cout << "\n=========\n";
-    fdapde::cout << "RGCCA fit\n";
-    fdapde::cout << "=========\n\n";
+    log_header_("RGCCA fit");
     fdapde::cout << opt_ << '\n';
-    if (run_model_selection || opt_.component_significance)
+    if (run_model_selection || opt_.component_significance || opt_.block_importance || inactive_block_signal_test_requested_())
         fdapde::cout << bootstrap_config_ << '\n';
 }
 
 // logs the bootstrap model-selection section header
 template <typename SamplingStrategy>
 void RGCCA<SamplingStrategy>::log_bootstrap_model_selection_header_() const {
-    fdapde::cout << "\n=========================================\n";
-    fdapde::cout << "Bootstrap model selection for component " << h_ + 1 << '\n';
-    fdapde::cout << "=========================================\n\n";
+    log_header_(std::string("Bootstrap model selection for component ") + std::to_string(h_ + 1));
 }
 
 // logs the component-significance bootstrap section header
 template <typename SamplingStrategy>
 void RGCCA<SamplingStrategy>::log_bootstrap_component_significance_header_() const {
-    fdapde::cout << "\n================================================\n";
-    fdapde::cout << "Bootstrap component significance for component " << h_ + 1 << '\n';
-    fdapde::cout << "================================================\n\n";
+    log_header_(std::string("Bootstrap component significance for component ") + std::to_string(h_ + 1));
+}
+
+// logs the block-importance bootstrap section header
+template <typename SamplingStrategy>
+void RGCCA<SamplingStrategy>::log_bootstrap_block_importance_header_() const {
+    log_header_(std::string("Bootstrap block importance for component ") + std::to_string(h_ + 1));
+}
+
+// logs the inactive-block signal test section header
+template <typename SamplingStrategy>
+void RGCCA<SamplingStrategy>::log_inactive_block_signal_test_header_() const {
+    log_header_(std::string("Inactive-block signal test for component ") + std::to_string(h_ + 1));
 }
 
 // logs the lambda candidate currently being evaluated
@@ -148,7 +164,40 @@ void RGCCA<SamplingStrategy>::log_component_significance_(
     fdapde::cout << "\nSignificance:\n"
                  << "  - rho_tot = " << significance.rho_tot << '\n'
                  << "  - p-value = " << significance.p_value << '\n'
-                 << "  - significant = " << significance.significant << '\n';
+                 << "  - significant = " << std::boolalpha << significance.significant << std::noboolalpha << "\n\n";
+}
+
+// logs the block-importance test result
+template <typename SamplingStrategy>
+void RGCCA<SamplingStrategy>::log_block_importance_(
+    const typename RGCCA<SamplingStrategy>::BlockImportanceResult& importance
+) const {
+    fdapde::cout << "\nBlock importance:\n";
+    for (int j = 0; j < static_cast<int>(importance.rho.size()); ++j) {
+        fdapde::cout << "  - block[" << j << "]"
+                     << ": rho = " << importance.rho[j]
+                     << ", p-value = " << importance.p_value[j]
+                     << ", significant = " << std::boolalpha << importance.significant[j] << std::noboolalpha
+                     << '\n';
+    }
+    fdapde::cout << '\n';
+}
+
+// logs one inactive-block gate decision before fitting the next component
+template <typename SamplingStrategy>
+void RGCCA<SamplingStrategy>::log_inactive_block_signal_gate_(
+    const int block,
+    const InactiveBlockSignalAction action,
+    const double statistic,
+    const double p_value
+) const {
+    fdapde::cout << "Inactive-block signal gate for component " << h_ + 1
+                 << ": block[" << block << "] " << rgcca::to_string(action);
+    if (std::isfinite(statistic))
+        fdapde::cout << ", stat=" << std::setprecision(4) << statistic;
+    if (std::isfinite(p_value))
+        fdapde::cout << ", p=" << std::setprecision(4) << p_value;
+    fdapde::cout << std::defaultfloat << '\n';
 }
 
 // logs the final bootstrap summary for one lambda candidate
