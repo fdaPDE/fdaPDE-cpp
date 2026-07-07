@@ -260,7 +260,7 @@ void RGCCA<SamplingStrategy>::log_bootstrap_selection_result_(
 
     // block deactivation result
     fdapde::cout << "\nBlock deactivation:\n";
-    for (int j = 0; j < static_cast<int>(boot_results.active_blocks.size()); ++j) {
+    for (int j = 0; j < n_blocks(); ++j) {
         const double nrm = boot_results.w_min_by_lambda[boot_results.lambda_opt_index][j].norm();
         fdapde::cout << "- block[" << std::setw(2) << j << "]: "
                      << "||w_min|| = " << std::fixed << std::setprecision(4) << nrm
@@ -270,12 +270,11 @@ void RGCCA<SamplingStrategy>::log_bootstrap_selection_result_(
     }
 
     // design matrix recap
-    const int J = static_cast<int>(C_best.rows());
-    if (J <= 20) {
+    if (n_blocks() <= 20) {
         fdapde::cout << "\nUpdated design matrix:\n";
         fdapde::cout << C_best << "\n\n";
     } else {
-        fdapde::cout << "\nUpdated design matrix: skipped (" << J << " blocks)\n\n";
+        fdapde::cout << "\nUpdated design matrix: skipped (" << n_blocks() << " blocks)\n\n";
     }
 }
 

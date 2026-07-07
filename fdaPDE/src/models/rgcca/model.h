@@ -1,18 +1,18 @@
 // This file is part of fdaPDE, a C++ library for physics-informed
-// spatial and functional data analysis
+// spatial and functional data analysis.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version
+// (at your option) any later version.
 //
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details
+// GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with this program.  If not, see <http://www.gnu.org/licenses/>
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
 #ifndef __FDAPDE_RGCCA_MODEL_H__
@@ -96,20 +96,6 @@ public:
         design_mode_ = DesignMode::Custom;
     }
 
-    // initialization
-    void init() {
-        ensure_design_initialized_();
-
-        if (design_mode_ == DesignMode::Empty) {
-            set_fully_connected_design_();
-            design_mode_ = DesignMode::FullyConnected;
-        }
-
-        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) compute_Psi_T_();
-
-        initialized_ = true;
-    }
-
     // weights and components regularization utilities
     void set_lambda_weights_all(const double lambda) const {
         rgcca::internals::validate_positive_regularization_lambda(lambda, "weight lambda");
@@ -148,13 +134,31 @@ public:
         }
     }
 
+    // initialization
+    void init() {
+
+        // init design matrix
+        ensure_design_initialized_();
+        if (design_mode_ == DesignMode::Empty) {
+            set_fully_connected_design_();
+            design_mode_ = DesignMode::FullyConnected;
+        }
+
+        // init components evaluation matrix (only in the TimeDependentSampling scenario)
+        if constexpr (std::same_as<SamplingStrategy, TimeDependentSampling>) compute_Psi_T_();
+
+        // set the model as initialized
+        initialized_ = true;
+    }
+
     // fit
-    std::vector<Result> fit(ComponentCallback on_component = {}) {
+    std::vector<Result> fit(ComponentCallback component_callback = {}) {
+
+        // initialization
         if (!initialized_) init();
 
         // validation and logging
         validate_fit_();
-        const int J = n_blocks();
         const bool run_model_selection = bootstrap_model_selection_requested_();
         log_fit_header_(run_model_selection);
 
@@ -165,15 +169,16 @@ public:
         bootstrap_selection_results_.reserve(n_comp());
 
         // components loop
-        bool completed_components = true;
+        n_comp_effective_ = 0;
         std::vector<bool> previous_active_blocks;
-        std::vector<bool> carried_inactive_blocks(J, false);
+        std::vector<bool> carried_inactive_blocks(n_blocks(), false);
+
         for (int hh = 0; hh < n_comp(); ++hh) {
             set_h_(hh);
 
-            // bootstrap model selection
+            // active blocks gating
             BoolMatrix C_active = C_;
-            std::vector<InactiveBlockSignalAction> inactive_block_signal_actions(J, InactiveBlockSignalAction::None);
+            std::vector<InactiveBlockSignalAction> inactive_block_signal_actions(n_blocks(), InactiveBlockSignalAction::None);
             if (inactive_block_signal_test_requested_() && !previous_active_blocks.empty()) {
                 auto blocks = main_blocks_();
                 apply_inactive_block_signal_test_(
@@ -184,6 +189,8 @@ public:
                     C_active
                 );
             }
+
+            // bootstrap model selection
             if (run_model_selection && count_active_connections_(C_active) > 0) {
                 auto selection = bootstrap_model_selection_(C_active);
                 C_active = std::move(selection.C_active);
@@ -200,13 +207,11 @@ public:
             component_result.inactive_block_signal_actions = std::move(inactive_block_signal_actions);
             log_step_end_(step_start);
 
-            // structural stop: no active design left, independent of significance testing
+            // structural stop: no active design left
             if (count_active_connections_(C_active) == 0) {
                 annotate_component_significance_(component_result, inactive_component_significance_());
                 results.push_back(std::move(component_result));
-                run_component_callback_(on_component, results.back());
-                append_inactive_components_(results, hh + 1, J);
-                completed_components = false;
+                finish_component_(results.back(), component_callback);
                 break;
             }
 
@@ -214,15 +219,14 @@ public:
             if (opt_.component_significance) {
                 const auto significance = bootstrap_test_component_significance_(C_active);
                 annotate_component_significance_(component_result, significance);
-
                 if (!significance.significant) {
                     results.push_back(std::move(component_result));
-                    run_component_callback_(on_component, results.back());
-                    append_inactive_components_(results, hh + 1, J);
-                    completed_components = false;
+                    finish_component_(results.back(), component_callback);
                     break;
                 }
             }
+
+            // bootstrap block importance
             if (opt_.block_importance) {
                 const auto importance = bootstrap_test_block_importance_(C_active);
                 annotate_block_importance_(component_result, importance);
@@ -236,19 +240,10 @@ public:
             deflate_all_();
             log_step_end_(step_start);
 
-            // component callback
-            step_start = log_step_start_("Component callback");
-            run_component_callback_(on_component, results.back());
-            log_step_end_(step_start);
+            // component post-processing
+            finish_component_(results.back(), component_callback);
 
             previous_active_blocks = results.back().active_blocks;
-        }
-
-        // post-processing weights
-        if (!on_component || !completed_components) {
-            auto step_start = log_step_start_("Compute weights_star");
-            compute_weights_star_();
-            log_step_end_(step_start);
         }
 
         return results;
@@ -256,13 +251,11 @@ public:
 
     // getters
     void get_tau(const BlockRefList& blocks, std::vector<double>& tau_values) const {
-        const int J = n_blocks();
-        for (std::size_t j = 0; j < J; ++j)
+        for (int j = 0; j < n_blocks(); ++j)
             tau_values[j] = blocks[j]->tau();
     }
     void get_lambdas(const BlockRefList& blocks, std::vector<double> & lambda_components_values, std::vector<double> & lambda_weights_values) const {
-        const int J = n_blocks();
-        for (std::size_t j = 0; j < J; ++j) {
+        for (int j = 0; j < n_blocks(); ++j) {
             lambda_components_values[j] = blocks[j]->lambda_components();
             lambda_weights_values[j] = blocks[j]->lambda_weights();
         }
@@ -271,6 +264,7 @@ public:
     // observers
     [[nodiscard]] int n() const { return n_; }
     [[nodiscard]] int n_comp() const { return n_comp_; }
+    [[nodiscard]] int n_comp_effective() const { return n_comp_effective_; }
     [[nodiscard]] int n_blocks() const { return J_; }
     [[nodiscard]] const Options& options() const { return opt_; }
     [[nodiscard]] const Scheme& scheme() const { return opt_.scheme; }
@@ -279,6 +273,8 @@ public:
     template <typename S = SamplingStrategy>
     requires std::same_as<S, TimeDependentSampling>
     [[nodiscard]] const SparseMatrix& Psi_T() const { return Psi_T_; };
+
+    // bootstrap results
     [[nodiscard]] const std::vector<BootstrapResult>& bootstrap_selection_results() const { return bootstrap_selection_results_; }
     void clear_bootstrap_selection_results() {
         bootstrap_selection_results_.clear();
@@ -301,10 +297,10 @@ private:
         Matrix Cov;
         Eigen::ArrayXXi dirty;
 
-        explicit FitWorkspace(int J) {
-            Cov.setZero(J, J);
-            dirty.setOnes(J, J);
-            for (int j = 0; j < J; ++j) {
+        explicit FitWorkspace(int n_blocks) {
+            Cov.setZero(n_blocks, n_blocks);
+            dirty.setOnes(n_blocks, n_blocks);
+            for (int j = 0; j < n_blocks; ++j) {
                 Cov(j, j) = 1.0;
                 dirty(j, j) = 0;
             }
@@ -324,14 +320,14 @@ private:
             const BootstrapConfig bootstrap_config,
             const int n_threads_,
             const int h,
-            const int J_
-        ) : n_threads(n_threads_), J(J_) {
+            const int n_blocks_
+        ) : n_threads(n_threads_), n_blocks(n_blocks_) {
             seed = bootstrap_config.seed + static_cast<unsigned>(h);
             B_min = bootstrap_config.B_min;
             B_max = bootstrap_config.adaptive ? bootstrap_config.B_max : B_min;
             check_every = bootstrap_config.adaptive ? bootstrap_config.check_every : B_min;
-            corr_pos_count.setZero(J, J);
-            corr_neg_count.setZero(J, J);
+            corr_pos_count.setZero(n_blocks, n_blocks);
+            corr_neg_count.setZero(n_blocks, n_blocks);
         }
 
         void reset() {
@@ -352,13 +348,13 @@ private:
             crit_prev_check = std::numeric_limits<double>::infinity();
             crit = std::numeric_limits<double>::quiet_NaN();
             last_check_B_done = 0;
-            corr_pos_count.setZero(J, J);
-            corr_neg_count.setZero(J, J);
+            corr_pos_count.setZero(n_blocks, n_blocks);
+            corr_neg_count.setZero(n_blocks, n_blocks);
         }
 
         // config
         int n_threads;
-        int J;
+        int n_blocks;
         int seed;
         int B_min;
         int B_max;
@@ -461,7 +457,7 @@ private:
         bool fit_started = false;
     };
 
-    // components initialization
+    // component initialization
     void init_comp_(
         const BlockRefList& blocks,
         InitStrategy init_strategy = InitStrategy::None,
@@ -478,6 +474,7 @@ private:
 
         if (init_strategy == InitStrategy::None) init_strategy = opt_.init_strategy;
 
+        // blocks loop
         for (int j = 0; j < n_blocks(); ++j) {
             auto* b = blocks[j];
             b->set_h(h_);
@@ -517,19 +514,18 @@ private:
         const int max_iter_override = -1,
         const std::function<bool()>& cancelled = {}
     ) {
-        const int J = n_blocks();
         const int max_iter = max_iter_override > 0 ? max_iter_override : opt_.max_iter;
-        FitWorkspace ws(J);
+        FitWorkspace ws(n_blocks());
 
         // room for results
-        Result res(J);
+        Result res(n_blocks());
         res.h = h_;
         res.obj_history.reserve(max_iter);
 
         // design update according to current active blocks
         res.C = C_active;
         res.active_blocks = active_blocks_from_C_(C_active);
-        for (int j = 0; j < J; ++j) {
+        for (int j = 0; j < n_blocks(); ++j) {
             if (!res.active_blocks[j]){
                 blocks[j]->weights().col(h_).setZero();
                 blocks[j]->components().col(h_).setZero();
@@ -545,11 +541,9 @@ private:
 
         // main loop
         for (int s = 0; s < max_iter; ++s) {
-            if (cancelled && cancelled()) {
-                res.cancelled = true;
-                return res;
-            }
-            for (int l = 0; l < J; ++l) {
+            for (int l = 0; l < n_blocks(); ++l) {
+
+                // allow callers to stop long fits between block updates
                 if (cancelled && cancelled()) {
                     res.cancelled = true;
                     return res;
@@ -561,7 +555,7 @@ private:
                 // inner-component assembler
                 Vector nu_l = Vector::Zero(blocks[l]->n());
                 const Vector& eta_l = eta_cache[l];
-                for (int k = 0; k < J; ++k) {
+                for (int k = 0; k < n_blocks(); ++k) {
                     if (!res.C(l, k)) continue;
                     const Vector& eta_k = eta_cache[k];
                     const double cov_lk = cov_value_(ws, l, k, eta_l, eta_k);
@@ -600,6 +594,7 @@ private:
             w_prev = snapshot_weights_(blocks);
         }
 
+        // allow callers to stop long fits before cov and cor matrices computation
         if (cancelled && cancelled()) {
             res.cancelled = true;
             return res;
@@ -632,17 +627,16 @@ private:
         std::vector<InactiveBlockSignalAction>& actions,
         BoolMatrix& C_active
     ) {
-        const int J = static_cast<int>(blocks.size());
-        if (static_cast<int>(previous_active_blocks.size()) != J)
+        if (static_cast<int>(previous_active_blocks.size()) != n_blocks())
             throw std::logic_error("inactive block signal test: active block size mismatch");
-        if (static_cast<int>(carried_inactive_blocks.size()) != J)
+        if (static_cast<int>(carried_inactive_blocks.size()) != n_blocks())
             throw std::logic_error("inactive block signal test: carried block size mismatch");
-        if (static_cast<int>(actions.size()) != J)
+        if (static_cast<int>(actions.size()) != n_blocks())
             throw std::logic_error("inactive block signal test: action size mismatch");
 
         log_inactive_block_signal_test_header_();
 
-        for (int j = 0; j < J; ++j) {
+        for (int j = 0; j < n_blocks(); ++j) {
             if (previous_active_blocks[j])
                 carried_inactive_blocks[j] = false;
             if (carried_inactive_blocks[j]) {
@@ -653,14 +647,14 @@ private:
             }
         }
 
-        std::vector<Vector> block_scores(J);
-        for (int k = 0; k < J; ++k)
+        std::vector<Vector> block_scores(n_blocks());
+        for (int k = 0; k < n_blocks(); ++k)
             block_scores[k] = blocks[k]->svd_init().nu;
 
         const BoolMatrix C_test = C_active;
         const auto active_blocks = active_blocks_from_C_(C_test);
-        std::vector<bool> deactivate(J, false);
-        for (int j = 0; j < J; ++j) {
+        std::vector<bool> deactivate(n_blocks(), false);
+        for (int j = 0; j < n_blocks(); ++j) {
             if (carried_inactive_blocks[j]) continue;
             const bool has_active_neighbor = inactive_block_has_active_neighbor_(active_blocks, C_test, j);
             double observed = std::numeric_limits<double>::quiet_NaN();
@@ -689,7 +683,7 @@ private:
             );
         }
 
-        for (int j = 0; j < J; ++j) {
+        for (int j = 0; j < n_blocks(); ++j) {
             if (deactivate[j]) {
                 C_active.row(j).setConstant(false);
                 C_active.col(j).setConstant(false);
@@ -710,13 +704,12 @@ private:
 
         // original blocks
         auto blocks = main_blocks_();
-        const int J = static_cast<int>(blocks.size());
         BoolMatrix C_active = C_initial;
         BoolMatrix C_best = C_initial;
 
         // init bootstrap
         auto step_start = log_step_start_("Init bootstrap");
-        AdaptiveBootstrapState bootstrap_state(bootstrap_config_, n_threads, h_, J);
+        AdaptiveBootstrapState bootstrap_state(bootstrap_config_, n_threads, h_, n_blocks());
         const auto block_dims = block_dims_(blocks);
         BootstrapResult boot_results(
             h_, bootstrap_state.B_max, lambda_grid,
@@ -726,8 +719,7 @@ private:
 
         // preliminary fit
         step_start = log_step_start_("Preliminary fit");
-        if (select_lambda)
-            set_lambda_weights_all(lambda_grid.back());
+        if (select_lambda) set_lambda_weights_all(lambda_grid.back());
         const auto preliminary_active_blocks = active_blocks_from_C_(C_active);
         init_comp_(blocks, InitStrategy::None, true, &preliminary_active_blocks);
         fit_component_(blocks, C_active);
@@ -741,22 +733,15 @@ private:
             thread_boot_worker[t] = clone_blocks_();
         }
         log_step_end_(step_start);
-        auto fixed_weight_lambda = [&]() {
-            for (const auto& block : blocks) {
-                const double lambda = block->lambda_weights();
-                if (std::isfinite(lambda)) return lambda;
-            }
-            return std::numeric_limits<double>::quiet_NaN();
-        };
 
         // model selection loop
         int n_lambda = static_cast<int>(lambda_grid.size());
         for (int lambda_i = n_lambda - 1; lambda_i >= 0; --lambda_i) {
-            ensure_bootstrap_lambda_storage_(boot_results, lambda_i, block_dims, J);
+            ensure_bootstrap_lambda_storage_(boot_results, lambda_i, block_dims, n_blocks());
             const bool reuse_preliminary_fit = lambda_i == n_lambda - 1;
 
+            // set the current lambda (if needed)
             if (select_lambda) {
-                // current lambda
                 const double lambda = lambda_grid[lambda_i];
                 log_bootstrap_lambda_candidate_(select_lambda, lambda);
                 if (!reuse_preliminary_fit) {
@@ -765,10 +750,10 @@ private:
                         set_lambda_weights_all_(worker.refs, lambda);
                 }
             } else {
-                log_bootstrap_lambda_candidate_(select_lambda, fixed_weight_lambda());
+                log_bootstrap_lambda_candidate_(select_lambda, fixed_weight_lambda_(blocks));
             }
 
-            // init warm start at lambda
+            // init warm-start at lambda
             std::vector<Vector> w_fit;
             if (reuse_preliminary_fit) {
                 step_start = log_step_start_("  Warm-start fit (reuse preliminary)");
@@ -816,7 +801,8 @@ private:
             boot_results.w_min_by_lambda[lambda_i] = w_min;
             step_start = log_step_start_("  Final lambda correlation");
             correlation_matrix_(blocks, w_min, boot_results.corr_min_by_lambda[lambda_i]);
-            boot_results.corr_min_by_lambda[lambda_i].array() *= (C_lambda.cast<double>() + Matrix::Identity(J, J)).array();
+            boot_results.corr_min_by_lambda[lambda_i].array() *=
+                (C_lambda.cast<double>() + Matrix::Identity(n_blocks(), n_blocks())).array();
             log_step_end_(step_start);
             if (!std::isfinite(bootstrap_state.crit))
                 bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_initial);
@@ -835,7 +821,7 @@ private:
                 elapsed_sec,
                 n_active_blocks,
                 n_active_connections,
-                select_lambda ? lambda_grid[lambda_i] : fixed_weight_lambda()
+                select_lambda ? lambda_grid[lambda_i] : fixed_weight_lambda_(blocks)
             );
 
             // early stop
@@ -850,12 +836,12 @@ private:
 
         // resize allocated space for bootstrap results
         step_start = log_step_start_("Resize bootstrap results");
-        resize_bootstrap_results_(boot_results, static_cast<int>(lambda_grid.size()), J, block_dims);
+        resize_bootstrap_results_(boot_results, static_cast<int>(lambda_grid.size()), n_blocks(), block_dims);
         log_step_end_(step_start);
 
         // compute correlation matrices CI
         step_start = log_step_start_("Compute bootstrap correlation CIs");
-        compute_bootstrap_corr_cis_(boot_results, J);
+        compute_bootstrap_corr_cis_(boot_results, n_blocks());
         log_step_end_(step_start);
 
         // save optimal design
@@ -867,6 +853,7 @@ private:
         boot_results.active_blocks = active_blocks_from_C_(C_best);
         log_bootstrap_selection_result_(boot_results, C_best, select_lambda);
 
+        // return model selection results
         bootstrap_selection_results_.push_back(std::move(boot_results));
         ModelSelectionResult out;
         out.lambda_selected = select_lambda;
@@ -882,7 +869,6 @@ private:
 
         // observed statistic on the fitted component
         auto blocks = main_blocks_();
-        const int J = static_cast<int>(blocks.size());
         out.rho_tot = rho_tot_maxvar_(blocks, C_active);
 
         // inactive or degenerate components are declared non-significant
@@ -946,12 +932,11 @@ private:
         log_bootstrap_block_importance_header_();
 
         auto blocks = main_blocks_();
-        const int J = static_cast<int>(blocks.size());
         const int B = bootstrap_config_.block_importance_resamples;
         BlockImportanceResult out;
-        out.rho.assign(J, 0.0);
-        out.p_value.assign(J, 1.0);
-        out.significant.assign(J, false);
+        out.rho.assign(n_blocks(), 0.0);
+        out.p_value.assign(n_blocks(), 1.0);
+        out.significant.assign(n_blocks(), false);
         out.B = B;
 
         const std::vector<Vector> eta = eta_(blocks);
@@ -961,9 +946,9 @@ private:
             return out;
         }
 
-        std::vector<Vector> targets(J);
-        std::vector<int> testable(J, 0);
-        for (int j = 0; j < J; ++j) {
+        std::vector<Vector> targets(n_blocks());
+        std::vector<int> testable(n_blocks(), 0);
+        for (int j = 0; j < n_blocks(); ++j) {
             if (v[j] == 0.0) continue;
             targets[j] = block_importance_target_(eta, C_active, v, j);
             const double target_var = cov_(targets[j], targets[j]);
@@ -972,8 +957,8 @@ private:
             out.rho[j] = block_importance_rho_(eta[j], targets[j]);
         }
 
-        std::vector<int> significant(J, 0);
-        parallel_for(0, J, 1, [&](int j) {
+        std::vector<int> significant(n_blocks(), 0);
+        parallel_for(0, n_blocks(), 1, [&](int j) {
             if (!testable[j]) return;
 
             auto boot_blocks = clone_blocks_();
@@ -998,7 +983,7 @@ private:
             significant[j] = out.p_value[j] <= bootstrap_config_.block_importance_alpha ? 1 : 0;
         });
 
-        for (int j = 0; j < J; ++j)
+        for (int j = 0; j < n_blocks(); ++j)
             out.significant[j] = significant[j] != 0;
 
         log_block_importance_(out);
@@ -1021,11 +1006,6 @@ private:
         for (int j = 0; j < n_blocks(); ++j)
             for (int k = 0; k < n_blocks(); ++k)
                 C_(j, k) = (j != k);
-    }
-    BoolMatrix inactive_design_(const int J) const {
-        BoolMatrix C_inactive(J, J);
-        C_inactive.setConstant(false);
-        return C_inactive;
     }
     template <typename S = SamplingStrategy>
     requires std::same_as<S, TimeDependentSampling>
@@ -1063,11 +1043,20 @@ private:
     void deflate_all_() const {
         for (auto& b : blocks_) b->deflate(opt_.deflation_mode);
     }
-    void compute_weights_star_() {
-        for (auto& b : blocks_) b->compute_weights_star();
-    }
     void compute_weights_star_(const int h) {
         for (auto& b : blocks_) b->compute_weights_star(h);
+    }
+    void finish_component_(const Result& result, const ComponentCallback& component_callback) {
+        n_comp_effective_ = result.h + 1;
+        auto step_start = log_step_start_("Compute weights_star");
+        compute_weights_star_(result.h);
+        log_step_end_(step_start);
+
+        if (component_callback) {
+            step_start = log_step_start_("Component callback");
+            component_callback(*this, result);
+            log_step_end_(step_start);
+        }
     }
     double weights_variation_(const BlockRefList& blocks, const std::vector<Vector>& w_prev) const {
         double acc = 0.0;
@@ -1098,12 +1087,12 @@ private:
 
         return {std::numeric_limits<double>::quiet_NaN()};
     }
-
-    // component callback runner
-    void run_component_callback_(const ComponentCallback& on_component, const Result& result) {
-        if (!on_component) return;
-        compute_weights_star_(result.h);
-        on_component(*this, result);
+    double fixed_weight_lambda_(const BlockRefList& blocks) const {
+        for (const auto* block : blocks) {
+            const double lambda = block->lambda_weights();
+            if (std::isfinite(lambda)) return lambda;
+        }
+        return std::numeric_limits<double>::quiet_NaN();
     }
 
     // logging helpers
@@ -1201,7 +1190,7 @@ private:
         BootstrapResult& boot_results,
         const int lambda_i,
         const std::vector<int>& block_dims,
-        const int J
+        const int n_blocks
     ) const;
     AdaptiveStopInfo adaptive_stop_(AdaptiveBootstrapState& state, const BootstrapConfig& config) const;
     bool early_stop_lambda_(AdaptiveBootstrapState& state, int lambda_i, const BootstrapConfig& config) const;
@@ -1238,10 +1227,10 @@ private:
     void resize_bootstrap_results_(
         BootstrapResult& boot_results,
         int n_lambdas,
-        int J,
+        int n_blocks,
         const std::vector<int>& block_dims
     ) const;
-    void compute_bootstrap_corr_cis_(BootstrapResult& boot_results, int J) const;
+    void compute_bootstrap_corr_cis_(BootstrapResult& boot_results, int n_blocks) const;
 
     // bootstrap row-index helpers
     void set_row_index_all_(const BlockRefList& blocks, const IndexVector& idx);
@@ -1263,7 +1252,6 @@ private:
     // bootstrap component significance helpers
     void annotate_component_significance_(Result& result, const ComponentSignificanceResult& significance) const;
     ComponentSignificanceResult inactive_component_significance_() const;
-    void append_inactive_components_(std::vector<Result>& results, const int from_h, const int J);
     double rho_tot_maxvar_(const BlockRefList& blocks, const BoolMatrix& C) const;
 
     // bootstrap block-importance helpers
@@ -1372,15 +1360,13 @@ private:
         return out;
     }
     std::vector<Vector> eta_with_weights_(const BlockRefList& blocks, const std::vector<Vector>& weights) const {
-        const int J = static_cast<int>(blocks.size());
-
-        if (static_cast<int>(weights.size()) != J)
+        if (static_cast<int>(weights.size()) != n_blocks())
             throw std::logic_error("eta_with_weights_: size mismatch");
 
         std::vector<Vector> out;
         out.reserve(blocks.size());
 
-        for (int j = 0; j < J; ++j) {
+        for (int j = 0; j < n_blocks(); ++j) {
             if (weights[j].size() != blocks[j]->n_dofs_weights())
                 throw std::logic_error("eta_with_weights_: incompatible weight size");
 
@@ -1390,15 +1376,13 @@ private:
         return out;
     }
     std::vector<Vector> eta_with_weights_for_evaluation_(const BlockRefList& blocks, const std::vector<Vector>& weights) {
-        const int J = static_cast<int>(blocks.size());
-
-        if (static_cast<int>(weights.size()) != J)
+        if (static_cast<int>(weights.size()) != n_blocks())
             throw std::logic_error("eta_with_weights_for_evaluation_: size mismatch");
 
         std::vector<Vector> out;
         out.reserve(blocks.size());
 
-        for (int j = 0; j < J; ++j) {
+        for (int j = 0; j < n_blocks(); ++j) {
             if (weights[j].size() != blocks[j]->n_dofs_weights())
                 throw std::logic_error("eta_with_weights_for_evaluation_: incompatible weight size");
 
@@ -1446,11 +1430,10 @@ private:
         ws.Cov(l, l) = 1.0;
     }
     void covariance_matrix_(const std::vector<Vector>& eta, Matrix& Cov) const {
-        const int J = static_cast<int>(eta.size());
-        Cov.setZero(J, J);
+        Cov.setZero(n_blocks(), n_blocks());
 
-        for (int j = 0; j < J; ++j) {
-            for (int k = j; k < J; ++k) {
+        for (int j = 0; j < n_blocks(); ++j) {
+            for (int k = j; k < n_blocks(); ++k) {
                 const double c = cov_(eta[j], eta[k]);
                 Cov(j, k) = c;
                 Cov(k, j) = c;
@@ -1464,16 +1447,15 @@ private:
         correlation_matrix_(eta_(blocks), Corr);
     }
     void correlation_matrix_(const std::vector<Vector>& eta, Matrix& Corr) const {
-        const int J = static_cast<int>(eta.size());
-        Corr.setIdentity(J, J);
+        Corr.setIdentity(n_blocks(), n_blocks());
 
-        std::vector<double> vars(J);
-        for (int j = 0; j < J; ++j) {
+        std::vector<double> vars(n_blocks());
+        for (int j = 0; j < n_blocks(); ++j) {
             vars[j] = cov_(eta[j], eta[j]);
         }
 
-        for (int j = 0; j < J; ++j) {
-            for (int k = j + 1; k < J; ++k) {
+        for (int j = 0; j < n_blocks(); ++j) {
+            for (int k = j + 1; k < n_blocks(); ++k) {
                 double corr_jk = 0.0;
 
                 if (vars[j] > 0.0 && vars[k] > 0.0) {
@@ -1493,15 +1475,14 @@ private:
         const std::vector<Vector>& weights,
         Matrix& Corr
     ) const {
-        const int J = static_cast<int>(blocks.size());
-        if (static_cast<int>(weights.size()) != J)
+        if (static_cast<int>(weights.size()) != n_blocks())
             throw std::logic_error("correlation_matrix_raw_data_: size mismatch");
 
-        Corr.setIdentity(J, J);
-        std::vector<Vector> eta(J);
-        std::vector<double> vars(J, 0.0);
+        Corr.setIdentity(n_blocks(), n_blocks());
+        std::vector<Vector> eta(n_blocks());
+        std::vector<double> vars(n_blocks(), 0.0);
 
-        for (int j = 0; j < J; ++j) {
+        for (int j = 0; j < n_blocks(); ++j) {
             if (weights[j].size() != blocks[j]->n_dofs_weights())
                 throw std::logic_error("correlation_matrix_raw_data_: incompatible weight size");
             if (weights[j].squaredNorm() == 0.0)
@@ -1511,8 +1492,8 @@ private:
             vars[j] = cov_(eta[j], eta[j]);
         }
 
-        for (int j = 0; j < J; ++j) {
-            for (int k = j + 1; k < J; ++k) {
+        for (int j = 0; j < n_blocks(); ++j) {
+            for (int k = j + 1; k < n_blocks(); ++k) {
                 double corr_jk = 0.0;
                 if (vars[j] > 0.0 && vars[k] > 0.0)
                     corr_jk = cov_(eta[j], eta[k]) / std::sqrt(vars[j] * vars[k]);
@@ -1526,10 +1507,9 @@ private:
         return objective_(ws, C, eta_(blocks));
     }
     double objective_(FitWorkspace& ws, const BoolMatrix& C, const std::vector<Vector>& eta) const {
-        const int J = n_blocks();
         double f = 0.0;
-        for (int j = 0; j < J; ++j) {
-            for (int k = j; k < J; ++k) {
+        for (int j = 0; j < n_blocks(); ++j) {
+            for (int k = j; k < n_blocks(); ++k) {
                 if (C(j, k)) {
                     const double cov_jk = cov_value_(ws, j, k, eta[j], eta[k]);
                     const double mult = j == k ? 1.0 : 2.0;
@@ -1552,6 +1532,7 @@ private:
 
     int h_ {0}; // current component index
     int n_comp_{1};
+    int n_comp_effective_{0};
 
     std::vector<std::unique_ptr<Matrix>> data_blocks_;
     std::vector<BlockPtr> blocks_;

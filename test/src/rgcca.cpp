@@ -729,7 +729,8 @@ TEST(rgcca, inactive_design_stops_remaining_components_without_significance) {
     });
 
     EXPECT_EQ(callback_count, 1);
-    ASSERT_EQ(static_cast<int>(results.size()), n_comp_local);
+    ASSERT_EQ(static_cast<int>(results.size()), 1);
+    EXPECT_EQ(rgcca.n_comp_effective(), 1);
     for (const auto& result : results) {
         EXPECT_FALSE(result.component_significant);
         EXPECT_DOUBLE_EQ(result.rho_tot, 0.0);
@@ -742,7 +743,7 @@ TEST(rgcca, inactive_design_stops_remaining_components_without_significance) {
 TEST(rgcca, inactive_block_signal_test_deactivates_noise_blocks) {
     const auto results = fit_inactive_block_signal_gate_scenario(false);
 
-    ASSERT_EQ(static_cast<int>(results.size()), 3);
+    ASSERT_EQ(static_cast<int>(results.size()), 2);
     EXPECT_TRUE(results[0].active_blocks[0]);
     EXPECT_FALSE(results[0].active_blocks[1]);
     EXPECT_FALSE(results[0].active_blocks[2]);
@@ -756,11 +757,6 @@ TEST(rgcca, inactive_block_signal_test_deactivates_noise_blocks) {
     EXPECT_EQ(results[1].inactive_block_signal_actions[1], InactiveBlockSignalAction::KeptInactive);
     EXPECT_EQ(results[1].inactive_block_signal_actions[2], InactiveBlockSignalAction::KeptInactive);
     EXPECT_EQ(results[1].inactive_block_signal_actions[3], InactiveBlockSignalAction::Deactivated);
-
-    EXPECT_FALSE(results[2].active_blocks[0]);
-    EXPECT_FALSE(results[2].active_blocks[1]);
-    EXPECT_FALSE(results[2].active_blocks[2]);
-    EXPECT_FALSE(results[2].active_blocks[3]);
 }
 
 TEST(rgcca, inactive_block_signal_test_preserves_residual_signal_blocks) {

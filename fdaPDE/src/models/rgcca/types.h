@@ -227,7 +227,7 @@ struct Result {
     using BoolMatrix = fdapde::rgcca::BoolMatrix;
 
     int h = 0;
-    int J = 0;
+    int n_blocks = 0;
     std::vector<double> obj_history;
     bool monotone = true;
     bool cancelled = false;
@@ -249,12 +249,12 @@ struct Result {
     int block_importance_bootstrap_count = 0;
     std::vector<InactiveBlockSignalAction> inactive_block_signal_actions;
 
-    explicit Result(const int n_blocks) : J(n_blocks), C(J, J), covariance_matrix(J, J),
-    tau_values(J), lambda_components_values(J), lambda_weights_values(J), active_blocks(J),
-    block_importance(J, std::numeric_limits<double>::quiet_NaN()),
-    block_importance_p_values(J, std::numeric_limits<double>::quiet_NaN()),
-    block_importance_significant(J, false),
-    inactive_block_signal_actions(J, InactiveBlockSignalAction::None) {}
+    explicit Result(const int n_blocks_) : n_blocks(n_blocks_), C(n_blocks_, n_blocks_), covariance_matrix(n_blocks_, n_blocks_),
+    tau_values(n_blocks_), lambda_components_values(n_blocks_), lambda_weights_values(n_blocks_), active_blocks(n_blocks_),
+    block_importance(n_blocks_, std::numeric_limits<double>::quiet_NaN()),
+    block_importance_p_values(n_blocks_, std::numeric_limits<double>::quiet_NaN()),
+    block_importance_significant(n_blocks_, false),
+    inactive_block_signal_actions(n_blocks_, InactiveBlockSignalAction::None) {}
 };
 
 struct BootstrapResult {
@@ -284,7 +284,7 @@ struct BootstrapResult {
     std::vector<Matrix> corr_boot_by_lambda;
     std::vector<Matrix> corr_min_by_lambda;
 
-    // [lambda] -> J x J confidence intervals
+    // [lambda] -> n_blocks x n_blocks confidence intervals
     std::vector<Matrix> corr_ci_low_by_lambda;
     std::vector<Matrix> corr_ci_high_by_lambda;
 
@@ -306,14 +306,14 @@ struct BootstrapResult {
         block_names(block_names_)
     {
         const std::size_t n_lambda = lambda_grid.size();
-        const std::size_t J = block_dims_.size();
+        const std::size_t n_blocks = block_dims_.size();
 
         w_fit_by_lambda.resize(n_lambda);
         w_boot_by_lambda.resize(n_lambda);
         w_min_by_lambda.resize(n_lambda);
         B_used_by_lambda.resize(n_lambda);
 
-        active_blocks.resize(J);
+        active_blocks.resize(n_blocks);
 
         corr_min_by_lambda.resize(n_lambda);
         corr_boot_by_lambda.resize(n_lambda);
@@ -321,9 +321,9 @@ struct BootstrapResult {
         corr_ci_high_by_lambda.resize(n_lambda);
 
         for (std::size_t i = 0; i < n_lambda; ++i) {
-            corr_min_by_lambda[i].setZero(J , J);
-            corr_ci_low_by_lambda[i].setZero(J, J);
-            corr_ci_high_by_lambda[i].setZero(J, J);
+            corr_min_by_lambda[i].setZero(n_blocks, n_blocks);
+            corr_ci_low_by_lambda[i].setZero(n_blocks, n_blocks);
+            corr_ci_high_by_lambda[i].setZero(n_blocks, n_blocks);
         }
     }
 };
