@@ -561,3 +561,5 @@ TEST(sr, test_19) {
     EXPECT_TRUE(almost_equal<double>(m.f(), "../data/sr/19/field.mtx"));
     EXPECT_TRUE(almost_equal<double>(m.beta(), "../data/sr/19/beta.mtx"));
 }
+
+
