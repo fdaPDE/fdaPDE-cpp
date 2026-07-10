@@ -74,7 +74,7 @@ namespace test {
 
 // #include "src/sr.cpp"
 #include "src/fpls.cpp"
-// #include "src/fpca.cpp"
+#include "src/fpca.cpp"
 // #include "src/gsr.cpp"
 // #include "src/qsr.cpp"
 // #include "src/de.cpp"

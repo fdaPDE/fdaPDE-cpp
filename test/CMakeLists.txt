@@ -6,6 +6,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_WARNINGS_FLAGS "") # "-Wall -Wpedantic -Wextra -Werror")
 set(CMAKE_CXX_FLAGS "-O2 -march=native -std=c++20 ${CMAKE_WARNINGS_FLAGS} -I${CMAKE_CURRENT_SOURCE_DIR}/../ -I${CMAKE_CURRENT_SOURCE_DIR}/../fdaPDE/core/")
 
+if(APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+	add_compile_definitions(_Static_assert=static_assert)
+endif()
+
 find_package (Eigen3 3.4 REQUIRED NO_MODULE)
 
 include_directories(../src/)

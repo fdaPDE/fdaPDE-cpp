@@ -9,6 +9,7 @@
 *.so
 test/fdapde_test
 test/.cache
+test/_deps/
 test/build/
 build/
 CMakeFiles/

@@ -5,7 +5,13 @@
 
 namespace fdapde {
 
-template <typename DirectionSolver, typename LoadingSolver> class fPLS {
+enum class fPLSMode { Regression, ModeA, SymmetricBlock };
+template <fPLSMode Mode> using fPLSModeTag = std::integral_constant<fPLSMode, Mode>;
+inline constexpr fPLSModeTag<fPLSMode::Regression> fPLS_R {};
+inline constexpr fPLSModeTag<fPLSMode::ModeA> fPLS_A {};
+inline constexpr fPLSModeTag<fPLSMode::SymmetricBlock> fPLS_SB {};
+
+template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLSMode::Regression> class fPLS {
    private:
     using direction_solver_t = std::decay_t<DirectionSolver>;
     using loading_solver_t = std::decay_t<LoadingSolver>;
@@ -19,7 +25,7 @@ template <typename DirectionSolver, typename LoadingSolver> class fPLS {
     template <typename GeoFrame, typename DirectionPenalty, typename LoadingPenalty>
     fPLS(
       const std::string& colname, const matrix_t& Y, const GeoFrame& gf, DirectionPenalty&& direction_penalty,
-      LoadingPenalty&& loading_penalty) {
+      LoadingPenalty&& loading_penalty, fPLSModeTag<Mode> = {}) {
         direction_solver_.discretize(direction_penalty.get());
         loading_solver_.discretize(loading_penalty.get());
         analyze_data(colname, Y, gf);
@@ -53,22 +59,19 @@ template <typename DirectionSolver, typename LoadingSolver> class fPLS {
         V_.resize(Y_.cols(), n_comp_);
         D_.resize(Y_.cols(), n_comp_);
         T_.resize(n_units_, n_comp_);
+        U_.resize(n_units_, n_comp_);
+        sigma_.resize(n_comp_);
 
+        matrix_t M_h = Y_h.transpose() * X_h;
         for (int h = 0; h < n_comp_; ++h) {
-            fit_direction_(Y_h.transpose() * X_h, direction_lambda, max_iter, tol, h);
-            T_.col(h) = X_h * direction_solver_.Psi() * W_.col(h);
+            fit_direction_(M_h, direction_lambda, max_iter, tol, h);
+            project_(X_h, Y_h, h);
 
-            loading_solver_.update_response(X_h.transpose() * T_.col(h) / T_.col(h).squaredNorm());
-            loading_solver_.fit(loading_lambda);
-            C_.col(h) = loading_solver_.f();
-            D_.col(h) = Y_h.transpose() * T_.col(h) / T_.col(h).squaredNorm();
+            fit_loadings_(X_h, Y_h, loading_lambda, h);
 
-            X_h -= T_.col(h) * (loading_solver_.Psi() * C_.col(h)).transpose();
-            Y_h -= T_.col(h) * D_.col(h).transpose();
+            deflate_(X_h, Y_h, M_h, h);
         }
-        B_ = W_ * (C_.transpose() * loading_solver_.Psi().transpose() * loading_solver_.Psi() * W_)
-                   .partialPivLu()
-                   .solve(D_.transpose());
+        if constexpr (Mode == fPLSMode::Regression) { B_ = coefficient_(n_comp_); }
     }
 
     void fit(
@@ -85,10 +88,13 @@ template <typename DirectionSolver, typename LoadingSolver> class fPLS {
         V_.resize(Y_.cols(), n_comp_);
         D_.resize(Y_.cols(), n_comp_);
         T_.resize(n_units_, n_comp_);
+        U_.resize(n_units_, n_comp_);
+        sigma_.resize(n_comp_);
         direction_lambda_.resize(n_comp_, direction_n_lambda);
         loading_lambda_.resize(n_comp_, loading_n_lambda);
 
         int calibration = (flag & 0b11110);
+        matrix_t M_h = Y_h.transpose() * X_h;
         for (int h = 0; h < n_comp_; ++h) {
             Eigen::Matrix<double, direction_n_lambda, 1> direction_lambda;
             Eigen::Matrix<double, loading_n_lambda, 1> loading_lambda;
@@ -100,11 +106,10 @@ template <typename DirectionSolver, typename LoadingSolver> class fPLS {
                 std::copy(loading_lambda_grid.begin(), loading_lambda_grid.end(), loading_lambda.begin());
             } break;
             case OptimizeGCV: {
-                matrix_t M = Y_h.transpose() * X_h;
-                Eigen::JacobiSVD<matrix_t> svd(M, Eigen::ComputeThinU | Eigen::ComputeThinV);
+                Eigen::JacobiSVD<matrix_t> svd(M_h, Eigen::ComputeThinU | Eigen::ComputeThinV);
                 vector_t f0 = svd.matrixV().col(0);
                 auto direction_gcv = [&](auto lambda) {
-                    return direction_gcv_(M, lambda, f0, max_iter, tol, edf_r, seed);
+                    return direction_gcv_(M_h, lambda, f0, max_iter, tol, edf_r, seed);
                 };
                 auto loading_gcv = [&](auto lambda) {
                     return loading_gcv_(X_h, T_.col(h), lambda, edf_r, seed);
@@ -112,11 +117,16 @@ template <typename DirectionSolver, typename LoadingSolver> class fPLS {
                 GridSearch<direction_n_lambda> direction_optimizer;
                 direction_lambda = direction_optimizer.optimize(direction_gcv, direction_lambda_grid);
 
-                fit_direction_(M, direction_lambda, f0, max_iter, tol, h);
-                T_.col(h) = X_h * direction_solver_.Psi() * W_.col(h);
+                fit_direction_(M_h, direction_lambda, f0, max_iter, tol, h);
+                project_(X_h, Y_h, h);
 
-                GridSearch<loading_n_lambda> loading_optimizer;
-                loading_lambda = loading_optimizer.optimize(loading_gcv, loading_lambda_grid);
+                if constexpr (Mode == fPLSMode::SymmetricBlock) {
+                    std::copy(loading_lambda_grid.begin(), loading_lambda_grid.begin() + loading_n_lambda, loading_lambda.begin());
+                }
+                if constexpr (Mode == fPLSMode::Regression || Mode == fPLSMode::ModeA) {
+                    GridSearch<loading_n_lambda> loading_optimizer;
+                    loading_lambda = loading_optimizer.optimize(loading_gcv, loading_lambda_grid);
+                }
             } break;
             default: {
                 throw std::runtime_error("Unrecognized calibration option.");
@@ -124,38 +134,103 @@ template <typename DirectionSolver, typename LoadingSolver> class fPLS {
             }
 
             if (calibration != OptimizeGCV) {
-                Eigen::JacobiSVD<matrix_t> svd(Y_h.transpose() * X_h, Eigen::ComputeThinU | Eigen::ComputeThinV);
-                fit_direction_(Y_h.transpose() * X_h, direction_lambda, svd.matrixV().col(0), max_iter, tol, h);
-                T_.col(h) = X_h * direction_solver_.Psi() * W_.col(h);
+                Eigen::JacobiSVD<matrix_t> svd(M_h, Eigen::ComputeThinU | Eigen::ComputeThinV);
+                fit_direction_(M_h, direction_lambda, svd.matrixV().col(0), max_iter, tol, h);
+                project_(X_h, Y_h, h);
             }
 
-            loading_solver_.update_response(X_h.transpose() * T_.col(h) / T_.col(h).squaredNorm());
-            loading_solver_.fit(loading_lambda);
-            C_.col(h) = loading_solver_.f();
-            D_.col(h) = Y_h.transpose() * T_.col(h) / T_.col(h).squaredNorm();
+            fit_loadings_(X_h, Y_h, loading_lambda, h);
             for (int j = 0; j < direction_n_lambda; ++j) { direction_lambda_(h, j) = direction_lambda[j]; }
             for (int j = 0; j < loading_n_lambda; ++j) { loading_lambda_(h, j) = loading_lambda[j]; }
 
-            X_h -= T_.col(h) * (loading_solver_.Psi() * C_.col(h)).transpose();
-            Y_h -= T_.col(h) * D_.col(h).transpose();
+            deflate_(X_h, Y_h, M_h, h);
         }
-        B_ = W_ * (C_.transpose() * loading_solver_.Psi().transpose() * loading_solver_.Psi() * W_)
-                   .partialPivLu()
-                   .solve(D_.transpose());
+        if constexpr (Mode == fPLSMode::Regression) { B_ = coefficient_(n_comp_); }
     }
 
+    static constexpr fPLSMode mode() { return Mode; }
     const matrix_t& X_space_directions() const { return W_; }
     const matrix_t& Y_space_directions() const { return V_; }
     const matrix_t& X_latent() const { return T_; }
+    const matrix_t& X_latent_scores() const { return T_; }
+    const matrix_t& Y_latent_scores() const { return U_; }
     const matrix_t& X_loadings() const { return C_; }
     const matrix_t& Y_loadings() const { return D_; }
-    matrix_t fitted() const { return T_ * D_.transpose(); }
-    matrix_t reconstructed() const { return T_ * (loading_solver_.Psi() * C_).transpose(); }
-    const matrix_t& B() const { return B_; }
+    matrix_t fitted() const { return fitted(n_comp_); }
+    matrix_t fitted(int h) const {
+        h = components_(h);
+        if constexpr (Mode == fPLSMode::Regression) { return T_.leftCols(h) * D_.leftCols(h).transpose(); }
+        if constexpr (Mode == fPLSMode::ModeA || Mode == fPLSMode::SymmetricBlock) {
+            return U_.leftCols(h) * D_.leftCols(h).transpose();
+        }
+    }
+    matrix_t reconstructed() const { return reconstructed(n_comp_); }
+    matrix_t reconstructed(int h) const {
+        h = components_(h);
+        return T_.leftCols(h) * (loading_solver_.Psi() * C_.leftCols(h)).transpose();
+    }
+    const matrix_t& B() const requires(Mode == fPLSMode::Regression) { return B_; }
+    matrix_t B(int h) const requires(Mode == fPLSMode::Regression) {
+        h = components_(h);
+        if (h == n_comp_) return B_;
+        return coefficient_(h);
+    }
+    const matrix_t& Beta() const requires(Mode == fPLSMode::Regression) { return B(); }
+    matrix_t Beta(int h) const requires(Mode == fPLSMode::Regression) { return B(h); }
     const matrix_t& direction_lambda() const { return direction_lambda_; }
     const matrix_t& loading_lambda() const { return loading_lambda_; }
 
    private:
+    int components_(int h) const {
+        if (h == 0) h = n_comp_;
+        fdapde_assert(h > 0 && h <= n_comp_);
+        return h;
+    }
+    matrix_t coefficient_(int h) const {
+        static_assert(Mode == fPLSMode::Regression);
+        const auto W_h = W_.leftCols(h);
+        const auto C_h = C_.leftCols(h);
+        const auto D_h = D_.leftCols(h);
+        return W_h * (C_h.transpose() * loading_solver_.Psi().transpose() * loading_solver_.Psi() * W_h)
+                       .partialPivLu()
+                       .solve(D_h.transpose());
+    }
+    template <typename Lambda>
+        requires(internals::is_subscriptable<Lambda, int>)
+    void fit_loadings_(const matrix_t& X_h, const matrix_t& Y_h, const Lambda& loading_lambda, int h) {
+        if constexpr (Mode == fPLSMode::SymmetricBlock) {
+            C_.col(h) = W_.col(h);
+            D_.col(h) = V_.col(h);
+            return;
+        }
+        loading_solver_.update_response(X_h.transpose() * T_.col(h) / T_.col(h).squaredNorm());
+        loading_solver_.fit(loading_lambda);
+        C_.col(h) = loading_solver_.f();
+        if constexpr (Mode == fPLSMode::Regression) {
+            D_.col(h) = Y_h.transpose() * T_.col(h) / T_.col(h).squaredNorm();
+        }
+        if constexpr (Mode == fPLSMode::ModeA) {
+            D_.col(h) = Y_h.transpose() * U_.col(h) / U_.col(h).squaredNorm();
+        }
+    }
+    void project_(const matrix_t& X_h, const matrix_t& Y_h, int h) {
+        T_.col(h) = X_h * direction_solver_.Psi() * W_.col(h);
+        U_.col(h) = Y_h * V_.col(h);
+    }
+    void deflate_(matrix_t& X_h, matrix_t& Y_h, matrix_t& M_h, int h) {
+        if constexpr (Mode == fPLSMode::SymmetricBlock) {
+            M_h -= sigma_[h] * V_.col(h) * W_.col(h).transpose();
+            return;
+        }
+        X_h -= T_.col(h) * (loading_solver_.Psi() * C_.col(h)).transpose();
+        if constexpr (Mode == fPLSMode::Regression) {
+            Y_h -= T_.col(h) * D_.col(h).transpose();
+        }
+        if constexpr (Mode == fPLSMode::ModeA) {
+            Y_h -= U_.col(h) * D_.col(h).transpose();
+        }
+        M_h = Y_h.transpose() * X_h;
+    }
     template <typename Lambda>
         requires(internals::is_subscriptable<Lambda, int>)
     void fit_direction_(const matrix_t& M, const Lambda& lambda, int max_iter, double tol, int h) {
@@ -185,9 +260,11 @@ template <typename DirectionSolver, typename LoadingSolver> class fPLS {
         requires(internals::is_subscriptable<Lambda, int>)
     void fit_direction_(const matrix_t& M, const Lambda& lambda, const Init& f0, int max_iter, double tol, int h) {
         const auto& [f, v] = solve_direction_(M, lambda, f0, max_iter, tol);
-        const double norm = std::sqrt(direction_solver_.f().dot(direction_solver_.mass() * direction_solver_.f()));
-        W_.col(h) = f / norm;
-        V_.col(h) = v;
+        const double w_norm = (direction_solver_.Psi() * f).norm();
+        const double v_norm = v.norm();
+        W_.col(h) = f / w_norm;
+        V_.col(h) = v / v_norm;
+        sigma_[h] = w_norm * v_norm;
     }
     template <typename Lambda, typename Init>
         requires(internals::is_subscriptable<Lambda, int>)
@@ -216,9 +293,11 @@ template <typename DirectionSolver, typename LoadingSolver> class fPLS {
     matrix_t W_;   // X directions
     matrix_t V_;   // Y directions
     matrix_t T_;   // X scores
+    matrix_t U_;   // Y scores
     matrix_t C_;   // X loadings
     matrix_t D_;   // Y loadings
     matrix_t B_;   // regression operator
+    vector_t sigma_;
     matrix_t direction_lambda_;
     matrix_t loading_lambda_;
 };
@@ -227,7 +306,13 @@ template <typename GeoFrame, typename DirectionPenalty, typename LoadingPenalty>
 fPLS(
   const std::string& colname, const Eigen::Matrix<double, Dynamic, Dynamic>& Y, const GeoFrame& gf,
   DirectionPenalty&& direction_penalty, LoadingPenalty&& loading_penalty)
-  -> fPLS<typename DirectionPenalty::solver_t, typename LoadingPenalty::solver_t>;
+  -> fPLS<typename DirectionPenalty::solver_t, typename LoadingPenalty::solver_t, fPLSMode::Regression>;
+
+template <typename GeoFrame, typename DirectionPenalty, typename LoadingPenalty, fPLSMode Mode>
+fPLS(
+  const std::string& colname, const Eigen::Matrix<double, Dynamic, Dynamic>& Y, const GeoFrame& gf,
+  DirectionPenalty&& direction_penalty, LoadingPenalty&& loading_penalty, fPLSModeTag<Mode>)
+  -> fPLS<typename DirectionPenalty::solver_t, typename LoadingPenalty::solver_t, Mode>;
 
 }   // namespace fdapde
 
