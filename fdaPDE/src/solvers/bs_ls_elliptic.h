@@ -90,9 +90,6 @@ struct bs_ls_elliptic {
         requires(is_valid_penalty_v<Penalty>)
     bs_ls_elliptic(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
-        // fdapde_assert(gf.n_layers() == 1);
-        // n_obs_  = gf[0].rows();
-        // n_locs_ = n_obs_;
         discretize(penalty);
         analyze_data(formula, gf, W);
     }
@@ -105,9 +102,6 @@ struct bs_ls_elliptic {
         requires(is_valid_penalty_v<Penalty>)
     bs_ls_elliptic(const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
-        // fdapde_assert(gf.n_layers() == 1);
-        // n_obs_  = gf[0].rows();
-        // n_locs_ = n_obs_;
         discretize(penalty);
         eval_basis_at_(gf);
     }
@@ -316,11 +310,12 @@ struct bs_ls_elliptic {
     // perform a nonparametric_fit, e.g. discarding possible covariates
     vector_t nonparametric_fit(double lambda) {
         fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
-        if (lambda_saved_.value() != lambda) {
+        if (lambda_saved_.value() != lambda || W_changed_) {
             // assemble and factorize system matrix for nonparameteric part
             const sparse_matrix_t A = PsiNA().transpose() * D_ * W_ * PsiNA() + lambda * R1_;
             // todo: add Dirichlet boundary conditions
             invA_.compute(A);
+            W_changed_ = false;
         }
         lambda_saved_ = lambda;
 
@@ -333,7 +328,7 @@ struct bs_ls_elliptic {
         fdapde_assert(lambda_saved_.has_value());
 
         if (trace_mode_ == TraceMode::Hutchinson) {
-            if (!Ys_.has_value() || !Bs_.has_value()) {
+            if (!Ys_.has_value() || !Bs_.has_value() || !Us_.has_value() || Us_->cols() != r) {
                 int seed_ = (seed == random_seed) ? std::random_device()() : seed;
                 std::mt19937 rng(seed_);
                 rademacher_distribution rademacher;
@@ -370,11 +365,12 @@ struct bs_ls_elliptic {
             fdapde_assert(lambda > 0);
             lambda_ = lambda;
         }
-        if (lambda_saved_.value() != lambda_) {
+        if (lambda_saved_.value() != lambda_ || W_changed_) {
             sparse_matrix_t A = PsiNA().transpose() * D_ * W_ * PsiNA() + lambda_ * R1_;
             // todo: add Dirichlet boundary conditions
             invA_.compute(A);
             lambda_saved_ = lambda_;
+            W_changed_ = false;
         }
         return edf(r, seed);
     }
@@ -412,7 +408,7 @@ struct bs_ls_elliptic {
     int n_obs() const { return n_obs_;}
     int n_covs() const { return n_covs_; }
     const binary_t& nan_pattern() const { return nan_pattern_; }
-    const sparse_matrix_t mass() const { return R0_; }
+    const sparse_matrix_t& mass() const { return R0_; }
     const sparse_matrix_t& stiff() const { return R1_; }
     const sparse_matrix_t& Psi() const { return Psi_; }
     const sparse_matrix_t& PsiNA() const { return B_.has_value() ? *B_ : Psi_; }
@@ -454,7 +450,7 @@ struct bs_ls_elliptic {
     matrix_t XtWX_;            // n_covs x n_covs matrix X^\top * W * X
     dense_solver_t invXtWX_;   // factorization of n_covs x n_covs matrix X^\top * W * X
     matrix_t invXtWXXtW_;      // n_covs x n_obs matrix (X^\top * X)^{-1} * (X^\top W)
-    bool W_changed_;
+    bool W_changed_ = false;
     TraceMode trace_mode_ = TraceMode::Hutchinson;
 
     // basis eval handles
