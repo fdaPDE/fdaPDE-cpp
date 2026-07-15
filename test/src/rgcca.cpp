@@ -631,6 +631,21 @@ TEST(rgcca, R_RGCCA) {
     check_rgcca_against_cran("rgcca", Mode::Regularized);
 }
 
+TEST(rgcca, connection_uncertainty_retains_threshold_overlap) {
+    const double z = fdapde::internals::standard_normal_quantile(0.975);
+    EXPECT_NEAR(z, 1.959963984540054, 1e-12);
+
+    EXPECT_GE(fdapde::internals::wilson_score_upper_bound(110, 120, z), 0.95);
+    EXPECT_LT(fdapde::internals::wilson_score_upper_bound(109, 120, z), 0.95);
+
+    std::vector<double> overlapping(120, 0.04);
+    std::fill(overlapping.begin() + 65, overlapping.end(), 0.06);
+    EXPECT_GE(fdapde::internals::median_confidence_upper_bound(overlapping, z), 0.05);
+
+    std::vector<double> clearly_weak(120, 0.04);
+    EXPECT_LT(fdapde::internals::median_confidence_upper_bound(clearly_weak, z), 0.05);
+}
+
 TEST(rgcca, GCCA_NN_cov) {
 
     write_ipopt_options();

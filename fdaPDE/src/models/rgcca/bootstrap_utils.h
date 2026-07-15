@@ -253,13 +253,6 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
 ) {
     const int n_threads = bootstrap_state.n_threads;
     const unsigned seed = static_cast<unsigned>(bootstrap_state.seed);
-    const int candidate_window = std::max(
-        bootstrap_state.check_every,
-        std::max(
-            bootstrap_state.check_every_block_deactivation,
-            bootstrap_state.check_every_connection_deactivation
-        )
-    );
     int next_candidate = 0;
 
     // start parallel execution timer
@@ -273,10 +266,36 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
     };
 
     while (!bootstrap_state.stop && bootstrap_state.B_done < bootstrap_state.B_max) {
-        const int window_size = std::min(
-            candidate_window,
-            bootstrap_state.B_max - bootstrap_state.B_done
+        const auto until_check = [&](const int last_check, const int check_every) {
+            return std::max(
+                1,
+                check_every - (bootstrap_state.B_done - last_check)
+            );
+        };
+
+        int window_size = std::min(
+            bootstrap_state.B_max - bootstrap_state.B_done,
+            until_check(bootstrap_state.last_check_B_done, bootstrap_state.check_every)
         );
+        if (bootstrap_config_.adaptive && opt_.block_deactivation) {
+            window_size = std::min(
+                window_size,
+                until_check(
+                    bootstrap_state.last_block_deactivation_check_B_done,
+                    bootstrap_state.check_every_block_deactivation
+                )
+            );
+        }
+        if (bootstrap_config_.adaptive && opt_.connection_deactivation) {
+            window_size = std::min(
+                window_size,
+                until_check(
+                    bootstrap_state.last_connection_deactivation_check_B_done,
+                    bootstrap_state.check_every_connection_deactivation
+                )
+            );
+        }
+
         const int window_begin = next_candidate;
         const int window_end = window_begin + window_size;
         const rgcca::BoolMatrix C_snapshot = C_active;
@@ -640,6 +659,10 @@ int RGCCA<SamplingStrategy>::threshold_inactive_connections_(
     if (B_eff <= 0)
         return count_active_connections_(C_active);
 
+    const double z = internals::standard_normal_quantile(
+        0.5 * (1.0 + bootstrap_config_.ci_level)
+    );
+
     for (int j = 0; j < n_blocks(); ++j) {
         for (int k = j + 1; k < n_blocks(); ++k) {
             if (!C_active(j, k)) continue;
@@ -656,15 +679,14 @@ int RGCCA<SamplingStrategy>::threshold_inactive_connections_(
 
             const int n_pos = state.corr_pos_count(j, k);
             const int n_neg = state.corr_neg_count(j, k);
-            const double sign_stability = B_eff > 0 ?
-                static_cast<double>(std::max(n_pos, n_neg)) / static_cast<double>(B_eff) :
-                0.0;
-
-            const double med_abs_corr = internals::median(abs_corr);
+            const double sign_stability_upper = internals::wilson_score_upper_bound(
+                std::max(n_pos, n_neg), B_eff, z
+            );
+            const double median_abs_corr_upper = internals::median_confidence_upper_bound(abs_corr, z);
 
             const bool active =
-                sign_stability >= bootstrap_config_.active_connection_sign_stability &&
-                med_abs_corr >= bootstrap_config_.active_connection_min_abs_corr;
+                sign_stability_upper >= bootstrap_config_.active_connection_sign_stability &&
+                median_abs_corr_upper >= bootstrap_config_.active_connection_min_abs_corr;
 
             if (!active) {
                 C_active(j, k) = false;
