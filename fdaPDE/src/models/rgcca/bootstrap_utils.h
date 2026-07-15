@@ -208,6 +208,7 @@ void RGCCA<SamplingStrategy>::ensure_bootstrap_lambda_storage_(
     for (int j = 0; j < n_blocks; ++j)
         boot_results.w_boot_by_lambda[lambda_i][j].setZero(block_dims[j], boot_results.B);
     boot_results.corr_boot_by_lambda[lambda_i].setZero(n_blocks * n_blocks, boot_results.B);
+    boot_results.candidate_ids_by_lambda[lambda_i].assign(boot_results.B, -1);
 }
 
 // updates the best lambda candidate and applies lambda-level early stopping
@@ -252,11 +253,14 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
 ) {
     const int n_threads = bootstrap_state.n_threads;
     const unsigned seed = static_cast<unsigned>(bootstrap_state.seed);
-
-    // shared stream state: workers claim bootstrap ids, while accepted samples merge under one lock
-    std::atomic<int> next_boot {0};
-    std::atomic<bool> stop {false};
-    std::mutex merge_mutex;
+    const int candidate_window = std::max(
+        bootstrap_state.check_every,
+        std::max(
+            bootstrap_state.check_every_block_deactivation,
+            bootstrap_state.check_every_connection_deactivation
+        )
+    );
+    int next_candidate = 0;
 
     // start parallel execution timer
     const auto parallel_start = std::chrono::high_resolution_clock::now();
@@ -268,64 +272,49 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
         return elapsed;
     };
 
-    parallel_for(0, n_threads, /* grain_size */ 1, [&](int) {
-        while (!stop.load(std::memory_order_acquire)) {
+    while (!bootstrap_state.stop && bootstrap_state.B_done < bootstrap_state.B_max) {
+        const int window_size = std::min(
+            candidate_window,
+            bootstrap_state.B_max - bootstrap_state.B_done
+        );
+        const int window_begin = next_candidate;
+        const int window_end = window_begin + window_size;
+        const rgcca::BoolMatrix C_snapshot = C_active;
+        std::vector<typename RGCCA<SamplingStrategy>::BootstrapSampleResult> samples(window_size);
 
-            // claim a candidate resample id; it may be discarded before fitting if the stream is full
-            const int b = next_boot.fetch_add(1, std::memory_order_relaxed);
-
-            // copy the current design under the merge lock so this sample fits one epoch
-            rgcca::BoolMatrix C_snapshot;
-            int epoch = 0;
-            {
-                std::lock_guard<std::mutex> lock(merge_mutex);
-                if (bootstrap_state.stop || bootstrap_state.B_done >= bootstrap_state.B_max) {
-                    stop.store(true, std::memory_order_release);
-                    break;
-                }
-                C_snapshot = C_active;
-                epoch = bootstrap_state.design_epoch;
-            }
-
-            // fit outside the merge lock; cancellation handles design resets
+        // Candidate tasks remain dynamically scheduled; only their reduction is ordered.
+        parallel_for(window_begin, window_end, /* grain_size */ 1, [&](int b) {
             const int tid = this_thread_id();
-            auto cancelled = [&]() {
-                return stop.load(std::memory_order_acquire) ||
-                    epoch != bootstrap_state.design_epoch_signal.load(std::memory_order_acquire);
-            };
-            auto sample = fit_bootstrap_sample_(thread_boot_worker[tid], b, seed, C_snapshot, w_fit, cancelled);
+            samples[b - window_begin] = fit_bootstrap_sample_(
+                thread_boot_worker[tid], b, seed, C_snapshot, w_fit
+            );
+        });
 
-            // merge sample accounting and discard stale work
-            std::lock_guard<std::mutex> lock(merge_mutex);
-            ++bootstrap_state.B_total;
+        bootstrap_state.B_total += window_size;
+        for (const auto& sample : samples)
             timing_summary.add_sample(sample.fit_time, sample.fit_iters, sample.capped, sample.fit_started);
+
+        bool design_changed = false;
+        int consumed = 0;
+        for (int offset = 0; offset < window_size; ++offset) {
+            auto& sample = samples[offset];
+            ++consumed;
 
             if (sample.cancelled) {
                 ++bootstrap_state.B_cancelled;
                 continue;
             }
 
-            if (bootstrap_state.stop || epoch != bootstrap_state.design_epoch) {
-                if (epoch != bootstrap_state.design_epoch)
-                    ++bootstrap_state.B_stale;
-                continue;
-            }
-
-            if (bootstrap_state.B_done >= bootstrap_state.B_max) {
-                bootstrap_state.stop = true;
-                stop.store(true, std::memory_order_release);
-                continue;
-            }
-
-            // store accepted weights and correlations
+            // Store accepted weights and correlations in candidate-ID order.
             const int b_good = bootstrap_state.B_done;
+            boot_results.candidate_ids_by_lambda[lambda_i][b_good] = window_begin + offset;
             for (int j = 0; j < n_blocks(); ++j) {
                 boot_results.w_boot_by_lambda[lambda_i][j].col(b_good) = sample.w[j];
                 update_w_min_(w_min[j], w_fit[j], sample.w[j]);
             }
-            boot_results.corr_boot_by_lambda[lambda_i].col(b_good) = Eigen::Map<const rgcca::Vector>(sample.corr.data(), n_blocks() * n_blocks());
+            boot_results.corr_boot_by_lambda[lambda_i].col(b_good) =
+                Eigen::Map<const rgcca::Vector>(sample.corr.data(), n_blocks() * n_blocks());
 
-            // track correlation sign stability for later connection deactivation
             for (int j = 0; j < n_blocks(); ++j) {
                 for (int k = j + 1; k < n_blocks(); ++k) {
                     const double c = sample.corr(j, k);
@@ -340,7 +329,6 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
             }
             ++bootstrap_state.B_done;
 
-            // adaptive mode can change the design mid-stream; non-adaptive mode waits until B_max
             const bool force_check = bootstrap_state.B_done >= bootstrap_state.B_max;
             const bool allow_design_deactivation = bootstrap_config_.adaptive || force_check;
             const bool due_block_deactivation =
@@ -352,7 +340,6 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
                 bootstrap_state.B_done - bootstrap_state.last_connection_deactivation_check_B_done >=
                     bootstrap_state.check_every_connection_deactivation;
 
-            // block deactivation invalidates previously accepted samples
             if (opt_.block_deactivation && allow_design_deactivation && due_block_deactivation) {
                 bootstrap_state.last_block_deactivation_check_B_done = bootstrap_state.B_done;
                 const rgcca::BoolMatrix C_before = C_active;
@@ -367,21 +354,19 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
                         n_active_connections,
                         elapsed_since_last_log()
                     );
+                    design_changed = true;
                     if (n_active_connections == 0) {
                         bootstrap_state.crit = 0.0;
                         bootstrap_state.stop = true;
-                        stop.store(true, std::memory_order_release);
                     }
-                    continue;
+                    break;
                 }
             }
 
-            // expensive adaptive checks run only at configured checkpoints
             const bool due_adaptive_check =
                 force_check ||
                 bootstrap_state.B_done - bootstrap_state.last_check_B_done >= bootstrap_state.check_every;
 
-            // connection deactivation also restarts the accepted-sample stream
             if (opt_.connection_deactivation && allow_design_deactivation && due_connection_deactivation) {
                 bootstrap_state.last_connection_deactivation_check_B_done = bootstrap_state.B_done;
                 const rgcca::BoolMatrix C_before = C_active;
@@ -396,19 +381,17 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
                         n_active_connections,
                         elapsed_since_last_log()
                     );
+                    design_changed = true;
                     if (n_active_connections == 0) {
                         bootstrap_state.crit = 0.0;
                         bootstrap_state.stop = true;
-                        stop.store(true, std::memory_order_release);
                     }
-                    continue;
+                    break;
                 }
             }
 
             if (!due_adaptive_check) continue;
             bootstrap_state.last_check_B_done = bootstrap_state.B_done;
-
-            // criterion and adaptive stopping use the current minimum-weight envelope
             bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_);
             const typename RGCCA<SamplingStrategy>::AdaptiveStopInfo stop_info =
                 bootstrap_config_.adaptive ?
@@ -424,10 +407,18 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
 
             if (stop_info.stop || bootstrap_state.B_done >= bootstrap_state.B_max) {
                 bootstrap_state.stop = true;
-                stop.store(true, std::memory_order_release);
+                break;
             }
         }
-    });
+
+        if (design_changed) {
+            // Replay the deterministic, unconsumed suffix under the new design.
+            bootstrap_state.B_stale += window_size - consumed;
+            next_candidate = window_begin + consumed;
+        } else {
+            next_candidate = window_end;
+        }
+    }
 
     // end parallel execution timer
     const auto parallel_end = std::chrono::high_resolution_clock::now();
@@ -456,6 +447,8 @@ auto RGCCA<SamplingStrategy>::fit_bootstrap_sample_(
     }
 
     // restore the full-sample weights and switch block views to this resample
+    for (std::size_t j = 0; j < boot_blocks.refs.size(); ++j)
+        boot_blocks.refs[j]->reset_bootstrap_fit_state(w_fit[j]);
     copy_weights_snapshot_(boot_blocks.refs, w_fit);
     set_row_index_all_(boot_blocks.refs, bootstrap_index_(n_, seed + static_cast<unsigned>(b)));
 
@@ -524,7 +517,6 @@ void RGCCA<SamplingStrategy>::reset_good_bootstrap_(
     state.B_design += state.B_done;
     state.reset_good();
     ++state.design_epoch;
-    state.design_epoch_signal.store(state.design_epoch, std::memory_order_release);
 
     // restart the envelope because accepted samples came from the previous design
     w_min = w_fit;
@@ -787,8 +779,13 @@ void RGCCA<SamplingStrategy>::annotate_component_significance_(
     const typename RGCCA<SamplingStrategy>::ComponentSignificanceResult& significance
 ) const {
     result.rho_tot = significance.rho_tot;
+    result.rho_tot_raw = significance.rho_tot_raw;
     result.rho_tot_p_value = significance.p_value;
+    result.rho_tot_null_mean = significance.null_mean;
+    result.rho_tot_null_q95 = significance.null_q95;
+    result.rho_tot_null_max = significance.null_max;
     result.rho_tot_bootstrap_count = significance.B;
+    result.rho_tot_null_valid_count = significance.null_valid_count;
     result.component_significant = significance.significant;
 }
 
@@ -798,6 +795,7 @@ auto RGCCA<SamplingStrategy>::inactive_component_significance_() const
     -> typename RGCCA<SamplingStrategy>::ComponentSignificanceResult {
     typename RGCCA<SamplingStrategy>::ComponentSignificanceResult out;
     out.rho_tot = 0.0;
+    out.rho_tot_raw = 0.0;
     out.p_value = 1.0;
     out.B = 0;
     out.significant = false;
@@ -806,10 +804,11 @@ auto RGCCA<SamplingStrategy>::inactive_component_significance_() const
 
 // computes design-normalized maxvar total correlation
 template <typename SamplingStrategy>
-double RGCCA<SamplingStrategy>::rho_tot_maxvar_(
+auto RGCCA<SamplingStrategy>::rho_tot_maxvar_(
     const typename RGCCA<SamplingStrategy>::BlockRefList& blocks,
     const rgcca::BoolMatrix& C
-) const {
+) const -> MaxvarCorrelationResult {
+    MaxvarCorrelationResult out;
     rgcca::Matrix Corr;
     correlation_matrix_(blocks, Corr);
 
@@ -820,17 +819,21 @@ double RGCCA<SamplingStrategy>::rho_tot_maxvar_(
             active.push_back(j);
 
     const int m = static_cast<int>(active.size());
-    if (m < 2) return 0.0;
+    if (m < 2) return {0.0, 0.0, 0.0};
 
     rgcca::Matrix R(m, m), Design(m, m);
     R.setIdentity();
     Design.setIdentity();
+    double squared_correlation_sum = 0.0;
+    int edge_count = 0;
     for (int a = 0; a < m; ++a) {
         for (int b = a + 1; b < m; ++b) {
             if (!C(active[a], active[b])) continue;
 
             double corr = Corr(active[a], active[b]);
             if (!std::isfinite(corr)) corr = 0.0;
+            squared_correlation_sum += corr * corr;
+            ++edge_count;
             if (opt_.scheme.sign_invariant) corr = std::abs(corr);
             R(a, b) = corr;
             R(b, a) = corr;
@@ -838,17 +841,26 @@ double RGCCA<SamplingStrategy>::rho_tot_maxvar_(
             Design(b, a) = 1.0;
         }
     }
+    out.inner_ave = edge_count > 0
+        ? std::clamp(squared_correlation_sum / static_cast<double>(edge_count), 0.0, 1.0)
+        : 0.0;
 
     Eigen::SelfAdjointEigenSolver<rgcca::Matrix> solver(R, Eigen::EigenvaluesOnly);
-    if (solver.info() != Eigen::Success) return std::numeric_limits<double>::quiet_NaN();
+    if (solver.info() != Eigen::Success) return out;
     Eigen::SelfAdjointEigenSolver<rgcca::Matrix> design_solver(Design, Eigen::EigenvaluesOnly);
-    if (design_solver.info() != Eigen::Success) return std::numeric_limits<double>::quiet_NaN();
+    if (design_solver.info() != Eigen::Success) return out;
 
     const double lambda = solver.eigenvalues().maxCoeff();
     const double lambda_max = design_solver.eigenvalues().maxCoeff();
-    if (!std::isfinite(lambda)) return std::numeric_limits<double>::quiet_NaN();
-    if (!std::isfinite(lambda_max) || lambda_max <= 1.0) return 0.0;
-    return std::clamp((lambda - 1.0) / (lambda_max - 1.0), 0.0, 1.0);
+    if (!std::isfinite(lambda)) return out;
+
+    out.raw = std::max(0.0, lambda - 1.0);
+    if (!std::isfinite(lambda_max) || lambda_max <= 1.0) {
+        out.normalized = 0.0;
+        return out;
+    }
+    out.normalized = std::clamp(out.raw / (lambda_max - 1.0), 0.0, 1.0);
+    return out;
 }
 
 // -----------------------------------------------------------------------------
@@ -867,7 +879,7 @@ void RGCCA<SamplingStrategy>::annotate_block_importance_(
     result.block_importance_bootstrap_count = importance.B;
 }
 
-// computes maxvar block weights used by Deleus-style block importance
+// computes maxvar block weights per connected design component
 template <typename SamplingStrategy>
 bool RGCCA<SamplingStrategy>::block_importance_weights_(
     const std::vector<rgcca::Vector>& eta,
@@ -875,39 +887,58 @@ bool RGCCA<SamplingStrategy>::block_importance_weights_(
     rgcca::Vector& v
 ) const {
     const auto active_blocks = active_blocks_from_C_(C_active);
-    std::vector<int> active;
-    for (int j = 0; j < n_blocks(); ++j)
-        if (active_blocks[j])
-            active.push_back(j);
-
-    const int m = static_cast<int>(active.size());
     v.setZero(n_blocks());
-    if (m < 2) return false;
+    std::vector<bool> visited(n_blocks(), false);
+    bool found_component = false;
 
-    rgcca::Matrix R(m, m);
-    R.setIdentity();
-    for (int a = 0; a < m; ++a) {
-        for (int b = a + 1; b < m; ++b) {
-            if (!C_active(active[a], active[b])) continue;
-            double corr = corr_(eta[active[a]], eta[active[b]]);
-            if (opt_.scheme.sign_invariant) corr = std::abs(corr);
-            R(a, b) = corr;
-            R(b, a) = corr;
+    for (int seed = 0; seed < n_blocks(); ++seed) {
+        if (!active_blocks[seed] || visited[seed]) continue;
+
+        std::vector<int> component;
+        std::vector<int> pending{seed};
+        visited[seed] = true;
+        while (!pending.empty()) {
+            const int j = pending.back();
+            pending.pop_back();
+            component.push_back(j);
+
+            for (int k = 0; k < n_blocks(); ++k) {
+                if (!active_blocks[k] || visited[k]) continue;
+                if (!C_active(j, k) && !C_active(k, j)) continue;
+                visited[k] = true;
+                pending.push_back(k);
+            }
         }
+
+        const int m = static_cast<int>(component.size());
+        if (m < 2) continue;
+        found_component = true;
+
+        rgcca::Matrix R(m, m);
+        R.setIdentity();
+        for (int a = 0; a < m; ++a) {
+            for (int b = a + 1; b < m; ++b) {
+                if (!C_active(component[a], component[b])) continue;
+                double corr = corr_(eta[component[a]], eta[component[b]]);
+                if (opt_.scheme.sign_invariant) corr = std::abs(corr);
+                R(a, b) = corr;
+                R(b, a) = corr;
+            }
+        }
+
+        Eigen::SelfAdjointEigenSolver<rgcca::Matrix> solver(R);
+        if (solver.info() != Eigen::Success) return false;
+
+        rgcca::Vector v_component = solver.eigenvectors().col(m - 1);
+        if (opt_.scheme.sign_invariant)
+            v_component = v_component.cwiseAbs();
+        else if (v_component.sum() < 0.0)
+            v_component *= -1.0;
+
+        for (int a = 0; a < m; ++a)
+            v[component[a]] = v_component[a];
     }
-
-    Eigen::SelfAdjointEigenSolver<rgcca::Matrix> solver(R);
-    if (solver.info() != Eigen::Success) return false;
-
-    rgcca::Vector v_active = solver.eigenvectors().col(m - 1);
-    if (opt_.scheme.sign_invariant)
-        v_active = v_active.cwiseAbs();
-    else if (v_active.sum() < 0.0)
-        v_active *= -1.0;
-
-    for (int a = 0; a < m; ++a)
-        v[active[a]] = v_active[a];
-    return true;
+    return found_component;
 }
 
 // builds the aggregate signal from blocks connected to one candidate block
@@ -934,85 +965,6 @@ double RGCCA<SamplingStrategy>::block_importance_rho_(
 ) const {
     const double rho = corr_(z, s);
     return opt_.scheme.sign_invariant ? std::abs(rho) : rho;
-}
-
-// checks whether a block is connected to at least one active block
-template <typename SamplingStrategy>
-bool RGCCA<SamplingStrategy>::inactive_block_has_active_neighbor_(
-    const std::vector<bool>& active_blocks,
-    const rgcca::BoolMatrix& C_active,
-    const int candidate
-) const {
-    for (int k = 0; k < n_blocks(); ++k)
-        if (active_blocks[k] && C_active(candidate, k))
-            return true;
-    return false;
-}
-
-// tests whether a block has residual signal against its active neighbors
-template <typename SamplingStrategy>
-bool RGCCA<SamplingStrategy>::inactive_block_has_residual_signal_(
-    const typename RGCCA<SamplingStrategy>::BlockRefList& blocks,
-    const std::vector<rgcca::Vector>& active_scores,
-    const std::vector<bool>& active_blocks,
-    const rgcca::BoolMatrix& C_active,
-    const int candidate,
-    double* observed_out,
-    double* p_value_out
-) const {
-    std::vector<int> active_neighbors;
-    for (int k = 0; k < n_blocks(); ++k) {
-        if (active_blocks[k] && C_active(candidate, k))
-            active_neighbors.push_back(k);
-    }
-    if (active_neighbors.empty()) return false;
-
-    const rgcca::Vector candidate_score = blocks[candidate]->svd_init().nu;
-    const double observed = residual_signal_stat_(candidate_score, active_scores, active_neighbors);
-    if (observed_out != nullptr) *observed_out = observed;
-    if (!(observed > 0.0) || !std::isfinite(observed)) return false;
-
-    const int B = bootstrap_config_.inactive_block_signal_resamples;
-    int ge_count = 0;
-    std::mt19937_64 rng(
-        bootstrap_config_.seed +
-        static_cast<unsigned>(1000003 * (h_ + 1)) +
-        static_cast<unsigned>(9176 * (candidate + 1))
-    );
-    for (int b = 0; b < B; ++b) {
-        const rgcca::IndexVector idx = single_block_null_indices_(candidate_score.size(), rng);
-        rgcca::Vector null_score(idx.size());
-        for (int i = 0; i < idx.size(); ++i)
-            null_score[i] = candidate_score[idx[i]];
-
-        const double null_stat = residual_signal_stat_(null_score, active_scores, active_neighbors);
-        if (std::isfinite(null_stat) && null_stat >= observed)
-            ++ge_count;
-    }
-
-    const double p_value = static_cast<double>(ge_count + 1) / static_cast<double>(B + 1);
-    if (p_value_out != nullptr) *p_value_out = p_value;
-    return p_value <= bootstrap_config_.inactive_block_signal_alpha;
-}
-
-// computes max absolute correlation between one score and active neighbor scores
-template <typename SamplingStrategy>
-double RGCCA<SamplingStrategy>::residual_signal_stat_(
-    const rgcca::Vector& candidate_score,
-    const std::vector<rgcca::Vector>& active_scores,
-    const std::vector<int>& active_neighbors
-) const {
-    const double candidate_var = cov_(candidate_score, candidate_score);
-    if (!(candidate_var > 0.0) || !std::isfinite(candidate_var)) return 0.0;
-
-    double stat = 0.0;
-    for (const int k : active_neighbors) {
-        const double active_var = cov_(active_scores[k], active_scores[k]);
-        if (!(active_var > 0.0) || !std::isfinite(active_var)) continue;
-        const double corr = cov_(candidate_score, active_scores[k]) / std::sqrt(candidate_var * active_var);
-        if (std::isfinite(corr)) stat = std::max(stat, std::abs(corr));
-    }
-    return stat;
 }
 
 // -----------------------------------------------------------------------------
@@ -1086,6 +1038,7 @@ void RGCCA<SamplingStrategy>::resize_bootstrap_results_(
             for (int j = 0; j < n_blocks; ++j)
                 boot_results.w_boot_by_lambda[i][j].setZero(block_dims[j], 0);
             boot_results.corr_boot_by_lambda[i].setZero(n_blocks * n_blocks, 0);
+            boot_results.candidate_ids_by_lambda[i].clear();
             continue;
         }
 
@@ -1098,6 +1051,7 @@ void RGCCA<SamplingStrategy>::resize_bootstrap_results_(
         boot_results.corr_boot_by_lambda[i].conservativeResize(
             Eigen::NoChange, B_eff
         );
+        boot_results.candidate_ids_by_lambda[i].resize(B_eff);
     }
 }
 

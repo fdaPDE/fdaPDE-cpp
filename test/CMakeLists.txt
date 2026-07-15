@@ -44,13 +44,25 @@ target_link_libraries(fdapde_test Eigen3::Eigen)
 target_link_libraries(fdapde_test gtest_main)
 target_link_libraries(fdapde_test ipopt)
 
-add_executable(frgcca_covmax_timing frgcca_covmax_timing.cpp)
-target_compile_definitions(frgcca_covmax_timing PRIVATE FDAPDE_ENABLE_COUT)
-target_link_libraries(frgcca_covmax_timing Eigen3::Eigen)
-target_link_libraries(frgcca_covmax_timing ipopt)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/frgcca_covmax_timing.cpp")
+    add_executable(frgcca_covmax_timing frgcca_covmax_timing.cpp)
+    target_compile_definitions(frgcca_covmax_timing PRIVATE FDAPDE_ENABLE_COUT)
+    target_link_libraries(frgcca_covmax_timing Eigen3::Eigen)
+    target_link_libraries(frgcca_covmax_timing ipopt)
+endif()
+
+add_executable(rgcca_bootstrap_reproducibility rgcca_bootstrap_reproducibility.cpp)
+target_link_libraries(rgcca_bootstrap_reproducibility Eigen3::Eigen)
+target_link_libraries(rgcca_bootstrap_reproducibility ipopt)
 
 add_test(NAME fdapde_test
 		COMMAND $<TARGET_FILE:fdapde_test>
+)
+
+add_test(NAME rgcca_bootstrap_worker_reproducibility
+    COMMAND ${CMAKE_COMMAND}
+        -DREPRO_EXECUTABLE=$<TARGET_FILE:rgcca_bootstrap_reproducibility>
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/compare_rgcca_bootstrap_reproducibility.cmake.in
 )
 
 include(GoogleTest)

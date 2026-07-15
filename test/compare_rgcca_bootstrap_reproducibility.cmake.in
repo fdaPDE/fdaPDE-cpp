@@ -1,0 +1,33 @@
+if(NOT DEFINED REPRO_EXECUTABLE)
+    message(FATAL_ERROR "REPRO_EXECUTABLE is required")
+endif()
+
+execute_process(
+    COMMAND "${REPRO_EXECUTABLE}" 1
+    RESULT_VARIABLE serial_status
+    OUTPUT_VARIABLE serial_output
+    ERROR_VARIABLE serial_error
+)
+if(NOT serial_status EQUAL 0)
+    message(FATAL_ERROR "1-worker run failed (${serial_status}): ${serial_error}")
+endif()
+
+foreach(workers IN ITEMS 2 4)
+    execute_process(
+        COMMAND "${REPRO_EXECUTABLE}" ${workers}
+        RESULT_VARIABLE parallel_status
+        OUTPUT_VARIABLE parallel_output
+        ERROR_VARIABLE parallel_error
+    )
+    if(NOT parallel_status EQUAL 0)
+        message(FATAL_ERROR "${workers}-worker run failed (${parallel_status}): ${parallel_error}")
+    endif()
+
+    if(NOT serial_output STREQUAL parallel_output)
+        message(FATAL_ERROR
+            "RGCCA bootstrap differs between 1 and ${workers} workers\n"
+            "--- 1 worker ---\n${serial_output}"
+            "--- ${workers} workers ---\n${parallel_output}"
+        )
+    endif()
+endforeach()

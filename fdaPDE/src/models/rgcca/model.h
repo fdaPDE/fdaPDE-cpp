@@ -49,7 +49,6 @@ public:
     using Deflation = rgcca::Deflation;
     using WeightSignConstraint = rgcca::WeightSignConstraint;
     using ResamplingStrategy = rgcca::ResamplingStrategy;
-    using InactiveBlockSignalAction = rgcca::InactiveBlockSignalAction;
     using Scheme = rgcca::Scheme;
     using Options = rgcca::Options;
     using BootstrapConfig = rgcca::BootstrapConfig;
@@ -169,28 +168,16 @@ public:
         results.reserve(n_comp());
         bootstrap_selection_results_.clear();
         bootstrap_selection_results_.reserve(n_comp());
+        const auto initial_block_variance = block_variance_trace_(main_blocks_());
+        auto current_block_variance = initial_block_variance;
 
         // components loop
         n_comp_effective_ = 0;
-        std::vector<bool> previous_active_blocks;
-        std::vector<bool> carried_inactive_blocks(n_blocks(), false);
 
         for (int hh = 0; hh < n_comp(); ++hh) {
             set_h_(hh);
 
-            // active blocks gating
             BoolMatrix C_active = C_;
-            std::vector<InactiveBlockSignalAction> inactive_block_signal_actions(n_blocks(), InactiveBlockSignalAction::None);
-            if (inactive_block_signal_test_requested_() && !previous_active_blocks.empty()) {
-                auto blocks = main_blocks_();
-                apply_inactive_block_signal_test_(
-                    blocks,
-                    previous_active_blocks,
-                    carried_inactive_blocks,
-                    inactive_block_signal_actions,
-                    C_active
-                );
-            }
 
             // bootstrap model selection
             if (run_model_selection && count_active_connections_(C_active) > 0) {
@@ -206,12 +193,19 @@ public:
             const auto active_blocks = active_blocks_from_C_(C_active);
             init_comp_(blocks, InitStrategy::None, true, &active_blocks);
             Result component_result = fit_component_(blocks, C_active);
-            component_result.inactive_block_signal_actions = std::move(inactive_block_signal_actions);
             log_step_end_(step_start);
+            const auto block_variance_before = current_block_variance;
+            const auto observed_correlation = rho_tot_maxvar_(blocks, C_active);
+            component_result.rho_tot = observed_correlation.normalized;
+            component_result.rho_tot_raw = observed_correlation.raw;
+            component_result.inner_ave = observed_correlation.inner_ave;
 
             // structural stop: no active design left
             if (count_active_connections_(C_active) == 0) {
                 annotate_component_significance_(component_result, inactive_component_significance_());
+                annotate_explained_variance_(
+                    component_result, initial_block_variance, block_variance_before, block_variance_before
+                );
                 results.push_back(std::move(component_result));
                 finish_component_(results.back(), component_callback);
                 break;
@@ -219,9 +213,12 @@ public:
 
             // bootstrap component significance
             if (opt_.component_significance) {
-                const auto significance = bootstrap_test_component_significance_(C_active);
+                const auto significance = bootstrap_test_component_significance_(C_active, observed_correlation);
                 annotate_component_significance_(component_result, significance);
                 if (!significance.significant) {
+                    annotate_explained_variance_(
+                        component_result, initial_block_variance, block_variance_before, block_variance_before
+                    );
                     results.push_back(std::move(component_result));
                     finish_component_(results.back(), component_callback);
                     break;
@@ -241,11 +238,13 @@ public:
             step_start = log_step_start_("Deflate blocks");
             deflate_all_();
             log_step_end_(step_start);
+            current_block_variance = block_variance_trace_(blocks);
+            annotate_explained_variance_(
+                results.back(), initial_block_variance, block_variance_before, current_block_variance
+            );
 
             // component post-processing
             finish_component_(results.back(), component_callback);
-
-            previous_active_blocks = results.back().active_blocks;
         }
 
         return results;
@@ -343,7 +342,6 @@ private:
             B_stale = 0;
             B_cancelled = 0;
             design_epoch = 0;
-            design_epoch_signal.store(0, std::memory_order_release);
             last_check_B_done = 0;
             last_block_deactivation_check_B_done = 0;
             last_connection_deactivation_check_B_done = 0;
@@ -379,7 +377,6 @@ private:
         int B_stale = 0;
         int B_cancelled = 0;
         int design_epoch = 0;
-        std::atomic<int> design_epoch_signal {0};
         int last_check_B_done = 0;
         int last_block_deactivation_check_B_done = 0;
         int last_connection_deactivation_check_B_done = 0;
@@ -449,10 +446,20 @@ private:
             return n_fits > 0 ? iters / static_cast<double>(n_fits) : 0.0;
         }
     };
+    struct MaxvarCorrelationResult {
+        double raw = std::numeric_limits<double>::quiet_NaN();
+        double normalized = std::numeric_limits<double>::quiet_NaN();
+        double inner_ave = std::numeric_limits<double>::quiet_NaN();
+    };
     struct ComponentSignificanceResult {
         double rho_tot = std::numeric_limits<double>::quiet_NaN();
+        double rho_tot_raw = std::numeric_limits<double>::quiet_NaN();
         double p_value = std::numeric_limits<double>::quiet_NaN();
+        double null_mean = std::numeric_limits<double>::quiet_NaN();
+        double null_q95 = std::numeric_limits<double>::quiet_NaN();
+        double null_max = std::numeric_limits<double>::quiet_NaN();
         int B = 0;
+        int null_valid_count = 0;
         bool significant = true;
     };
     struct BlockImportanceResult {
@@ -634,77 +641,6 @@ private:
         return fit_component_(blocks, C_);
     }
 
-    void apply_inactive_block_signal_test_(
-        const BlockRefList& blocks,
-        const std::vector<bool>& previous_active_blocks,
-        std::vector<bool>& carried_inactive_blocks,
-        std::vector<InactiveBlockSignalAction>& actions,
-        BoolMatrix& C_active
-    ) {
-        if (static_cast<int>(previous_active_blocks.size()) != n_blocks())
-            throw std::logic_error("inactive block signal test: active block size mismatch");
-        if (static_cast<int>(carried_inactive_blocks.size()) != n_blocks())
-            throw std::logic_error("inactive block signal test: carried block size mismatch");
-        if (static_cast<int>(actions.size()) != n_blocks())
-            throw std::logic_error("inactive block signal test: action size mismatch");
-
-        log_inactive_block_signal_test_header_();
-
-        for (int j = 0; j < n_blocks(); ++j) {
-            if (previous_active_blocks[j])
-                carried_inactive_blocks[j] = false;
-            if (carried_inactive_blocks[j]) {
-                C_active.row(j).setConstant(false);
-                C_active.col(j).setConstant(false);
-                actions[j] = InactiveBlockSignalAction::KeptInactive;
-                log_inactive_block_signal_gate_(j, actions[j]);
-            }
-        }
-
-        std::vector<Vector> block_scores(n_blocks());
-        for (int k = 0; k < n_blocks(); ++k)
-            block_scores[k] = blocks[k]->svd_init().nu;
-
-        const BoolMatrix C_test = C_active;
-        const auto active_blocks = active_blocks_from_C_(C_test);
-        std::vector<bool> deactivate(n_blocks(), false);
-        for (int j = 0; j < n_blocks(); ++j) {
-            if (carried_inactive_blocks[j]) continue;
-            const bool has_active_neighbor = inactive_block_has_active_neighbor_(active_blocks, C_test, j);
-            double observed = std::numeric_limits<double>::quiet_NaN();
-            double p_value = std::numeric_limits<double>::quiet_NaN();
-            const bool has_signal = inactive_block_has_residual_signal_(
-                blocks, block_scores, active_blocks, C_test, j, &observed, &p_value
-            );
-            if (!has_signal)
-                deactivate[j] = true;
-            if (deactivate[j] && has_active_neighbor)
-                carried_inactive_blocks[j] = true;
-            const InactiveBlockSignalAction action =
-                has_signal ?
-                    (previous_active_blocks[j] ?
-                        InactiveBlockSignalAction::KeptActive :
-                        InactiveBlockSignalAction::Reactivated) :
-                    (previous_active_blocks[j] ?
-                        InactiveBlockSignalAction::Deactivated :
-                        InactiveBlockSignalAction::KeptInactive);
-            actions[j] = action;
-            log_inactive_block_signal_gate_(
-                j,
-                action,
-                observed,
-                p_value
-            );
-        }
-
-        for (int j = 0; j < n_blocks(); ++j) {
-            if (deactivate[j]) {
-                C_active.row(j).setConstant(false);
-                C_active.col(j).setConstant(false);
-            }
-        }
-    }
-
     // bootstrap model selection
     ModelSelectionResult bootstrap_model_selection_(const BoolMatrix& C_initial) {
         log_bootstrap_model_selection_header_();
@@ -822,6 +758,11 @@ private:
                 bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_initial);
             boot_results.criterion[lambda_i] = bootstrap_state.crit;
             boot_results.B_used_by_lambda[lambda_i] = bootstrap_state.B_done;
+            boot_results.B_total_by_lambda[lambda_i] = bootstrap_state.B_total;
+            boot_results.B_design_by_lambda[lambda_i] = bootstrap_state.B_design;
+            boot_results.B_stale_by_lambda[lambda_i] = bootstrap_state.B_stale;
+            boot_results.B_cancelled_by_lambda[lambda_i] = bootstrap_state.B_cancelled;
+            boot_results.design_epochs_by_lambda[lambda_i] = bootstrap_state.design_epoch + 1;
 
             // store current design if better
             if (bootstrap_state.crit > bootstrap_state.best_criterion) {
@@ -877,13 +818,16 @@ private:
     }
 
     // bootstrap component significance
-    ComponentSignificanceResult bootstrap_test_component_significance_(const BoolMatrix& C_active) {
+    ComponentSignificanceResult bootstrap_test_component_significance_(
+        const BoolMatrix& C_active,
+        const MaxvarCorrelationResult& observed
+    ) {
         log_bootstrap_component_significance_header_();
         ComponentSignificanceResult out;
 
-        // observed statistic on the fitted component
         auto blocks = main_blocks_();
-        out.rho_tot = rho_tot_maxvar_(blocks, C_active);
+        out.rho_tot = observed.normalized;
+        out.rho_tot_raw = observed.raw;
 
         // inactive or degenerate components are declared non-significant
         if (count_active_connections_(C_active) == 0 || !std::isfinite(out.rho_tot)) {
@@ -896,6 +840,7 @@ private:
         const int B = bootstrap_config_.component_significance_resamples;
         const int n_threads = bootstrap_n_threads_();
         out.B = B;
+        const auto w_fit = snapshot_weights_(blocks);
 
         // each worker owns a mutable clone with its own row permutation
         auto step_start = log_step_start_("Clone significance worker blocks");
@@ -904,7 +849,7 @@ private:
             thread_boot_worker[t] = clone_blocks_();
         log_step_end_(step_start);
 
-        std::vector<int> thread_ge_count(n_threads, 0);
+        std::vector<double> rho_null(B, std::numeric_limits<double>::quiet_NaN());
         const unsigned seed = bootstrap_config_.seed + static_cast<unsigned>(1000003 * (h_ + 1));
         const auto active_blocks = active_blocks_from_C_(C_active);
 
@@ -914,6 +859,9 @@ private:
             const int tid = this_thread_id();
             auto& boot_blocks = thread_boot_worker[tid];
 
+            for (std::size_t j = 0; j < boot_blocks.refs.size(); ++j)
+                boot_blocks.refs[j]->reset_bootstrap_fit_state(w_fit[j]);
+            copy_weights_snapshot_(boot_blocks.refs, w_fit);
             set_component_significance_row_index_all_(
                 boot_blocks.refs,
                 seed + static_cast<unsigned>(7919 * (b + 1))
@@ -923,17 +871,36 @@ private:
             fit_component_(boot_blocks.refs, C_active, false, bootstrap_fit_max_iter_());
 
             // count null statistics at least as extreme as the observed one
-            const double rho_star = rho_tot_maxvar_(boot_blocks.refs, C_active);
-            if (std::isfinite(rho_star) && rho_star >= out.rho_tot)
-                ++thread_ge_count[tid];
+            rho_null[b] = rho_tot_maxvar_(boot_blocks.refs, C_active).normalized;
 
             clear_row_index_all_(boot_blocks.refs);
         });
         log_step_end_(step_start);
 
-        // corrected empirical upper-tail p-value
-        const int ge_count = std::accumulate(thread_ge_count.begin(), thread_ge_count.end(), 0);
-        out.p_value = static_cast<double>(ge_count + 1) / static_cast<double>(B + 1);
+        std::vector<double> valid_null;
+        valid_null.reserve(B);
+        double null_sum = 0.0;
+        int ge_count = 0;
+        for (const double rho_star : rho_null) {
+            if (!std::isfinite(rho_star)) continue;
+            valid_null.push_back(rho_star);
+            null_sum += rho_star;
+            if (rho_star >= out.rho_tot) ++ge_count;
+        }
+
+        out.null_valid_count = static_cast<int>(valid_null.size());
+        if (valid_null.empty()) {
+            out.p_value = 1.0;
+            out.significant = false;
+            log_component_significance_(out);
+            return out;
+        }
+
+        out.null_mean = null_sum / static_cast<double>(valid_null.size());
+        out.null_max = *std::max_element(valid_null.begin(), valid_null.end());
+        out.null_q95 = internals::empirical_quantile(valid_null, 0.95);
+        out.p_value = static_cast<double>(ge_count + 1) /
+            static_cast<double>(out.null_valid_count + 1);
         out.significant = out.p_value <= bootstrap_config_.component_significance_alpha;
 
         log_component_significance_(out);
@@ -948,8 +915,9 @@ private:
         auto blocks = main_blocks_();
         const int B = bootstrap_config_.block_importance_resamples;
         BlockImportanceResult out;
-        out.rho.assign(n_blocks(), 0.0);
-        out.p_value.assign(n_blocks(), 1.0);
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        out.rho.assign(n_blocks(), nan);
+        out.p_value.assign(n_blocks(), nan);
         out.significant.assign(n_blocks(), false);
         out.B = B;
 
@@ -1054,6 +1022,30 @@ private:
     }
 
     // fit helpers
+    std::vector<double> block_variance_trace_(const BlockRefList& blocks) const {
+        std::vector<double> out;
+        out.reserve(blocks.size());
+        for (const auto* block : blocks) out.push_back(block->variance_trace());
+        return out;
+    }
+    void annotate_explained_variance_(
+        Result& result,
+        const std::vector<double>& initial,
+        const std::vector<double>& before,
+        const std::vector<double>& after
+    ) const {
+        if (initial.size() != blocks_.size() || before.size() != blocks_.size() || after.size() != blocks_.size())
+            throw std::logic_error("annotate_explained_variance_: block count mismatch");
+
+        result.block_variance_initial = initial;
+        result.block_variance_before = before;
+        result.block_variance_after = after;
+        for (std::size_t j = 0; j < initial.size(); ++j) {
+            if (!(initial[j] > 0.0) || !std::isfinite(initial[j])) continue;
+            result.block_variance_explained[j] = (before[j] - after[j]) / initial[j];
+            result.block_variance_explained_cumulative[j] = (initial[j] - after[j]) / initial[j];
+        }
+    }
     void deflate_all_() const {
         for (auto& b : blocks_) b->deflate(opt_.deflation_mode);
     }
@@ -1089,9 +1081,6 @@ private:
             opt_.connection_deactivation ||
             opt_.lambda_selection_weights == LambdaSelection::Automatic;
     }
-    bool inactive_block_signal_test_requested_() const {
-        return opt_.inactive_block_signal_test;
-    }
     bool weight_lambda_selection_requested_() const {
         return opt_.lambda_selection_weights == LambdaSelection::Automatic;
     }
@@ -1117,16 +1106,9 @@ private:
     void log_bootstrap_model_selection_header_() const;
     void log_bootstrap_component_significance_header_() const;
     void log_bootstrap_block_importance_header_() const;
-    void log_inactive_block_signal_test_header_() const;
     void log_bootstrap_lambda_candidate_(bool lambda_selected, double lambda) const;
     void log_component_significance_(const ComponentSignificanceResult& significance) const;
     void log_block_importance_(const BlockImportanceResult& importance) const;
-    void log_inactive_block_signal_gate_(
-        int block,
-        InactiveBlockSignalAction action,
-        double statistic = std::numeric_limits<double>::quiet_NaN(),
-        double p_value = std::numeric_limits<double>::quiet_NaN()
-    ) const;
     void log_bootstrap_lambda_summary_(
         const AdaptiveBootstrapState& state,
         const BootstrapTimingSummary& timing_summary,
@@ -1264,7 +1246,7 @@ private:
     // bootstrap component significance helpers
     void annotate_component_significance_(Result& result, const ComponentSignificanceResult& significance) const;
     ComponentSignificanceResult inactive_component_significance_() const;
-    double rho_tot_maxvar_(const BlockRefList& blocks, const BoolMatrix& C) const;
+    MaxvarCorrelationResult rho_tot_maxvar_(const BlockRefList& blocks, const BoolMatrix& C) const;
 
     // bootstrap block-importance helpers
     void annotate_block_importance_(Result& result, const BlockImportanceResult& importance) const;
@@ -1276,27 +1258,6 @@ private:
         const int j
     ) const;
     double block_importance_rho_(const Vector& z, const Vector& s) const;
-
-    // inactive-block signal gate helpers
-    bool inactive_block_has_active_neighbor_(
-        const std::vector<bool>& active_blocks,
-        const BoolMatrix& C_active,
-        const int candidate
-    ) const;
-    bool inactive_block_has_residual_signal_(
-        const BlockRefList& blocks,
-        const std::vector<Vector>& active_scores,
-        const std::vector<bool>& active_blocks,
-        const BoolMatrix& C_active,
-        const int candidate,
-        double* observed_out = nullptr,
-        double* p_value_out = nullptr
-    ) const;
-    double residual_signal_stat_(
-        const Vector& candidate_score,
-        const std::vector<Vector>& active_scores,
-        const std::vector<int>& active_neighbors
-    ) const;
 
     // validation helpers
     void validate_fit_() const;

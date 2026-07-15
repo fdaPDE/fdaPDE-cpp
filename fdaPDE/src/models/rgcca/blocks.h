@@ -126,6 +126,15 @@ public:
     [[nodiscard]] auto data() const {
         return raw_data()(row_index_, Eigen::all);
     }
+    [[nodiscard]] double variance_trace() const {
+        const auto X = data();
+        if (X.rows() == 0 || X.cols() == 0) return 0.0;
+
+        const double n_d = static_cast<double>(X.rows());
+        const double den = bias_ ? n_d : std::max(1.0, n_d - 1.0);
+        const double centered_ss = X.squaredNorm() - n_d * X.colwise().mean().squaredNorm();
+        return std::max(0.0, centered_ss) / den;
+    }
     void set_raw_data_mutable(const bool value) { raw_data_mutable_ = value; }
 
     // dimensions
@@ -257,6 +266,10 @@ public:
         IndexVector idx(n_raw());
         std::iota(idx.data(), idx.data() + idx.size(), 0);
         set_row_index(idx);
+    }
+    void reset_bootstrap_fit_state(const Vector& weights) {
+        if (nn_weights_solver_)
+            nn_weights_solver_->reset_warm_start(weights);
     }
 
     // main compute method

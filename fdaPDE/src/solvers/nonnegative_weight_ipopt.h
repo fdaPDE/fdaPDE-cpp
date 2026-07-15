@@ -392,6 +392,16 @@ public:
 
     NonNegativeWeightSolver& operator=(const NonNegativeWeightSolver&) = delete;
 
+    void reset_warm_start(const Vector& solution) {
+        if (solution.size() != x_init_.size())
+            throw std::invalid_argument("NonNegativeWeightSolver: incompatible warm start");
+        last_solution_ = solution;
+        last_solution_pos_ = solution;
+        last_solution_neg_ = solution;
+        last_z_.setZero(Psi_.rows());
+        has_last_z_ = false;
+    }
+
     Vector solve(const Vector& z) {
         // The Ipopt subproblem enforces w >= 0. For sign-invariant objectives, try both
         // orientations; otherwise keep the positive orientation only. Use direct Omega^{-1}

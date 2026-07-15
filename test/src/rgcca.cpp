@@ -115,43 +115,6 @@ Eigen::Matrix<double, Dynamic, Dynamic> two_column_block(
     return out;
 }
 
-std::vector<Result> fit_inactive_block_signal_gate_scenario(const bool candidate_has_signal) {
-    constexpr int n = 80;
-    constexpr int n_comp_local = 3;
-
-    const Eigen::VectorXd signal = centered_wave(n, 0.17);
-    const Eigen::VectorXd residual_signal = centered_wave(n, 0.71);
-    const Eigen::VectorXd zero = Eigen::VectorXd::Zero(n);
-    const Eigen::VectorXd strong_signal = 10.0 * signal;
-    const Eigen::VectorXd weak_residual_signal = 4.0 * residual_signal;
-    Eigen::VectorXd candidate_signal = zero;
-    if (candidate_has_signal) candidate_signal = weak_residual_signal;
-
-    RGCCA<IndependentSampling>::Options options;
-    options.mode = Mode::CovMax;
-    options.inactive_block_signal_test = true;
-
-    RGCCA<IndependentSampling> rgcca(n, options, n_comp_local);
-    rgcca.add_multivariate_block("active_with_residual", two_column_block(strong_signal, weak_residual_signal));
-    rgcca.add_multivariate_block("candidate_1", two_column_block(candidate_signal, zero));
-    rgcca.add_multivariate_block("candidate_2", two_column_block(candidate_signal, zero));
-    rgcca.add_multivariate_block("active_anchor", two_column_block(strong_signal, zero));
-
-    rgcca.connect(0, 3);
-
-    RGCCA<IndependentSampling>::BootstrapConfig bootstrap_config;
-    bootstrap_config.inactive_block_signal_resamples = 19;
-    bootstrap_config.inactive_block_signal_alpha = 0.1;
-    rgcca.set_bootstrap_config(bootstrap_config);
-
-    return rgcca.fit([](auto& model, const Result& result) {
-        if (result.h == 0) {
-            model.connect(0, 1);
-            model.connect(0, 2);
-        }
-    });
-}
-
 void check_tau(
   const std::vector<Result>& results, const std::string& reference_path, int n_blocks, int n_comp) {
     Eigen::Matrix<double, Dynamic, Dynamic> actual_tau(n_blocks * n_comp, 1);
@@ -196,6 +159,14 @@ void check_component_significance_reference(
         actual_significance(h, 1) = results[h].rho_tot_p_value;
         actual_significance(h, 2) = static_cast<double>(results[h].rho_tot_bootstrap_count);
         actual_significance(h, 3) = results[h].component_significant ? 1.0 : 0.0;
+
+        EXPECT_TRUE(std::isfinite(results[h].rho_tot_raw));
+        EXPECT_EQ(results[h].rho_tot_null_valid_count, results[h].rho_tot_bootstrap_count);
+        EXPECT_TRUE(std::isfinite(results[h].rho_tot_null_mean));
+        EXPECT_TRUE(std::isfinite(results[h].rho_tot_null_q95));
+        EXPECT_TRUE(std::isfinite(results[h].rho_tot_null_max));
+        EXPECT_LE(results[h].rho_tot_null_mean, results[h].rho_tot_null_max);
+        EXPECT_LE(results[h].rho_tot_null_q95, results[h].rho_tot_null_max);
 
         for (int j = 0; j < n_blocks; ++j)
             actual_active_blocks(h, j) = results[h].active_blocks[j] ? 1.0 : 0.0;
@@ -734,53 +705,69 @@ TEST(rgcca, inactive_design_stops_remaining_components_without_significance) {
     for (const auto& result : results) {
         EXPECT_FALSE(result.component_significant);
         EXPECT_DOUBLE_EQ(result.rho_tot, 0.0);
+        EXPECT_DOUBLE_EQ(result.inner_ave, 0.0);
         EXPECT_DOUBLE_EQ(result.rho_tot_p_value, 1.0);
         for (bool active : result.active_blocks)
             EXPECT_FALSE(active);
     }
 }
 
-TEST(rgcca, inactive_block_signal_test_deactivates_noise_blocks) {
-    const auto results = fit_inactive_block_signal_gate_scenario(false);
+TEST(rgcca, component_diagnostics_track_correlation_and_deflated_variance) {
+    constexpr int n = 80;
+    constexpr int n_comp_local = 2;
 
-    ASSERT_EQ(static_cast<int>(results.size()), 2);
-    EXPECT_TRUE(results[0].active_blocks[0]);
-    EXPECT_FALSE(results[0].active_blocks[1]);
-    EXPECT_FALSE(results[0].active_blocks[2]);
-    EXPECT_TRUE(results[0].active_blocks[3]);
+    const Eigen::VectorXd signal = centered_wave(n, 0.17);
+    Eigen::VectorXd second = centered_wave(n, 0.71);
+    second -= signal * signal.dot(second);
+    second.normalize();
 
-    EXPECT_FALSE(results[1].active_blocks[0]);
-    EXPECT_FALSE(results[1].active_blocks[1]);
-    EXPECT_FALSE(results[1].active_blocks[2]);
-    EXPECT_FALSE(results[1].active_blocks[3]);
-    EXPECT_EQ(results[1].inactive_block_signal_actions[0], InactiveBlockSignalAction::Deactivated);
-    EXPECT_EQ(results[1].inactive_block_signal_actions[1], InactiveBlockSignalAction::KeptInactive);
-    EXPECT_EQ(results[1].inactive_block_signal_actions[2], InactiveBlockSignalAction::KeptInactive);
-    EXPECT_EQ(results[1].inactive_block_signal_actions[3], InactiveBlockSignalAction::Deactivated);
-}
+    RGCCA<IndependentSampling>::Options options;
+    options.mode = Mode::CovMax;
 
-TEST(rgcca, inactive_block_signal_test_preserves_residual_signal_blocks) {
-    const auto results = fit_inactive_block_signal_gate_scenario(true);
+    RGCCA<IndependentSampling> rgcca(n, options, n_comp_local);
+    rgcca.add_multivariate_block("X1", two_column_block(4.0 * signal, 2.0 * second));
+    rgcca.add_multivariate_block("X2", two_column_block(3.0 * signal, 1.0 * second));
+    rgcca.connect(0, 1);
 
-    ASSERT_EQ(static_cast<int>(results.size()), 3);
-    EXPECT_TRUE(results[0].active_blocks[0]);
-    EXPECT_FALSE(results[0].active_blocks[1]);
-    EXPECT_FALSE(results[0].active_blocks[2]);
-    EXPECT_TRUE(results[0].active_blocks[3]);
+    const auto results = rgcca.fit();
 
-    EXPECT_TRUE(results[1].active_blocks[0]);
-    EXPECT_TRUE(results[1].active_blocks[1]);
-    EXPECT_TRUE(results[1].active_blocks[2]);
-    EXPECT_FALSE(results[1].active_blocks[3]);
-    EXPECT_EQ(results[1].inactive_block_signal_actions[0], InactiveBlockSignalAction::KeptActive);
-    EXPECT_EQ(results[1].inactive_block_signal_actions[1], InactiveBlockSignalAction::Reactivated);
-    EXPECT_EQ(results[1].inactive_block_signal_actions[2], InactiveBlockSignalAction::Reactivated);
-    EXPECT_EQ(results[1].inactive_block_signal_actions[3], InactiveBlockSignalAction::Deactivated);
+    ASSERT_EQ(static_cast<int>(results.size()), n_comp_local);
+    for (int h = 0; h < n_comp_local; ++h) {
+        const auto& result = results[h];
+        EXPECT_TRUE(std::isfinite(result.rho_tot));
+        EXPECT_TRUE(std::isfinite(result.rho_tot_raw));
+        EXPECT_TRUE(std::isfinite(result.inner_ave));
+        EXPECT_NEAR(result.rho_tot_raw, result.rho_tot, 1e-12);
+        EXPECT_NEAR(result.inner_ave, result.rho_tot * result.rho_tot, 1e-12);
+        EXPECT_GE(result.inner_ave, 0.0);
+        EXPECT_LE(result.inner_ave, 1.0);
 
-    EXPECT_FALSE(results[2].active_blocks[0]);
-    EXPECT_FALSE(results[2].active_blocks[1]);
-    EXPECT_FALSE(results[2].active_blocks[2]);
-    EXPECT_FALSE(results[2].active_blocks[3]);
+        for (int j = 0; j < 2; ++j) {
+            ASSERT_GT(result.block_variance_initial[j], 0.0);
+            EXPECT_LE(result.block_variance_after[j], result.block_variance_before[j] + 1e-12);
+            EXPECT_NEAR(
+                result.block_variance_explained[j],
+                (result.block_variance_before[j] - result.block_variance_after[j]) /
+                    result.block_variance_initial[j],
+                1e-12
+            );
+            EXPECT_NEAR(
+                result.block_variance_explained_cumulative[j],
+                (result.block_variance_initial[j] - result.block_variance_after[j]) /
+                    result.block_variance_initial[j],
+                1e-12
+            );
+        }
+    }
+
+    for (int j = 0; j < 2; ++j) {
+        EXPECT_NEAR(results[0].block_variance_before[j], results[0].block_variance_initial[j], 1e-12);
+        EXPECT_NEAR(results[1].block_variance_before[j], results[0].block_variance_after[j], 1e-12);
+        EXPECT_GE(
+            results[1].block_variance_explained_cumulative[j] + 1e-12,
+            results[0].block_variance_explained_cumulative[j]
+        );
+    }
 }
 
 TEST(rgcca, block_importance_detects_current_component_blocks) {
@@ -811,9 +798,58 @@ TEST(rgcca, block_importance_detects_current_component_blocks) {
     ASSERT_EQ(static_cast<int>(results.size()), 1);
     EXPECT_EQ(results[0].block_importance_bootstrap_count, 19);
     ASSERT_EQ(static_cast<int>(results[0].block_importance.size()), 3);
+    EXPECT_TRUE(std::isfinite(results[0].block_importance[0]));
+    EXPECT_TRUE(std::isfinite(results[0].block_importance[1]));
+    EXPECT_TRUE(std::isnan(results[0].block_importance[2]));
+    EXPECT_TRUE(std::isnan(results[0].block_importance_p_values[2]));
     EXPECT_TRUE(results[0].block_importance_significant[0]);
     EXPECT_TRUE(results[0].block_importance_significant[1]);
     EXPECT_FALSE(results[0].block_importance_significant[2]);
+}
+
+TEST(rgcca, block_importance_tests_each_disconnected_design_component) {
+    constexpr int n = 80;
+
+    const Eigen::VectorXd signal_1 = centered_wave(n, 0.17);
+    Eigen::VectorXd signal_2 = centered_wave(n, 0.71);
+    signal_2 -= signal_1 * signal_1.dot(signal_2);
+    signal_2.normalize();
+    Eigen::VectorXd isolated = centered_wave(n, 1.31);
+    isolated -= signal_1 * signal_1.dot(isolated);
+    isolated -= signal_2 * signal_2.dot(isolated);
+    isolated.normalize();
+
+    RGCCA<IndependentSampling>::Options options;
+    options.mode = Mode::CovMax;
+    options.block_importance = true;
+
+    RGCCA<IndependentSampling> rgcca(n, options, 1);
+    rgcca.add_multivariate_block("pair_1a", two_column_block(10.0 * signal_1, Eigen::VectorXd::Zero(n)));
+    rgcca.add_multivariate_block("pair_2a", two_column_block(8.0 * signal_2, Eigen::VectorXd::Zero(n)));
+    rgcca.add_multivariate_block("pair_1b", two_column_block(10.0 * signal_1, Eigen::VectorXd::Zero(n)));
+    rgcca.add_multivariate_block("pair_2b", two_column_block(8.0 * signal_2, Eigen::VectorXd::Zero(n)));
+    rgcca.add_multivariate_block("isolated", two_column_block(6.0 * isolated, Eigen::VectorXd::Zero(n)));
+    rgcca.connect(0, 2);
+    rgcca.connect(1, 3);
+
+    RGCCA<IndependentSampling>::BootstrapConfig bootstrap_config;
+    bootstrap_config.max_threads = 1;
+    bootstrap_config.block_importance_resamples = 19;
+    bootstrap_config.block_importance_alpha = 0.1;
+    rgcca.set_bootstrap_config(bootstrap_config);
+
+    const auto results = rgcca.fit();
+
+    ASSERT_EQ(static_cast<int>(results.size()), 1);
+    ASSERT_EQ(static_cast<int>(results[0].block_importance.size()), 5);
+    for (int j = 0; j < 4; ++j) {
+        EXPECT_NEAR(results[0].block_importance[j], 1.0, 1e-12);
+        EXPECT_NEAR(results[0].block_importance_p_values[j], 0.05, 1e-12);
+        EXPECT_TRUE(results[0].block_importance_significant[j]);
+    }
+    EXPECT_TRUE(std::isnan(results[0].block_importance[4]));
+    EXPECT_TRUE(std::isnan(results[0].block_importance_p_values[4]));
+    EXPECT_FALSE(results[0].block_importance_significant[4]);
 }
 
 TEST(rgcca, component_callback_can_release_bootstrap_results) {
