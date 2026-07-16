@@ -76,14 +76,14 @@ inline void log_header_(const std::string_view title) {
     for (std::size_t i = 0; i < title.size(); ++i) fdapde::cout << '=';
     fdapde::cout << '\n' << title << '\n';
     for (std::size_t i = 0; i < title.size(); ++i) fdapde::cout << '=';
-    fdapde::cout << "\n\n";
+    fdapde::cout << "\n\n" << std::flush;
 }
 
 // starts a timed log step and returns its start time
 template <typename SamplingStrategy>
 auto RGCCA<SamplingStrategy>::log_step_start_(std::string_view label) const
     -> std::chrono::high_resolution_clock::time_point {
-    fdapde::cout << label << " --> ";
+    fdapde::cout << label << " --> " << std::flush;
     return std::chrono::high_resolution_clock::now();
 }
 
@@ -94,7 +94,8 @@ void RGCCA<SamplingStrategy>::log_step_end_(
 ) const {
     const auto end = std::chrono::high_resolution_clock::now();
     const double elapsed_sec = std::chrono::duration<double>(end - start).count();
-    fdapde::cout << "<-- " << std::fixed << std::setprecision(3) << elapsed_sec << std::defaultfloat << "s\n";
+    fdapde::cout << "<-- " << std::fixed << std::setprecision(3) << elapsed_sec
+                 << std::defaultfloat << "s\n" << std::flush;
 }
 
 // logs the active weight regularization value
@@ -308,7 +309,7 @@ void RGCCA<SamplingStrategy>::log_bootstrap_progress_(
     }
     if (stop_info.stop)
         fdapde::cout << " | stop=" << stop_info.reason;
-    fdapde::cout << std::defaultfloat << '\n';
+    fdapde::cout << std::defaultfloat << '\n' << std::flush;
 }
 
 // logs a bootstrap design reset after block or connection deactivation
@@ -332,7 +333,7 @@ void RGCCA<SamplingStrategy>::log_bootstrap_design_reset_(
                  << ", ac=" << std::setw(6) << n_active_connections
                  << std::defaultfloat
                  << " | epoch=" << state.design_epoch
-                 << '\n';
+                 << '\n' << std::flush;
 }
 
 } // namespace fdapde
