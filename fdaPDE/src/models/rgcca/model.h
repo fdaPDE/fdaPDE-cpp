@@ -24,6 +24,8 @@
 #include "fdaPDE/execution.h"
 
 #include <algorithm>
+#include <condition_variable>
+#include <map>
 
 namespace fdapde {
 
@@ -764,6 +766,9 @@ private:
             boot_results.B_cancelled_by_lambda[lambda_i] = bootstrap_state.B_cancelled;
             boot_results.design_epochs_by_lambda[lambda_i] = bootstrap_state.design_epoch + 1;
 
+            // Release unused B_max columns before allocating the next lambda.
+            resize_bootstrap_lambda_results_(boot_results, lambda_i, n_blocks(), block_dims);
+
             // store current design if better
             if (bootstrap_state.crit > bootstrap_state.best_criterion) {
                 C_best = C_lambda;
@@ -788,11 +793,6 @@ private:
             C_active = reset_connections_keep_inactive_blocks_(C_initial, C_active);
 
         }
-
-        // resize allocated space for bootstrap results
-        step_start = log_step_start_("Resize bootstrap results");
-        resize_bootstrap_results_(boot_results, static_cast<int>(lambda_grid.size()), n_blocks(), block_dims);
-        log_step_end_(step_start);
 
         // compute correlation matrices CI
         step_start = log_step_start_("Compute bootstrap correlation CIs");
@@ -1218,9 +1218,9 @@ private:
         const double alpha_high
     ) const;
     void update_w_min_(Vector& w_min_j, const Vector& w_fit_j, const Vector& w_bj) const;
-    void resize_bootstrap_results_(
+    void resize_bootstrap_lambda_results_(
         BootstrapResult& boot_results,
-        int n_lambdas,
+        int lambda_i,
         int n_blocks,
         const std::vector<int>& block_dims
     ) const;

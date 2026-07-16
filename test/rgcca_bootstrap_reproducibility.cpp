@@ -98,17 +98,21 @@ int main(int argc, char** argv) {
         throw std::runtime_error("bootstrap did not select a candidate");
     if (selection.design_epochs_by_lambda[lambda] < 2)
         throw std::runtime_error("test data did not exercise deterministic design epochs");
-    if (selection.B_stale_by_lambda[lambda] != 0 ||
-        selection.B_cancelled_by_lambda[lambda] != 0)
-        throw std::runtime_error("control-point barriers produced stale or cancelled fits");
-    if (selection.B_total_by_lambda[lambda] !=
+    if (selection.B_total_by_lambda[lambda] <
         selection.B_design_by_lambda[lambda] + selection.B_used_by_lambda[lambda])
-        throw std::runtime_error("control-point barrier accounting discarded fitted candidates");
+        throw std::runtime_error("speculative bootstrap accounting lost committed candidates");
     if (result.rho_tot_bootstrap_count != bootstrap.component_significance_resamples ||
         result.block_importance_bootstrap_count != bootstrap.block_importance_resamples)
         throw std::runtime_error("test data did not exercise significance diagnostics");
 
     const auto& candidate_ids = selection.candidate_ids_by_lambda[lambda];
+    if (candidate_ids.size() != static_cast<std::size_t>(selection.B_used_by_lambda[lambda]) ||
+        selection.corr_boot_by_lambda[lambda].cols() != selection.B_used_by_lambda[lambda])
+        throw std::runtime_error("bootstrap storage was not shrunk to accepted samples");
+    for (const auto& weights : selection.w_boot_by_lambda[lambda]) {
+        if (weights.cols() != selection.B_used_by_lambda[lambda])
+            throw std::runtime_error("bootstrap weight storage was not shrunk to accepted samples");
+    }
     for (std::size_t i = 1; i < candidate_ids.size(); ++i) {
         if (candidate_ids[i] != candidate_ids[i - 1] + 1)
             throw std::runtime_error("accepted bootstrap candidate IDs are not contiguous");
@@ -117,10 +121,7 @@ int main(int argc, char** argv) {
     std::cout << std::setprecision(17);
     print_matrix(result.C.cast<int>());
     std::cout << selection.B_used_by_lambda[lambda] << ' '
-              << selection.B_total_by_lambda[lambda] << ' '
               << selection.B_design_by_lambda[lambda] << ' '
-              << selection.B_stale_by_lambda[lambda] << ' '
-              << selection.B_cancelled_by_lambda[lambda] << ' '
               << selection.design_epochs_by_lambda[lambda] << ' '
               << selection.criterion[lambda] << '\n';
     for (const int id : candidate_ids)

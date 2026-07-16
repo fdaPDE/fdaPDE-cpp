@@ -351,6 +351,16 @@ const RGCCA<IndependentSampling>::BootstrapResult* find_bootstrap_result(
     return nullptr;
 }
 
+void check_compact_bootstrap_storage(const RGCCA<IndependentSampling>::BootstrapResult& component) {
+    for (std::size_t i = 0; i < component.lambda_grid.size(); ++i) {
+        const int B_used = component.B_used_by_lambda[i];
+        EXPECT_EQ(component.corr_boot_by_lambda[i].cols(), B_used);
+        EXPECT_EQ(component.candidate_ids_by_lambda[i].size(), static_cast<std::size_t>(B_used));
+        for (const auto& weights : component.w_boot_by_lambda[i])
+            EXPECT_EQ(weights.cols(), B_used);
+    }
+}
+
 void write_bootstrap_references(
   const RGCCA<IndependentSampling>& rgcca, const std::vector<Result>& results, const std::string& reference_path) {
     const auto bootstrap_results = rgcca.bootstrap_selection_results();
@@ -361,6 +371,7 @@ void write_bootstrap_references(
         const auto* component = find_bootstrap_result(bootstrap_results, h);
         ASSERT_NE(component, nullptr);
         ASSERT_GE(component->lambda_opt_index, 0);
+        check_compact_bootstrap_storage(*component);
 
         const std::string suffix = comp_suffix(h);
         Eigen::Matrix<double, Dynamic, Dynamic> lambda_opt(1, 1);
@@ -396,6 +407,7 @@ void check_bootstrap_references(
         const auto* component = find_bootstrap_result(bootstrap_results, h);
         ASSERT_NE(component, nullptr);
         ASSERT_GE(component->lambda_opt_index, 0);
+        check_compact_bootstrap_storage(*component);
 
         const std::string suffix = comp_suffix(h);
         const auto lambda_ref = load_market_matrix(reference_path + "ref_lambda_opt" + suffix + ".mtx");
@@ -442,6 +454,7 @@ void write_multivariate_bootstrap_references(
         const auto* component = find_bootstrap_result(bootstrap_results, h);
         ASSERT_NE(component, nullptr);
         ASSERT_EQ(component->lambda_opt_index, 0);
+        check_compact_bootstrap_storage(*component);
         ASSERT_EQ(static_cast<int>(component->lambda_grid.size()), 1);
         EXPECT_TRUE(std::isnan(component->lambda_grid.front()));
         EXPECT_TRUE(std::isnan(component->lambda_opt));
@@ -484,6 +497,7 @@ void check_multivariate_bootstrap_references(
         const auto* component = find_bootstrap_result(bootstrap_results, h);
         ASSERT_NE(component, nullptr);
         ASSERT_EQ(component->lambda_opt_index, 0);
+        check_compact_bootstrap_storage(*component);
         ASSERT_EQ(static_cast<int>(component->lambda_grid.size()), 1);
         EXPECT_TRUE(std::isnan(component->lambda_grid.front()));
         EXPECT_TRUE(std::isnan(component->lambda_opt));

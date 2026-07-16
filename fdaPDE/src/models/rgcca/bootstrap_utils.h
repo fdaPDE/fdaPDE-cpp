@@ -253,7 +253,15 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
 ) {
     const int n_threads = bootstrap_state.n_threads;
     const unsigned seed = static_cast<unsigned>(bootstrap_state.seed);
+    const int lookahead = std::min(bootstrap_state.B_max, 2 * n_threads);
+
+    std::atomic<bool> stop {false};
+    std::atomic<int> epoch_signal {bootstrap_state.design_epoch};
+    std::mutex stream_mutex;
+    std::condition_variable stream_cv;
+    std::map<int, typename RGCCA<SamplingStrategy>::BootstrapSampleResult> completed;
     int next_candidate = 0;
+    int next_commit = 0;
 
     // start parallel execution timer
     const auto parallel_start = std::chrono::high_resolution_clock::now();
@@ -265,106 +273,129 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
         return elapsed;
     };
 
-    while (!bootstrap_state.stop && bootstrap_state.B_done < bootstrap_state.B_max) {
-        const auto until_check = [&](const int last_check, const int check_every) {
-            return std::max(
-                1,
-                check_every - (bootstrap_state.B_done - last_check)
-            );
-        };
+    auto can_claim = [&]() {
+        const int remaining = bootstrap_state.B_max - bootstrap_state.B_done;
+        return remaining > 0 &&
+            next_candidate < next_commit + std::min(lookahead, remaining);
+    };
 
-        int window_size = std::min(
-            bootstrap_state.B_max - bootstrap_state.B_done,
-            until_check(bootstrap_state.last_check_B_done, bootstrap_state.check_every)
-        );
-        if (bootstrap_config_.adaptive && opt_.block_deactivation) {
-            window_size = std::min(
-                window_size,
-                until_check(
-                    bootstrap_state.last_block_deactivation_check_B_done,
-                    bootstrap_state.check_every_block_deactivation
-                )
-            );
-        }
-        if (bootstrap_config_.adaptive && opt_.connection_deactivation) {
-            window_size = std::min(
-                window_size,
-                until_check(
-                    bootstrap_state.last_connection_deactivation_check_B_done,
-                    bootstrap_state.check_every_connection_deactivation
-                )
-            );
-        }
+    // Workers fit ahead continuously; only this ordered commit frontier can change the design.
+    parallel_for(0, n_threads, /* grain_size */ 1, [&](int) {
+        while (true) {
+            int b = 0;
+            int epoch = 0;
+            rgcca::BoolMatrix C_snapshot;
+            {
+                std::unique_lock<std::mutex> lock(stream_mutex);
+                stream_cv.wait(lock, [&]() {
+                    return stop.load(std::memory_order_acquire) || can_claim();
+                });
+                if (stop.load(std::memory_order_acquire)) break;
 
-        const int window_begin = next_candidate;
-        const int window_end = window_begin + window_size;
-        const rgcca::BoolMatrix C_snapshot = C_active;
-        std::vector<typename RGCCA<SamplingStrategy>::BootstrapSampleResult> samples(window_size);
+                b = next_candidate++;
+                epoch = bootstrap_state.design_epoch;
+                C_snapshot = C_active;
+            }
 
-        // Candidate tasks remain dynamically scheduled; only their reduction is ordered.
-        parallel_for(window_begin, window_end, /* grain_size */ 1, [&](int b) {
             const int tid = this_thread_id();
-            samples[b - window_begin] = fit_bootstrap_sample_(
-                thread_boot_worker[tid], b, seed, C_snapshot, w_fit
+            auto cancelled = [&]() {
+                return stop.load(std::memory_order_acquire) ||
+                    epoch != epoch_signal.load(std::memory_order_acquire);
+            };
+            auto sample = fit_bootstrap_sample_(
+                thread_boot_worker[tid], b, seed, C_snapshot, w_fit, cancelled
             );
-        });
 
-        bootstrap_state.B_total += window_size;
-        for (const auto& sample : samples)
+            std::unique_lock<std::mutex> lock(stream_mutex);
+            ++bootstrap_state.B_total;
             timing_summary.add_sample(sample.fit_time, sample.fit_iters, sample.capped, sample.fit_started);
-
-        bool design_changed = false;
-        int consumed = 0;
-        for (int offset = 0; offset < window_size; ++offset) {
-            auto& sample = samples[offset];
-            ++consumed;
 
             if (sample.cancelled) {
                 ++bootstrap_state.B_cancelled;
+                lock.unlock();
+                stream_cv.notify_all();
+                continue;
+            }
+            if (epoch != bootstrap_state.design_epoch) {
+                ++bootstrap_state.B_stale;
+                lock.unlock();
+                stream_cv.notify_all();
                 continue;
             }
 
-            // Store accepted weights and correlations in candidate-ID order.
-            const int b_good = bootstrap_state.B_done;
-            boot_results.candidate_ids_by_lambda[lambda_i][b_good] = window_begin + offset;
-            for (int j = 0; j < n_blocks(); ++j) {
-                boot_results.w_boot_by_lambda[lambda_i][j].col(b_good) = sample.w[j];
-                update_w_min_(w_min[j], w_fit[j], sample.w[j]);
-            }
-            boot_results.corr_boot_by_lambda[lambda_i].col(b_good) =
-                Eigen::Map<const rgcca::Vector>(sample.corr.data(), n_blocks() * n_blocks());
+            completed.emplace(b, std::move(sample));
 
-            for (int j = 0; j < n_blocks(); ++j) {
-                for (int k = j + 1; k < n_blocks(); ++k) {
-                    const double c = sample.corr(j, k);
-                    if (c > 0.0) {
-                        ++bootstrap_state.corr_pos_count(j, k);
-                        ++bootstrap_state.corr_pos_count(k, j);
-                    } else if (c < 0.0) {
-                        ++bootstrap_state.corr_neg_count(j, k);
-                        ++bootstrap_state.corr_neg_count(k, j);
+            while (!bootstrap_state.stop) {
+                auto completed_it = completed.find(next_commit);
+                if (completed_it == completed.end()) break;
+
+                const int committed_id = next_commit++;
+                auto committed = std::move(completed_it->second);
+                completed.erase(completed_it);
+
+                const int b_good = bootstrap_state.B_done;
+                boot_results.candidate_ids_by_lambda[lambda_i][b_good] = committed_id;
+                for (int j = 0; j < n_blocks(); ++j) {
+                    boot_results.w_boot_by_lambda[lambda_i][j].col(b_good) = committed.w[j];
+                    update_w_min_(w_min[j], w_fit[j], committed.w[j]);
+                }
+                boot_results.corr_boot_by_lambda[lambda_i].col(b_good) =
+                    Eigen::Map<const rgcca::Vector>(committed.corr.data(), n_blocks() * n_blocks());
+
+                for (int j = 0; j < n_blocks(); ++j) {
+                    for (int k = j + 1; k < n_blocks(); ++k) {
+                        const double c = committed.corr(j, k);
+                        if (c > 0.0) {
+                            ++bootstrap_state.corr_pos_count(j, k);
+                            ++bootstrap_state.corr_pos_count(k, j);
+                        } else if (c < 0.0) {
+                            ++bootstrap_state.corr_neg_count(j, k);
+                            ++bootstrap_state.corr_neg_count(k, j);
+                        }
                     }
                 }
-            }
-            ++bootstrap_state.B_done;
+                ++bootstrap_state.B_done;
 
-            const bool force_check = bootstrap_state.B_done >= bootstrap_state.B_max;
-            const bool allow_design_deactivation = bootstrap_config_.adaptive || force_check;
-            const bool due_block_deactivation =
-                force_check ||
-                bootstrap_state.B_done - bootstrap_state.last_block_deactivation_check_B_done >=
-                    bootstrap_state.check_every_block_deactivation;
-            const bool due_connection_deactivation =
-                force_check ||
-                bootstrap_state.B_done - bootstrap_state.last_connection_deactivation_check_B_done >=
-                    bootstrap_state.check_every_connection_deactivation;
+                const bool force_check = bootstrap_state.B_done >= bootstrap_state.B_max;
+                const bool allow_design_deactivation = bootstrap_config_.adaptive || force_check;
+                const bool due_block_deactivation =
+                    force_check ||
+                    bootstrap_state.B_done - bootstrap_state.last_block_deactivation_check_B_done >=
+                        bootstrap_state.check_every_block_deactivation;
+                const bool due_connection_deactivation =
+                    force_check ||
+                    bootstrap_state.B_done - bootstrap_state.last_connection_deactivation_check_B_done >=
+                        bootstrap_state.check_every_connection_deactivation;
+                bool design_changed = false;
 
-            if (opt_.block_deactivation && allow_design_deactivation && due_block_deactivation) {
-                bootstrap_state.last_block_deactivation_check_B_done = bootstrap_state.B_done;
-                const rgcca::BoolMatrix C_before = C_active;
-                threshold_inactive_blocks_(w_min, C_active);
-                if (!same_design_(C_before, C_active)) {
+                if (opt_.block_deactivation && allow_design_deactivation && due_block_deactivation) {
+                    bootstrap_state.last_block_deactivation_check_B_done = bootstrap_state.B_done;
+                    const rgcca::BoolMatrix C_before = C_active;
+                    threshold_inactive_blocks_(w_min, C_active);
+                    design_changed = !same_design_(C_before, C_active);
+                }
+
+                const bool due_adaptive_check =
+                    force_check ||
+                    bootstrap_state.B_done - bootstrap_state.last_check_B_done >= bootstrap_state.check_every;
+
+                if (
+                    !design_changed && opt_.connection_deactivation &&
+                    allow_design_deactivation && due_connection_deactivation
+                ) {
+                    bootstrap_state.last_connection_deactivation_check_B_done = bootstrap_state.B_done;
+                    const rgcca::BoolMatrix C_before = C_active;
+                    threshold_inactive_connections_(lambda_i, bootstrap_state, boot_results, C_active);
+                    design_changed = !same_design_(C_before, C_active);
+                }
+
+                if (design_changed) {
                     reset_good_bootstrap_(bootstrap_state, w_min, w_fit, C_active);
+                    bootstrap_state.B_stale += static_cast<int>(completed.size());
+                    completed.clear();
+                    next_candidate = next_commit;
+                    epoch_signal.store(bootstrap_state.design_epoch, std::memory_order_release);
+
                     const int n_active_blocks = count_active_blocks_(C_active);
                     const int n_active_connections = count_active_connections_(C_active);
                     log_bootstrap_design_reset_(
@@ -373,71 +404,41 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
                         n_active_connections,
                         elapsed_since_last_log()
                     );
-                    design_changed = true;
                     if (n_active_connections == 0) {
                         bootstrap_state.crit = 0.0;
                         bootstrap_state.stop = true;
+                        stop.store(true, std::memory_order_release);
                     }
+                    break;
+                }
+
+                if (!due_adaptive_check) continue;
+                bootstrap_state.last_check_B_done = bootstrap_state.B_done;
+                bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_);
+                const typename RGCCA<SamplingStrategy>::AdaptiveStopInfo stop_info =
+                    bootstrap_config_.adaptive ?
+                        adaptive_stop_(bootstrap_state, bootstrap_config_) :
+                        typename RGCCA<SamplingStrategy>::AdaptiveStopInfo{};
+                log_bootstrap_progress_(
+                    bootstrap_state,
+                    count_active_blocks_(C_active),
+                    count_active_connections_(C_active),
+                    stop_info,
+                    elapsed_since_last_log()
+                );
+
+                if (stop_info.stop || bootstrap_state.B_done >= bootstrap_state.B_max) {
+                    bootstrap_state.stop = true;
+                    stop.store(true, std::memory_order_release);
+                    completed.clear();
                     break;
                 }
             }
 
-            const bool due_adaptive_check =
-                force_check ||
-                bootstrap_state.B_done - bootstrap_state.last_check_B_done >= bootstrap_state.check_every;
-
-            if (opt_.connection_deactivation && allow_design_deactivation && due_connection_deactivation) {
-                bootstrap_state.last_connection_deactivation_check_B_done = bootstrap_state.B_done;
-                const rgcca::BoolMatrix C_before = C_active;
-                threshold_inactive_connections_(lambda_i, bootstrap_state, boot_results, C_active);
-                if (!same_design_(C_before, C_active)) {
-                    reset_good_bootstrap_(bootstrap_state, w_min, w_fit, C_active);
-                    const int n_active_blocks = count_active_blocks_(C_active);
-                    const int n_active_connections = count_active_connections_(C_active);
-                    log_bootstrap_design_reset_(
-                        bootstrap_state,
-                        n_active_blocks,
-                        n_active_connections,
-                        elapsed_since_last_log()
-                    );
-                    design_changed = true;
-                    if (n_active_connections == 0) {
-                        bootstrap_state.crit = 0.0;
-                        bootstrap_state.stop = true;
-                    }
-                    break;
-                }
-            }
-
-            if (!due_adaptive_check) continue;
-            bootstrap_state.last_check_B_done = bootstrap_state.B_done;
-            bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_);
-            const typename RGCCA<SamplingStrategy>::AdaptiveStopInfo stop_info =
-                bootstrap_config_.adaptive ?
-                    adaptive_stop_(bootstrap_state, bootstrap_config_) :
-                    typename RGCCA<SamplingStrategy>::AdaptiveStopInfo{};
-            log_bootstrap_progress_(
-                bootstrap_state,
-                count_active_blocks_(C_active),
-                count_active_connections_(C_active),
-                stop_info,
-                elapsed_since_last_log()
-            );
-
-            if (stop_info.stop || bootstrap_state.B_done >= bootstrap_state.B_max) {
-                bootstrap_state.stop = true;
-                break;
-            }
+            lock.unlock();
+            stream_cv.notify_all();
         }
-
-        if (design_changed) {
-            // Replay the deterministic, unconsumed suffix under the new design.
-            bootstrap_state.B_stale += window_size - consumed;
-            next_candidate = window_begin + consumed;
-        } else {
-            next_candidate = window_end;
-        }
-    }
+    });
 
     // end parallel execution timer
     const auto parallel_end = std::chrono::high_resolution_clock::now();
@@ -1044,37 +1045,30 @@ void RGCCA<SamplingStrategy>::update_w_min_(
     }
 }
 
-// shrinks bootstrap storage to the number of accepted samples per lambda
+// shrinks one lambda's bootstrap storage to its accepted samples
 template <typename SamplingStrategy>
-void RGCCA<SamplingStrategy>::resize_bootstrap_results_(
+void RGCCA<SamplingStrategy>::resize_bootstrap_lambda_results_(
     typename RGCCA<SamplingStrategy>::BootstrapResult& boot_results,
-    int n_lambdas,
+    int lambda_i,
     int n_blocks,
     const std::vector<int>& block_dims
 ) const {
-    for (int i = 0; i < n_lambdas; ++i) {
-        const int B_eff = boot_results.B_used_by_lambda[i];
+    const int B_eff = boot_results.B_used_by_lambda[lambda_i];
 
-        if (boot_results.corr_boot_by_lambda[i].size() == 0) {
-            boot_results.w_boot_by_lambda[i].resize(n_blocks);
-            for (int j = 0; j < n_blocks; ++j)
-                boot_results.w_boot_by_lambda[i][j].setZero(block_dims[j], 0);
-            boot_results.corr_boot_by_lambda[i].setZero(n_blocks * n_blocks, 0);
-            boot_results.candidate_ids_by_lambda[i].clear();
-            continue;
-        }
-
-        for (int j = 0; j < n_blocks; ++j) {
-            boot_results.w_boot_by_lambda[i][j].conservativeResize(
-                Eigen::NoChange, B_eff
-            );
-        }
-
-        boot_results.corr_boot_by_lambda[i].conservativeResize(
-            Eigen::NoChange, B_eff
-        );
-        boot_results.candidate_ids_by_lambda[i].resize(B_eff);
+    if (boot_results.corr_boot_by_lambda[lambda_i].size() == 0) {
+        boot_results.w_boot_by_lambda[lambda_i].resize(n_blocks);
+        for (int j = 0; j < n_blocks; ++j)
+            boot_results.w_boot_by_lambda[lambda_i][j].setZero(block_dims[j], 0);
+        boot_results.corr_boot_by_lambda[lambda_i].setZero(n_blocks * n_blocks, 0);
+        boot_results.candidate_ids_by_lambda[lambda_i].clear();
+        return;
     }
+
+    for (int j = 0; j < n_blocks; ++j)
+        boot_results.w_boot_by_lambda[lambda_i][j].conservativeResize(Eigen::NoChange, B_eff);
+
+    boot_results.corr_boot_by_lambda[lambda_i].conservativeResize(Eigen::NoChange, B_eff);
+    boot_results.candidate_ids_by_lambda[lambda_i].resize(B_eff);
 }
 
 // computes bootstrap correlation confidence intervals for every lambda and block pair
