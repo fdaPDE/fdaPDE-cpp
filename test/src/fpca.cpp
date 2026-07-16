@@ -57,4 +57,7 @@ TEST(fpca, test_01) {
     EXPECT_TRUE(almost_equal<double>(m.F().col(0), data_path + "f1.mtx") || almost_equal<double>(-m.F().col(0), data_path + "f1.mtx"));
     EXPECT_TRUE(almost_equal<double>(m.F().col(1), data_path + "f2.mtx") || almost_equal<double>(-m.F().col(1), data_path + "f2.mtx"));
     EXPECT_TRUE(almost_equal<double>(m.F().col(2), data_path + "f3.mtx") || almost_equal<double>(-m.F().col(2), data_path + "f3.mtx"));
+    EXPECT_EQ(m.objective_history().size(), 3);
+    EXPECT_EQ(m.iterations().size(), 3);
+    EXPECT_EQ(m.monotone().size(), 3);
 }

@@ -89,6 +89,14 @@ void check_fpls_case(const std::string& data_path, double lambda) {
     EXPECT_EQ(m.fitted(1).cols(), Y.cols());
     EXPECT_EQ(m.reconstructed(1).rows(), Y.rows());
     EXPECT_EQ(m.B(1).cols(), Y.cols());
+    EXPECT_EQ(m.direction_iterations().size(), 3);
+    EXPECT_EQ(m.direction_objective_history().size(), 3);
+    EXPECT_EQ(m.direction_monotone().size(), 3);
+    for (int h = 0; h < 3; ++h) {
+        EXPECT_GT(m.direction_iterations()[h], 0);
+        EXPECT_EQ(m.direction_objective_history()[h].size(), m.direction_iterations()[h]);
+        EXPECT_TRUE(m.direction_monotone()[h]);
+    }
 }
 
 void check_fpls_gcv_case(const std::string& data_path) {
@@ -140,6 +148,14 @@ void check_fpls_gcv_case(const std::string& data_path) {
     EXPECT_EQ(m.fitted(1).cols(), Y.cols());
     EXPECT_EQ(m.reconstructed(1).rows(), Y.rows());
     EXPECT_EQ(m.B(1).cols(), Y.cols());
+    EXPECT_EQ(m.direction_iterations().size(), 3);
+    EXPECT_EQ(m.direction_objective_history().size(), 3);
+    EXPECT_EQ(m.direction_monotone().size(), 3);
+    for (int h = 0; h < 3; ++h) {
+        EXPECT_GT(m.direction_iterations()[h], 0);
+        EXPECT_EQ(m.direction_objective_history()[h].size(), m.direction_iterations()[h]);
+        EXPECT_TRUE(m.direction_monotone()[h]);
+    }
 }
 
 void check_restored_modes_smoke(const std::string& data_path, double lambda) {
@@ -234,6 +250,9 @@ void check_spline_smoke() {
     EXPECT_TRUE(m.fitted().array().isFinite().all());
     EXPECT_TRUE(m.reconstructed().array().isFinite().all());
     EXPECT_TRUE(m.Beta().array().isFinite().all());
+    EXPECT_EQ(m.direction_iterations().size(), 2);
+    EXPECT_EQ(m.direction_objective_history().size(), 2);
+    EXPECT_EQ(m.direction_monotone().size(), 2);
 }
 
 }   // namespace

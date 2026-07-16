@@ -19,6 +19,14 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
     static constexpr int direction_n_lambda = direction_solver_t::n_lambda;
     static constexpr int loading_n_lambda = loading_solver_t::n_lambda;
+
+    struct direction_fit_result {
+        vector_t f;
+        vector_t v;
+        std::vector<double> objective_history;
+        int iterations = 0;
+        bool monotone = true;
+    };
    public:
     fPLS() noexcept = default;
 
@@ -61,6 +69,9 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
         T_.resize(n_units_, n_comp_);
         U_.resize(n_units_, n_comp_);
         sigma_.resize(n_comp_);
+        direction_objective_history_.resize(n_comp_);
+        direction_iterations_.assign(n_comp_, 0);
+        direction_monotone_.assign(n_comp_, true);
 
         matrix_t M_h = Y_h.transpose() * X_h;
         for (int h = 0; h < n_comp_; ++h) {
@@ -90,6 +101,9 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
         T_.resize(n_units_, n_comp_);
         U_.resize(n_units_, n_comp_);
         sigma_.resize(n_comp_);
+        direction_objective_history_.resize(n_comp_);
+        direction_iterations_.assign(n_comp_, 0);
+        direction_monotone_.assign(n_comp_, true);
         direction_lambda_.resize(n_comp_, direction_n_lambda);
         loading_lambda_.resize(n_comp_, loading_n_lambda);
 
@@ -179,6 +193,11 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
     matrix_t Beta(int h) const requires(Mode == fPLSMode::Regression) { return B(h); }
     const matrix_t& direction_lambda() const { return direction_lambda_; }
     const matrix_t& loading_lambda() const { return loading_lambda_; }
+    const std::vector<std::vector<double>>& direction_objective_history() const {
+        return direction_objective_history_;
+    }
+    const std::vector<int>& direction_iterations() const { return direction_iterations_; }
+    const std::vector<bool>& direction_monotone() const { return direction_monotone_; }
 
    private:
     int components_(int h) const {
@@ -243,6 +262,8 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
         vector_t fn = f0;
         vector_t v(M.rows());
         double Jold = std::numeric_limits<double>::max(), Jnew = 1.0;
+        direction_fit_result result;
+        result.objective_history.reserve(max_iter);
 
         for (int i = 0; !almost_equal(Jnew, Jold, tol) && i < max_iter; ++i) {
             v = M * fn;
@@ -252,28 +273,39 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
             Jold = Jnew;
             fn = direction_solver_.fn();
             Jnew = (M - v * fn.transpose()).squaredNorm() + direction_solver_.ftPf(lambda);
+            result.objective_history.push_back(Jnew);
+            result.iterations = i + 1;
+            if (!std::isfinite(Jnew) ||
+                (i > 0 && (Jnew - Jold) / (1.0 + std::abs(Jold)) > tol)) {
+                result.monotone = false;
+            }
         }
 
-        return std::make_pair(direction_solver_.f(), v);
+        result.f = direction_solver_.f();
+        result.v = std::move(v);
+        return result;
     }
     template <typename Lambda, typename Init>
         requires(internals::is_subscriptable<Lambda, int>)
     void fit_direction_(const matrix_t& M, const Lambda& lambda, const Init& f0, int max_iter, double tol, int h) {
-        const auto& [f, v] = solve_direction_(M, lambda, f0, max_iter, tol);
-        const double w_norm = (direction_solver_.Psi() * f).norm();
-        const double v_norm = v.norm();
-        W_.col(h) = f / w_norm;
-        V_.col(h) = v / v_norm;
+        auto result = solve_direction_(M, lambda, f0, max_iter, tol);
+        const double w_norm = (direction_solver_.Psi() * result.f).norm();
+        const double v_norm = result.v.norm();
+        W_.col(h) = result.f / w_norm;
+        V_.col(h) = result.v / v_norm;
         sigma_[h] = w_norm * v_norm;
+        direction_objective_history_[h] = std::move(result.objective_history);
+        direction_iterations_[h] = result.iterations;
+        direction_monotone_[h] = result.monotone;
     }
     template <typename Lambda, typename Init>
         requires(internals::is_subscriptable<Lambda, int>)
     double direction_gcv_(
       const matrix_t& M, const Lambda& lambda, const Init& f0, int max_iter, double tol, int edf_r, int seed) {
-        const auto& [f, v] = solve_direction_(M, lambda, f0, max_iter, tol);
+        const auto result = solve_direction_(M, lambda, f0, max_iter, tol);
         double dor = n_locs_ - direction_solver_.edf(lambda, edf_r, seed);
         return (n_locs_ / std::pow(dor, 2)) *
-               ((direction_solver_.Psi() * f) - direction_solver_.response()).squaredNorm();
+               ((direction_solver_.Psi() * result.f) - direction_solver_.response()).squaredNorm();
     }
     template <typename Lambda>
         requires(internals::is_subscriptable<Lambda, int>)
@@ -300,6 +332,9 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
     vector_t sigma_;
     matrix_t direction_lambda_;
     matrix_t loading_lambda_;
+    std::vector<std::vector<double>> direction_objective_history_;
+    std::vector<int> direction_iterations_;
+    std::vector<bool> direction_monotone_;
 };
 
 template <typename GeoFrame, typename DirectionPenalty, typename LoadingPenalty>
