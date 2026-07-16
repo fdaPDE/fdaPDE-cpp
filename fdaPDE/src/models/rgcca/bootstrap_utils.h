@@ -260,6 +260,8 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
     std::mutex stream_mutex;
     std::condition_variable stream_cv;
     std::map<int, typename RGCCA<SamplingStrategy>::BootstrapSampleResult> completed;
+    std::vector<double> claim_wait_time(n_threads, 0.0);
+    std::vector<double> merge_wait_time(n_threads, 0.0);
     int next_candidate = 0;
     int next_commit = 0;
 
@@ -280,16 +282,20 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
     };
 
     // Workers fit ahead continuously; only this ordered commit frontier can change the design.
-    parallel_for(0, n_threads, /* grain_size */ 1, [&](int) {
+    parallel_for(0, n_threads, /* grain_size */ 1, [&](int worker_i) {
         while (true) {
             int b = 0;
             int epoch = 0;
             rgcca::BoolMatrix C_snapshot;
             {
                 std::unique_lock<std::mutex> lock(stream_mutex);
+                const auto wait_start = std::chrono::high_resolution_clock::now();
                 stream_cv.wait(lock, [&]() {
                     return stop.load(std::memory_order_acquire) || can_claim();
                 });
+                claim_wait_time[worker_i] += std::chrono::duration<double>(
+                    std::chrono::high_resolution_clock::now() - wait_start
+                ).count();
                 if (stop.load(std::memory_order_acquire)) break;
 
                 b = next_candidate++;
@@ -302,12 +308,21 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
                 return stop.load(std::memory_order_acquire) ||
                     epoch != epoch_signal.load(std::memory_order_acquire);
             };
+            const auto worker_start = std::chrono::high_resolution_clock::now();
             auto sample = fit_bootstrap_sample_(
                 thread_boot_worker[tid], b, seed, C_snapshot, w_fit, cancelled
             );
+            const double worker_elapsed = std::chrono::duration<double>(
+                std::chrono::high_resolution_clock::now() - worker_start
+            ).count();
 
+            const auto merge_wait_start = std::chrono::high_resolution_clock::now();
             std::unique_lock<std::mutex> lock(stream_mutex);
+            merge_wait_time[worker_i] += std::chrono::duration<double>(
+                std::chrono::high_resolution_clock::now() - merge_wait_start
+            ).count();
             ++bootstrap_state.B_total;
+            timing_summary.add_worker_time(worker_elapsed);
             timing_summary.add_sample(sample.fit_time, sample.fit_iters, sample.capped, sample.fit_started);
 
             if (sample.cancelled) {
@@ -444,6 +459,10 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
     const auto parallel_end = std::chrono::high_resolution_clock::now();
     const double parallel_time = std::chrono::duration<double>(parallel_end - parallel_start).count();
     timing_summary.set_parallel_capacity(parallel_time, n_threads);
+    timing_summary.set_scheduler_wait_times(
+        std::accumulate(claim_wait_time.begin(), claim_wait_time.end(), 0.0),
+        std::accumulate(merge_wait_time.begin(), merge_wait_time.end(), 0.0)
+    );
 }
 
 // fits one bootstrap resample and returns its weights, correlations and timing

@@ -660,6 +660,32 @@ TEST(rgcca, connection_uncertainty_retains_threshold_overlap) {
     EXPECT_LT(fdapde::internals::median_confidence_upper_bound(clearly_weak, z), 0.05);
 }
 
+TEST(rgcca, nonnegative_weight_solver_finds_active_boundary_optimum) {
+    write_ipopt_options();
+
+    Eigen::SparseMatrix<double> Psi(2, 2);
+    Psi.setIdentity();
+
+    Eigen::SparseMatrix<double> Omega(2, 2);
+    Omega.insert(0, 0) = 2.0;
+    Omega.insert(0, 1) = 1.0;
+    Omega.insert(1, 0) = 1.0;
+    Omega.insert(1, 1) = 2.0;
+    Omega.makeCompressed();
+
+    Eigen::Vector2d z;
+    z << 1.0, -0.25;
+
+    ::fdapde::internals::NonNegativeWeightSolver solver(Psi, Omega, false);
+    const Eigen::VectorXd weights = solver.solve(z);
+
+    EXPECT_GE(weights.minCoeff(), 0.0);
+    EXPECT_NEAR(weights[0], 1.0 / std::sqrt(2.0), 1e-9);
+    EXPECT_NEAR(weights[1], 0.0, 1e-12);
+    EXPECT_NEAR(weights.dot(Omega * weights), 1.0, 1e-10);
+    EXPECT_NEAR(z.dot(weights), 1.0 / std::sqrt(2.0), 1e-9);
+}
+
 TEST(rgcca, GCCA_NN_cov) {
 
     write_ipopt_options();

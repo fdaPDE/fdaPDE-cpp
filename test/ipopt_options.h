@@ -1,15 +1,23 @@
 #ifndef FDAPDE_TEST_IPOPT_OPTIONS_H
 #define FDAPDE_TEST_IPOPT_OPTIONS_H
 
+#include <cstdlib>
 #include <fstream>
 
 inline void write_ipopt_options() {
-    std::ofstream("ipopt.opt")
-      << "print_level 0\n"
-      << "sb yes\n"
-      << "print_user_options no\n"
-      << "print_timing_statistics no\n"
-      << "\n"
+    std::ofstream options("ipopt.opt");
+    options
+        << "print_level 0\n"
+        << "sb yes\n"
+        << "print_user_options no\n"
+        << "print_timing_statistics no\n"
+        << "\n";
+    if (const char* hsllib = std::getenv("FDAPDE_TEST_HSL_LIBRARY"); hsllib && *hsllib) {
+        options
+            << "linear_solver ma57\n"
+            << "hsllib " << hsllib << "\n\n";
+    }
+    options
       /*<< "hessian_approximation exact\n"
       << "nlp_scaling_method none\n"
       << "\n"

@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <condition_variable>
 #include <map>
+#include <numeric>
 
 namespace fdapde {
 
@@ -413,6 +414,9 @@ private:
     struct BootstrapTimingSummary {
         double fit_time = 0.0;
         double fit_time_sq = 0.0;
+        double worker_time = 0.0;
+        double claim_wait_time = 0.0;
+        double merge_wait_time = 0.0;
         double parallel_capacity = 0.0;
         double iters = 0.0;
         int capped_fits = 0;
@@ -431,8 +435,27 @@ private:
         void set_parallel_capacity(const double wall_time_sec, const int n_threads) {
             parallel_capacity = wall_time_sec * static_cast<double>(n_threads);
         }
+        void add_worker_time(const double worker_time_sec) {
+            worker_time += worker_time_sec;
+        }
+        void set_scheduler_wait_times(const double claim_wait_sec, const double merge_wait_sec) {
+            claim_wait_time = claim_wait_sec;
+            merge_wait_time = merge_wait_sec;
+        }
         [[nodiscard]] double efficiency() const {
             return parallel_capacity > 0.0 ? fit_time / parallel_capacity : 0.0;
+        }
+        [[nodiscard]] double fraction_of_capacity(const double time_sec) const {
+            return parallel_capacity > 0.0 ? time_sec / parallel_capacity : 0.0;
+        }
+        [[nodiscard]] double worker_overhead_fraction() const {
+            return fraction_of_capacity(std::max(0.0, worker_time - fit_time));
+        }
+        [[nodiscard]] double coordinator_fraction() const {
+            return std::max(
+                0.0,
+                1.0 - fraction_of_capacity(worker_time + claim_wait_time + merge_wait_time)
+            );
         }
         [[nodiscard]] double avg_fit_time() const {
             return n_fits > 0 ? fit_time / static_cast<double>(n_fits) : 0.0;

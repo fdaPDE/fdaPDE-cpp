@@ -443,7 +443,10 @@ public:
                 pos_ok = true;
                 return;
             }
-
+            if (try_coordinate_solution_(p, last_solution_pos_, &last_solution_pos_)) {
+                pos_ok = true;
+                return;
+            }
             const Vector& x1_pos = x_direct_pos.size() == x_init_.size() ? x_direct_pos : x_init_;
             Vector x0_pos = normalize_convex_comb_(x_init_, x1_pos, alpha);
             double s_pos = std::abs(p.dot(x0_pos));
@@ -466,7 +469,10 @@ public:
                 neg_ok = true;
                 return;
             }
-
+            if (try_coordinate_solution_(-p, last_solution_neg_, &last_solution_neg_)) {
+                neg_ok = true;
+                return;
+            }
             const Vector& x1_neg = x_direct_neg.size() == x_init_.size() ? x_direct_neg : x_init_;
             Vector x0_neg = normalize_convex_comb_(x_init_, x1_neg, alpha);
             double s_neg = std::abs(p.dot(x0_neg));
@@ -562,6 +568,59 @@ private:
 
         out = y / std::sqrt(norm2);
         return true;
+    }
+    // The constrained linear maximum has the direction of this convex NNQP's
+    // nonzero minimizer; normalize it back to the Omega unit sphere afterward.
+    bool try_coordinate_solution_(const Vector& c, const Vector& warm_start, Vector* out) const {
+        const int n = static_cast<int>(c.size());
+        if (n == 0 || out == nullptr)
+            return false;
+
+        const Vector diagonal = Omega_.diagonal();
+        if ((diagonal.array() <= 0.0).any() || !diagonal.allFinite())
+            return false;
+
+        Vector x = warm_start.cwiseMax(0.0);
+        const double warm_norm2 = x.dot(Omega_ * x);
+        const double warm_scale = warm_norm2 > 0.0 ? std::max(0.0, c.dot(x) / warm_norm2) : 0.0;
+        x *= warm_scale;
+
+        Vector gradient = Omega_ * x - c;
+        const double tolerance = 1e-10 * std::max(1.0, c.lpNorm<Eigen::Infinity>());
+        constexpr int max_sweeps = 20000;
+
+        for (int sweep = 1; sweep <= max_sweeps; ++sweep) {
+            for (int i = 0; i < n; ++i) {
+                const double old_value = x[i];
+                const double new_value = std::max(0.0, old_value - gradient[i] / diagonal[i]);
+                const double delta = new_value - old_value;
+                if (delta == 0.0)
+                    continue;
+
+                x[i] = new_value;
+                for (SparseMatrix::InnerIterator it(Omega_, i); it; ++it)
+                    gradient[it.row()] += delta * it.value();
+            }
+
+            if (sweep % 20 == 0)
+                gradient.noalias() = Omega_ * x - c;
+
+            double violation = 0.0;
+            for (int i = 0; i < n; ++i) {
+                const double current = x[i] > 1e-14 ? std::abs(gradient[i]) : std::max(0.0, -gradient[i]);
+                violation = std::max(violation, current);
+            }
+            if (violation > tolerance)
+                continue;
+
+            const double norm2 = x.dot(Omega_ * x);
+            if (!(norm2 > 0.0) || !std::isfinite(norm2))
+                return false;
+            *out = x / std::sqrt(norm2);
+            return true;
+        }
+
+        return false;
     }
     double upper_bound_(const Vector& c) const {
         if (!omega_solver_ready_)

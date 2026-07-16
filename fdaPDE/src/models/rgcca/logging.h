@@ -222,6 +222,11 @@ void RGCCA<SamplingStrategy>::log_bootstrap_lambda_summary_(
                  << ", max=" << timing_summary.max_iters
                  << ", capped=" << timing_summary.capped_fits
                  << "/" << timing_summary.n_fits << '\n';
+    fdapde::cout << "  Scheduler: prep/post=" << std::setprecision(1)
+                 << 100.0 * timing_summary.worker_overhead_fraction()
+                 << "%, claim_wait=" << 100.0 * timing_summary.fraction_of_capacity(timing_summary.claim_wait_time)
+                 << "%, merge_wait=" << 100.0 * timing_summary.fraction_of_capacity(timing_summary.merge_wait_time)
+                 << "%, coordinator=" << 100.0 * timing_summary.coordinator_fraction() << "%\n";
 
     // design and criterion recap
     fdapde::cout << "  Design: active_blocks=" << n_active_blocks
