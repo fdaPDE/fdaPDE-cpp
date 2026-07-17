@@ -505,7 +505,9 @@ auto RGCCA<SamplingStrategy>::fit_bootstrap_sample_(
     const auto nn_stats_before = ::fdapde::internals::NonNegativeWeightSolver::thread_stats();
     const auto fit_start = std::chrono::high_resolution_clock::now();
     out.fit_started = true;
-    const Result fit_result = fit_component_(boot_blocks.refs, C_active, true, fit_max_iter, cancelled);
+    const Result fit_result = fit_component_(
+        boot_blocks.refs, C_active, true, fit_max_iter, cancelled, false
+    );
     const auto fit_end = std::chrono::high_resolution_clock::now();
 
     // save fit info

@@ -300,10 +300,12 @@ private:
     struct FitWorkspace {
         Matrix Cov;
         Eigen::ArrayXXi dirty;
+        Vector means;
 
         explicit FitWorkspace(int n_blocks) {
             Cov.setZero(n_blocks, n_blocks);
             dirty.setOnes(n_blocks, n_blocks);
+            means.setZero(n_blocks);
             for (int j = 0; j < n_blocks; ++j) {
                 Cov(j, j) = 1.0;
                 dirty(j, j) = 0;
@@ -567,7 +569,8 @@ private:
         const BoolMatrix& C_active,
         const bool update_component_lambdas = true,
         const int max_iter_override = -1,
-        const std::function<bool()>& cancelled = {}
+        const std::function<bool()>& cancelled = {},
+        const bool collect_summary = true
     ) {
         const int max_iter = max_iter_override > 0 ? max_iter_override : opt_.max_iter;
         FitWorkspace ws(n_blocks());
@@ -589,6 +592,8 @@ private:
 
         // initialization
         std::vector<Vector> eta_cache = eta_(blocks);
+        for (int j = 0; j < n_blocks(); ++j)
+            ws.means[j] = eta_cache[j].mean();
         res.obj_history.push_back(objective_(ws, res.C, eta_cache));
         auto w_prev = snapshot_weights_(blocks);
         if (update_component_lambdas && opt_.lambda_selection_components == LambdaSelection::Automatic)
@@ -625,6 +630,7 @@ private:
                 // block update
                 blocks[l]->compute(nu_l);
                 eta_cache[l] = eta_(*blocks[l]);
+                ws.means[l] = eta_cache[l].mean();
                 mark_cov_rowcol_dirty_(ws, l);
             }
 
@@ -654,6 +660,8 @@ private:
             res.cancelled = true;
             return res;
         }
+
+        if (!collect_summary) return res;
 
         // save results
         covariance_matrix_(blocks, res.covariance_matrix);
@@ -1420,7 +1428,10 @@ private:
 
         // compute or reuse cov(l,k); when computed, store and mark clean (both (l,k) and (k,l))
         if (!ws.dirty(l, k)) return ws.Cov(l, k);
-        const double c = cov_(eta_l, eta_k);
+        const double den = opt_.bias ? eta_l.size() : std::max<int>(1, eta_l.size() - 1);
+        const double c = (
+            eta_l.dot(eta_k) - static_cast<double>(eta_l.size()) * ws.means[l] * ws.means[k]
+        ) / den;
         ws.Cov(l, k) = ws.Cov(k, l) = c;
         ws.dirty(l, k) = ws.dirty(k, l) = 0;
         return c;
@@ -1509,7 +1520,10 @@ private:
 
     // optimization criteria
     double objective_(const BlockRefList& blocks, FitWorkspace& ws, const BoolMatrix& C) const {
-        return objective_(ws, C, eta_(blocks));
+        auto eta = eta_(blocks);
+        for (int j = 0; j < n_blocks(); ++j)
+            ws.means[j] = eta[j].mean();
+        return objective_(ws, C, eta);
     }
     double objective_(FitWorkspace& ws, const BoolMatrix& C, const std::vector<Vector>& eta) const {
         double f = 0.0;

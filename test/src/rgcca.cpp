@@ -687,6 +687,27 @@ TEST(rgcca, nonnegative_weight_solver_finds_active_boundary_optimum) {
     EXPECT_EQ(stats.would_fallback, 0);
 }
 
+TEST(rgcca, nonnegative_weight_solver_checks_opposite_sign_when_warm_order_is_wrong) {
+    Eigen::SparseMatrix<double> Psi(2, 2);
+    Psi.setIdentity();
+
+    Eigen::SparseMatrix<double> Omega(2, 2);
+    Omega.insert(0, 0) = 100.0;
+    Omega.insert(1, 1) = 1.0;
+    Omega.makeCompressed();
+
+    Eigen::Vector2d z;
+    z << 2.0, -1.5;
+
+    ::fdapde::internals::NonNegativeWeightSolver solver(Psi, Omega, true);
+    const Eigen::VectorXd weights = solver.solve(z);
+
+    EXPECT_NEAR(weights[0], 0.0, 1e-12);
+    EXPECT_NEAR(weights[1], 1.0, 1e-9);
+    EXPECT_NEAR(weights.dot(Omega * weights), 1.0, 1e-10);
+    EXPECT_NEAR(std::abs(z.dot(weights)), 1.5, 1e-9);
+}
+
 TEST(rgcca, nonnegative_weight_solver_handles_nonpositive_horst_signal) {
     Eigen::SparseMatrix<double> Psi(2, 2);
     Psi.setIdentity();

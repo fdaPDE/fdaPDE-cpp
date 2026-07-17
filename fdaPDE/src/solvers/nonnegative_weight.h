@@ -117,6 +117,7 @@ public:
             if (!pivots.allFinite() || !(max_pivot > 0.0) || pivots.minCoeff() <= pivot_tol)
                 throw std::invalid_argument("NonNegativeWeightSolver: Omega must be numerically positive definite");
         }
+        initialize_workspace_();
 
         x_init_ = Vector::Ones(Psi_.cols());
         x_init_ = normalize_(x_init_);
@@ -141,6 +142,7 @@ public:
             if (omega_solver_.info() != Eigen::Success)
                 throw std::invalid_argument("NonNegativeWeightSolver: Omega factorization failed in copy constructor");
         }
+        initialize_workspace_();
     }
 
     NonNegativeWeightSolver& operator=(const NonNegativeWeightSolver&) = delete;
@@ -169,7 +171,8 @@ public:
             return Vector::Zero(Psi_.cols());
         }
 
-        const Vector p = Psi_.transpose() * z;
+        transformed_signal_.noalias() = Psi_.transpose() * z;
+        const Vector& p = transformed_signal_;
         if (!p.allFinite())
             throw std::runtime_error("NonNegativeWeightSolver: transformed signal is not finite");
         if (p.lpNorm<Eigen::Infinity>() <= zero_tol) {
@@ -197,8 +200,9 @@ public:
                 ++thread_stats_.closed_form_sides;
                 return true;
             }
-            Vector projected_direct;
-            if (try_direct_solution_(c, solution, &projected_direct)) {
+            bool projected_direct_valid = false;
+            if (solution.minCoeff() > 1e-14 &&
+                try_direct_solution_(c, solution, &projected_direct_, &projected_direct_valid)) {
                 ++thread_stats_.direct_sides;
                 return true;
             }
@@ -207,8 +211,8 @@ public:
             int sweeps = 0;
             double violation = std::numeric_limits<double>::infinity();
             double tolerance = 0.0;
-            const Vector& warm_start = projected_direct.size() == solution.size() &&
-                c.dot(projected_direct) > c.dot(solution) ? projected_direct : solution;
+            const Vector& warm_start = projected_direct_valid &&
+                c.dot(projected_direct_) > c.dot(solution) ? projected_direct_ : solution;
             const bool converged = try_coordinate_solution_(
                 c, warm_start, &solution, sweeps, violation, tolerance
             );
@@ -234,23 +238,25 @@ public:
         } else if (negative_side_only) {
             neg_ok = solve_side(-p, last_solution_neg_);
         } else {
-            const double pos_bound = upper_bound_(p);
-            const double neg_bound = upper_bound_(-p);
-            auto pos_dominates = [&]() {
+            auto pos_dominates = [&](const double neg_bound) {
                 return pos_ok && p.dot(last_solution_pos_) +
                     1e-10 * (1.0 + std::abs(neg_bound)) >= neg_bound;
             };
-            auto neg_dominates = [&]() {
+            auto neg_dominates = [&](const double pos_bound) {
                 return neg_ok && -p.dot(last_solution_neg_) +
                     1e-10 * (1.0 + std::abs(pos_bound)) >= pos_bound;
             };
 
-            if (pos_bound >= neg_bound) {
+            const double pos_warm_objective = p.dot(last_solution_pos_);
+            const double neg_warm_objective = -p.dot(last_solution_neg_);
+            if (pos_warm_objective >= neg_warm_objective) {
                 pos_ok = solve_side(p, last_solution_pos_);
-                if (!pos_dominates()) neg_ok = solve_side(-p, last_solution_neg_);
+                if (!pos_dominates(upper_bound_(-p)))
+                    neg_ok = solve_side(-p, last_solution_neg_);
             } else {
                 neg_ok = solve_side(-p, last_solution_neg_);
-                if (!neg_dominates()) pos_ok = solve_side(p, last_solution_pos_);
+                if (!neg_dominates(upper_bound_(p)))
+                    pos_ok = solve_side(p, last_solution_pos_);
             }
         }
 
@@ -268,6 +274,23 @@ public:
     }
 
 private:
+    void initialize_workspace_() {
+        diagonal_ = Omega_.diagonal();
+        sqrt_diagonal_ = diagonal_.array().sqrt();
+        inv_sqrt_diagonal_ = sqrt_diagonal_.array().inverse();
+
+        const Eigen::Index n = Psi_.cols();
+        transformed_signal_.resize(n);
+        direct_solution_.resize(n);
+        projected_direct_.resize(n);
+        coordinate_x_.resize(n);
+        coordinate_u_.resize(n);
+        coordinate_gradient_.resize(n);
+        scaled_c_.resize(n);
+        bound_c_.resize(n);
+        bound_solution_.resize(n);
+    }
+
     void validate_omega_() const {
         if (Omega_.rows() == 0 || Omega_.rows() != Omega_.cols())
             throw std::invalid_argument("NonNegativeWeightSolver: Omega must be nonempty and square");
@@ -301,43 +324,50 @@ private:
     }
 
     Vector nonpositive_horst_solution_(const Vector& c) const {
-        const Vector diagonal = Omega_.diagonal();
         int best_i = 0;
         double best_score = -std::numeric_limits<double>::infinity();
         for (int i = 0; i < c.size(); ++i) {
-            const double score = c[i] / std::sqrt(diagonal[i]);
+            const double score = c[i] * inv_sqrt_diagonal_[i];
             if (score > best_score) {
                 best_score = score;
                 best_i = i;
             }
         }
         Vector out = Vector::Zero(c.size());
-        out[best_i] = 1.0 / std::sqrt(diagonal[best_i]);
+        out[best_i] = inv_sqrt_diagonal_[best_i];
         return out;
     }
 
-    bool try_direct_solution_(const Vector& c, Vector& out, Vector* projected_out = nullptr) const {
-        Vector y = omega_solver_.solve(c);
-        if (omega_solver_.info() != Eigen::Success || !y.allFinite())
+    bool try_direct_solution_(
+        const Vector& c,
+        Vector& out,
+        Vector* projected_out = nullptr,
+        bool* projected_valid = nullptr
+    ) {
+        if (projected_valid != nullptr) *projected_valid = false;
+        direct_solution_ = omega_solver_.solve(c);
+        if (omega_solver_.info() != Eigen::Success || !direct_solution_.allFinite())
             return false;
 
-        const double scale = std::max(1.0, y.cwiseAbs().maxCoeff());
+        const double scale = std::max(1.0, direct_solution_.cwiseAbs().maxCoeff());
         const double tol = 100.0 * std::numeric_limits<double>::epsilon() * scale;
-        if (y.minCoeff() < -tol) {
+        if (direct_solution_.minCoeff() < -tol) {
             if (projected_out != nullptr) {
-                Vector projected = y.cwiseMax(0.0);
-                const double norm2 = projected.dot(Omega_ * projected);
-                if (norm2 > 0.0 && std::isfinite(norm2))
-                    *projected_out = projected / std::sqrt(norm2);
+                *projected_out = direct_solution_.cwiseMax(0.0);
+                const double norm2 = projected_out->dot(Omega_ * *projected_out);
+                if (norm2 > 0.0 && std::isfinite(norm2)) {
+                    *projected_out /= std::sqrt(norm2);
+                    if (projected_valid != nullptr) *projected_valid = true;
+                }
             }
             return false;
         }
 
-        y = y.cwiseMax(0.0);
-        const double norm2 = y.dot(Omega_ * y);
+        direct_solution_ = direct_solution_.cwiseMax(0.0);
+        const double norm2 = direct_solution_.dot(Omega_ * direct_solution_);
         if (!(norm2 > 0.0) || !std::isfinite(norm2))
             return false;
-        out = y / std::sqrt(norm2);
+        out = direct_solution_ / std::sqrt(norm2);
         return true;
     }
 
@@ -348,69 +378,73 @@ private:
         int& sweeps,
         double& violation,
         double& tolerance
-    ) const {
+    ) {
         const int n = static_cast<int>(c.size());
-        const Vector diagonal = Omega_.diagonal();
-        const Vector sqrt_diagonal = diagonal.array().sqrt();
-        const Vector inv_sqrt_diagonal = sqrt_diagonal.array().inverse();
-        Vector x = warm_start.cwiseMax(0.0);
-        const double warm_norm2 = x.dot(Omega_ * x);
-        const double warm_scale = warm_norm2 > 0.0 ? std::max(0.0, c.dot(x) / warm_norm2) : 0.0;
-        Vector u = sqrt_diagonal.cwiseProduct(x) * warm_scale;
-        x = inv_sqrt_diagonal.cwiseProduct(u);
+        coordinate_x_ = warm_start.cwiseMax(0.0);
+        const double warm_norm2 = coordinate_x_.dot(Omega_ * coordinate_x_);
+        const double warm_scale = warm_norm2 > 0.0 ?
+            std::max(0.0, c.dot(coordinate_x_) / warm_norm2) : 0.0;
+        coordinate_u_ = sqrt_diagonal_.cwiseProduct(coordinate_x_) * warm_scale;
+        coordinate_x_ = inv_sqrt_diagonal_.cwiseProduct(coordinate_u_);
 
-        Vector gradient = inv_sqrt_diagonal.cwiseProduct(Omega_ * x - c);
-        const Vector scaled_c = inv_sqrt_diagonal.cwiseProduct(c);
-        tolerance = 1e-8 * std::max(1.0, scaled_c.lpNorm<Eigen::Infinity>());
+        coordinate_gradient_.noalias() = Omega_ * coordinate_x_;
+        coordinate_gradient_ -= c;
+        scaled_c_ = inv_sqrt_diagonal_.cwiseProduct(c);
+        tolerance = 1e-8 * std::max(1.0, scaled_c_.lpNorm<Eigen::Infinity>());
         constexpr int max_sweeps = 20000;
+        constexpr int violation_check_every = 5;
         constexpr double relaxation = 1.8;
 
         for (sweeps = 1; sweeps <= max_sweeps; ++sweeps) {
             for (int i = 0; i < n; ++i) {
-                const double old_value = u[i];
-                const double new_value = std::max(0.0, old_value - relaxation * gradient[i]);
+                const double old_value = coordinate_u_[i];
+                const double gradient_i = coordinate_gradient_[i] * inv_sqrt_diagonal_[i];
+                const double new_value = std::max(0.0, old_value - relaxation * gradient_i);
                 const double delta = new_value - old_value;
                 if (delta == 0.0) continue;
 
-                u[i] = new_value;
+                coordinate_u_[i] = new_value;
+                const double delta_x = delta * inv_sqrt_diagonal_[i];
                 for (SparseMatrix::InnerIterator it(Omega_, i); it; ++it)
-                    gradient[it.row()] += delta * it.value() *
-                        inv_sqrt_diagonal[it.row()] * inv_sqrt_diagonal[i];
+                    coordinate_gradient_[it.row()] += delta_x * it.value();
             }
 
             if (sweeps % 20 == 0) {
-                x = inv_sqrt_diagonal.cwiseProduct(u);
-                gradient = inv_sqrt_diagonal.cwiseProduct(Omega_ * x - c);
+                coordinate_x_ = inv_sqrt_diagonal_.cwiseProduct(coordinate_u_);
+                coordinate_gradient_.noalias() = Omega_ * coordinate_x_;
+                coordinate_gradient_ -= c;
             }
+            if (sweeps % violation_check_every != 0) continue;
 
             violation = 0.0;
             for (int i = 0; i < n; ++i) {
-                const double current = u[i] > 1e-14 ?
-                    std::abs(gradient[i]) : std::max(0.0, -gradient[i]);
+                const double gradient_i = coordinate_gradient_[i] * inv_sqrt_diagonal_[i];
+                const double current = coordinate_u_[i] > 1e-14 ?
+                    std::abs(gradient_i) : std::max(0.0, -gradient_i);
                 violation = std::max(violation, current);
             }
             if (violation > tolerance) continue;
 
-            x = inv_sqrt_diagonal.cwiseProduct(u);
-            const double norm2 = x.dot(Omega_ * x);
+            coordinate_x_ = inv_sqrt_diagonal_.cwiseProduct(coordinate_u_);
+            const double norm2 = coordinate_x_.dot(Omega_ * coordinate_x_);
             if (!(norm2 > 0.0) || !std::isfinite(norm2)) return false;
-            *out = x / std::sqrt(norm2);
+            *out = coordinate_x_ / std::sqrt(norm2);
             return true;
         }
         --sweeps;
         return false;
     }
 
-    double upper_bound_(const Vector& c) const {
+    double upper_bound_(const Vector& c) {
         if (use_closed_form_solution_)
             return c.cwiseMax(0.0).norm();
 
-        const Vector c_pos = c.cwiseMax(0.0);
-        if (c_pos.squaredNorm() == 0.0) return 0.0;
-        const Vector y = omega_solver_.solve(c_pos);
-        if (omega_solver_.info() != Eigen::Success || !y.allFinite())
+        bound_c_ = c.cwiseMax(0.0);
+        if (bound_c_.squaredNorm() == 0.0) return 0.0;
+        bound_solution_ = omega_solver_.solve(bound_c_);
+        if (omega_solver_.info() != Eigen::Success || !bound_solution_.allFinite())
             return std::numeric_limits<double>::infinity();
-        const double q = c_pos.dot(y);
+        const double q = bound_c_.dot(bound_solution_);
         return q > 0.0 && std::isfinite(q) ?
             std::sqrt(q) : std::numeric_limits<double>::infinity();
     }
@@ -420,6 +454,19 @@ private:
     bool objective_sign_invariant_ = true;
     bool use_closed_form_solution_ = false;
     Eigen::SimplicialLDLT<SparseMatrix> omega_solver_;
+
+    Vector diagonal_;
+    Vector sqrt_diagonal_;
+    Vector inv_sqrt_diagonal_;
+    Vector transformed_signal_;
+    Vector direct_solution_;
+    Vector projected_direct_;
+    Vector coordinate_x_;
+    Vector coordinate_u_;
+    Vector coordinate_gradient_;
+    Vector scaled_c_;
+    Vector bound_c_;
+    Vector bound_solution_;
 
     Vector x_init_;
     Vector last_solution_pos_;
