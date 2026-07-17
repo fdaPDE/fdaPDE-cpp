@@ -76,14 +76,14 @@ inline void log_header_(const std::string_view title) {
     for (std::size_t i = 0; i < title.size(); ++i) fdapde::cout << '=';
     fdapde::cout << '\n' << title << '\n';
     for (std::size_t i = 0; i < title.size(); ++i) fdapde::cout << '=';
-    fdapde::cout << "\n\n";
+    fdapde::cout << "\n\n" << std::flush;
 }
 
 // starts a timed log step and returns its start time
 template <typename SamplingStrategy>
 auto RGCCA<SamplingStrategy>::log_step_start_(std::string_view label) const
     -> std::chrono::high_resolution_clock::time_point {
-    fdapde::cout << label << " --> ";
+    fdapde::cout << label << " --> " << std::flush;
     return std::chrono::high_resolution_clock::now();
 }
 
@@ -94,7 +94,8 @@ void RGCCA<SamplingStrategy>::log_step_end_(
 ) const {
     const auto end = std::chrono::high_resolution_clock::now();
     const double elapsed_sec = std::chrono::duration<double>(end - start).count();
-    fdapde::cout << "<-- " << std::fixed << std::setprecision(3) << elapsed_sec << std::defaultfloat << "s\n";
+    fdapde::cout << "<-- " << std::fixed << std::setprecision(3) << elapsed_sec
+                 << std::defaultfloat << "s\n" << std::flush;
 }
 
 // logs the active weight regularization value
@@ -112,7 +113,7 @@ template <typename SamplingStrategy>
 void RGCCA<SamplingStrategy>::log_fit_header_(const bool run_model_selection) const {
     log_header_("RGCCA fit");
     fdapde::cout << opt_ << '\n';
-    if (run_model_selection || opt_.component_significance || opt_.block_importance || inactive_block_signal_test_requested_())
+    if (run_model_selection || opt_.component_significance || opt_.block_importance)
         fdapde::cout << bootstrap_config_ << '\n';
 }
 
@@ -132,12 +133,6 @@ void RGCCA<SamplingStrategy>::log_bootstrap_component_significance_header_() con
 template <typename SamplingStrategy>
 void RGCCA<SamplingStrategy>::log_bootstrap_block_importance_header_() const {
     log_header_(std::string("Bootstrap block importance for component ") + std::to_string(h_ + 1));
-}
-
-// logs the inactive-block signal test section header
-template <typename SamplingStrategy>
-void RGCCA<SamplingStrategy>::log_inactive_block_signal_test_header_() const {
-    log_header_(std::string("Inactive-block signal test for component ") + std::to_string(h_ + 1));
 }
 
 // logs the lambda candidate currently being evaluated
@@ -162,9 +157,16 @@ void RGCCA<SamplingStrategy>::log_component_significance_(
     const typename RGCCA<SamplingStrategy>::ComponentSignificanceResult& significance
 ) const {
     fdapde::cout << "\nSignificance:\n"
-                 << "  - rho_tot = " << significance.rho_tot << '\n'
-                 << "  - p-value = " << significance.p_value << '\n'
-                 << "  - significant = " << std::boolalpha << significance.significant << std::noboolalpha << "\n\n";
+                 << "  - rho_tot normalized = " << significance.rho_tot << '\n'
+                 << "  - rho_tot raw = " << significance.rho_tot_raw << '\n';
+    if (significance.null_valid_count > 0) {
+        fdapde::cout << "  - null mean/q95/max = " << significance.null_mean << " / "
+                     << significance.null_q95 << " / " << significance.null_max << '\n'
+                     << "  - valid null resamples = " << significance.null_valid_count
+                     << "/" << significance.B << '\n';
+    }
+    fdapde::cout << "  - p-value = " << significance.p_value << '\n'
+                 << "  - status = " << rgcca::to_string(significance.status) << "\n\n";
 }
 
 // logs the block-importance test result
@@ -174,30 +176,17 @@ void RGCCA<SamplingStrategy>::log_block_importance_(
 ) const {
     fdapde::cout << "\nBlock importance:\n";
     for (int j = 0; j < static_cast<int>(importance.rho.size()); ++j) {
-        fdapde::cout << "  - block[" << j << "]"
-                     << ": rho = " << importance.rho[j]
+        fdapde::cout << "- block[" << std::setw(2) << j << "]";
+        if (!std::isfinite(importance.rho[j]) || !std::isfinite(importance.p_value[j])) {
+            fdapde::cout << ": not tested\n";
+            continue;
+        }
+        fdapde::cout << ": rho = " << importance.rho[j]
                      << ", p-value = " << importance.p_value[j]
                      << ", significant = " << std::boolalpha << importance.significant[j] << std::noboolalpha
                      << '\n';
     }
     fdapde::cout << '\n';
-}
-
-// logs one inactive-block gate decision before fitting the next component
-template <typename SamplingStrategy>
-void RGCCA<SamplingStrategy>::log_inactive_block_signal_gate_(
-    const int block,
-    const InactiveBlockSignalAction action,
-    const double statistic,
-    const double p_value
-) const {
-    fdapde::cout << "Inactive-block signal gate for component " << h_ + 1
-                 << ": block[" << block << "] " << rgcca::to_string(action);
-    if (std::isfinite(statistic))
-        fdapde::cout << ", stat=" << std::setprecision(4) << statistic;
-    if (std::isfinite(p_value))
-        fdapde::cout << ", p=" << std::setprecision(4) << p_value;
-    fdapde::cout << std::defaultfloat << '\n';
 }
 
 // logs the final bootstrap summary for one lambda candidate
@@ -223,6 +212,7 @@ void RGCCA<SamplingStrategy>::log_bootstrap_lambda_summary_(
                  << ", design=" << state.B_design
                  << ", stale=" << state.B_stale
                  << ", cancelled=" << state.B_cancelled
+                 << ", final_capped=" << state.B_final_capped
                  << ", good=" << state.B_done
                  << ", discarded=" << B_discarded << '\n';
     fdapde::cout << "  Time: total=" << std::fixed << std::setprecision(3) << elapsed_sec
@@ -232,8 +222,27 @@ void RGCCA<SamplingStrategy>::log_bootstrap_lambda_summary_(
                  << 100.0 * timing_summary.efficiency() << "%\n";
     fdapde::cout << "  Iters: avg=" << std::setprecision(1) << timing_summary.avg_iters()
                  << ", max=" << timing_summary.max_iters
-                 << ", capped=" << timing_summary.capped_fits
+                 << ", physical_capped=" << timing_summary.capped_fits
                  << "/" << timing_summary.n_fits << '\n';
+    fdapde::cout << "  Scheduler: prep/post=" << std::setprecision(1)
+                 << 100.0 * timing_summary.worker_overhead_fraction()
+                 << "%, claim_wait=" << 100.0 * timing_summary.fraction_of_capacity(timing_summary.claim_wait_time)
+                 << "%, merge_wait=" << 100.0 * timing_summary.fraction_of_capacity(timing_summary.merge_wait_time)
+                 << "%, coordinator=" << 100.0 * timing_summary.coordinator_fraction() << "%\n";
+    if (timing_summary.nn_stats.calls > 0) {
+        const double avg_sweeps = timing_summary.nn_stats.coordinate_attempts > 0 ?
+            static_cast<double>(timing_summary.nn_stats.coordinate_sweeps) /
+                static_cast<double>(timing_summary.nn_stats.coordinate_attempts) : 0.0;
+        fdapde::cout << "  NN solves: calls=" << timing_summary.nn_stats.calls
+                     << ", direct=" << timing_summary.nn_stats.direct_sides
+                     << ", coordinate=" << timing_summary.nn_stats.coordinate_converged
+                     << "/" << timing_summary.nn_stats.coordinate_attempts
+                     << ", closed_form=" << timing_summary.nn_stats.closed_form_sides << '\n';
+        fdapde::cout << "  NN coordinate: avg_sweeps=" << std::fixed << std::setprecision(1)
+                     << avg_sweeps << std::defaultfloat
+                     << ", Horst_boundary=" << timing_summary.nn_stats.horst_boundaries
+                     << ", would_fallback=" << timing_summary.nn_stats.would_fallback << '\n';
+    }
 
     // design and criterion recap
     fdapde::cout << "  Design: active_blocks=" << n_active_blocks
@@ -300,6 +309,7 @@ void RGCCA<SamplingStrategy>::log_bootstrap_progress_(
                  << " design=" << std::setw(6) << state.B_design
                  << " stale=" << std::setw(4) << state.B_stale
                  << " cancelled=" << std::setw(6) << state.B_cancelled
+                 << " final_capped=" << std::setw(4) << state.B_final_capped
                  << " good=" << std::setw(6) << state.B_done
                  << " | dt=" << std::fixed << std::setprecision(3) << std::setw(8)
                  << elapsed_since_last_log << "s"
@@ -315,7 +325,7 @@ void RGCCA<SamplingStrategy>::log_bootstrap_progress_(
     }
     if (stop_info.stop)
         fdapde::cout << " | stop=" << stop_info.reason;
-    fdapde::cout << std::defaultfloat << '\n';
+    fdapde::cout << std::defaultfloat << '\n' << std::flush;
 }
 
 // logs a bootstrap design reset after block or connection deactivation
@@ -331,6 +341,7 @@ void RGCCA<SamplingStrategy>::log_bootstrap_design_reset_(
                  << " design=" << std::setw(6) << state.B_design
                  << " stale=" << std::setw(4) << state.B_stale
                  << " cancelled=" << std::setw(6) << state.B_cancelled
+                 << " final_capped=" << std::setw(4) << state.B_final_capped
                  << " good=" << std::setw(6) << state.B_done
                  << " | dt=" << std::fixed << std::setprecision(3) << std::setw(8)
                  << elapsed_since_last_log << "s"
@@ -339,7 +350,7 @@ void RGCCA<SamplingStrategy>::log_bootstrap_design_reset_(
                  << ", ac=" << std::setw(6) << n_active_connections
                  << std::defaultfloat
                  << " | epoch=" << state.design_epoch
-                 << '\n';
+                 << '\n' << std::flush;
 }
 
 } // namespace fdapde

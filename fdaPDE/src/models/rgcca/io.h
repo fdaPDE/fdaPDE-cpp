@@ -36,7 +36,6 @@ inline std::ostream& operator<<(std::ostream& os, const Options& opt) {
        << "  lambda_selection_components = " << to_string(opt.lambda_selection_components) << '\n'
        << "  component_significance      = " << bool_text_(opt.component_significance) << '\n'
        << "  block_importance            = " << bool_text_(opt.block_importance) << '\n'
-       << "  inactive_block_signal_test  = " << bool_text_(opt.inactive_block_signal_test) << '\n'
        << "  block_deactivation          = " << bool_text_(opt.block_deactivation) << '\n'
        << "  connection_deactivation     = " << bool_text_(opt.connection_deactivation) << '\n'
        << "  mode                        = " << to_string(opt.mode) << '\n'
@@ -67,12 +66,16 @@ inline std::ostream& operator<<(std::ostream& os, const BootstrapConfig& config)
        << "  patience                           = " << config.patience << '\n'
        << "  resampling_strategy                = " << to_string(config.resampling_strategy) << '\n'
        << "  stationary_block_length            = " << config.stationary_block_length << '\n'
+       << "  resampling_segment_lengths         = [";
+    for (std::size_t i = 0; i < config.resampling_segment_lengths.size(); ++i) {
+        if (i > 0) os << ", ";
+        os << config.resampling_segment_lengths[i];
+    }
+    os << "]\n"
        << "  component_significance_resamples   = " << config.component_significance_resamples << '\n'
        << "  component_significance_alpha       = " << config.component_significance_alpha << '\n'
        << "  block_importance_resamples         = " << config.block_importance_resamples << '\n'
        << "  block_importance_alpha             = " << config.block_importance_alpha << '\n'
-       << "  inactive_block_signal_resamples    = " << config.inactive_block_signal_resamples << '\n'
-       << "  inactive_block_signal_alpha        = " << config.inactive_block_signal_alpha << '\n'
        << "}";
     return os;
 }
@@ -80,6 +83,7 @@ inline std::ostream& operator<<(std::ostream& os, const BootstrapConfig& config)
 // pretty printer for a single Result
 inline std::ostream& operator<<(std::ostream& os, const Result& r) {
     const bool minimal = false;
+    os << "status: " << to_string(r.status) << "\n";
     if (!minimal) {
         os << "shrinkage parameters used : " << std::endl;
         for (size_t i = 0; i < r.tau_values.size(); ++i) {
@@ -133,31 +137,55 @@ inline std::ostream& operator<<(std::ostream& os, const Result& r) {
         os << std::fixed << std::setprecision(8);
     }
     os << std::endl;
-    if (std::isfinite(r.rho_tot_p_value)) {
-        os << "significance:\n";
-        os << "- rho_tot: " << std::fixed << r.rho_tot << "\n";
+    if (std::isfinite(r.rho_tot)) {
+        os << "component diagnostics:\n";
+        os << "- rho_tot normalized: " << std::fixed << r.rho_tot << "\n";
+        os << "- rho_tot raw: " << std::fixed << r.rho_tot_raw << "\n";
+        os << "- inner AVE: " << std::fixed << r.inner_ave << "\n";
+
+        double explained_sum = 0.0;
+        double cumulative_sum = 0.0;
+        int explained_count = 0;
+        for (std::size_t j = 0; j < r.block_variance_explained.size(); ++j) {
+            if (!std::isfinite(r.block_variance_explained[j]) ||
+                !std::isfinite(r.block_variance_explained_cumulative[j])) continue;
+            explained_sum += r.block_variance_explained[j];
+            cumulative_sum += r.block_variance_explained_cumulative[j];
+            ++explained_count;
+        }
+        if (explained_count > 0) {
+            os << "- mean block variance explained: " << explained_sum / explained_count << "\n";
+            os << "- mean cumulative block variance explained: " << cumulative_sum / explained_count << "\n";
+        }
+    }
+    os << "\nsignificance:\n";
+    os << "- status: " << to_string(r.significance_status) << "\n";
+    if (r.significance_tested()) {
         os << "- p-value: " << std::fixed << r.rho_tot_p_value
            << " (" << r.rho_tot_bootstrap_count << " resamples)\n";
-        os << "- signif.: " << (r.component_significant ? "yes" : "no") << "\n";
+        if (r.rho_tot_null_valid_count > 0) {
+            os << "- null mean/q95/max: " << r.rho_tot_null_mean << " / "
+               << r.rho_tot_null_q95 << " / " << r.rho_tot_null_max << "\n";
+            os << "- valid null resamples: " << r.rho_tot_null_valid_count << "\n";
+        }
+    } else if (r.rho_tot_bootstrap_count > 0) {
+        os << "- valid null resamples: " << r.rho_tot_null_valid_count
+           << "/" << r.rho_tot_bootstrap_count << "\n";
     }
     if (r.block_importance_bootstrap_count > 0) {
         os << "\nblock importance:\n";
         for (size_t j = 0; j < r.block_importance.size(); ++j) {
-            os << "- Block " << j + 1 << ": rho = " << r.block_importance[j]
+            os << "- Block " << j + 1;
+            if (!std::isfinite(r.block_importance[j]) ||
+                !std::isfinite(r.block_importance_p_values[j])) {
+                os << ": not tested\n";
+                continue;
+            }
+            os << ": rho = " << r.block_importance[j]
                << ", p-value = " << r.block_importance_p_values[j]
                << ", signif. = " << (r.block_importance_significant[j] ? "yes" : "no") << "\n";
         }
     }
-    if (std::any_of(
-            r.inactive_block_signal_actions.begin(),
-            r.inactive_block_signal_actions.end(),
-            [](InactiveBlockSignalAction action) { return action != InactiveBlockSignalAction::None; }
-        )) {
-        os << "\ninactive block signal gate:\n";
-        for (size_t j = 0; j < r.inactive_block_signal_actions.size(); ++j)
-            os << "- Block " << j + 1 << ": " << to_string(r.inactive_block_signal_actions[j]) << "\n";
-    }
-
     return os;
 }
 

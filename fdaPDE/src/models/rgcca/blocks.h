@@ -18,10 +18,12 @@
 #ifndef __FDAPDE_RGCCA_BLOCKS_H__
 #define __FDAPDE_RGCCA_BLOCKS_H__
 
+#include <cassert>
+
 #include "gcv.h"
 #include "linear_algebra.h"
 #include "sampling.h"
-#include "fdaPDE/src/solvers/nonnegative_weight_ipopt.h"
+#include "fdaPDE/src/solvers/nonnegative_weight.h"
 
 namespace fdapde {
 namespace rgcca {
@@ -69,6 +71,7 @@ public:
         h_(other.h_),
         data_ptr_(other.data_ptr_),
         row_index_(other.row_index_),
+        identity_row_index_(other.identity_row_index_),
         components_solver_(other.components_solver_),
         tau_(other.tau_),
         mode_(other.mode_),
@@ -125,6 +128,15 @@ public:
     }
     [[nodiscard]] auto data() const {
         return raw_data()(row_index_, Eigen::all);
+    }
+    [[nodiscard]] double variance_trace() const {
+        const auto X = data();
+        if (X.rows() == 0 || X.cols() == 0) return 0.0;
+
+        const double n_d = static_cast<double>(X.rows());
+        const double den = bias_ ? n_d : std::max(1.0, n_d - 1.0);
+        const double centered_ss = X.squaredNorm() - n_d * X.colwise().mean().squaredNorm();
+        return std::max(0.0, centered_ss) / den;
     }
     void set_raw_data_mutable(const bool value) { raw_data_mutable_ = value; }
 
@@ -238,9 +250,11 @@ public:
         if (idx.size() == 0)
             throw std::invalid_argument("row index cannot be empty");
 
+        identity_row_index_ = idx.size() == n_raw();
         for (int i = 0; i < idx.size(); ++i) {
             if (idx(i) < 0 || idx(i) >= n_raw())
                 throw std::out_of_range("invalid row index");
+            if (idx(i) != i) identity_row_index_ = false;
         }
 
         row_index_ = idx;
@@ -257,6 +271,14 @@ public:
         IndexVector idx(n_raw());
         std::iota(idx.data(), idx.data() + idx.size(), 0);
         set_row_index(idx);
+    }
+    void reset_bootstrap_fit_state(const Vector& weights) {
+        if (nn_weights_solver_) {
+            nn_weights_solver_->reset_warm_start(weights);
+            nn_weights_pending_warm_start_.reset();
+        } else {
+            nn_weights_pending_warm_start_ = weights;
+        }
     }
 
     // main compute method
@@ -396,13 +418,9 @@ protected:
     void init_identity_row_index_() {
         row_index_.resize(raw_data().rows());
         std::iota(row_index_.data(), row_index_.data() + row_index_.size(), 0);
+        identity_row_index_ = true;
     }
-    [[nodiscard]] bool is_identity_row_index_() const {
-        if (row_index_.size() != n_raw()) return false;
-        for (int i = 0; i < row_index_.size(); ++i)
-            if (row_index_(i) != i) return false;
-        return true;
-    }
+    [[nodiscard]] bool is_identity_row_index_() const { return identity_row_index_; }
     Vector data_times_(const Vector& x) const {
         raw_score_cache_.resize(n_raw());
         raw_score_cache_.noalias() = raw_data() * x;
@@ -422,10 +440,10 @@ protected:
         if (is_identity_row_index_()) {
             out.noalias() = raw_data().transpose() * x;
         } else {
-            Vector raw_x = Vector::Zero(n_raw());
+            raw_x_cache_.setZero(n_raw());
             for (int i = 0; i < row_index_.size(); ++i)
-                raw_x[row_index_(i)] += x[i];
-            out.noalias() = raw_data().transpose() * raw_x;
+                raw_x_cache_[row_index_(i)] += x[i];
+            out.noalias() = raw_data().transpose() * raw_x_cache_;
         }
         return out;
     }
@@ -578,18 +596,24 @@ protected:
     }
 
     // non-negative solver utils
-    Vector solve_nonnegative_weight_ipopt_(const Vector& z, const bool use_closed_form_solution = false) {
-        if (!nn_weights_solver_)
+    Vector solve_nonnegative_weight_(const Vector& z, const bool use_closed_form_solution = false) {
+        if (!nn_weights_solver_) {
             nn_weights_solver_ = std::make_unique<::fdapde::internals::NonNegativeWeightSolver>(
                 Psi_D(),
                 Omega(),
                 objective_sign_invariant_,
                 use_closed_form_solution
             );
+            if (nn_weights_pending_warm_start_) {
+                nn_weights_solver_->reset_warm_start(*nn_weights_pending_warm_start_);
+                nn_weights_pending_warm_start_.reset();
+            }
+        }
         return nn_weights_solver_->solve(z);
     }
     void reset_nonnegative_weight_solver_() {
         nn_weights_solver_.reset();
+        nn_weights_pending_warm_start_.reset();
     }
 
     // weights solver
@@ -633,10 +657,12 @@ protected:
     Matrix* data_ptr_ = nullptr;
     IndexVector row_index_;
     mutable Vector raw_score_cache_;
+    mutable Vector raw_x_cache_;
 
     // solvers
     ComponentsSolverType components_solver_;
     std::unique_ptr<::fdapde::internals::NonNegativeWeightSolver> nn_weights_solver_;
+    std::optional<Vector> nn_weights_pending_warm_start_;
 
     // options
     double tau_ {0.0};
@@ -662,6 +688,7 @@ protected:
 
     // flags
     bool raw_data_mutable_ = false;
+    bool identity_row_index_ = true;
     mutable bool raw_score_cache_ready_ {false};
     bool weights_ready_ {false}, components_ready_ {false};
     bool M_ready_ {false}, invM_ready_ {false}, ginvM_ready_ {false};
@@ -732,7 +759,7 @@ protected:
     using Base::n;
     using Base::m;
     using Base::mode;
-    using Base::solve_nonnegative_weight_ipopt_;
+    using Base::solve_nonnegative_weight_;
     using Base::reset_nonnegative_weight_solver_;
     using Base::normalize_weight_;
     using Base::data_transpose_times_;
@@ -751,7 +778,7 @@ protected:
         Vector z = data_transpose_times_(nu);
 
         if (weight_sign_constraint() == ::fdapde::rgcca::WeightSignConstraint::NonNegative) {
-            return solve_nonnegative_weight_ipopt_(z, mode() == ::fdapde::rgcca::Mode::CovMax); // already normalized
+            return solve_nonnegative_weight_(z, mode() == ::fdapde::rgcca::Mode::CovMax); // already normalized
         }
 
         if (mode() == ::fdapde::rgcca::Mode::CovMax) return normalize_weight_(z);
@@ -841,7 +868,7 @@ public:
 protected:
     using Base::init;
     using Base::n;
-    using Base::solve_nonnegative_weight_ipopt_;
+    using Base::solve_nonnegative_weight_;
     using Base::reset_nonnegative_weight_solver_;
     using Base::data_transpose_times_;
     using Base::weight_sign_constraint;
@@ -861,7 +888,7 @@ protected:
         Vector z = data_transpose_times_(nu);
 
         if (weight_sign_constraint() == ::fdapde::rgcca::WeightSignConstraint::NonNegative) {
-            return solve_nonnegative_weight_ipopt_(z);  // already normalized
+            return solve_nonnegative_weight_(z);  // already normalized
         }
 
         if (!weights_solver_weights_ready_) {

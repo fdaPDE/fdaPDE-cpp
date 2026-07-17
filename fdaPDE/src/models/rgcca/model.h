@@ -24,6 +24,9 @@
 #include "fdaPDE/execution.h"
 
 #include <algorithm>
+#include <condition_variable>
+#include <map>
+#include <numeric>
 
 namespace fdapde {
 
@@ -49,7 +52,8 @@ public:
     using Deflation = rgcca::Deflation;
     using WeightSignConstraint = rgcca::WeightSignConstraint;
     using ResamplingStrategy = rgcca::ResamplingStrategy;
-    using InactiveBlockSignalAction = rgcca::InactiveBlockSignalAction;
+    using SignificanceStatus = rgcca::SignificanceStatus;
+    using ComponentStatus = rgcca::ComponentStatus;
     using Scheme = rgcca::Scheme;
     using Options = rgcca::Options;
     using BootstrapConfig = rgcca::BootstrapConfig;
@@ -61,10 +65,29 @@ public:
     // constructors
     template <typename S = SamplingStrategy>
     requires std::same_as<S, IndependentSampling>
-    explicit RGCCA(const int n, const Options& opt = Options(), const int n_comp = 1) : n_(n), opt_(opt), n_comp_(n_comp) {}
+    explicit RGCCA(
+        const int n,
+        const Options& opt = Options(),
+        const int n_comp = 1
+    ) :
+        opt_(opt),
+        n_(n),
+        n_comp_(n_comp)
+    {}
+
     template <typename S = SamplingStrategy>
     requires std::same_as<S, TimeDependentSampling>
-    explicit RGCCA(const int n, const Triangulation<1, 1>& T, const Options& opt = Options(), const int n_comp = 1) : n_(n), T_(T), opt_(opt), n_comp_(n_comp) {}
+    explicit RGCCA(
+        const int n,
+        const Triangulation<1, 1>& T,
+        const Options& opt = Options(),
+        const int n_comp = 1
+    ) :
+        opt_(opt),
+        n_(n),
+        T_(T),
+        n_comp_(n_comp)
+    {}
 
     // blocks management
     int add_block(BlockPtr b);
@@ -153,7 +176,15 @@ public:
         initialized_ = true;
     }
 
-    // fit
+    // Component lifecycle
+    //
+    // Every requested component starts as an attempt. Model selection chooses
+    // its design, the final full-data fit supplies its scientific estimate,
+    // and structural/significance gates decide whether it is retained.
+    // Rejected attempts remain in the returned diagnostics, but only retained
+    // components are deflated, receive weights_star, and advance
+    // n_comp_effective_. finalize_component_attempt_ is the single accounting
+    // and callback boundary for both outcomes.
     std::vector<Result> fit(ComponentCallback component_callback = {}) {
 
         // initialization
@@ -169,28 +200,17 @@ public:
         results.reserve(n_comp());
         bootstrap_selection_results_.clear();
         bootstrap_selection_results_.reserve(n_comp());
+        const auto initial_block_variance = block_variance_trace_(main_blocks_());
+        auto current_block_variance = initial_block_variance;
 
-        // components loop
+        // component attempts
         n_comp_effective_ = 0;
-        std::vector<bool> previous_active_blocks;
-        std::vector<bool> carried_inactive_blocks(n_blocks(), false);
+        n_comp_attempted_ = 0;
 
-        for (int hh = 0; hh < n_comp(); ++hh) {
-            set_h_(hh);
+        for (int component_index = 0; component_index < n_comp(); ++component_index) {
+            set_h_(component_index);
 
-            // active blocks gating
             BoolMatrix C_active = C_;
-            std::vector<InactiveBlockSignalAction> inactive_block_signal_actions(n_blocks(), InactiveBlockSignalAction::None);
-            if (inactive_block_signal_test_requested_() && !previous_active_blocks.empty()) {
-                auto blocks = main_blocks_();
-                apply_inactive_block_signal_test_(
-                    blocks,
-                    previous_active_blocks,
-                    carried_inactive_blocks,
-                    inactive_block_signal_actions,
-                    C_active
-                );
-            }
 
             // bootstrap model selection
             if (run_model_selection && count_active_connections_(C_active) > 0) {
@@ -206,27 +226,44 @@ public:
             const auto active_blocks = active_blocks_from_C_(C_active);
             init_comp_(blocks, InitStrategy::None, true, &active_blocks);
             Result component_result = fit_component_(blocks, C_active);
-            component_result.inactive_block_signal_actions = std::move(inactive_block_signal_actions);
             log_step_end_(step_start);
+            const auto block_variance_before = current_block_variance;
+            const auto observed_correlation = rho_tot_maxvar_(blocks, C_active);
+            component_result.rho_tot = observed_correlation.normalized;
+            component_result.rho_tot_raw = observed_correlation.raw;
+            component_result.inner_ave = observed_correlation.inner_ave;
 
             // structural stop: no active design left
             if (count_active_connections_(C_active) == 0) {
+                component_result.status = ComponentStatus::RejectedInactiveDesign;
                 annotate_component_significance_(component_result, inactive_component_significance_());
+                annotate_explained_variance_(
+                    component_result, initial_block_variance, block_variance_before, block_variance_before
+                );
                 results.push_back(std::move(component_result));
-                finish_component_(results.back(), component_callback);
+                finalize_component_attempt_(results.back(), component_callback);
                 break;
             }
 
             // bootstrap component significance
             if (opt_.component_significance) {
-                const auto significance = bootstrap_test_component_significance_(C_active);
+                const auto significance = bootstrap_test_component_significance_(C_active, observed_correlation);
                 annotate_component_significance_(component_result, significance);
-                if (!significance.significant) {
+                if (significance.status != SignificanceStatus::Significant) {
+                    component_result.status =
+                        significance.status == SignificanceStatus::NotSignificant ?
+                            ComponentStatus::RejectedNotSignificant :
+                            ComponentStatus::RejectedSignificanceUnavailable;
+                    annotate_explained_variance_(
+                        component_result, initial_block_variance, block_variance_before, block_variance_before
+                    );
                     results.push_back(std::move(component_result));
-                    finish_component_(results.back(), component_callback);
+                    finalize_component_attempt_(results.back(), component_callback);
                     break;
                 }
             }
+
+            component_result.status = ComponentStatus::Retained;
 
             // bootstrap block importance
             if (opt_.block_importance) {
@@ -241,11 +278,13 @@ public:
             step_start = log_step_start_("Deflate blocks");
             deflate_all_();
             log_step_end_(step_start);
+            current_block_variance = block_variance_trace_(blocks);
+            annotate_explained_variance_(
+                results.back(), initial_block_variance, block_variance_before, current_block_variance
+            );
 
             // component post-processing
-            finish_component_(results.back(), component_callback);
-
-            previous_active_blocks = results.back().active_blocks;
+            finalize_component_attempt_(results.back(), component_callback);
         }
 
         return results;
@@ -267,6 +306,7 @@ public:
     [[nodiscard]] int n() const { return n_; }
     [[nodiscard]] int n_comp() const { return n_comp_; }
     [[nodiscard]] int n_comp_effective() const { return n_comp_effective_; }
+    [[nodiscard]] int n_comp_attempted() const { return n_comp_attempted_; }
     [[nodiscard]] int n_blocks() const { return J_; }
     [[nodiscard]] const Options& options() const { return opt_; }
     [[nodiscard]] const Scheme& scheme() const { return opt_.scheme; }
@@ -298,10 +338,12 @@ private:
     struct FitWorkspace {
         Matrix Cov;
         Eigen::ArrayXXi dirty;
+        Vector means;
 
         explicit FitWorkspace(int n_blocks) {
             Cov.setZero(n_blocks, n_blocks);
             dirty.setOnes(n_blocks, n_blocks);
+            means.setZero(n_blocks);
             for (int j = 0; j < n_blocks; ++j) {
                 Cov(j, j) = 1.0;
                 dirty(j, j) = 0;
@@ -336,21 +378,21 @@ private:
             corr_neg_count.setZero(n_blocks, n_blocks);
         }
 
-        void reset() {
-            B_done = 0;
+        // Starts a lambda candidate with fresh accounting and adaptive state.
+        void reset_for_lambda() {
             B_total = 0;
             B_design = 0;
             B_stale = 0;
             B_cancelled = 0;
+            B_final_capped = 0;
             design_epoch = 0;
-            design_epoch_signal.store(0, std::memory_order_release);
-            last_check_B_done = 0;
-            last_block_deactivation_check_B_done = 0;
-            last_connection_deactivation_check_B_done = 0;
             stop = false;
-            reset_good();
+            reset_accepted_samples();
         }
-        void reset_good() {
+
+        // Clears design-dependent accepted samples while preserving cumulative
+        // physical/stale/capped diagnostics for the current lambda candidate.
+        void reset_accepted_samples() {
             B_done = 0;
             stable_checks = 0;
             crit_prev_check = std::numeric_limits<double>::infinity();
@@ -372,14 +414,15 @@ private:
         int check_every_block_deactivation;
         int check_every_connection_deactivation;
 
-        // state
-        int B_done = 0;
-        int B_total = 0;
-        int B_design = 0;
-        int B_stale = 0;
-        int B_cancelled = 0;
+        // sample accounting. B_done belongs to the current design; the other
+        // counters accumulate over all design epochs for this lambda.
+        int B_done = 0;          // accepted by the current design
+        int B_total = 0;         // physical worker results returned
+        int B_design = 0;        // accepted, then invalidated by design changes
+        int B_stale = 0;         // completed under an obsolete design
+        int B_cancelled = 0;     // interrupted after a design change or stop
+        int B_final_capped = 0;  // ordered final fits rejected at fit_max_iter
         int design_epoch = 0;
-        std::atomic<int> design_epoch_signal {0};
         int last_check_B_done = 0;
         int last_block_deactivation_check_B_done = 0;
         int last_connection_deactivation_check_B_done = 0;
@@ -393,7 +436,7 @@ private:
         double crit_prev_check = std::numeric_limits<double>::infinity();
         double crit = std::numeric_limits<double>::quiet_NaN();
 
-        // early stop
+        // lambda-grid search state (intentionally preserved by reset_for_lambda)
         double best_criterion = -std::numeric_limits<double>::infinity();
         int best_i = -1;
         int no_improve = 0;
@@ -414,26 +457,56 @@ private:
     struct BootstrapTimingSummary {
         double fit_time = 0.0;
         double fit_time_sq = 0.0;
+        double worker_time = 0.0;
+        double claim_wait_time = 0.0;
+        double merge_wait_time = 0.0;
         double parallel_capacity = 0.0;
         double iters = 0.0;
         int capped_fits = 0;
         int max_iters = 0;
         int n_fits = 0;
+        ::fdapde::internals::NonNegativeWeightSolveStats nn_stats;
 
-        void add_sample(const double fit_time_sec, const int fit_iters, const bool capped, const bool fit_started) {
+        void add_sample(
+            const double fit_time_sec,
+            const int fit_iters,
+            const bool capped,
+            const bool fit_started,
+            const ::fdapde::internals::NonNegativeWeightSolveStats& sample_nn_stats
+        ) {
             if (!fit_started) return;
             fit_time += fit_time_sec;
             fit_time_sq += fit_time_sec * fit_time_sec;
             iters += static_cast<double>(fit_iters);
             capped_fits += capped ? 1 : 0;
             max_iters = std::max(max_iters, fit_iters);
+            nn_stats += sample_nn_stats;
             ++n_fits;
         }
         void set_parallel_capacity(const double wall_time_sec, const int n_threads) {
             parallel_capacity = wall_time_sec * static_cast<double>(n_threads);
         }
+        void add_worker_time(const double worker_time_sec) {
+            worker_time += worker_time_sec;
+        }
+        void set_scheduler_wait_times(const double claim_wait_sec, const double merge_wait_sec) {
+            claim_wait_time = claim_wait_sec;
+            merge_wait_time = merge_wait_sec;
+        }
         [[nodiscard]] double efficiency() const {
             return parallel_capacity > 0.0 ? fit_time / parallel_capacity : 0.0;
+        }
+        [[nodiscard]] double fraction_of_capacity(const double time_sec) const {
+            return parallel_capacity > 0.0 ? time_sec / parallel_capacity : 0.0;
+        }
+        [[nodiscard]] double worker_overhead_fraction() const {
+            return fraction_of_capacity(std::max(0.0, worker_time - fit_time));
+        }
+        [[nodiscard]] double coordinator_fraction() const {
+            return std::max(
+                0.0,
+                1.0 - fraction_of_capacity(worker_time + claim_wait_time + merge_wait_time)
+            );
         }
         [[nodiscard]] double avg_fit_time() const {
             return n_fits > 0 ? fit_time / static_cast<double>(n_fits) : 0.0;
@@ -449,11 +522,21 @@ private:
             return n_fits > 0 ? iters / static_cast<double>(n_fits) : 0.0;
         }
     };
+    struct MaxvarCorrelationResult {
+        double raw = std::numeric_limits<double>::quiet_NaN();
+        double normalized = std::numeric_limits<double>::quiet_NaN();
+        double inner_ave = std::numeric_limits<double>::quiet_NaN();
+    };
     struct ComponentSignificanceResult {
         double rho_tot = std::numeric_limits<double>::quiet_NaN();
+        double rho_tot_raw = std::numeric_limits<double>::quiet_NaN();
         double p_value = std::numeric_limits<double>::quiet_NaN();
+        double null_mean = std::numeric_limits<double>::quiet_NaN();
+        double null_q95 = std::numeric_limits<double>::quiet_NaN();
+        double null_max = std::numeric_limits<double>::quiet_NaN();
         int B = 0;
-        bool significant = true;
+        int null_valid_count = 0;
+        SignificanceStatus status = SignificanceStatus::NotTested;
     };
     struct BlockImportanceResult {
         std::vector<double> rho;
@@ -469,6 +552,7 @@ private:
         bool capped = false;
         bool cancelled = false;
         bool fit_started = false;
+        ::fdapde::internals::NonNegativeWeightSolveStats nn_stats;
     };
 
     // component initialization
@@ -526,7 +610,8 @@ private:
         const BoolMatrix& C_active,
         const bool update_component_lambdas = true,
         const int max_iter_override = -1,
-        const std::function<bool()>& cancelled = {}
+        const std::function<bool()>& cancelled = {},
+        const bool collect_summary = true
     ) {
         const int max_iter = max_iter_override > 0 ? max_iter_override : opt_.max_iter;
         FitWorkspace ws(n_blocks());
@@ -548,6 +633,8 @@ private:
 
         // initialization
         std::vector<Vector> eta_cache = eta_(blocks);
+        for (int j = 0; j < n_blocks(); ++j)
+            ws.means[j] = eta_cache[j].mean();
         res.obj_history.push_back(objective_(ws, res.C, eta_cache));
         auto w_prev = snapshot_weights_(blocks);
         if (update_component_lambdas && opt_.lambda_selection_components == LambdaSelection::Automatic)
@@ -584,6 +671,7 @@ private:
                 // block update
                 blocks[l]->compute(nu_l);
                 eta_cache[l] = eta_(*blocks[l]);
+                ws.means[l] = eta_cache[l].mean();
                 mark_cov_rowcol_dirty_(ws, l);
             }
 
@@ -614,6 +702,8 @@ private:
             return res;
         }
 
+        if (!collect_summary) return res;
+
         // save results
         covariance_matrix_(blocks, res.covariance_matrix);
         correlation_matrix_(blocks, res.correlation_matrix);
@@ -632,77 +722,6 @@ private:
     Result fit_component_() {
         auto blocks = main_blocks_();
         return fit_component_(blocks, C_);
-    }
-
-    void apply_inactive_block_signal_test_(
-        const BlockRefList& blocks,
-        const std::vector<bool>& previous_active_blocks,
-        std::vector<bool>& carried_inactive_blocks,
-        std::vector<InactiveBlockSignalAction>& actions,
-        BoolMatrix& C_active
-    ) {
-        if (static_cast<int>(previous_active_blocks.size()) != n_blocks())
-            throw std::logic_error("inactive block signal test: active block size mismatch");
-        if (static_cast<int>(carried_inactive_blocks.size()) != n_blocks())
-            throw std::logic_error("inactive block signal test: carried block size mismatch");
-        if (static_cast<int>(actions.size()) != n_blocks())
-            throw std::logic_error("inactive block signal test: action size mismatch");
-
-        log_inactive_block_signal_test_header_();
-
-        for (int j = 0; j < n_blocks(); ++j) {
-            if (previous_active_blocks[j])
-                carried_inactive_blocks[j] = false;
-            if (carried_inactive_blocks[j]) {
-                C_active.row(j).setConstant(false);
-                C_active.col(j).setConstant(false);
-                actions[j] = InactiveBlockSignalAction::KeptInactive;
-                log_inactive_block_signal_gate_(j, actions[j]);
-            }
-        }
-
-        std::vector<Vector> block_scores(n_blocks());
-        for (int k = 0; k < n_blocks(); ++k)
-            block_scores[k] = blocks[k]->svd_init().nu;
-
-        const BoolMatrix C_test = C_active;
-        const auto active_blocks = active_blocks_from_C_(C_test);
-        std::vector<bool> deactivate(n_blocks(), false);
-        for (int j = 0; j < n_blocks(); ++j) {
-            if (carried_inactive_blocks[j]) continue;
-            const bool has_active_neighbor = inactive_block_has_active_neighbor_(active_blocks, C_test, j);
-            double observed = std::numeric_limits<double>::quiet_NaN();
-            double p_value = std::numeric_limits<double>::quiet_NaN();
-            const bool has_signal = inactive_block_has_residual_signal_(
-                blocks, block_scores, active_blocks, C_test, j, &observed, &p_value
-            );
-            if (!has_signal)
-                deactivate[j] = true;
-            if (deactivate[j] && has_active_neighbor)
-                carried_inactive_blocks[j] = true;
-            const InactiveBlockSignalAction action =
-                has_signal ?
-                    (previous_active_blocks[j] ?
-                        InactiveBlockSignalAction::KeptActive :
-                        InactiveBlockSignalAction::Reactivated) :
-                    (previous_active_blocks[j] ?
-                        InactiveBlockSignalAction::Deactivated :
-                        InactiveBlockSignalAction::KeptInactive);
-            actions[j] = action;
-            log_inactive_block_signal_gate_(
-                j,
-                action,
-                observed,
-                p_value
-            );
-        }
-
-        for (int j = 0; j < n_blocks(); ++j) {
-            if (deactivate[j]) {
-                C_active.row(j).setConstant(false);
-                C_active.col(j).setConstant(false);
-            }
-        }
     }
 
     // bootstrap model selection
@@ -788,7 +807,7 @@ private:
             auto start = std::chrono::high_resolution_clock::now();
 
             // streaming bootstrap
-            bootstrap_state.reset();
+            bootstrap_state.reset_for_lambda();
             BootstrapTimingSummary bootstrap_timing_summary;
             run_bootstrap_stream_(
                 lambda_i,
@@ -822,6 +841,15 @@ private:
                 bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_initial);
             boot_results.criterion[lambda_i] = bootstrap_state.crit;
             boot_results.B_used_by_lambda[lambda_i] = bootstrap_state.B_done;
+            boot_results.B_total_by_lambda[lambda_i] = bootstrap_state.B_total;
+            boot_results.B_design_by_lambda[lambda_i] = bootstrap_state.B_design;
+            boot_results.B_stale_by_lambda[lambda_i] = bootstrap_state.B_stale;
+            boot_results.B_cancelled_by_lambda[lambda_i] = bootstrap_state.B_cancelled;
+            boot_results.B_final_capped_by_lambda[lambda_i] = bootstrap_state.B_final_capped;
+            boot_results.design_epochs_by_lambda[lambda_i] = bootstrap_state.design_epoch + 1;
+
+            // Release unused B_max columns before allocating the next lambda.
+            resize_bootstrap_lambda_results_(boot_results, lambda_i, n_blocks(), block_dims);
 
             // store current design if better
             if (bootstrap_state.crit > bootstrap_state.best_criterion) {
@@ -848,11 +876,6 @@ private:
 
         }
 
-        // resize allocated space for bootstrap results
-        step_start = log_step_start_("Resize bootstrap results");
-        resize_bootstrap_results_(boot_results, static_cast<int>(lambda_grid.size()), n_blocks(), block_dims);
-        log_step_end_(step_start);
-
         // compute correlation matrices CI
         step_start = log_step_start_("Compute bootstrap correlation CIs");
         compute_bootstrap_corr_cis_(boot_results, n_blocks());
@@ -877,25 +900,28 @@ private:
     }
 
     // bootstrap component significance
-    ComponentSignificanceResult bootstrap_test_component_significance_(const BoolMatrix& C_active) {
+    ComponentSignificanceResult bootstrap_test_component_significance_(
+        const BoolMatrix& C_active,
+        const MaxvarCorrelationResult& observed
+    ) {
         log_bootstrap_component_significance_header_();
         ComponentSignificanceResult out;
 
-        // observed statistic on the fitted component
         auto blocks = main_blocks_();
-        out.rho_tot = rho_tot_maxvar_(blocks, C_active);
+        out.rho_tot = observed.normalized;
+        out.rho_tot_raw = observed.raw;
 
-        // inactive or degenerate components are declared non-significant
+        // A degenerate observed statistic cannot support a significance claim.
         if (count_active_connections_(C_active) == 0 || !std::isfinite(out.rho_tot)) {
             out.B = 0;
-            out.p_value = 1.0;
-            out.significant = false;
+            log_component_significance_(out);
             return out;
         }
 
         const int B = bootstrap_config_.component_significance_resamples;
         const int n_threads = bootstrap_n_threads_();
         out.B = B;
+        const auto w_fit = snapshot_weights_(blocks);
 
         // each worker owns a mutable clone with its own row permutation
         auto step_start = log_step_start_("Clone significance worker blocks");
@@ -904,7 +930,7 @@ private:
             thread_boot_worker[t] = clone_blocks_();
         log_step_end_(step_start);
 
-        std::vector<int> thread_ge_count(n_threads, 0);
+        std::vector<double> rho_null(B, std::numeric_limits<double>::quiet_NaN());
         const unsigned seed = bootstrap_config_.seed + static_cast<unsigned>(1000003 * (h_ + 1));
         const auto active_blocks = active_blocks_from_C_(C_active);
 
@@ -914,6 +940,9 @@ private:
             const int tid = this_thread_id();
             auto& boot_blocks = thread_boot_worker[tid];
 
+            for (std::size_t j = 0; j < boot_blocks.refs.size(); ++j)
+                boot_blocks.refs[j]->reset_bootstrap_fit_state(w_fit[j]);
+            copy_weights_snapshot_(boot_blocks.refs, w_fit);
             set_component_significance_row_index_all_(
                 boot_blocks.refs,
                 seed + static_cast<unsigned>(7919 * (b + 1))
@@ -923,18 +952,36 @@ private:
             fit_component_(boot_blocks.refs, C_active, false, bootstrap_fit_max_iter_());
 
             // count null statistics at least as extreme as the observed one
-            const double rho_star = rho_tot_maxvar_(boot_blocks.refs, C_active);
-            if (std::isfinite(rho_star) && rho_star >= out.rho_tot)
-                ++thread_ge_count[tid];
+            rho_null[b] = rho_tot_maxvar_(boot_blocks.refs, C_active).normalized;
 
             clear_row_index_all_(boot_blocks.refs);
         });
         log_step_end_(step_start);
 
-        // corrected empirical upper-tail p-value
-        const int ge_count = std::accumulate(thread_ge_count.begin(), thread_ge_count.end(), 0);
-        out.p_value = static_cast<double>(ge_count + 1) / static_cast<double>(B + 1);
-        out.significant = out.p_value <= bootstrap_config_.component_significance_alpha;
+        std::vector<double> valid_null;
+        valid_null.reserve(B);
+        double null_sum = 0.0;
+        int ge_count = 0;
+        for (const double rho_star : rho_null) {
+            if (!std::isfinite(rho_star)) continue;
+            valid_null.push_back(rho_star);
+            null_sum += rho_star;
+            if (rho_star >= out.rho_tot) ++ge_count;
+        }
+
+        out.null_valid_count = static_cast<int>(valid_null.size());
+        if (valid_null.empty()) {
+            log_component_significance_(out);
+            return out;
+        }
+
+        out.null_mean = null_sum / static_cast<double>(valid_null.size());
+        out.null_max = *std::max_element(valid_null.begin(), valid_null.end());
+        out.null_q95 = internals::empirical_quantile(valid_null, 0.95);
+        out.p_value = static_cast<double>(ge_count + 1) /
+            static_cast<double>(out.null_valid_count + 1);
+        out.status = out.p_value <= bootstrap_config_.component_significance_alpha ?
+            SignificanceStatus::Significant : SignificanceStatus::NotSignificant;
 
         log_component_significance_(out);
 
@@ -948,8 +995,9 @@ private:
         auto blocks = main_blocks_();
         const int B = bootstrap_config_.block_importance_resamples;
         BlockImportanceResult out;
-        out.rho.assign(n_blocks(), 0.0);
-        out.p_value.assign(n_blocks(), 1.0);
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        out.rho.assign(n_blocks(), nan);
+        out.p_value.assign(n_blocks(), nan);
         out.significant.assign(n_blocks(), false);
         out.B = B;
 
@@ -1054,20 +1102,50 @@ private:
     }
 
     // fit helpers
+    std::vector<double> block_variance_trace_(const BlockRefList& blocks) const {
+        std::vector<double> out;
+        out.reserve(blocks.size());
+        for (const auto* block : blocks) out.push_back(block->variance_trace());
+        return out;
+    }
+    void annotate_explained_variance_(
+        Result& result,
+        const std::vector<double>& initial,
+        const std::vector<double>& before,
+        const std::vector<double>& after
+    ) const {
+        if (initial.size() != blocks_.size() || before.size() != blocks_.size() || after.size() != blocks_.size())
+            throw std::logic_error("annotate_explained_variance_: block count mismatch");
+
+        result.block_variance_initial = initial;
+        result.block_variance_before = before;
+        result.block_variance_after = after;
+        for (std::size_t j = 0; j < initial.size(); ++j) {
+            if (!(initial[j] > 0.0) || !std::isfinite(initial[j])) continue;
+            result.block_variance_explained[j] = (before[j] - after[j]) / initial[j];
+            result.block_variance_explained_cumulative[j] = (initial[j] - after[j]) / initial[j];
+        }
+    }
     void deflate_all_() const {
         for (auto& b : blocks_) b->deflate(opt_.deflation_mode);
     }
     void compute_weights_star_(const int h) {
         for (auto& b : blocks_) b->compute_weights_star(h);
     }
-    void finish_component_(const Result& result, const ComponentCallback& component_callback) {
-        n_comp_effective_ = result.h + 1;
-        auto step_start = log_step_start_("Compute weights_star");
-        compute_weights_star_(result.h);
-        log_step_end_(step_start);
+    void finalize_component_attempt_(
+        const Result& result,
+        const ComponentCallback& component_callback
+    ) {
+        ++n_comp_attempted_;
+        if (result.retained()) {
+            ++n_comp_effective_;
+            auto step_start = log_step_start_("Compute weights_star");
+            compute_weights_star_(result.h);
+            log_step_end_(step_start);
+        }
 
         if (component_callback) {
-            step_start = log_step_start_("Component callback");
+            auto step_start = log_step_start_("Component callback");
             component_callback(*this, result);
             log_step_end_(step_start);
         }
@@ -1088,9 +1166,6 @@ private:
         return opt_.block_deactivation ||
             opt_.connection_deactivation ||
             opt_.lambda_selection_weights == LambdaSelection::Automatic;
-    }
-    bool inactive_block_signal_test_requested_() const {
-        return opt_.inactive_block_signal_test;
     }
     bool weight_lambda_selection_requested_() const {
         return opt_.lambda_selection_weights == LambdaSelection::Automatic;
@@ -1117,16 +1192,9 @@ private:
     void log_bootstrap_model_selection_header_() const;
     void log_bootstrap_component_significance_header_() const;
     void log_bootstrap_block_importance_header_() const;
-    void log_inactive_block_signal_test_header_() const;
     void log_bootstrap_lambda_candidate_(bool lambda_selected, double lambda) const;
     void log_component_significance_(const ComponentSignificanceResult& significance) const;
     void log_block_importance_(const BlockImportanceResult& importance) const;
-    void log_inactive_block_signal_gate_(
-        int block,
-        InactiveBlockSignalAction action,
-        double statistic = std::numeric_limits<double>::quiet_NaN(),
-        double p_value = std::numeric_limits<double>::quiet_NaN()
-    ) const;
     void log_bootstrap_lambda_summary_(
         const AdaptiveBootstrapState& state,
         const BootstrapTimingSummary& timing_summary,
@@ -1170,7 +1238,7 @@ private:
 
     // bootstrap state helpers
     bool same_design_(const BoolMatrix& lhs, const BoolMatrix& rhs) const;
-    void reset_good_bootstrap_(
+    void restart_bootstrap_for_design_(
         AdaptiveBootstrapState& state,
         std::vector<Vector>& w_min,
         const std::vector<Vector>& w_fit,
@@ -1236,9 +1304,9 @@ private:
         const double alpha_high
     ) const;
     void update_w_min_(Vector& w_min_j, const Vector& w_fit_j, const Vector& w_bj) const;
-    void resize_bootstrap_results_(
+    void resize_bootstrap_lambda_results_(
         BootstrapResult& boot_results,
-        int n_lambdas,
+        int lambda_i,
         int n_blocks,
         const std::vector<int>& block_dims
     ) const;
@@ -1264,7 +1332,7 @@ private:
     // bootstrap component significance helpers
     void annotate_component_significance_(Result& result, const ComponentSignificanceResult& significance) const;
     ComponentSignificanceResult inactive_component_significance_() const;
-    double rho_tot_maxvar_(const BlockRefList& blocks, const BoolMatrix& C) const;
+    MaxvarCorrelationResult rho_tot_maxvar_(const BlockRefList& blocks, const BoolMatrix& C) const;
 
     // bootstrap block-importance helpers
     void annotate_block_importance_(Result& result, const BlockImportanceResult& importance) const;
@@ -1277,30 +1345,10 @@ private:
     ) const;
     double block_importance_rho_(const Vector& z, const Vector& s) const;
 
-    // inactive-block signal gate helpers
-    bool inactive_block_has_active_neighbor_(
-        const std::vector<bool>& active_blocks,
-        const BoolMatrix& C_active,
-        const int candidate
-    ) const;
-    bool inactive_block_has_residual_signal_(
-        const BlockRefList& blocks,
-        const std::vector<Vector>& active_scores,
-        const std::vector<bool>& active_blocks,
-        const BoolMatrix& C_active,
-        const int candidate,
-        double* observed_out = nullptr,
-        double* p_value_out = nullptr
-    ) const;
-    double residual_signal_stat_(
-        const Vector& candidate_score,
-        const std::vector<Vector>& active_scores,
-        const std::vector<int>& active_neighbors
-    ) const;
-
     // validation helpers
     void validate_fit_() const;
     void validate_bootstrap_support_() const;
+    void validate_stationary_resampling_config_(const char* workflow) const;
     void validate_bootstrap_config_() const;
     void validate_component_significance_config_() const;
     void validate_block_importance_config_() const;
@@ -1427,7 +1475,10 @@ private:
 
         // compute or reuse cov(l,k); when computed, store and mark clean (both (l,k) and (k,l))
         if (!ws.dirty(l, k)) return ws.Cov(l, k);
-        const double c = cov_(eta_l, eta_k);
+        const double den = opt_.bias ? eta_l.size() : std::max<int>(1, eta_l.size() - 1);
+        const double c = (
+            eta_l.dot(eta_k) - static_cast<double>(eta_l.size()) * ws.means[l] * ws.means[k]
+        ) / den;
         ws.Cov(l, k) = ws.Cov(k, l) = c;
         ws.dirty(l, k) = ws.dirty(k, l) = 0;
         return c;
@@ -1516,7 +1567,10 @@ private:
 
     // optimization criteria
     double objective_(const BlockRefList& blocks, FitWorkspace& ws, const BoolMatrix& C) const {
-        return objective_(ws, C, eta_(blocks));
+        auto eta = eta_(blocks);
+        for (int j = 0; j < n_blocks(); ++j)
+            ws.means[j] = eta[j].mean();
+        return objective_(ws, C, eta);
     }
     double objective_(FitWorkspace& ws, const BoolMatrix& C, const std::vector<Vector>& eta) const {
         double f = 0.0;
@@ -1545,6 +1599,7 @@ private:
     int h_ {0}; // current component index
     int n_comp_{1};
     int n_comp_effective_{0};
+    int n_comp_attempted_{0};
 
     std::vector<std::unique_ptr<Matrix>> data_blocks_;
     std::vector<BlockPtr> blocks_;

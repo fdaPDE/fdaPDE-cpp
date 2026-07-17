@@ -71,6 +71,60 @@ inline double empirical_quantile(std::vector<double>& x, const double p) {
     return (1.0 - frac) * x[lo] + frac * x[hi];
 }
 
+inline double standard_normal_quantile(const double p) {
+    if (!std::isfinite(p) || p <= 0.0 || p >= 1.0)
+        return std::numeric_limits<double>::quiet_NaN();
+
+    double lower = -8.0;
+    double upper = 8.0;
+    constexpr int iterations = 64;
+    const double inv_sqrt_two = std::sqrt(0.5);
+
+    for (int i = 0; i < iterations; ++i) {
+        const double mid = 0.5 * (lower + upper);
+        const double cdf = 0.5 * std::erfc(-mid * inv_sqrt_two);
+        if (cdf < p)
+            lower = mid;
+        else
+            upper = mid;
+    }
+
+    return 0.5 * (lower + upper);
+}
+
+inline double wilson_score_upper_bound(
+    const int successes,
+    const int trials,
+    const double z
+) {
+    if (trials <= 0 || successes < 0 || successes > trials || !std::isfinite(z) || z < 0.0)
+        return std::numeric_limits<double>::quiet_NaN();
+
+    const double n = static_cast<double>(trials);
+    const double p = static_cast<double>(successes) / n;
+    const double z2 = z * z;
+    const double denominator = 1.0 + z2 / n;
+    const double center = (p + z2 / (2.0 * n)) / denominator;
+    const double margin = z / denominator *
+        std::sqrt(p * (1.0 - p) / n + z2 / (4.0 * n * n));
+
+    return std::clamp(center + margin, 0.0, 1.0);
+}
+
+inline double median_confidence_upper_bound(std::vector<double>& x, const double z) {
+    x.erase(
+        std::remove_if(x.begin(), x.end(), [](const double v) { return !std::isfinite(v); }),
+        x.end()
+    );
+
+    if (x.empty() || !std::isfinite(z) || z < 0.0)
+        return std::numeric_limits<double>::quiet_NaN();
+
+    // Normal approximation to the binomial order-statistic interval for a median.
+    const double upper_probability = 0.5 + z / (2.0 * std::sqrt(static_cast<double>(x.size())));
+    return empirical_quantile(x, std::clamp(upper_probability, 0.5, 1.0));
+}
+
 } // namespace internals
 } // namespace fdapde
 

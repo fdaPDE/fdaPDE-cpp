@@ -23,10 +23,6 @@ include_directories(../../fdaPDE/)
 include_directories(../)
 include_directories(../fdaPDE/core/)
 
-# Ipopt
-include_directories(/opt/homebrew/opt/ipopt/include/coin-or)
-link_directories(/opt/homebrew/opt/ipopt/lib)
-
 include(FetchContent)
 FetchContent_Declare(
 		googletest
@@ -42,15 +38,24 @@ add_executable(fdapde_test main.cpp)
 
 target_link_libraries(fdapde_test Eigen3::Eigen)
 target_link_libraries(fdapde_test gtest_main)
-target_link_libraries(fdapde_test ipopt)
 
-add_executable(frgcca_covmax_timing frgcca_covmax_timing.cpp)
-target_compile_definitions(frgcca_covmax_timing PRIVATE FDAPDE_ENABLE_COUT)
-target_link_libraries(frgcca_covmax_timing Eigen3::Eigen)
-target_link_libraries(frgcca_covmax_timing ipopt)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/frgcca_covmax_timing.cpp")
+    add_executable(frgcca_covmax_timing frgcca_covmax_timing.cpp)
+    target_compile_definitions(frgcca_covmax_timing PRIVATE FDAPDE_ENABLE_COUT)
+    target_link_libraries(frgcca_covmax_timing Eigen3::Eigen)
+endif()
+
+add_executable(rgcca_bootstrap_reproducibility rgcca_bootstrap_reproducibility.cpp)
+target_link_libraries(rgcca_bootstrap_reproducibility Eigen3::Eigen)
 
 add_test(NAME fdapde_test
 		COMMAND $<TARGET_FILE:fdapde_test>
+)
+
+add_test(NAME rgcca_bootstrap_worker_reproducibility
+    COMMAND ${CMAKE_COMMAND}
+        -DREPRO_EXECUTABLE=$<TARGET_FILE:rgcca_bootstrap_reproducibility>
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/compare_rgcca_bootstrap_reproducibility.cmake.in
 )
 
 include(GoogleTest)

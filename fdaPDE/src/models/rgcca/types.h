@@ -46,6 +46,65 @@ using BoolMatrix = Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>;
 using IndexVector = Eigen::Vector<int, Eigen::Dynamic>;
 using SparseMatrix = Eigen::SparseMatrix<double, Eigen::ColMajor, int>;
 
+namespace internals {
+
+// Stationary bootstrap for one contiguous series.
+inline IndexVector stationary_bootstrap_indices(
+    const int n,
+    const double mean_block_length,
+    std::mt19937_64& rng
+) {
+    if (n <= 0)
+        throw std::invalid_argument("n must be positive");
+    if (!(mean_block_length > 0.0) || !std::isfinite(mean_block_length))
+        throw std::invalid_argument("stationary block length must be positive");
+
+    const double p = std::clamp(1.0 / mean_block_length, 0.0, 1.0);
+    std::uniform_int_distribution<int> U_index(0, n - 1);
+    std::bernoulli_distribution start_new_block(p);
+
+    IndexVector idx(n);
+    int current = U_index(rng);
+    idx(0) = current;
+    for (int i = 1; i < n; ++i) {
+        current = start_new_block(rng) ? U_index(rng) : (current + 1) % n;
+        idx(i) = current;
+    }
+    return idx;
+}
+
+// Concatenated series are resampled independently within their original
+// segments, preserving the row count and output position of every segment.
+inline IndexVector stationary_bootstrap_indices(
+    const int n,
+    const double mean_block_length,
+    const std::vector<int>& segment_lengths,
+    std::mt19937_64& rng
+) {
+    if (segment_lengths.empty())
+        return stationary_bootstrap_indices(n, mean_block_length, rng);
+
+    long long total = 0;
+    for (const int length : segment_lengths) {
+        if (length <= 0)
+            throw std::invalid_argument("stationary resampling segment lengths must be positive");
+        total += length;
+    }
+    if (total != n)
+        throw std::invalid_argument("stationary resampling segment lengths must sum to n");
+
+    IndexVector idx(n);
+    int offset = 0;
+    for (const int length : segment_lengths) {
+        idx.segment(offset, length) =
+            (stationary_bootstrap_indices(length, mean_block_length, rng).array() + offset).matrix();
+        offset += length;
+    }
+    return idx;
+}
+
+} // namespace internals
+
 // Public RGCCA options shared by blocks, model fitting, and bootstrap
 enum class InitStrategy { None, SVD, Uniform, WarmStart };
 enum class DesignMode { Empty, Custom, FullyConnected };
@@ -54,7 +113,14 @@ enum class Mode { CorMax, Regularized, CovMax };
 enum class Deflation { None, Scores };
 enum class WeightSignConstraint { None, NonNegative };
 enum class ResamplingStrategy { Ordinary, Stationary };
-enum class InactiveBlockSignalAction { None, KeptInactive, Deactivated, KeptActive, Reactivated };
+enum class SignificanceStatus { NotTested, NotSignificant, Significant };
+enum class ComponentStatus {
+    Pending,
+    Retained,
+    RejectedInactiveDesign,
+    RejectedNotSignificant,
+    RejectedSignificanceUnavailable
+};
 
 inline const char* to_string(InitStrategy x) {
     switch (x) {
@@ -107,15 +173,24 @@ inline const char* to_string(ResamplingStrategy x) {
     return "Unknown";
 }
 
-inline const char* to_string(InactiveBlockSignalAction x) {
+inline const char* to_string(ComponentStatus x) {
     switch (x) {
-    case InactiveBlockSignalAction::None:         return "none";
-    case InactiveBlockSignalAction::KeptInactive: return "kept inactive";
-    case InactiveBlockSignalAction::Deactivated:  return "deactivated";
-    case InactiveBlockSignalAction::KeptActive:   return "kept active";
-    case InactiveBlockSignalAction::Reactivated:  return "reactivated";
+    case ComponentStatus::Pending:                    return "Pending";
+    case ComponentStatus::Retained:                   return "Retained";
+    case ComponentStatus::RejectedInactiveDesign:     return "RejectedInactiveDesign";
+    case ComponentStatus::RejectedNotSignificant:     return "RejectedNotSignificant";
+    case ComponentStatus::RejectedSignificanceUnavailable: return "RejectedSignificanceUnavailable";
     }
-    return "unknown";
+    return "Unknown";
+}
+
+inline const char* to_string(SignificanceStatus x) {
+    switch (x) {
+    case SignificanceStatus::NotTested:      return "NotTested";
+    case SignificanceStatus::NotSignificant: return "NotSignificant";
+    case SignificanceStatus::Significant:    return "Significant";
+    }
+    return "Unknown";
 }
 
 struct Scheme {
@@ -147,7 +222,6 @@ struct Options {
     LambdaSelection lambda_selection_components;
     bool component_significance;
     bool block_importance;
-    bool inactive_block_signal_test;
     bool block_deactivation;
     bool connection_deactivation;
     Mode mode;
@@ -165,8 +239,7 @@ struct Options {
       const Deflation deflation_mode_ = Deflation::Scores, const Scheme& scheme_ = Scheme::Factorial(),
       const bool cache_ = true,
       const bool block_deactivation_ = false, const bool connection_deactivation_ = false,
-      const bool block_importance_ = false,
-      const bool inactive_block_signal_test_ = false) :
+      const bool block_importance_ = false) :
         max_iter(max_iter_),
         tol(tol_),
         cache_covariances(cache_),
@@ -176,7 +249,6 @@ struct Options {
         lambda_selection_components(lambda_selection_components_),
         component_significance(component_significance_),
         block_importance(block_importance_),
-        inactive_block_signal_test(inactive_block_signal_test_),
         block_deactivation(block_deactivation_),
         connection_deactivation(connection_deactivation_),
         mode(mode_),
@@ -210,14 +282,12 @@ struct BootstrapConfig {
 
     ResamplingStrategy resampling_strategy = ResamplingStrategy::Ordinary;
     double stationary_block_length = 10.0;
+    std::vector<int> resampling_segment_lengths;
 
     int component_significance_resamples = 100;
     double component_significance_alpha = 0.05;
     int block_importance_resamples = 100;
     double block_importance_alpha = 0.05;
-
-    int inactive_block_signal_resamples = 100;
-    double inactive_block_signal_alpha = 0.05;
 };
 
 std::ostream& operator<<(std::ostream& os, const Options& opt);
@@ -229,6 +299,7 @@ struct Result {
 
     int h = 0;
     int n_blocks = 0;
+    ComponentStatus status = ComponentStatus::Pending;
     std::vector<double> obj_history;
     bool monotone = true;
     bool cancelled = false;
@@ -241,21 +312,43 @@ struct Result {
     std::vector<double> lambda_weights_values;
     std::vector<bool> active_blocks;
     double rho_tot = std::numeric_limits<double>::quiet_NaN();
+    double rho_tot_raw = std::numeric_limits<double>::quiet_NaN();
+    double inner_ave = std::numeric_limits<double>::quiet_NaN();
     double rho_tot_p_value = std::numeric_limits<double>::quiet_NaN();
+    double rho_tot_null_mean = std::numeric_limits<double>::quiet_NaN();
+    double rho_tot_null_q95 = std::numeric_limits<double>::quiet_NaN();
+    double rho_tot_null_max = std::numeric_limits<double>::quiet_NaN();
     int rho_tot_bootstrap_count = 0;
-    bool component_significant = true;
+    int rho_tot_null_valid_count = 0;
+    SignificanceStatus significance_status = SignificanceStatus::NotTested;
+    std::vector<double> block_variance_initial;
+    std::vector<double> block_variance_before;
+    std::vector<double> block_variance_after;
+    std::vector<double> block_variance_explained;
+    std::vector<double> block_variance_explained_cumulative;
     std::vector<double> block_importance;
     std::vector<double> block_importance_p_values;
     std::vector<bool> block_importance_significant;
     int block_importance_bootstrap_count = 0;
-    std::vector<InactiveBlockSignalAction> inactive_block_signal_actions;
+
+    [[nodiscard]] bool retained() const { return status == ComponentStatus::Retained; }
+    [[nodiscard]] bool significance_tested() const {
+        return significance_status != SignificanceStatus::NotTested;
+    }
+    [[nodiscard]] bool component_significant() const {
+        return significance_status == SignificanceStatus::Significant;
+    }
 
     explicit Result(const int n_blocks_) : n_blocks(n_blocks_), C(n_blocks_, n_blocks_), covariance_matrix(n_blocks_, n_blocks_),
     tau_values(n_blocks_), lambda_components_values(n_blocks_), lambda_weights_values(n_blocks_), active_blocks(n_blocks_),
+    block_variance_initial(n_blocks_, std::numeric_limits<double>::quiet_NaN()),
+    block_variance_before(n_blocks_, std::numeric_limits<double>::quiet_NaN()),
+    block_variance_after(n_blocks_, std::numeric_limits<double>::quiet_NaN()),
+    block_variance_explained(n_blocks_, std::numeric_limits<double>::quiet_NaN()),
+    block_variance_explained_cumulative(n_blocks_, std::numeric_limits<double>::quiet_NaN()),
     block_importance(n_blocks_, std::numeric_limits<double>::quiet_NaN()),
     block_importance_p_values(n_blocks_, std::numeric_limits<double>::quiet_NaN()),
-    block_importance_significant(n_blocks_, false),
-    inactive_block_signal_actions(n_blocks_, InactiveBlockSignalAction::None) {}
+    block_importance_significant(n_blocks_, false) {}
 };
 
 struct BootstrapResult {
@@ -280,6 +373,13 @@ struct BootstrapResult {
     std::vector<std::vector<Matrix>> w_boot_by_lambda;
     std::vector<std::vector<Vector>> w_min_by_lambda;
     std::vector<int> B_used_by_lambda;
+    std::vector<std::vector<int>> candidate_ids_by_lambda;
+    std::vector<int> B_total_by_lambda;
+    std::vector<int> B_design_by_lambda;
+    std::vector<int> B_stale_by_lambda;
+    std::vector<int> B_cancelled_by_lambda;
+    std::vector<int> B_final_capped_by_lambda;
+    std::vector<int> design_epochs_by_lambda;
 
     // [lambda] -> matrix
     std::vector<Matrix> corr_boot_by_lambda;
@@ -312,7 +412,14 @@ struct BootstrapResult {
         w_fit_by_lambda.resize(n_lambda);
         w_boot_by_lambda.resize(n_lambda);
         w_min_by_lambda.resize(n_lambda);
-        B_used_by_lambda.resize(n_lambda);
+        B_used_by_lambda.resize(n_lambda, 0);
+        candidate_ids_by_lambda.resize(n_lambda);
+        B_total_by_lambda.resize(n_lambda, 0);
+        B_design_by_lambda.resize(n_lambda, 0);
+        B_stale_by_lambda.resize(n_lambda, 0);
+        B_cancelled_by_lambda.resize(n_lambda, 0);
+        B_final_capped_by_lambda.resize(n_lambda, 0);
+        design_epochs_by_lambda.resize(n_lambda, 0);
 
         active_blocks.resize(n_blocks);
 
