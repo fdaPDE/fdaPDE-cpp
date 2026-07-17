@@ -1034,7 +1034,6 @@ TEST(rgcca, component_callback_can_release_bootstrap_results) {
     RGCCA<IndependentSampling>::Options options;
     options.mode = Mode::CovMax;
     options.block_deactivation = true;
-    options.max_iter = 2;
 
     RGCCA<IndependentSampling> rgcca(n_obs, options, n_comp_local);
     add_multivariate_blocks(rgcca, data_path);
@@ -1045,7 +1044,7 @@ TEST(rgcca, component_callback_can_release_bootstrap_results) {
     bootstrap_config.B_min = 2;
     bootstrap_config.B_max = 2;
     bootstrap_config.adaptive = false;
-    bootstrap_config.fit_max_iter = 2;
+    bootstrap_config.fit_max_iter = 100;
     rgcca.set_bootstrap_config(bootstrap_config);
 
     int callback_count = 0;
@@ -1059,6 +1058,36 @@ TEST(rgcca, component_callback_can_release_bootstrap_results) {
     EXPECT_EQ(callback_count, n_comp_local);
     EXPECT_TRUE(rgcca.bootstrap_selection_results().empty());
     ASSERT_EQ(static_cast<int>(results.size()), n_comp_local);
+}
+
+TEST(rgcca, bootstrap_fails_after_repeated_final_capped_fits) {
+    constexpr int n = 40;
+    const Eigen::VectorXd signal = centered_wave(n, 0.17);
+    const Eigen::VectorXd second = centered_wave(n, 0.71);
+
+    RGCCA<IndependentSampling>::Options options;
+    options.mode = Mode::CovMax;
+    options.block_deactivation = true;
+
+    RGCCA<IndependentSampling> rgcca(n, options, 1);
+    rgcca.add_multivariate_block("X1", two_column_block(signal, second));
+    rgcca.add_multivariate_block("X2", two_column_block(signal, second));
+    rgcca.connect(0, 1);
+
+    RGCCA<IndependentSampling>::BootstrapConfig bootstrap_config;
+    bootstrap_config.max_threads = 2;
+    bootstrap_config.B_min = 2;
+    bootstrap_config.B_max = 2;
+    bootstrap_config.adaptive = false;
+    bootstrap_config.fit_max_iter = 1;
+    rgcca.set_bootstrap_config(bootstrap_config);
+
+    try {
+        static_cast<void>(rgcca.fit());
+        FAIL() << "expected the all-capped bootstrap stream to fail";
+    } catch (const std::runtime_error& error) {
+        EXPECT_NE(std::string(error.what()).find("fit_max_iter"), std::string::npos);
+    }
 }
 
 TEST(rgcca, stationary_bootstrap_respects_concatenated_segment_boundaries) {

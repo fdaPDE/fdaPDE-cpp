@@ -378,6 +378,7 @@ struct BootstrapResult {
     std::vector<int> B_design_by_lambda;
     std::vector<int> B_stale_by_lambda;
     std::vector<int> B_cancelled_by_lambda;
+    std::vector<int> B_final_capped_by_lambda;
     std::vector<int> design_epochs_by_lambda;
 
     // [lambda] -> matrix
@@ -417,6 +418,7 @@ struct BootstrapResult {
         B_design_by_lambda.resize(n_lambda, 0);
         B_stale_by_lambda.resize(n_lambda, 0);
         B_cancelled_by_lambda.resize(n_lambda, 0);
+        B_final_capped_by_lambda.resize(n_lambda, 0);
         design_epochs_by_lambda.resize(n_lambda, 0);
 
         active_blocks.resize(n_blocks);

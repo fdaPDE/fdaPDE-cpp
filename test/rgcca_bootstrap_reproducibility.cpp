@@ -59,7 +59,7 @@ int main(int argc, char** argv) {
     options.component_significance = true;
     options.block_importance = true;
     options.max_iter = 40;
-    options.tol = 1e-10;
+    options.tol = 1e-6;
 
     RGCCA<IndependentSampling> model(n, options, 1);
     model.add_multivariate_block("signal_1", make_block(n, 0.1, 0.08));
@@ -79,7 +79,10 @@ int main(int argc, char** argv) {
     bootstrap.active_block_tol = 0.95;
     bootstrap.active_connection_sign_stability = 0.8;
     bootstrap.active_connection_min_abs_corr = 0.02;
-    bootstrap.fit_max_iter = 20;
+    bootstrap.fit_max_iter = 3;
+    bootstrap.resampling_strategy = ResamplingStrategy::Stationary;
+    bootstrap.stationary_block_length = 4.0;
+    bootstrap.resampling_segment_lengths = {16, 16, 16, 16};
     bootstrap.component_significance_resamples = 24;
     bootstrap.component_significance_alpha = 0.5;
     bootstrap.block_importance_resamples = 24;
@@ -98,8 +101,11 @@ int main(int argc, char** argv) {
         throw std::runtime_error("bootstrap did not select a candidate");
     if (selection.design_epochs_by_lambda[lambda] < 2)
         throw std::runtime_error("test data did not exercise deterministic design epochs");
+    if (selection.B_final_capped_by_lambda[lambda] <= 0)
+        throw std::runtime_error("test data did not exercise final-capped sample rejection");
     if (selection.B_total_by_lambda[lambda] <
-        selection.B_design_by_lambda[lambda] + selection.B_used_by_lambda[lambda])
+        selection.B_design_by_lambda[lambda] + selection.B_used_by_lambda[lambda] +
+            selection.B_final_capped_by_lambda[lambda])
         throw std::runtime_error("speculative bootstrap accounting lost committed candidates");
     if (result.rho_tot_bootstrap_count != bootstrap.component_significance_resamples ||
         result.block_importance_bootstrap_count != bootstrap.block_importance_resamples)
@@ -114,14 +120,15 @@ int main(int argc, char** argv) {
             throw std::runtime_error("bootstrap weight storage was not shrunk to accepted samples");
     }
     for (std::size_t i = 1; i < candidate_ids.size(); ++i) {
-        if (candidate_ids[i] != candidate_ids[i - 1] + 1)
-            throw std::runtime_error("accepted bootstrap candidate IDs are not contiguous");
+        if (candidate_ids[i] <= candidate_ids[i - 1])
+            throw std::runtime_error("accepted bootstrap candidate IDs are not strictly increasing");
     }
 
     std::cout << std::setprecision(17);
     print_matrix(result.C.cast<int>());
     std::cout << selection.B_used_by_lambda[lambda] << ' '
               << selection.B_design_by_lambda[lambda] << ' '
+              << selection.B_final_capped_by_lambda[lambda] << ' '
               << selection.design_epochs_by_lambda[lambda] << ' '
               << selection.criterion[lambda] << '\n';
     for (const int id : candidate_ids)

@@ -212,6 +212,7 @@ void RGCCA<SamplingStrategy>::log_bootstrap_lambda_summary_(
                  << ", design=" << state.B_design
                  << ", stale=" << state.B_stale
                  << ", cancelled=" << state.B_cancelled
+                 << ", final_capped=" << state.B_final_capped
                  << ", good=" << state.B_done
                  << ", discarded=" << B_discarded << '\n';
     fdapde::cout << "  Time: total=" << std::fixed << std::setprecision(3) << elapsed_sec
@@ -221,7 +222,7 @@ void RGCCA<SamplingStrategy>::log_bootstrap_lambda_summary_(
                  << 100.0 * timing_summary.efficiency() << "%\n";
     fdapde::cout << "  Iters: avg=" << std::setprecision(1) << timing_summary.avg_iters()
                  << ", max=" << timing_summary.max_iters
-                 << ", capped=" << timing_summary.capped_fits
+                 << ", physical_capped=" << timing_summary.capped_fits
                  << "/" << timing_summary.n_fits << '\n';
     fdapde::cout << "  Scheduler: prep/post=" << std::setprecision(1)
                  << 100.0 * timing_summary.worker_overhead_fraction()
@@ -308,6 +309,7 @@ void RGCCA<SamplingStrategy>::log_bootstrap_progress_(
                  << " design=" << std::setw(6) << state.B_design
                  << " stale=" << std::setw(4) << state.B_stale
                  << " cancelled=" << std::setw(6) << state.B_cancelled
+                 << " final_capped=" << std::setw(4) << state.B_final_capped
                  << " good=" << std::setw(6) << state.B_done
                  << " | dt=" << std::fixed << std::setprecision(3) << std::setw(8)
                  << elapsed_since_last_log << "s"
@@ -339,6 +341,7 @@ void RGCCA<SamplingStrategy>::log_bootstrap_design_reset_(
                  << " design=" << std::setw(6) << state.B_design
                  << " stale=" << std::setw(4) << state.B_stale
                  << " cancelled=" << std::setw(6) << state.B_cancelled
+                 << " final_capped=" << std::setw(4) << state.B_final_capped
                  << " good=" << std::setw(6) << state.B_done
                  << " | dt=" << std::fixed << std::setprecision(3) << std::setw(8)
                  << elapsed_since_last_log << "s"

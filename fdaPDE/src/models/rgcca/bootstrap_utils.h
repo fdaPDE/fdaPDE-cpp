@@ -264,6 +264,8 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
     std::vector<double> merge_wait_time(n_threads, 0.0);
     int next_candidate = 0;
     int next_commit = 0;
+    int consecutive_final_capped = 0;
+    bool cap_exhausted = false;
 
     // start parallel execution timer
     const auto parallel_start = std::chrono::high_resolution_clock::now();
@@ -349,6 +351,23 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
                 const int committed_id = next_commit++;
                 auto committed = std::move(completed_it->second);
                 completed.erase(completed_it);
+
+                // Acceptance depends only on the final fit at the ordered
+                // frontier. Speculative or stale capped work never reaches
+                // this branch and therefore cannot poison a later replay.
+                if (committed.capped) {
+                    ++bootstrap_state.B_final_capped;
+                    ++consecutive_final_capped;
+                    if (consecutive_final_capped >= bootstrap_state.B_max) {
+                        cap_exhausted = true;
+                        bootstrap_state.stop = true;
+                        stop.store(true, std::memory_order_release);
+                        completed.clear();
+                        break;
+                    }
+                    continue;
+                }
+                consecutive_final_capped = 0;
 
                 const int b_good = bootstrap_state.B_done;
                 boot_results.candidate_ids_by_lambda[lambda_i][b_good] = committed_id;
@@ -465,6 +484,12 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
         std::accumulate(claim_wait_time.begin(), claim_wait_time.end(), 0.0),
         std::accumulate(merge_wait_time.begin(), merge_wait_time.end(), 0.0)
     );
+    if (cap_exhausted) {
+        throw std::runtime_error(
+            "RGCCA: bootstrap exhausted its accepted-sample budget because consecutive final fits "
+            "reached fit_max_iter; increase BootstrapConfig::fit_max_iter"
+        );
+    }
 }
 
 // fits one bootstrap resample and returns its weights, correlations and timing
@@ -517,8 +542,9 @@ auto RGCCA<SamplingStrategy>::fit_bootstrap_sample_(
     out.capped = fit_result.iters >= fit_max_iter;
     out.cancelled = fit_result.cancelled;
 
-    // restore full-data row views before returning cancelled work
-    if (out.cancelled) {
+    // Cancelled and final-capped fits are never accepted by the ordered
+    // stream, so avoid computing weight/correlation summaries for them.
+    if (out.cancelled || out.capped) {
         clear_row_index_all_(boot_blocks.refs);
         return out;
     }

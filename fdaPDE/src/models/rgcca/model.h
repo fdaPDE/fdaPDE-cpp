@@ -357,6 +357,7 @@ private:
             B_design = 0;
             B_stale = 0;
             B_cancelled = 0;
+            B_final_capped = 0;
             design_epoch = 0;
             last_check_B_done = 0;
             last_block_deactivation_check_B_done = 0;
@@ -392,6 +393,7 @@ private:
         int B_design = 0;
         int B_stale = 0;
         int B_cancelled = 0;
+        int B_final_capped = 0;
         int design_epoch = 0;
         int last_check_B_done = 0;
         int last_block_deactivation_check_B_done = 0;
@@ -815,6 +817,7 @@ private:
             boot_results.B_design_by_lambda[lambda_i] = bootstrap_state.B_design;
             boot_results.B_stale_by_lambda[lambda_i] = bootstrap_state.B_stale;
             boot_results.B_cancelled_by_lambda[lambda_i] = bootstrap_state.B_cancelled;
+            boot_results.B_final_capped_by_lambda[lambda_i] = bootstrap_state.B_final_capped;
             boot_results.design_epochs_by_lambda[lambda_i] = bootstrap_state.design_epoch + 1;
 
             // Release unused B_max columns before allocating the next lambda.
