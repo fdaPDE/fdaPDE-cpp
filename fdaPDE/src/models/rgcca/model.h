@@ -422,14 +422,22 @@ private:
         int capped_fits = 0;
         int max_iters = 0;
         int n_fits = 0;
+        ::fdapde::internals::NonNegativeWeightSolveStats nn_stats;
 
-        void add_sample(const double fit_time_sec, const int fit_iters, const bool capped, const bool fit_started) {
+        void add_sample(
+            const double fit_time_sec,
+            const int fit_iters,
+            const bool capped,
+            const bool fit_started,
+            const ::fdapde::internals::NonNegativeWeightSolveStats& sample_nn_stats
+        ) {
             if (!fit_started) return;
             fit_time += fit_time_sec;
             fit_time_sq += fit_time_sec * fit_time_sec;
             iters += static_cast<double>(fit_iters);
             capped_fits += capped ? 1 : 0;
             max_iters = std::max(max_iters, fit_iters);
+            nn_stats += sample_nn_stats;
             ++n_fits;
         }
         void set_parallel_capacity(const double wall_time_sec, const int n_threads) {
@@ -501,6 +509,7 @@ private:
         bool capped = false;
         bool cancelled = false;
         bool fit_started = false;
+        ::fdapde::internals::NonNegativeWeightSolveStats nn_stats;
     };
 
     // component initialization

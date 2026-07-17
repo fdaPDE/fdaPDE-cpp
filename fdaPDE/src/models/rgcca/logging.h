@@ -228,6 +228,20 @@ void RGCCA<SamplingStrategy>::log_bootstrap_lambda_summary_(
                  << "%, claim_wait=" << 100.0 * timing_summary.fraction_of_capacity(timing_summary.claim_wait_time)
                  << "%, merge_wait=" << 100.0 * timing_summary.fraction_of_capacity(timing_summary.merge_wait_time)
                  << "%, coordinator=" << 100.0 * timing_summary.coordinator_fraction() << "%\n";
+    if (timing_summary.nn_stats.calls > 0) {
+        const double avg_sweeps = timing_summary.nn_stats.coordinate_attempts > 0 ?
+            static_cast<double>(timing_summary.nn_stats.coordinate_sweeps) /
+                static_cast<double>(timing_summary.nn_stats.coordinate_attempts) : 0.0;
+        fdapde::cout << "  NN solves: calls=" << timing_summary.nn_stats.calls
+                     << ", direct=" << timing_summary.nn_stats.direct_sides
+                     << ", coordinate=" << timing_summary.nn_stats.coordinate_converged
+                     << "/" << timing_summary.nn_stats.coordinate_attempts
+                     << ", closed_form=" << timing_summary.nn_stats.closed_form_sides << '\n';
+        fdapde::cout << "  NN coordinate: avg_sweeps=" << std::fixed << std::setprecision(1)
+                     << avg_sweeps << std::defaultfloat
+                     << ", Horst_boundary=" << timing_summary.nn_stats.horst_boundaries
+                     << ", would_fallback=" << timing_summary.nn_stats.would_fallback << '\n';
+    }
 
     // design and criterion recap
     fdapde::cout << "  Design: active_blocks=" << n_active_blocks

@@ -20,8 +20,6 @@
 #include <fstream>
 #include <iomanip>
 
-#include "../ipopt_options.h"
-
 using namespace fdapde;
 using namespace fdapde::rgcca;
 using fdapde::test::almost_equal;
@@ -661,8 +659,6 @@ TEST(rgcca, connection_uncertainty_retains_threshold_overlap) {
 }
 
 TEST(rgcca, nonnegative_weight_solver_finds_active_boundary_optimum) {
-    write_ipopt_options();
-
     Eigen::SparseMatrix<double> Psi(2, 2);
     Psi.setIdentity();
 
@@ -676,20 +672,82 @@ TEST(rgcca, nonnegative_weight_solver_finds_active_boundary_optimum) {
     Eigen::Vector2d z;
     z << 1.0, -0.25;
 
+    const auto stats_before = ::fdapde::internals::NonNegativeWeightSolver::thread_stats();
     ::fdapde::internals::NonNegativeWeightSolver solver(Psi, Omega, false);
     const Eigen::VectorXd weights = solver.solve(z);
+    const auto stats = ::fdapde::internals::NonNegativeWeightSolver::thread_stats() - stats_before;
 
     EXPECT_GE(weights.minCoeff(), 0.0);
     EXPECT_NEAR(weights[0], 1.0 / std::sqrt(2.0), 1e-9);
     EXPECT_NEAR(weights[1], 0.0, 1e-12);
     EXPECT_NEAR(weights.dot(Omega * weights), 1.0, 1e-10);
     EXPECT_NEAR(z.dot(weights), 1.0 / std::sqrt(2.0), 1e-9);
+    EXPECT_EQ(stats.coordinate_attempts, 1);
+    EXPECT_EQ(stats.coordinate_converged, 1);
+    EXPECT_EQ(stats.would_fallback, 0);
+}
+
+TEST(rgcca, nonnegative_weight_solver_handles_nonpositive_horst_signal) {
+    Eigen::SparseMatrix<double> Psi(2, 2);
+    Psi.setIdentity();
+
+    Eigen::SparseMatrix<double> Omega(2, 2);
+    Omega.insert(0, 0) = 2.0;
+    Omega.insert(0, 1) = 0.5;
+    Omega.insert(1, 0) = 0.5;
+    Omega.insert(1, 1) = 8.0;
+    Omega.makeCompressed();
+
+    Eigen::Vector2d z;
+    z << -1.0, -1.0;
+
+    const auto stats_before = ::fdapde::internals::NonNegativeWeightSolver::thread_stats();
+    ::fdapde::internals::NonNegativeWeightSolver solver(Psi, Omega, false);
+    const Eigen::VectorXd weights = solver.solve(z);
+    const auto stats = ::fdapde::internals::NonNegativeWeightSolver::thread_stats() - stats_before;
+
+    EXPECT_NEAR(weights[0], 0.0, 1e-12);
+    EXPECT_NEAR(weights[1], 1.0 / std::sqrt(8.0), 1e-12);
+    EXPECT_NEAR(weights.dot(Omega * weights), 1.0, 1e-12);
+    EXPECT_NEAR(z.dot(weights), -1.0 / std::sqrt(8.0), 1e-12);
+    EXPECT_EQ(stats.horst_boundaries, 1);
+    EXPECT_EQ(stats.coordinate_attempts, 0);
+    EXPECT_EQ(stats.would_fallback, 0);
+}
+
+TEST(rgcca, nonnegative_weight_solver_rejects_non_spd_omega) {
+    Eigen::SparseMatrix<double> Psi(2, 2);
+    Psi.setIdentity();
+
+    Eigen::SparseMatrix<double> Omega(2, 2);
+    Omega.insert(0, 0) = 1.0;
+    Omega.insert(0, 1) = 1.0;
+    Omega.insert(1, 0) = 1.0;
+    Omega.insert(1, 1) = 1.0;
+    Omega.makeCompressed();
+
+    EXPECT_THROW(
+        (::fdapde::internals::NonNegativeWeightSolver(Psi, Omega, false)),
+        std::invalid_argument
+    );
+}
+
+TEST(rgcca, nonnegative_weight_solver_rejects_invalid_closed_form_omega) {
+    Eigen::SparseMatrix<double> Psi(2, 2);
+    Psi.setIdentity();
+
+    Eigen::SparseMatrix<double> Omega(2, 2);
+    Omega.insert(0, 0) = 2.0;
+    Omega.insert(1, 1) = 1.0;
+    Omega.makeCompressed();
+
+    EXPECT_THROW(
+        (::fdapde::internals::NonNegativeWeightSolver(Psi, Omega, false, true)),
+        std::invalid_argument
+    );
 }
 
 TEST(rgcca, GCCA_NN_cov) {
-
-    write_ipopt_options();
-
     check_rgcca_against_first_run("nn_cov",  FunctionalDiscretization::MV, WeightSignConstraint::NonNegative);
 }
 
@@ -702,17 +760,11 @@ TEST(rgcca, F_GCCA_splines_cov) {
 }
 
 TEST(rgcca, F_GCCA_NN_fem_cov) {
-
-    write_ipopt_options();
-
     check_rgcca_against_first_run(
       "fem_nn_cov", FunctionalDiscretization::FEM, WeightSignConstraint::NonNegative);
 }
 
 TEST(rgcca, F_GCCA_NN_splines_cov) {
-
-    write_ipopt_options();
-
     check_rgcca_against_first_run(
       "splines_nn_cov", FunctionalDiscretization::Splines, WeightSignConstraint::NonNegative);
 }

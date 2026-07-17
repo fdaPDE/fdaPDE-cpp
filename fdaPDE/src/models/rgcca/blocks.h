@@ -21,7 +21,7 @@
 #include "gcv.h"
 #include "linear_algebra.h"
 #include "sampling.h"
-#include "fdaPDE/src/solvers/nonnegative_weight_ipopt.h"
+#include "fdaPDE/src/solvers/nonnegative_weight.h"
 
 namespace fdapde {
 namespace rgcca {
@@ -591,7 +591,7 @@ protected:
     }
 
     // non-negative solver utils
-    Vector solve_nonnegative_weight_ipopt_(const Vector& z, const bool use_closed_form_solution = false) {
+    Vector solve_nonnegative_weight_(const Vector& z, const bool use_closed_form_solution = false) {
         if (!nn_weights_solver_)
             nn_weights_solver_ = std::make_unique<::fdapde::internals::NonNegativeWeightSolver>(
                 Psi_D(),
@@ -745,7 +745,7 @@ protected:
     using Base::n;
     using Base::m;
     using Base::mode;
-    using Base::solve_nonnegative_weight_ipopt_;
+    using Base::solve_nonnegative_weight_;
     using Base::reset_nonnegative_weight_solver_;
     using Base::normalize_weight_;
     using Base::data_transpose_times_;
@@ -764,7 +764,7 @@ protected:
         Vector z = data_transpose_times_(nu);
 
         if (weight_sign_constraint() == ::fdapde::rgcca::WeightSignConstraint::NonNegative) {
-            return solve_nonnegative_weight_ipopt_(z, mode() == ::fdapde::rgcca::Mode::CovMax); // already normalized
+            return solve_nonnegative_weight_(z, mode() == ::fdapde::rgcca::Mode::CovMax); // already normalized
         }
 
         if (mode() == ::fdapde::rgcca::Mode::CovMax) return normalize_weight_(z);
@@ -854,7 +854,7 @@ public:
 protected:
     using Base::init;
     using Base::n;
-    using Base::solve_nonnegative_weight_ipopt_;
+    using Base::solve_nonnegative_weight_;
     using Base::reset_nonnegative_weight_solver_;
     using Base::data_transpose_times_;
     using Base::weight_sign_constraint;
@@ -874,7 +874,7 @@ protected:
         Vector z = data_transpose_times_(nu);
 
         if (weight_sign_constraint() == ::fdapde::rgcca::WeightSignConstraint::NonNegative) {
-            return solve_nonnegative_weight_ipopt_(z);  // already normalized
+            return solve_nonnegative_weight_(z);  // already normalized
         }
 
         if (!weights_solver_weights_ready_) {

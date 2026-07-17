@@ -323,7 +323,9 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
             ).count();
             ++bootstrap_state.B_total;
             timing_summary.add_worker_time(worker_elapsed);
-            timing_summary.add_sample(sample.fit_time, sample.fit_iters, sample.capped, sample.fit_started);
+            timing_summary.add_sample(
+                sample.fit_time, sample.fit_iters, sample.capped, sample.fit_started, sample.nn_stats
+            );
 
             if (sample.cancelled) {
                 ++bootstrap_state.B_cancelled;
@@ -500,6 +502,7 @@ auto RGCCA<SamplingStrategy>::fit_bootstrap_sample_(
     }
 
     // fit the bootstrap component on the resampled rows
+    const auto nn_stats_before = ::fdapde::internals::NonNegativeWeightSolver::thread_stats();
     const auto fit_start = std::chrono::high_resolution_clock::now();
     out.fit_started = true;
     const Result fit_result = fit_component_(boot_blocks.refs, C_active, true, fit_max_iter, cancelled);
@@ -507,6 +510,7 @@ auto RGCCA<SamplingStrategy>::fit_bootstrap_sample_(
 
     // save fit info
     out.fit_time = std::chrono::duration<double>(fit_end - fit_start).count();
+    out.nn_stats = ::fdapde::internals::NonNegativeWeightSolver::thread_stats() - nn_stats_before;
     out.fit_iters = fit_result.iters;
     out.capped = fit_result.iters >= fit_max_iter;
     out.cancelled = fit_result.cancelled;
