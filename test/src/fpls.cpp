@@ -255,6 +255,28 @@ void check_spline_smoke() {
     EXPECT_EQ(m.direction_monotone().size(), 2);
 }
 
+void check_singular_direction_failure() {
+    Triangulation<1, 1> T = Triangulation<1, 1>::Interval(0, 1, 11);
+    GeoFrame data(T);
+    auto& l1 = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
+
+    Eigen::MatrixXd X = Eigen::MatrixXd::Zero(6, data[0].rows());
+    Eigen::MatrixXd Y = Eigen::MatrixXd::Random(6, 1);
+    l1.load_blk("X", X.transpose());
+
+    BsSpace Bh(T, 3);
+    TrialFunction f(Bh);
+    TestFunction v(Bh);
+    auto a = integral(T)(dxx(f) * dxx(v));
+    ZeroField<1> u;
+    auto F = integral(T)(u * v);
+
+    fPLS m("X", Y, data, bs_ls_elliptic(a, F), bs_ls_elliptic(a, F));
+    Eigen::Matrix<double, 1, 1> lambda;
+    lambda << 1e-9;
+    EXPECT_THROW(m.fit(1, lambda, lambda), std::runtime_error);
+}
+
 }   // namespace
 
 TEST(fpls, test_01) {
@@ -272,3 +294,5 @@ TEST(fpls, restored_modes_smoke) {
 TEST(fpls, spline_smoke) {
     check_spline_smoke();
 }
+
+TEST(fpls, singular_direction_failure) { check_singular_direction_failure(); }

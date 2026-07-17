@@ -222,15 +222,29 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
             D_.col(h) = V_.col(h);
             return;
         }
-        loading_solver_.update_response(X_h.transpose() * T_.col(h) / T_.col(h).squaredNorm());
+        const double t_norm = T_.col(h).squaredNorm();
+        if (!std::isfinite(t_norm) || t_norm <= 0) {
+            throw std::runtime_error("fPLS loading update has a non-finite or zero X score");
+        }
+        const vector_t x_response = X_h.transpose() * T_.col(h) / t_norm;
+        if (!x_response.array().isFinite().all()) {
+            throw std::runtime_error("fPLS loading update produced a non-finite response");
+        }
+        loading_solver_.update_response(x_response);
         loading_solver_.fit(loading_lambda);
+        if (!loading_solver_.f().array().isFinite().all()) {
+            throw std::runtime_error("fPLS loading solver produced a non-finite solution");
+        }
         C_.col(h) = loading_solver_.f();
-        if constexpr (Mode == fPLSMode::Regression) {
-            D_.col(h) = Y_h.transpose() * T_.col(h) / T_.col(h).squaredNorm();
-        }
+        if constexpr (Mode == fPLSMode::Regression) { D_.col(h) = Y_h.transpose() * T_.col(h) / t_norm; }
         if constexpr (Mode == fPLSMode::ModeA) {
-            D_.col(h) = Y_h.transpose() * U_.col(h) / U_.col(h).squaredNorm();
+            const double u_norm = U_.col(h).squaredNorm();
+            if (!std::isfinite(u_norm) || u_norm <= 0) {
+                throw std::runtime_error("fPLS loading update has a non-finite or zero Y score");
+            }
+            D_.col(h) = Y_h.transpose() * U_.col(h) / u_norm;
         }
+        if (!D_.col(h).array().isFinite().all()) { throw std::runtime_error("fPLS response loading is not finite"); }
     }
     void project_(const matrix_t& X_h, const matrix_t& Y_h, int h) {
         T_.col(h) = X_h * direction_solver_.Psi() * W_.col(h);
@@ -267,18 +281,27 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
 
         for (int i = 0; !almost_equal(Jnew, Jold, tol) && i < max_iter; ++i) {
             v = M * fn;
-            v.normalize();
-            direction_solver_.update_response(M.transpose() * v);
+            const double v_norm = v.norm();
+            if (!v.array().isFinite().all() || !std::isfinite(v_norm) || v_norm <= 0) {
+                throw std::runtime_error("fPLS direction update is non-finite or numerically singular");
+            }
+            v /= v_norm;
+            const vector_t response = M.transpose() * v;
+            if (!response.array().isFinite().all()) {
+                throw std::runtime_error("fPLS direction update produced a non-finite response");
+            }
+            direction_solver_.update_response(response);
             direction_solver_.fit(lambda);
             Jold = Jnew;
             fn = direction_solver_.fn();
+            if (!fn.array().isFinite().all()) {
+                throw std::runtime_error("fPLS direction solver produced a non-finite solution");
+            }
             Jnew = (M - v * fn.transpose()).squaredNorm() + direction_solver_.ftPf(lambda);
+            if (!std::isfinite(Jnew)) { throw std::runtime_error("fPLS direction objective is not finite"); }
             result.objective_history.push_back(Jnew);
             result.iterations = i + 1;
-            if (!std::isfinite(Jnew) ||
-                (i > 0 && (Jnew - Jold) / (1.0 + std::abs(Jold)) > tol)) {
-                result.monotone = false;
-            }
+            if (i > 0 && (Jnew - Jold) / (1.0 + std::abs(Jold)) > tol) { result.monotone = false; }
         }
 
         result.f = direction_solver_.f();
@@ -291,6 +314,9 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
         auto result = solve_direction_(M, lambda, f0, max_iter, tol);
         const double w_norm = (direction_solver_.Psi() * result.f).norm();
         const double v_norm = result.v.norm();
+        if (!std::isfinite(w_norm) || !std::isfinite(v_norm) || w_norm <= 0 || v_norm <= 0) {
+            throw std::runtime_error("fPLS direction normalization is non-finite or numerically singular");
+        }
         W_.col(h) = result.f / w_norm;
         V_.col(h) = result.v / v_norm;
         sigma_[h] = w_norm * v_norm;
