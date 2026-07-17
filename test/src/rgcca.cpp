@@ -829,8 +829,11 @@ TEST(rgcca, inactive_design_stops_remaining_components_without_significance) {
 
     EXPECT_EQ(callback_count, 1);
     ASSERT_EQ(static_cast<int>(results.size()), 1);
-    EXPECT_EQ(rgcca.n_comp_effective(), 1);
+    EXPECT_EQ(rgcca.n_comp_attempted(), 1);
+    EXPECT_EQ(rgcca.n_comp_effective(), 0);
     for (const auto& result : results) {
+        EXPECT_EQ(result.status, ComponentStatus::RejectedInactiveDesign);
+        EXPECT_FALSE(result.retained());
         EXPECT_FALSE(result.component_significant);
         EXPECT_DOUBLE_EQ(result.rho_tot, 0.0);
         EXPECT_DOUBLE_EQ(result.inner_ave, 0.0);
@@ -860,8 +863,12 @@ TEST(rgcca, component_diagnostics_track_correlation_and_deflated_variance) {
     const auto results = rgcca.fit();
 
     ASSERT_EQ(static_cast<int>(results.size()), n_comp_local);
+    EXPECT_EQ(rgcca.n_comp_attempted(), n_comp_local);
+    EXPECT_EQ(rgcca.n_comp_effective(), n_comp_local);
     for (int h = 0; h < n_comp_local; ++h) {
         const auto& result = results[h];
+        EXPECT_EQ(result.status, ComponentStatus::Retained);
+        EXPECT_TRUE(result.retained());
         EXPECT_TRUE(std::isfinite(result.rho_tot));
         EXPECT_TRUE(std::isfinite(result.rho_tot_raw));
         EXPECT_TRUE(std::isfinite(result.inner_ave));

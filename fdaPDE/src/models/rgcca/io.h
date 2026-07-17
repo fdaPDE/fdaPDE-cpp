@@ -77,6 +77,7 @@ inline std::ostream& operator<<(std::ostream& os, const BootstrapConfig& config)
 // pretty printer for a single Result
 inline std::ostream& operator<<(std::ostream& os, const Result& r) {
     const bool minimal = false;
+    os << "status: " << to_string(r.status) << "\n";
     if (!minimal) {
         os << "shrinkage parameters used : " << std::endl;
         for (size_t i = 0; i < r.tau_values.size(); ++i) {

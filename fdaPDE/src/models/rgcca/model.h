@@ -52,6 +52,7 @@ public:
     using Deflation = rgcca::Deflation;
     using WeightSignConstraint = rgcca::WeightSignConstraint;
     using ResamplingStrategy = rgcca::ResamplingStrategy;
+    using ComponentStatus = rgcca::ComponentStatus;
     using Scheme = rgcca::Scheme;
     using Options = rgcca::Options;
     using BootstrapConfig = rgcca::BootstrapConfig;
@@ -176,6 +177,7 @@ public:
 
         // components loop
         n_comp_effective_ = 0;
+        n_comp_attempted_ = 0;
 
         for (int hh = 0; hh < n_comp(); ++hh) {
             set_h_(hh);
@@ -205,6 +207,7 @@ public:
 
             // structural stop: no active design left
             if (count_active_connections_(C_active) == 0) {
+                component_result.status = ComponentStatus::RejectedInactiveDesign;
                 annotate_component_significance_(component_result, inactive_component_significance_());
                 annotate_explained_variance_(
                     component_result, initial_block_variance, block_variance_before, block_variance_before
@@ -219,6 +222,7 @@ public:
                 const auto significance = bootstrap_test_component_significance_(C_active, observed_correlation);
                 annotate_component_significance_(component_result, significance);
                 if (!significance.significant) {
+                    component_result.status = ComponentStatus::RejectedNotSignificant;
                     annotate_explained_variance_(
                         component_result, initial_block_variance, block_variance_before, block_variance_before
                     );
@@ -227,6 +231,8 @@ public:
                     break;
                 }
             }
+
+            component_result.status = ComponentStatus::Retained;
 
             // bootstrap block importance
             if (opt_.block_importance) {
@@ -269,6 +275,7 @@ public:
     [[nodiscard]] int n() const { return n_; }
     [[nodiscard]] int n_comp() const { return n_comp_; }
     [[nodiscard]] int n_comp_effective() const { return n_comp_effective_; }
+    [[nodiscard]] int n_comp_attempted() const { return n_comp_attempted_; }
     [[nodiscard]] int n_blocks() const { return J_; }
     [[nodiscard]] const Options& options() const { return opt_; }
     [[nodiscard]] const Scheme& scheme() const { return opt_.scheme; }
@@ -1093,13 +1100,16 @@ private:
         for (auto& b : blocks_) b->compute_weights_star(h);
     }
     void finish_component_(const Result& result, const ComponentCallback& component_callback) {
-        n_comp_effective_ = result.h + 1;
-        auto step_start = log_step_start_("Compute weights_star");
-        compute_weights_star_(result.h);
-        log_step_end_(step_start);
+        ++n_comp_attempted_;
+        if (result.retained()) {
+            ++n_comp_effective_;
+            auto step_start = log_step_start_("Compute weights_star");
+            compute_weights_star_(result.h);
+            log_step_end_(step_start);
+        }
 
         if (component_callback) {
-            step_start = log_step_start_("Component callback");
+            auto step_start = log_step_start_("Component callback");
             component_callback(*this, result);
             log_step_end_(step_start);
         }
@@ -1552,6 +1562,7 @@ private:
     int h_ {0}; // current component index
     int n_comp_{1};
     int n_comp_effective_{0};
+    int n_comp_attempted_{0};
 
     std::vector<std::unique_ptr<Matrix>> data_blocks_;
     std::vector<BlockPtr> blocks_;

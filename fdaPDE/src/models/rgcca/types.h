@@ -54,6 +54,7 @@ enum class Mode { CorMax, Regularized, CovMax };
 enum class Deflation { None, Scores };
 enum class WeightSignConstraint { None, NonNegative };
 enum class ResamplingStrategy { Ordinary, Stationary };
+enum class ComponentStatus { Pending, Retained, RejectedInactiveDesign, RejectedNotSignificant };
 
 inline const char* to_string(InitStrategy x) {
     switch (x) {
@@ -102,6 +103,16 @@ inline const char* to_string(ResamplingStrategy x) {
     switch (x) {
     case ResamplingStrategy::Ordinary:   return "Ordinary";
     case ResamplingStrategy::Stationary: return "Stationary";
+    }
+    return "Unknown";
+}
+
+inline const char* to_string(ComponentStatus x) {
+    switch (x) {
+    case ComponentStatus::Pending:                    return "Pending";
+    case ComponentStatus::Retained:                   return "Retained";
+    case ComponentStatus::RejectedInactiveDesign:     return "RejectedInactiveDesign";
+    case ComponentStatus::RejectedNotSignificant:     return "RejectedNotSignificant";
     }
     return "Unknown";
 }
@@ -211,6 +222,7 @@ struct Result {
 
     int h = 0;
     int n_blocks = 0;
+    ComponentStatus status = ComponentStatus::Pending;
     std::vector<double> obj_history;
     bool monotone = true;
     bool cancelled = false;
@@ -241,6 +253,8 @@ struct Result {
     std::vector<double> block_importance_p_values;
     std::vector<bool> block_importance_significant;
     int block_importance_bootstrap_count = 0;
+
+    [[nodiscard]] bool retained() const { return status == ComponentStatus::Retained; }
 
     explicit Result(const int n_blocks_) : n_blocks(n_blocks_), C(n_blocks_, n_blocks_), covariance_matrix(n_blocks_, n_blocks_),
     tau_values(n_blocks_), lambda_components_values(n_blocks_), lambda_weights_values(n_blocks_), active_blocks(n_blocks_),
