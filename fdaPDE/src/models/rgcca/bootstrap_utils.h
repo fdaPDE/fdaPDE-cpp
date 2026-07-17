@@ -1259,33 +1259,12 @@ auto RGCCA<SamplingStrategy>::stationary_bootstrap_indices_(
     const double mean_block_length,
     std::mt19937_64& rng
 ) const -> rgcca::IndexVector {
-    if (n <= 0)
-        throw std::invalid_argument("n must be positive");
-
-    if (!(mean_block_length > 0.0) || !std::isfinite(mean_block_length))
-        throw std::invalid_argument("stationary block length must be positive");
-
-    const double p = std::clamp(1.0 / mean_block_length, 0.0, 1.0);
-
-    std::uniform_int_distribution<int> U_index(0, n - 1);
-    std::bernoulli_distribution start_new_block(p);
-
-    rgcca::IndexVector idx(n);
-
-    int current = U_index(rng);
-    idx(0) = current;
-
-    for (int i = 1; i < n; ++i) {
-        if (start_new_block(rng)) {
-            current = U_index(rng);
-        } else {
-            current = (current + 1) % n;
-        }
-
-        idx(i) = current;
-    }
-
-    return idx;
+    return rgcca::internals::stationary_bootstrap_indices(
+        n,
+        mean_block_length,
+        bootstrap_config_.resampling_segment_lengths,
+        rng
+    );
 }
 
 } // namespace fdapde

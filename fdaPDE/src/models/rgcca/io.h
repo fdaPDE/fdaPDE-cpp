@@ -66,6 +66,12 @@ inline std::ostream& operator<<(std::ostream& os, const BootstrapConfig& config)
        << "  patience                           = " << config.patience << '\n'
        << "  resampling_strategy                = " << to_string(config.resampling_strategy) << '\n'
        << "  stationary_block_length            = " << config.stationary_block_length << '\n'
+       << "  resampling_segment_lengths         = [";
+    for (std::size_t i = 0; i < config.resampling_segment_lengths.size(); ++i) {
+        if (i > 0) os << ", ";
+        os << config.resampling_segment_lengths[i];
+    }
+    os << "]\n"
        << "  component_significance_resamples   = " << config.component_significance_resamples << '\n'
        << "  component_significance_alpha       = " << config.component_significance_alpha << '\n'
        << "  block_importance_resamples         = " << config.block_importance_resamples << '\n'

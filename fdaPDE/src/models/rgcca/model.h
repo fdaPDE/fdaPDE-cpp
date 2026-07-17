@@ -1312,6 +1312,7 @@ private:
     // validation helpers
     void validate_fit_() const;
     void validate_bootstrap_support_() const;
+    void validate_stationary_resampling_config_(const char* workflow) const;
     void validate_bootstrap_config_() const;
     void validate_component_significance_config_() const;
     void validate_block_importance_config_() const;

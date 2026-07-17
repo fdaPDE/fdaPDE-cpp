@@ -70,6 +70,40 @@ void RGCCA<SamplingStrategy>::validate_bootstrap_support_() const {
     }
 }
 
+// validates the shared stationary-resampling contract for every bootstrap-backed workflow
+template <typename SamplingStrategy>
+void RGCCA<SamplingStrategy>::validate_stationary_resampling_config_(const char* workflow) const {
+    if (bootstrap_config_.resampling_strategy != rgcca::ResamplingStrategy::Stationary)
+        return;
+
+    if (
+        !(bootstrap_config_.stationary_block_length > 0.0) ||
+        !std::isfinite(bootstrap_config_.stationary_block_length)
+    ) {
+        throw std::invalid_argument(
+            std::string("RGCCA: ") + workflow +
+            " stationary_block_length must be finite and positive"
+        );
+    }
+
+    long long total = 0;
+    for (const int length : bootstrap_config_.resampling_segment_lengths) {
+        if (length <= 0) {
+            throw std::invalid_argument(
+                std::string("RGCCA: ") + workflow +
+                " resampling_segment_lengths must be positive"
+            );
+        }
+        total += length;
+    }
+    if (!bootstrap_config_.resampling_segment_lengths.empty() && total != n_) {
+        throw std::invalid_argument(
+            std::string("RGCCA: ") + workflow +
+            " resampling_segment_lengths must sum to the number of observations"
+        );
+    }
+}
+
 // validates adaptive bootstrap and model-selection configuration
 template <typename SamplingStrategy>
 void RGCCA<SamplingStrategy>::validate_bootstrap_config_() const {
@@ -125,13 +159,7 @@ void RGCCA<SamplingStrategy>::validate_bootstrap_config_() const {
     }
     if (bootstrap_config_.patience <= 0)
         throw std::invalid_argument("RGCCA: bootstrap patience must be positive");
-    if (
-        bootstrap_config_.resampling_strategy == rgcca::ResamplingStrategy::Stationary &&
-        (!(bootstrap_config_.stationary_block_length > 0.0) ||
-         !std::isfinite(bootstrap_config_.stationary_block_length))
-    ) {
-        throw std::invalid_argument("RGCCA: bootstrap stationary_block_length must be finite and positive");
-    }
+    validate_stationary_resampling_config_("bootstrap");
 }
 
 // validates the permutation bootstrap used for component significance
@@ -152,13 +180,7 @@ void RGCCA<SamplingStrategy>::validate_component_significance_config_() const {
             "RGCCA: component significance alpha must be finite and in (0, 1)"
         );
     }
-    if (
-        bootstrap_config_.resampling_strategy == rgcca::ResamplingStrategy::Stationary &&
-        (!(bootstrap_config_.stationary_block_length > 0.0) ||
-         !std::isfinite(bootstrap_config_.stationary_block_length))
-    ) {
-        throw std::invalid_argument("RGCCA: component significance stationary_block_length must be finite and positive");
-    }
+    validate_stationary_resampling_config_("component significance");
 }
 
 // validates the bootstrap used for block importance
@@ -177,13 +199,7 @@ void RGCCA<SamplingStrategy>::validate_block_importance_config_() const {
             "RGCCA: block importance alpha must be finite and in (0, 1)"
         );
     }
-    if (
-        bootstrap_config_.resampling_strategy == rgcca::ResamplingStrategy::Stationary &&
-        (!(bootstrap_config_.stationary_block_length > 0.0) ||
-         !std::isfinite(bootstrap_config_.stationary_block_length))
-    ) {
-        throw std::invalid_argument("RGCCA: block importance stationary_block_length must be finite and positive");
-    }
+    validate_stationary_resampling_config_("block importance");
 }
 
 // validates a block index against the model block list

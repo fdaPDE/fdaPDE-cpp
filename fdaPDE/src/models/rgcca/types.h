@@ -46,6 +46,65 @@ using BoolMatrix = Eigen::Matrix<bool, Eigen::Dynamic, Eigen::Dynamic>;
 using IndexVector = Eigen::Vector<int, Eigen::Dynamic>;
 using SparseMatrix = Eigen::SparseMatrix<double, Eigen::ColMajor, int>;
 
+namespace internals {
+
+// Stationary bootstrap for one contiguous series.
+inline IndexVector stationary_bootstrap_indices(
+    const int n,
+    const double mean_block_length,
+    std::mt19937_64& rng
+) {
+    if (n <= 0)
+        throw std::invalid_argument("n must be positive");
+    if (!(mean_block_length > 0.0) || !std::isfinite(mean_block_length))
+        throw std::invalid_argument("stationary block length must be positive");
+
+    const double p = std::clamp(1.0 / mean_block_length, 0.0, 1.0);
+    std::uniform_int_distribution<int> U_index(0, n - 1);
+    std::bernoulli_distribution start_new_block(p);
+
+    IndexVector idx(n);
+    int current = U_index(rng);
+    idx(0) = current;
+    for (int i = 1; i < n; ++i) {
+        current = start_new_block(rng) ? U_index(rng) : (current + 1) % n;
+        idx(i) = current;
+    }
+    return idx;
+}
+
+// Concatenated series are resampled independently within their original
+// segments, preserving the row count and output position of every segment.
+inline IndexVector stationary_bootstrap_indices(
+    const int n,
+    const double mean_block_length,
+    const std::vector<int>& segment_lengths,
+    std::mt19937_64& rng
+) {
+    if (segment_lengths.empty())
+        return stationary_bootstrap_indices(n, mean_block_length, rng);
+
+    long long total = 0;
+    for (const int length : segment_lengths) {
+        if (length <= 0)
+            throw std::invalid_argument("stationary resampling segment lengths must be positive");
+        total += length;
+    }
+    if (total != n)
+        throw std::invalid_argument("stationary resampling segment lengths must sum to n");
+
+    IndexVector idx(n);
+    int offset = 0;
+    for (const int length : segment_lengths) {
+        idx.segment(offset, length) =
+            (stationary_bootstrap_indices(length, mean_block_length, rng).array() + offset).matrix();
+        offset += length;
+    }
+    return idx;
+}
+
+} // namespace internals
+
 // Public RGCCA options shared by blocks, model fitting, and bootstrap
 enum class InitStrategy { None, SVD, Uniform, WarmStart };
 enum class DesignMode { Empty, Custom, FullyConnected };
@@ -206,6 +265,7 @@ struct BootstrapConfig {
 
     ResamplingStrategy resampling_strategy = ResamplingStrategy::Ordinary;
     double stationary_block_length = 10.0;
+    std::vector<int> resampling_segment_lengths;
 
     int component_significance_resamples = 100;
     double component_significance_alpha = 0.05;

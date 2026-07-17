@@ -1021,6 +1021,76 @@ TEST(rgcca, component_callback_can_release_bootstrap_results) {
     ASSERT_EQ(static_cast<int>(results.size()), n_comp_local);
 }
 
+TEST(rgcca, stationary_bootstrap_respects_concatenated_segment_boundaries) {
+    constexpr int n = 12;
+    constexpr double mean_block_length = 3.0;
+    constexpr unsigned seed = 98765;
+
+    std::mt19937_64 empty_rng(seed);
+    std::mt19937_64 one_segment_rng(seed);
+    const auto empty_segments = fdapde::rgcca::internals::stationary_bootstrap_indices(
+        n, mean_block_length, std::vector<int>{}, empty_rng
+    );
+    const auto one_segment = fdapde::rgcca::internals::stationary_bootstrap_indices(
+        n, mean_block_length, std::vector<int>{n}, one_segment_rng
+    );
+    EXPECT_TRUE((empty_segments.array() == one_segment.array()).all());
+
+    const std::vector<int> segments {3, 4, 5};
+    std::mt19937_64 rng_a(seed);
+    std::mt19937_64 rng_b(seed);
+    const auto idx_a = fdapde::rgcca::internals::stationary_bootstrap_indices(
+        n, mean_block_length, segments, rng_a
+    );
+    const auto idx_b = fdapde::rgcca::internals::stationary_bootstrap_indices(
+        n, mean_block_length, segments, rng_b
+    );
+    EXPECT_TRUE((idx_a.array() == idx_b.array()).all());
+
+    int offset = 0;
+    for (const int length : segments) {
+        for (int i = offset; i < offset + length; ++i) {
+            EXPECT_GE(idx_a(i), offset);
+            EXPECT_LT(idx_a(i), offset + length);
+        }
+        offset += length;
+    }
+
+    std::mt19937_64 invalid_rng(seed);
+    EXPECT_THROW(
+        fdapde::rgcca::internals::stationary_bootstrap_indices(
+            n, mean_block_length, std::vector<int>{3, 0, 9}, invalid_rng
+        ),
+        std::invalid_argument
+    );
+    EXPECT_THROW(
+        fdapde::rgcca::internals::stationary_bootstrap_indices(
+            n, mean_block_length, std::vector<int>{3, 4}, invalid_rng
+        ),
+        std::invalid_argument
+    );
+}
+
+TEST(rgcca, stationary_segment_lengths_must_match_observations) {
+    constexpr int n = 6;
+    RGCCA<IndependentSampling>::Options options;
+    options.component_significance = true;
+
+    RGCCA<IndependentSampling> rgcca(n, options, 1);
+    Eigen::MatrixXd X1 = Eigen::MatrixXd::Random(n, 2);
+    Eigen::MatrixXd X2 = Eigen::MatrixXd::Random(n, 2);
+    rgcca.add_multivariate_block("x1", std::move(X1));
+    rgcca.add_multivariate_block("x2", std::move(X2));
+
+    RGCCA<IndependentSampling>::BootstrapConfig bootstrap_config;
+    bootstrap_config.resampling_strategy = ResamplingStrategy::Stationary;
+    bootstrap_config.resampling_segment_lengths = {2, 3};
+    bootstrap_config.component_significance_resamples = 1;
+    rgcca.set_bootstrap_config(bootstrap_config);
+
+    EXPECT_THROW(rgcca.fit(), std::invalid_argument);
+}
+
 TEST(rgcca, F_GCCA_fem_cov_component_significance) {
     check_fem_cov_component_significance();
 }
