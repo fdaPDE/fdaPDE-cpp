@@ -133,7 +133,7 @@ void write_component_significance_reference(
         significance(h, 0) = results[h].rho_tot;
         significance(h, 1) = results[h].rho_tot_p_value;
         significance(h, 2) = static_cast<double>(results[h].rho_tot_bootstrap_count);
-        significance(h, 3) = results[h].component_significant ? 1.0 : 0.0;
+        significance(h, 3) = results[h].component_significant() ? 1.0 : 0.0;
 
         for (int j = 0; j < n_blocks; ++j)
             active_blocks(h, j) = results[h].active_blocks[j] ? 1.0 : 0.0;
@@ -156,8 +156,10 @@ void check_component_significance_reference(
         actual_significance(h, 0) = results[h].rho_tot;
         actual_significance(h, 1) = results[h].rho_tot_p_value;
         actual_significance(h, 2) = static_cast<double>(results[h].rho_tot_bootstrap_count);
-        actual_significance(h, 3) = results[h].component_significant ? 1.0 : 0.0;
+        actual_significance(h, 3) = results[h].component_significant() ? 1.0 : 0.0;
 
+        EXPECT_TRUE(results[h].significance_tested());
+        EXPECT_EQ(results[h].significance_status, SignificanceStatus::Significant);
         EXPECT_TRUE(std::isfinite(results[h].rho_tot_raw));
         EXPECT_EQ(results[h].rho_tot_null_valid_count, results[h].rho_tot_bootstrap_count);
         EXPECT_TRUE(std::isfinite(results[h].rho_tot_null_mean));
@@ -834,10 +836,12 @@ TEST(rgcca, inactive_design_stops_remaining_components_without_significance) {
     for (const auto& result : results) {
         EXPECT_EQ(result.status, ComponentStatus::RejectedInactiveDesign);
         EXPECT_FALSE(result.retained());
-        EXPECT_FALSE(result.component_significant);
+        EXPECT_EQ(result.significance_status, SignificanceStatus::NotTested);
+        EXPECT_FALSE(result.significance_tested());
+        EXPECT_FALSE(result.component_significant());
         EXPECT_DOUBLE_EQ(result.rho_tot, 0.0);
         EXPECT_DOUBLE_EQ(result.inner_ave, 0.0);
-        EXPECT_DOUBLE_EQ(result.rho_tot_p_value, 1.0);
+        EXPECT_TRUE(std::isnan(result.rho_tot_p_value));
         for (bool active : result.active_blocks)
             EXPECT_FALSE(active);
     }
@@ -869,6 +873,10 @@ TEST(rgcca, component_diagnostics_track_correlation_and_deflated_variance) {
         const auto& result = results[h];
         EXPECT_EQ(result.status, ComponentStatus::Retained);
         EXPECT_TRUE(result.retained());
+        EXPECT_EQ(result.significance_status, SignificanceStatus::NotTested);
+        EXPECT_FALSE(result.significance_tested());
+        EXPECT_FALSE(result.component_significant());
+        EXPECT_TRUE(std::isnan(result.rho_tot_p_value));
         EXPECT_TRUE(std::isfinite(result.rho_tot));
         EXPECT_TRUE(std::isfinite(result.rho_tot_raw));
         EXPECT_TRUE(std::isfinite(result.inner_ave));
@@ -903,6 +911,38 @@ TEST(rgcca, component_diagnostics_track_correlation_and_deflated_variance) {
             results[0].block_variance_explained_cumulative[j]
         );
     }
+}
+
+TEST(rgcca, component_significance_records_nonsignificant_terminal_attempt) {
+    constexpr int n = 40;
+    const Eigen::VectorXd signal = centered_wave(n, 0.17);
+
+    RGCCA<IndependentSampling>::Options options;
+    options.mode = Mode::CovMax;
+    options.component_significance = true;
+
+    RGCCA<IndependentSampling> rgcca(n, options, 2);
+    rgcca.add_multivariate_block("X1", two_column_block(signal, Eigen::VectorXd::Zero(n)));
+    rgcca.add_multivariate_block("X2", two_column_block(signal, Eigen::VectorXd::Zero(n)));
+    rgcca.connect(0, 1);
+
+    RGCCA<IndependentSampling>::BootstrapConfig bootstrap_config;
+    bootstrap_config.max_threads = 1;
+    bootstrap_config.component_significance_resamples = 9;
+    bootstrap_config.component_significance_alpha = 0.01;
+    rgcca.set_bootstrap_config(bootstrap_config);
+
+    const auto results = rgcca.fit();
+
+    ASSERT_EQ(results.size(), 1);
+    EXPECT_EQ(rgcca.n_comp_attempted(), 1);
+    EXPECT_EQ(rgcca.n_comp_effective(), 0);
+    EXPECT_EQ(results[0].status, ComponentStatus::RejectedNotSignificant);
+    EXPECT_EQ(results[0].significance_status, SignificanceStatus::NotSignificant);
+    EXPECT_TRUE(results[0].significance_tested());
+    EXPECT_FALSE(results[0].component_significant());
+    EXPECT_EQ(results[0].rho_tot_bootstrap_count, 9);
+    EXPECT_TRUE(std::isfinite(results[0].rho_tot_p_value));
 }
 
 TEST(rgcca, block_importance_detects_current_component_blocks) {

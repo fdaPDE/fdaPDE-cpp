@@ -166,7 +166,7 @@ void RGCCA<SamplingStrategy>::log_component_significance_(
                      << "/" << significance.B << '\n';
     }
     fdapde::cout << "  - p-value = " << significance.p_value << '\n'
-                 << "  - significant = " << std::boolalpha << significance.significant << std::noboolalpha << "\n\n";
+                 << "  - status = " << rgcca::to_string(significance.status) << "\n\n";
 }
 
 // logs the block-importance test result

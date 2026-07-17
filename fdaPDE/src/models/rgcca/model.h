@@ -52,6 +52,7 @@ public:
     using Deflation = rgcca::Deflation;
     using WeightSignConstraint = rgcca::WeightSignConstraint;
     using ResamplingStrategy = rgcca::ResamplingStrategy;
+    using SignificanceStatus = rgcca::SignificanceStatus;
     using ComponentStatus = rgcca::ComponentStatus;
     using Scheme = rgcca::Scheme;
     using Options = rgcca::Options;
@@ -221,8 +222,11 @@ public:
             if (opt_.component_significance) {
                 const auto significance = bootstrap_test_component_significance_(C_active, observed_correlation);
                 annotate_component_significance_(component_result, significance);
-                if (!significance.significant) {
-                    component_result.status = ComponentStatus::RejectedNotSignificant;
+                if (significance.status != SignificanceStatus::Significant) {
+                    component_result.status =
+                        significance.status == SignificanceStatus::NotSignificant ?
+                            ComponentStatus::RejectedNotSignificant :
+                            ComponentStatus::RejectedSignificanceUnavailable;
                     annotate_explained_variance_(
                         component_result, initial_block_variance, block_variance_before, block_variance_before
                     );
@@ -502,7 +506,7 @@ private:
         double null_max = std::numeric_limits<double>::quiet_NaN();
         int B = 0;
         int null_valid_count = 0;
-        bool significant = true;
+        SignificanceStatus status = SignificanceStatus::NotTested;
     };
     struct BlockImportanceResult {
         std::vector<double> rho;
@@ -876,11 +880,10 @@ private:
         out.rho_tot = observed.normalized;
         out.rho_tot_raw = observed.raw;
 
-        // inactive or degenerate components are declared non-significant
+        // A degenerate observed statistic cannot support a significance claim.
         if (count_active_connections_(C_active) == 0 || !std::isfinite(out.rho_tot)) {
             out.B = 0;
-            out.p_value = 1.0;
-            out.significant = false;
+            log_component_significance_(out);
             return out;
         }
 
@@ -937,8 +940,6 @@ private:
 
         out.null_valid_count = static_cast<int>(valid_null.size());
         if (valid_null.empty()) {
-            out.p_value = 1.0;
-            out.significant = false;
             log_component_significance_(out);
             return out;
         }
@@ -948,7 +949,8 @@ private:
         out.null_q95 = internals::empirical_quantile(valid_null, 0.95);
         out.p_value = static_cast<double>(ge_count + 1) /
             static_cast<double>(out.null_valid_count + 1);
-        out.significant = out.p_value <= bootstrap_config_.component_significance_alpha;
+        out.status = out.p_value <= bootstrap_config_.component_significance_alpha ?
+            SignificanceStatus::Significant : SignificanceStatus::NotSignificant;
 
         log_component_significance_(out);
 

@@ -834,7 +834,7 @@ void RGCCA<SamplingStrategy>::annotate_component_significance_(
     result.rho_tot_null_max = significance.null_max;
     result.rho_tot_bootstrap_count = significance.B;
     result.rho_tot_null_valid_count = significance.null_valid_count;
-    result.component_significant = significance.significant;
+    result.significance_status = significance.status;
 }
 
 // builds the inactive-component significance marker
@@ -844,9 +844,7 @@ auto RGCCA<SamplingStrategy>::inactive_component_significance_() const
     typename RGCCA<SamplingStrategy>::ComponentSignificanceResult out;
     out.rho_tot = 0.0;
     out.rho_tot_raw = 0.0;
-    out.p_value = 1.0;
     out.B = 0;
-    out.significant = false;
     return out;
 }
 

@@ -158,8 +158,9 @@ inline std::ostream& operator<<(std::ostream& os, const Result& r) {
             os << "- mean cumulative block variance explained: " << cumulative_sum / explained_count << "\n";
         }
     }
-    if (std::isfinite(r.rho_tot_p_value)) {
-        os << "\nsignificance:\n";
+    os << "\nsignificance:\n";
+    os << "- status: " << to_string(r.significance_status) << "\n";
+    if (r.significance_tested()) {
         os << "- p-value: " << std::fixed << r.rho_tot_p_value
            << " (" << r.rho_tot_bootstrap_count << " resamples)\n";
         if (r.rho_tot_null_valid_count > 0) {
@@ -167,7 +168,9 @@ inline std::ostream& operator<<(std::ostream& os, const Result& r) {
                << r.rho_tot_null_q95 << " / " << r.rho_tot_null_max << "\n";
             os << "- valid null resamples: " << r.rho_tot_null_valid_count << "\n";
         }
-        os << "- signif.: " << (r.component_significant ? "yes" : "no") << "\n";
+    } else if (r.rho_tot_bootstrap_count > 0) {
+        os << "- valid null resamples: " << r.rho_tot_null_valid_count
+           << "/" << r.rho_tot_bootstrap_count << "\n";
     }
     if (r.block_importance_bootstrap_count > 0) {
         os << "\nblock importance:\n";

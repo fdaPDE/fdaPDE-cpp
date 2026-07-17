@@ -113,7 +113,14 @@ enum class Mode { CorMax, Regularized, CovMax };
 enum class Deflation { None, Scores };
 enum class WeightSignConstraint { None, NonNegative };
 enum class ResamplingStrategy { Ordinary, Stationary };
-enum class ComponentStatus { Pending, Retained, RejectedInactiveDesign, RejectedNotSignificant };
+enum class SignificanceStatus { NotTested, NotSignificant, Significant };
+enum class ComponentStatus {
+    Pending,
+    Retained,
+    RejectedInactiveDesign,
+    RejectedNotSignificant,
+    RejectedSignificanceUnavailable
+};
 
 inline const char* to_string(InitStrategy x) {
     switch (x) {
@@ -172,6 +179,16 @@ inline const char* to_string(ComponentStatus x) {
     case ComponentStatus::Retained:                   return "Retained";
     case ComponentStatus::RejectedInactiveDesign:     return "RejectedInactiveDesign";
     case ComponentStatus::RejectedNotSignificant:     return "RejectedNotSignificant";
+    case ComponentStatus::RejectedSignificanceUnavailable: return "RejectedSignificanceUnavailable";
+    }
+    return "Unknown";
+}
+
+inline const char* to_string(SignificanceStatus x) {
+    switch (x) {
+    case SignificanceStatus::NotTested:      return "NotTested";
+    case SignificanceStatus::NotSignificant: return "NotSignificant";
+    case SignificanceStatus::Significant:    return "Significant";
     }
     return "Unknown";
 }
@@ -303,7 +320,7 @@ struct Result {
     double rho_tot_null_max = std::numeric_limits<double>::quiet_NaN();
     int rho_tot_bootstrap_count = 0;
     int rho_tot_null_valid_count = 0;
-    bool component_significant = true;
+    SignificanceStatus significance_status = SignificanceStatus::NotTested;
     std::vector<double> block_variance_initial;
     std::vector<double> block_variance_before;
     std::vector<double> block_variance_after;
@@ -315,6 +332,12 @@ struct Result {
     int block_importance_bootstrap_count = 0;
 
     [[nodiscard]] bool retained() const { return status == ComponentStatus::Retained; }
+    [[nodiscard]] bool significance_tested() const {
+        return significance_status != SignificanceStatus::NotTested;
+    }
+    [[nodiscard]] bool component_significant() const {
+        return significance_status == SignificanceStatus::Significant;
+    }
 
     explicit Result(const int n_blocks_) : n_blocks(n_blocks_), C(n_blocks_, n_blocks_), covariance_matrix(n_blocks_, n_blocks_),
     tau_values(n_blocks_), lambda_components_values(n_blocks_), lambda_weights_values(n_blocks_), active_blocks(n_blocks_),

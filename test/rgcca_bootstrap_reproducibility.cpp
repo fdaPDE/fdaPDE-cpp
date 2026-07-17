@@ -135,7 +135,8 @@ int main(int argc, char** argv) {
     std::cout << result.rho_tot << ' '
               << result.rho_tot_p_value << ' '
               << result.rho_tot_bootstrap_count << ' '
-              << result.component_significant << '\n';
+              << to_string(result.significance_status) << ' '
+              << result.component_significant() << '\n';
     print_vector(result.block_importance);
     print_vector(result.block_importance_p_values);
     print_vector(result.block_importance_significant);
