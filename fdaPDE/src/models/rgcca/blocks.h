@@ -18,6 +18,8 @@
 #ifndef __FDAPDE_RGCCA_BLOCKS_H__
 #define __FDAPDE_RGCCA_BLOCKS_H__
 
+#include <cassert>
+
 #include "gcv.h"
 #include "linear_algebra.h"
 #include "sampling.h"
