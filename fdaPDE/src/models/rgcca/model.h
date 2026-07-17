@@ -65,10 +65,29 @@ public:
     // constructors
     template <typename S = SamplingStrategy>
     requires std::same_as<S, IndependentSampling>
-    explicit RGCCA(const int n, const Options& opt = Options(), const int n_comp = 1) : n_(n), opt_(opt), n_comp_(n_comp) {}
+    explicit RGCCA(
+        const int n,
+        const Options& opt = Options(),
+        const int n_comp = 1
+    ) :
+        opt_(opt),
+        n_(n),
+        n_comp_(n_comp)
+    {}
+
     template <typename S = SamplingStrategy>
     requires std::same_as<S, TimeDependentSampling>
-    explicit RGCCA(const int n, const Triangulation<1, 1>& T, const Options& opt = Options(), const int n_comp = 1) : n_(n), T_(T), opt_(opt), n_comp_(n_comp) {}
+    explicit RGCCA(
+        const int n,
+        const Triangulation<1, 1>& T,
+        const Options& opt = Options(),
+        const int n_comp = 1
+    ) :
+        opt_(opt),
+        n_(n),
+        T_(T),
+        n_comp_(n_comp)
+    {}
 
     // blocks management
     int add_block(BlockPtr b);
@@ -157,7 +176,15 @@ public:
         initialized_ = true;
     }
 
-    // fit
+    // Component lifecycle
+    //
+    // Every requested component starts as an attempt. Model selection chooses
+    // its design, the final full-data fit supplies its scientific estimate,
+    // and structural/significance gates decide whether it is retained.
+    // Rejected attempts remain in the returned diagnostics, but only retained
+    // components are deflated, receive weights_star, and advance
+    // n_comp_effective_. finalize_component_attempt_ is the single accounting
+    // and callback boundary for both outcomes.
     std::vector<Result> fit(ComponentCallback component_callback = {}) {
 
         // initialization
@@ -176,12 +203,12 @@ public:
         const auto initial_block_variance = block_variance_trace_(main_blocks_());
         auto current_block_variance = initial_block_variance;
 
-        // components loop
+        // component attempts
         n_comp_effective_ = 0;
         n_comp_attempted_ = 0;
 
-        for (int hh = 0; hh < n_comp(); ++hh) {
-            set_h_(hh);
+        for (int component_index = 0; component_index < n_comp(); ++component_index) {
+            set_h_(component_index);
 
             BoolMatrix C_active = C_;
 
@@ -214,7 +241,7 @@ public:
                     component_result, initial_block_variance, block_variance_before, block_variance_before
                 );
                 results.push_back(std::move(component_result));
-                finish_component_(results.back(), component_callback);
+                finalize_component_attempt_(results.back(), component_callback);
                 break;
             }
 
@@ -231,7 +258,7 @@ public:
                         component_result, initial_block_variance, block_variance_before, block_variance_before
                     );
                     results.push_back(std::move(component_result));
-                    finish_component_(results.back(), component_callback);
+                    finalize_component_attempt_(results.back(), component_callback);
                     break;
                 }
             }
@@ -257,7 +284,7 @@ public:
             );
 
             // component post-processing
-            finish_component_(results.back(), component_callback);
+            finalize_component_attempt_(results.back(), component_callback);
         }
 
         return results;
@@ -351,21 +378,21 @@ private:
             corr_neg_count.setZero(n_blocks, n_blocks);
         }
 
-        void reset() {
-            B_done = 0;
+        // Starts a lambda candidate with fresh accounting and adaptive state.
+        void reset_for_lambda() {
             B_total = 0;
             B_design = 0;
             B_stale = 0;
             B_cancelled = 0;
             B_final_capped = 0;
             design_epoch = 0;
-            last_check_B_done = 0;
-            last_block_deactivation_check_B_done = 0;
-            last_connection_deactivation_check_B_done = 0;
             stop = false;
-            reset_good();
+            reset_accepted_samples();
         }
-        void reset_good() {
+
+        // Clears design-dependent accepted samples while preserving cumulative
+        // physical/stale/capped diagnostics for the current lambda candidate.
+        void reset_accepted_samples() {
             B_done = 0;
             stable_checks = 0;
             crit_prev_check = std::numeric_limits<double>::infinity();
@@ -387,13 +414,14 @@ private:
         int check_every_block_deactivation;
         int check_every_connection_deactivation;
 
-        // state
-        int B_done = 0;
-        int B_total = 0;
-        int B_design = 0;
-        int B_stale = 0;
-        int B_cancelled = 0;
-        int B_final_capped = 0;
+        // sample accounting. B_done belongs to the current design; the other
+        // counters accumulate over all design epochs for this lambda.
+        int B_done = 0;          // accepted by the current design
+        int B_total = 0;         // physical worker results returned
+        int B_design = 0;        // accepted, then invalidated by design changes
+        int B_stale = 0;         // completed under an obsolete design
+        int B_cancelled = 0;     // interrupted after a design change or stop
+        int B_final_capped = 0;  // ordered final fits rejected at fit_max_iter
         int design_epoch = 0;
         int last_check_B_done = 0;
         int last_block_deactivation_check_B_done = 0;
@@ -408,7 +436,7 @@ private:
         double crit_prev_check = std::numeric_limits<double>::infinity();
         double crit = std::numeric_limits<double>::quiet_NaN();
 
-        // early stop
+        // lambda-grid search state (intentionally preserved by reset_for_lambda)
         double best_criterion = -std::numeric_limits<double>::infinity();
         int best_i = -1;
         int no_improve = 0;
@@ -779,7 +807,7 @@ private:
             auto start = std::chrono::high_resolution_clock::now();
 
             // streaming bootstrap
-            bootstrap_state.reset();
+            bootstrap_state.reset_for_lambda();
             BootstrapTimingSummary bootstrap_timing_summary;
             run_bootstrap_stream_(
                 lambda_i,
@@ -1104,7 +1132,10 @@ private:
     void compute_weights_star_(const int h) {
         for (auto& b : blocks_) b->compute_weights_star(h);
     }
-    void finish_component_(const Result& result, const ComponentCallback& component_callback) {
+    void finalize_component_attempt_(
+        const Result& result,
+        const ComponentCallback& component_callback
+    ) {
         ++n_comp_attempted_;
         if (result.retained()) {
             ++n_comp_effective_;
@@ -1207,7 +1238,7 @@ private:
 
     // bootstrap state helpers
     bool same_design_(const BoolMatrix& lhs, const BoolMatrix& rhs) const;
-    void reset_good_bootstrap_(
+    void restart_bootstrap_for_design_(
         AdaptiveBootstrapState& state,
         std::vector<Vector>& w_min,
         const std::vector<Vector>& w_fit,

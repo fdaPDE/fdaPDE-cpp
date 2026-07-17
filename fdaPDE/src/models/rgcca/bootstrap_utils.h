@@ -426,7 +426,7 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
                 }
 
                 if (design_changed) {
-                    reset_good_bootstrap_(bootstrap_state, w_min, w_fit, C_active);
+                    restart_bootstrap_for_design_(bootstrap_state, w_min, w_fit, C_active);
                     bootstrap_state.B_stale += static_cast<int>(completed.size());
                     completed.clear();
                     next_candidate = next_commit;
@@ -579,14 +579,14 @@ bool RGCCA<SamplingStrategy>::same_design_(
 
 // discards accepted samples after a design change and keeps inactive blocks zeroed
 template <typename SamplingStrategy>
-void RGCCA<SamplingStrategy>::reset_good_bootstrap_(
+void RGCCA<SamplingStrategy>::restart_bootstrap_for_design_(
     typename RGCCA<SamplingStrategy>::AdaptiveBootstrapState& state,
     std::vector<rgcca::Vector>& w_min,
     const std::vector<rgcca::Vector>& w_fit,
     const rgcca::BoolMatrix& C_active
 ) const {
     state.B_design += state.B_done;
-    state.reset_good();
+    state.reset_accepted_samples();
     ++state.design_epoch;
 
     // restart the envelope because accepted samples came from the previous design
