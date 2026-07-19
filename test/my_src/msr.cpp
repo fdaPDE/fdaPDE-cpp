@@ -21,6 +21,8 @@
 #include <string>
 #include <vector>
 
+// #include <unsupported/Eigen/SparseExtra>   // TEMPORARY: solo per usare saveMarket
+
 using namespace fdapde;
 using namespace std::chrono;  // to measure computational times 
 
@@ -50,14 +52,14 @@ int main(){
 //    missing:      no
 int test_06() {
 
-    const unsigned int sim_start = 1; 
-    const unsigned int n_sim = 30; 
+    const unsigned int sim_start = 31; 
+    const unsigned int n_sim = 100; 
 
     // run SRPDE and/or MSRPDE ? 
-    const bool run_srpde = true;    // stprde
+    const bool run_srpde = false;    // stprde
     const bool run_msrpde = true;   // mixed-effects anisotropic
     const bool run_msr_iso = true;  // mixed-effects isotropic
-    const bool run_srpde_d = true;   // strpde con dummies
+    const bool run_srpde_d = false;   // strpde con dummies
 
     bool likelihood_dataloss_type; // false = fpirls data loss, true = likelihood
     bool sigma_edf_type;           // false = sigma senza edf nelle iterazioni, true = sigma con edf
@@ -508,25 +510,31 @@ int test_06() {
 //    missing:      no
 int test_06_scalability() {
 
-    const bool scale_n = true; 
-    std::vector<unsigned int> nn_vec; 
+    const bool scale_n = true;   // true: scale: n, false: scale_m
+    std::vector<unsigned int> nn_vec, mm_vec; 
     if(scale_n){
         nn_vec = {100, 200, 400, 800, 1600, 3200}; 
+    } else{
+        mm_vec = {11, 21, 41, 81, 161, 321};
     }
 
+    const bool save_results = false; 
+
     const unsigned int sim_start = 1; 
-    const unsigned int n_sim = 50; 
+    const unsigned int n_sim = 1;      // up to 50 
 
     const bool run_msrpde = true;   // mixed-effects anisotropic
-    const bool run_msr_iso = true;  // mixed-effects isotropic
+    const bool run_msr_iso = false;  // mixed-effects isotropic
 
     bool likelihood_dataloss_type; // false = fpirls data loss, true = likelihood
     bool sigma_edf_type;           // false = sigma senza edf nelle iterazioni, true = sigma con edf
 
     const std::string trial_number = "14"; 
-    std::string R_path = "/u/desanctis/R_scripts/Test_6_scalability/trial_" + trial_number + "/";
+    std::string R_path = "../../../OneDrive - Politecnico di Milano/Corsi/PhD/Codice/models/MSRPDE/Tests/space-time/Test_6_scalability/trial_" + trial_number + "/";
     if(scale_n){
         R_path += "scale_n/";
+    } else{
+        R_path += "scale_m/";
     }
 
 
@@ -665,50 +673,206 @@ int test_06_scalability() {
                     m.set_compute_sigma_with_edf(sigma_edf_type);
 
                     // fit at optimal smoothing level
-                    m.fit(lambda_D, lambda_T);
+                    m.fit(lambda_D, lambda_T);   
+
+                    // // compute number of non-zero elements in m.PsiNA().transpose() * m.PsiNA()
+                    // Eigen::SparseMatrix<double> PsiNA_t_PsiNA = m.PsiNA().transpose() * m.PsiNA();
+                    // // check dimensions
+                    // std::cout << "Dimensions of PsiNA: " << m.PsiNA().rows() << " x " << m.PsiNA().cols() << std::endl;
+                    // std::cout << "Dimensions of PsiNA^T * PsiNA: " << PsiNA_t_PsiNA.rows() << " x " << PsiNA_t_PsiNA.cols() << std::endl;
+
+                    // std::cout << "Number of non-zero elements in PsiNA^T * PsiNA: " << PsiNA_t_PsiNA.nonZeros() << std::endl;    
+                    // // save nnz in .CSV
+                    // std::ofstream file_PsiNA_t_PsiNA_nonzeros(solution_path + "/PsiNA_t_PsiNA_nonzeros.csv");
+                    // if(file_PsiNA_t_PsiNA_nonzeros.is_open()){
+                    //     file_PsiNA_t_PsiNA_nonzeros << PsiNA_t_PsiNA.nonZeros() << "\n";
+                    //     file_PsiNA_t_PsiNA_nonzeros.close();
+                    // }   
+
+                    // // save the matrix PsiNA^T * PsiNA in market format using saveMarket  (-> per funzionare, riatttivare #include <unsupported/Eigen/SparseExtra> e #include <Eigen/Sparse>)
+                    // Eigen::saveMarket(PsiNA_t_PsiNA, solution_path + "/PsiNA_t_PsiNA.mtx");
+
 
                     // Stop measuring time
                     auto stop_time_run = high_resolution_clock::now();
                     auto duration_run = duration_cast<milliseconds>(stop_time_run - start_time_run).count();
                     std::cout << "Execution time RUN: " << duration_run << " ms" << std::endl;
 
-                    // Save results 
-                    write_csv(solution_path + "f.csv", m.f());    
-                    write_csv(solution_path + "beta.csv", m.beta());
+                    if(save_results){
+                        // Save results 
+                        write_csv(solution_path + "f.csv", m.f());    
+                        write_csv(solution_path + "beta.csv", m.beta());
 
-                    // Eigen::Matrix<double, Dynamic, Dynamic> computed_b;
-                    // computed_b.resize(m.b_hat().size(), m.n_random_covs());  
-                    // for(int i=0; i<m.b_hat().size(); ++i){
-                    //     computed_b.row(i) = m.b_hat()[i].transpose();   // NOTE: .transpose() is important to have the correct shape and save all the values in the case with >1 RE; 
-                    // }
-                    // write_csv(solution_path + "b_random.csv", computed_b);
-            
-                    double computedsigmahat = std::sqrt(m.sigma_sq_hat());
-                    std::ofstream filesigmahat(solution_path + "/sigma_hat.csv");
-                    if(filesigmahat.is_open()){
-                        filesigmahat << std::setprecision(16) << computedsigmahat << "\n"; 
-                        filesigmahat.close();
-                    }
-            
-                    write_csv(solution_path + "Sigma_b_hat.csv", m.Sigma_b());
+                        // Eigen::Matrix<double, Dynamic, Dynamic> computed_b;
+                        // computed_b.resize(m.b_hat().size(), m.n_random_covs());  
+                        // for(int i=0; i<m.b_hat().size(); ++i){
+                        //     computed_b.row(i) = m.b_hat()[i].transpose();   // NOTE: .transpose() is important to have the correct shape and save all the values in the case with >1 RE; 
+                        // }
+                        // write_csv(solution_path + "b_random.csv", computed_b);
+                
+                        double computedsigmahat = std::sqrt(m.sigma_sq_hat());
+                        std::ofstream filesigmahat(solution_path + "/sigma_hat.csv");
+                        if(filesigmahat.is_open()){
+                            filesigmahat << std::setprecision(16) << computedsigmahat << "\n"; 
+                            filesigmahat.close();
+                        }
+                
+                        write_csv(solution_path + "Sigma_b_hat.csv", m.Sigma_b());
 
-            
-                    std::ofstream file_time_run(solution_path + "/time_run.csv"); 
-                    if(file_time_run.is_open()){
-                        file_time_run << duration_run << "\n"; 
-                        file_time_run.close();
-                    }
+                
+                        std::ofstream file_time_run(solution_path + "/time_run.csv"); 
+                        if(file_time_run.is_open()){
+                            file_time_run << duration_run << "\n"; 
+                            file_time_run.close();
+                        }
 
-                    std::ofstream filen_iter(solution_path + "/n_iter.csv");
-                    if(filen_iter.is_open()){
-                        filen_iter << m.n_iter() << "\n"; 
-                        filen_iter.close();
+                        std::ofstream filen_iter(solution_path + "/n_iter.csv");
+                        if(filen_iter.is_open()){
+                            filen_iter << m.n_iter() << "\n"; 
+                            filen_iter.close();
+                        }
+
                     }
 
 
                 }
     
             }
+
+        } else{
+
+            for(unsigned int mm : mm_vec){
+
+                std::string path_mm = R_path + "m_" + std::to_string(mm) + "/";
+                std::cout << "======== Runnig m = " << mm << " =========" << std::endl;
+
+                for(auto sim = sim_start; sim <= n_sim; ++sim){
+
+                    std::cout << "Simulation RUN MSRPDE #" << std::to_string(sim) << std::endl; 
+            
+                    // data 
+                    GeoFrame data_msrpde(D, T);
+                    auto& l_msrpde = data_msrpde.insert_scalar_layer<POINT, POINT>("layer", std::pair{R_path + "space_locs.csv", path_mm + "time_locs.csv"});
+                    // NOTA: nel caso scale_n = true, le space_locs.csv sono in /n_***, mentre le time_locs.csv sono sempre quelle in R_path
+                    
+                    l_msrpde.load_csv<double>(path_mm + "X.csv");
+                    l_msrpde.load_csv<double>(path_mm + "ids_groups.csv");
+
+                    // load data from .csv files
+                    l_msrpde.load_csv<double>(path_mm + "simulations/sim_" + std::to_string(sim) + "/y_cpp.csv");
+                            
+                    std::string solutions_path_gcv = path_mm + "simulations/sim_" + std::to_string(sim) + "/fit_newlib/"; 
+                    std::string solution_path = path_mm + "simulations/sim_" + std::to_string(sim) + "/fit_newlib/"; 
+            
+                    // physics 
+                    FeSpace Vh(D, P1<1>);   // functional space definition
+                    Eigen::Matrix<double, 2, 2> K = read_csv<double>(path_mm + "simulations/sim_" + std::to_string(sim) + "/K.csv").as_matrix(); 
+                    std::cout << "K = " << K << std::endl;
+                    
+                    TrialFunction f(Vh);
+                    TestFunction v(Vh);
+                    auto a_D = integral(D)(dot(K * grad(f), grad(v)));
+                    // homogeneous forcing linear form
+                    ZeroField<2> u_D;
+                    auto F_D = integral(D)(u_D * v);
+
+                    // read lambdas
+                    double lambda_D;  
+                    double lambda_T;  
+            
+                    std::ifstream fileLambdaS_gcv(solution_path + "/lambda_s_opt.csv");
+                    if(fileLambdaS_gcv.is_open()){
+                        fileLambdaS_gcv >> lambda_D; 
+                        fileLambdaS_gcv.close();
+                    }
+                    std::ifstream fileLambdaT(solution_path + "/lambda_t_opt.csv");
+                    if(fileLambdaT.is_open()){
+                        fileLambdaT >> lambda_T; 
+                        fileLambdaT.close();
+                    }
+
+                    // std::cout << "Optimal lambda_D: " << std::setprecision(16) << lambda_D << std::endl;
+                    // std::cout << "Optimal lambda_T: " << std::setprecision(16) << lambda_T << std::endl;
+
+                    // Start measuring time
+                    auto start_time_run = high_resolution_clock::now();
+            
+                    // modeling
+                    MSRPDE m("y ~ x1 + x2 + 1|g + f", data_msrpde, fe_ls_separable_mono(std::pair {a_D, F_D}, std::pair {a_T, F_T}));  
+
+                    m.set_fpirls_max_iter(max_fpirls_iter);
+                    m.set_likelihood_dataloss_type(likelihood_dataloss_type);
+                    m.set_compute_sigma_with_edf(sigma_edf_type);
+
+                    // fit at optimal smoothing level
+                    m.fit(lambda_D, lambda_T);
+
+                    // // compute number of non-zero elements in m.PsiNA().transpose() * m.PsiNA()
+                    // Eigen::SparseMatrix<double> PsiNA_t_PsiNA = m.PsiNA().transpose() * m.PsiNA();
+                    // // check dimensions
+                    // std::cout << "Dimensions of PsiNA: " << m.PsiNA().rows() << " x " << m.PsiNA().cols() << std::endl;
+                    // std::cout << "Dimensions of PsiNA^T * PsiNA: " << PsiNA_t_PsiNA.rows() << " x " << PsiNA_t_PsiNA.cols() << std::endl;
+
+                    // std::cout << "Number of non-zero elements in PsiNA^T * PsiNA: " << PsiNA_t_PsiNA.nonZeros() << std::endl;    
+                    // // save nnz in .CSV
+                    // std::ofstream file_PsiNA_t_PsiNA_nonzeros(solution_path + "/PsiNA_t_PsiNA_nonzeros.csv");
+                    // if(file_PsiNA_t_PsiNA_nonzeros.is_open()){
+                    //     file_PsiNA_t_PsiNA_nonzeros << PsiNA_t_PsiNA.nonZeros() << "\n";
+                    //     file_PsiNA_t_PsiNA_nonzeros.close();
+                    // }  
+                     
+                    // // save the matrix PsiNA^T * PsiNA in market format using saveMarket  (-> per funzionare, riatttivare #include <unsupported/Eigen/SparseExtra> e #include <Eigen/Sparse>)
+                    // Eigen::saveMarket(PsiNA_t_PsiNA, solution_path + "/PsiNA_t_PsiNA.mtx");
+
+
+                    // Stop measuring time
+                    auto stop_time_run = high_resolution_clock::now();
+                    auto duration_run = duration_cast<milliseconds>(stop_time_run - start_time_run).count();
+                    std::cout << "Execution time RUN: " << duration_run << " ms" << std::endl;
+
+                    if(save_results){
+                        // Save results 
+                        write_csv(solution_path + "f.csv", m.f());    
+                        write_csv(solution_path + "beta.csv", m.beta());
+
+                        // Eigen::Matrix<double, Dynamic, Dynamic> computed_b;
+                        // computed_b.resize(m.b_hat().size(), m.n_random_covs());  
+                        // for(int i=0; i<m.b_hat().size(); ++i){
+                        //     computed_b.row(i) = m.b_hat()[i].transpose();   // NOTE: .transpose() is important to have the correct shape and save all the values in the case with >1 RE; 
+                        // }
+                        // write_csv(solution_path + "b_random.csv", computed_b);
+                
+                        double computedsigmahat = std::sqrt(m.sigma_sq_hat());
+                        std::ofstream filesigmahat(solution_path + "/sigma_hat.csv");
+                        if(filesigmahat.is_open()){
+                            filesigmahat << std::setprecision(16) << computedsigmahat << "\n"; 
+                            filesigmahat.close();
+                        }
+                
+                        write_csv(solution_path + "Sigma_b_hat.csv", m.Sigma_b());
+
+                
+                        std::ofstream file_time_run(solution_path + "/time_run.csv"); 
+                        if(file_time_run.is_open()){
+                            file_time_run << duration_run << "\n"; 
+                            file_time_run.close();
+                        }
+
+                        std::ofstream filen_iter(solution_path + "/n_iter.csv");
+                        if(filen_iter.is_open()){
+                            filen_iter << m.n_iter() << "\n"; 
+                            filen_iter.close();
+                        }
+
+
+                    }
+
+
+                }
+    
+            }
+
+
 
         }
 
@@ -795,38 +959,41 @@ int test_06_scalability() {
                     auto duration_run = duration_cast<milliseconds>(stop_time_run - start_time_run).count();
                     std::cout << "Execution time RUN: " << duration_run << " ms" << std::endl;
 
-                    // Save results 
-                    write_csv(solution_path + "f.csv", m.f());
-                    write_csv(solution_path + "beta.csv", m.beta());
+                    if(save_results){
+                        // Save results 
+                        write_csv(solution_path + "f.csv", m.f());
+                        write_csv(solution_path + "beta.csv", m.beta());
 
-                    // Eigen::Matrix<double, Dynamic, Dynamic> computed_b;
-                    // computed_b.resize(m.b_hat().size(), m.n_random_covs());  
-                    // for(int i=0; i<m.b_hat().size(); ++i){
-                    //     computed_b.row(i) = m.b_hat()[i].transpose();   // NOTE: .transpose() is important to have the correct shape and save all the values in the case with >1 RE; 
-                    // }
-                    // write_csv(solution_path + "b_random.csv", computed_b);
-            
+                        // Eigen::Matrix<double, Dynamic, Dynamic> computed_b;
+                        // computed_b.resize(m.b_hat().size(), m.n_random_covs());  
+                        // for(int i=0; i<m.b_hat().size(); ++i){
+                        //     computed_b.row(i) = m.b_hat()[i].transpose();   // NOTE: .transpose() is important to have the correct shape and save all the values in the case with >1 RE; 
+                        // }
+                        // write_csv(solution_path + "b_random.csv", computed_b);
+                
 
-                    double computedsigmahat = std::sqrt(m.sigma_sq_hat());
-                    std::ofstream filesigmahat(solution_path + "/sigma_hat.csv");
-                    if(filesigmahat.is_open()){
-                        filesigmahat << std::setprecision(16) << computedsigmahat << "\n"; 
-                        filesigmahat.close();
-                    }
-            
-                    write_csv(solution_path + "Sigma_b_hat.csv", m.Sigma_b());
+                        double computedsigmahat = std::sqrt(m.sigma_sq_hat());
+                        std::ofstream filesigmahat(solution_path + "/sigma_hat.csv");
+                        if(filesigmahat.is_open()){
+                            filesigmahat << std::setprecision(16) << computedsigmahat << "\n"; 
+                            filesigmahat.close();
+                        }
+                
+                        write_csv(solution_path + "Sigma_b_hat.csv", m.Sigma_b());
 
-            
-                    std::ofstream file_time_run(solution_path + "/time_run.csv"); 
-                    if(file_time_run.is_open()){
-                        file_time_run << duration_run << "\n"; 
-                        file_time_run.close();
-                    }
+                
+                        std::ofstream file_time_run(solution_path + "/time_run.csv"); 
+                        if(file_time_run.is_open()){
+                            file_time_run << duration_run << "\n"; 
+                            file_time_run.close();
+                        }
 
-                    std::ofstream filen_iter(solution_path + "/n_iter.csv");
-                    if(filen_iter.is_open()){
-                        filen_iter << m.n_iter() << "\n"; 
-                        filen_iter.close();
+                        std::ofstream filen_iter(solution_path + "/n_iter.csv");
+                        if(filen_iter.is_open()){
+                            filen_iter << m.n_iter() << "\n"; 
+                            filen_iter.close();
+                        }
+
                     }
 
 

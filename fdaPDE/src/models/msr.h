@@ -153,9 +153,9 @@ template <typename VariationalSolver> class MSRPDE {
         double Jold = std::numeric_limits<double>::max(), Jnew = 0;
         n_iter_ = 0;
 
-        // debug: compute Delta_debug_ at each iteration (inital guess here)
-        Delta_debug_.conservativeResize(n_random_covs_, 1);  
-        Delta_debug_.col(0) = Delta_;
+        // // debug: compute Delta_debug_ at each iteration (inital guess here)
+        // Delta_debug_.conservativeResize(n_random_covs_, 1);  
+        // Delta_debug_.col(0) = Delta_;
 
 
         std::cout << "Start FPIRLS with max_iter_=" << max_iter_ << " and tolerance=" << tol_ << std::endl;
@@ -238,10 +238,10 @@ template <typename VariationalSolver> class MSRPDE {
             Jold = Jnew;
             Jnew = data_loss + solver_.ftPf(lambda);
 
-            // debug: compute Delta_debug_ at each iteration
-            std::cout << "Debug: storing Delta matrix at iteration " << n_iter_ << "..." << std::endl;
-            Delta_debug_.conservativeResize(n_random_covs_, n_iter_+2); // n_iter+1 + 1 di initial guess 
-            Delta_debug_.col(n_iter_+1) = Delta_;
+            // // debug: compute Delta_debug_ at each iteration
+            // std::cout << "Debug: storing Delta matrix at iteration " << n_iter_ << "..." << std::endl;
+            // Delta_debug_.conservativeResize(n_random_covs_, n_iter_+2); // n_iter+1 + 1 di initial guess 
+            // Delta_debug_.col(n_iter_+1) = Delta_;
  
 
             // Update iteration counter
@@ -309,7 +309,7 @@ template <typename VariationalSolver> class MSRPDE {
     double Jold_debug() const {return Jold_debug_;}
     double Jnew_debug() const {return Jnew_debug_;}
     const matrix_t& Delta_debug() const {return Delta_debug_;}   // p x n_iter_: containts the values of Delta at each iteration
-
+    const sparse_matrix_t& PsiNA() const { return solver_.PsiNA(); } 
 
     // modifiers
     void set_fpirls_max_iter(int max_iter) { 

@@ -24,18 +24,18 @@
 using namespace fdapde;
 using namespace std::chrono;  // to measure computational times 
 
-// int test_06(); 
-int test_06_scalability(); 
+int test_06(); 
+// int test_06_scalability(); 
 // int test_07();
 // int test_08();  
 
 int main(){
-    // test_06();
-    test_06_scalability();
+    test_06();
+    // test_06_scalability();
     // test_07();
     // test_08();
     return 0; 
-}
+}   
 
 
 // test 6
@@ -49,14 +49,14 @@ int main(){
 //    missing:      no
 int test_06() {
 
-    const unsigned int sim_start = 1; 
-    const unsigned int n_sim = 30; 
+    const unsigned int sim_start = 31; 
+    const unsigned int n_sim = 100; 
 
     // run SRPDE and/or MSRPDE ? 
-    const bool run_srpde = true;     // stprde
+    const bool run_srpde = false;     // stprde
     const bool run_msrpde = true;     // mixed-effects anisotropic
     const bool run_msr_iso = true;   // mixed-effects isotropic
-    const bool run_srpde_d = true;   // strpde con dummies
+    const bool run_srpde_d = false;   // strpde con dummies
 
     bool likelihood_dataloss_type; // false = fpirls data loss, true = likelihood
     bool sigma_edf_type;           // false = sigma senza edf nelle iterazioni, true = sigma con edf
