@@ -27,11 +27,11 @@ using vector_t = Eigen::Matrix<double, Eigen::Dynamic, 1>;
 using sparse_matrix_t = Eigen::SparseMatrix<double>;
 
 
-int test_20(); 
+int test_1(); 
 
 
 int main(){
-    test_20();
+    test_1();
     return 0; 
 }
 
@@ -45,18 +45,21 @@ int main(){
 //    order FE:     1
 //    GCV optimization: grid stochastic 
 
-int test_20() {
+int test_1() {
+
+    const bool verbose = false; 
 
     const unsigned int sim_start = 1; 
     const unsigned int n_sim = 50; 
 
     const std::string R_path = "../../OneDrive - Politecnico di Milano/Corsi/PhD/Codice/models/COSP/space-only/Test_1/";
 
-    const bool naive_fit = true;    // caso sigma_p = sigma_A (=> W=I)
+    
     const bool hetero_fit = true;
+    const bool naive_fit = false;    // caso sigma_p = sigma_A (=> W=I)
     // NOTA: il naive fit corrisponde all'inizializzazione del caso etero
-    const bool only_point_fit = true; 
-    const bool only_area_fit = true; 
+    const bool only_point_fit = false; 
+    const bool only_area_fit = false; 
     
     // geometry
     std::string mesh_path = "../my_data/mesh/unit_square_21/";
@@ -177,6 +180,8 @@ int test_20() {
         // run hetero
         if(hetero_fit){
 
+            std::cout << "Running hetero fit..." << std::endl;
+
             // read optimal lambda 
             double best_lambda; 
             std::ifstream fileLambda(solution_path + "lambda_opt.csv");
@@ -186,7 +191,7 @@ int test_20() {
             }
 
             auto results_hetero = run_hetero_srpde(n_points, n_areal, n_dofs, D_matrix, Psi, R1, R0, y, u, best_lambda, 
-                random_seed_p, random_seed_A, random_seed);
+                random_seed_p, random_seed_A, random_seed, verbose);
 
             // save results at convergence 
             write_csv(solution_path + "f.csv", results_hetero.f);
@@ -222,6 +227,8 @@ int test_20() {
         // run naive
         if(naive_fit){
 
+            std::cout << "Running naive fit..." << std::endl;
+
             // read optimal lambda 
             double best_lambda; 
             std::ifstream fileLambda(solution_path_naive + "lambda_opt.csv");
@@ -231,7 +238,7 @@ int test_20() {
             }
 
 
-            auto results_naive = run_naive_srpde(n_points, n_areal, n_dofs, D_matrix, Psi, R1, R0, y, u, best_lambda, random_seed);
+            auto results_naive = run_naive_srpde(n_points, n_areal, n_dofs, D_matrix, Psi, R1, R0, y, u, best_lambda, random_seed, verbose);
 
             // save results 
             write_csv(solution_path_naive + "f.csv", results_naive.f);
@@ -249,10 +256,10 @@ int test_20() {
 
         // run GCV only-point
         if(only_point_fit){
+
             std::cout << "Running only-point fit..." << std::endl;
 
             // data
-            std::cout << "Define the only-point data structure..." << std::endl;
             GeoFrame geo_data_only_point(D);
             // pointwise layer
             auto& l_only_point = geo_data_only_point.insert_scalar_layer<POINT>("l1", R_path + "locs.csv");
@@ -269,11 +276,15 @@ int test_20() {
                 fileLambda.close();
             }
     
-            std::cout << "Defining model only-point" << std::endl;
             SRPDE model_only_point("y ~ f", geo_data_only_point, fe_ls_elliptic(a, F));
             model_only_point.fit(best_lambda);
 
             write_csv(solution_path_only_point + "f.csv", model_only_point.f());
+
+            // compute fn (with Psi matrix)
+            sparse_matrix_t Psi_only_point = internals::point_basis_eval(Vh, l_only_point.geometry<0>());
+            vector_t fn_only_point = Psi_only_point * model_only_point.f();
+            write_csv(solution_path_only_point + "fn.csv", fn_only_point);
         
             // compute sigma_sq and save 
             vector_t y_point = l_only_point.col<double>(0).as_matrix();
@@ -289,10 +300,10 @@ int test_20() {
 
         // run GCV only-area
         if(only_area_fit){
+
             std::cout << "Running only-area fit..." << std::endl;
 
             // data
-            std::cout << "Define the only-area data structure..." << std::endl;
             GeoFrame geo_data_only_area(D);
             // areal layer
             auto& l_only_area = geo_data_only_area.insert_scalar_layer<POLYGON>("l2", R_path + "incidence_mat.csv");
@@ -306,11 +317,15 @@ int test_20() {
                 fileLambda.close();
             }
 
-            std::cout << "Defining model only-area" << std::endl;
             SRPDE model_only_area("y ~ f", geo_data_only_area, fe_ls_elliptic(a, F));
             model_only_area.fit(best_lambda);
 
             write_csv(solution_path_only_area + "f.csv", model_only_area.f());
+
+            // compute fn (with Psi matrix)
+            auto [Psi_only_area, D_areal] = internals::areal_basis_eval(Vh, l_only_area.geometry<0>());
+            vector_t fn_only_area = Psi_only_area * model_only_area.f();
+            write_csv(solution_path_only_area + "fn.csv", fn_only_area);
         
             // compute sigma_sq and save 
             vector_t y_area = l_only_area.col<double>(0).as_matrix();

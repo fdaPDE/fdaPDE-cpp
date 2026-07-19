@@ -88,7 +88,7 @@ HeteroSRPDEResults run_hetero_srpde(unsigned int n_points, unsigned int n_areal,
                          const sparse_matrix_t& R1, const sparse_matrix_t& R0, 
                          const vector_t& y, const vector_t& u, double lambda,
                          unsigned int random_seed_p, unsigned int random_seed_A, unsigned int random_seed,
-                         const double tol_ = 1e-6, const unsigned int max_iter_ = 50) {
+                         const double tol_ = 1e-6, const unsigned int max_iter_ = 50, bool verbose = false) {
 
     // Weight matrix 
     // function to construcut the weight matrix: takes w_A as input and returns W = diag([1, ..., 1, w_A, ..., w_A])
@@ -123,7 +123,9 @@ HeteroSRPDEResults run_hetero_srpde(unsigned int n_points, unsigned int n_areal,
     std::vector<double> sigma_sq_A_history;
     while (n_iter_ < max_iter_ && std::abs(Jnew - Jold) > tol_) {
 
-        std::cout << "Iteration " << n_iter_ << std::endl;
+        if (verbose) {
+            std::cout << "Iteration " << n_iter_ << std::endl;
+        }
 
         // Step 1: solve weighted SRPDE
         SparseBlockMatrix<double, 2, 2> A(-Psi.transpose() * D_matrix * W * Psi, lambda * R1.transpose(), lambda * R1, lambda * R0);
@@ -138,16 +140,25 @@ HeteroSRPDEResults run_hetero_srpde(unsigned int n_points, unsigned int n_areal,
         g = x.bottomRows(n_dofs);
         fitted = Psi * f;
 
+        
         // Step 2: update weights: 
+        
         // - 2.1 compute edf_p and edf_A. Note: the function edf() computes the global effective degrees of freedom. 
         // We need to mask areal data for edf_p and point data for edf_A.
         double edf_p = edf(D_matrix, W, Psi, n_dofs, invA, EdfTarget::Points, n_points, 100, random_seed_p*n_iter_);
         double edf_A = edf(D_matrix, W, Psi, n_dofs, invA, EdfTarget::Areal, n_points, 100, random_seed_A*n_iter_);
-        // - 2.2 compute sigma_sq_p an sigma_sq_A
+        
+        // - 2.2 compute sigma_sq_p an sigma_sq_A  --> ATT: assumes that points are stacked ABOVE areas in the data vector y !!
         sigma_sq_p = (fitted.head(n_points) - y.head(n_points)).squaredNorm() / (n_points-edf_p);
-        sigma_sq_A = (fitted.tail(n_areal) - y.tail(n_areal)).squaredNorm() / (n_areal-edf_A);
+        // sigma_sq_A = (fitted.tail(n_areal) - y.tail(n_areal)).squaredNorm() / (n_areal-edf_A);
+        sigma_sq_A = ( (fitted.tail(n_areal) - y.tail(n_areal)).array().square() * D_matrix.diagonal().tail(n_areal).array() ).sum() / (n_areal - edf_A);
+        // --> ATT: metto *D in modo che sia una somma di residui pesati per le aree, cosicché questa sia effettivamente
+        // quella che nella teoria sto chiamando sigma_sq_a...
+
+
         // - 2.3 compute w_A = sigma_sq_p / sigma_sq_A
         w_A = sigma_sq_p / sigma_sq_A;
+        
         // - 2.4 construct new weight matrix W
         W = construct_W(w_A); 
 
@@ -162,8 +173,10 @@ HeteroSRPDEResults run_hetero_srpde(unsigned int n_points, unsigned int n_areal,
         Jnew = data_loss + ftPf(lambda, g, R0); 
         n_iter_++;
 
-        std::cout << "Absolute difference in objective: " << std::abs(Jnew - Jold) << std::endl;
-        std::cout << "--------------" << std::endl; 
+        if (verbose) {
+            std::cout << "Absolute difference in objective: " << std::abs(Jnew - Jold) << std::endl;
+            std::cout << "--------------" << std::endl;
+        }
 
         obj_history.push_back(Jnew);
         loss_p_history.push_back(data_loss_p);
@@ -190,44 +203,44 @@ HeteroSRPDEResults run_hetero_srpde(unsigned int n_points, unsigned int n_areal,
 NaiveSRPDEResults run_naive_srpde(unsigned int n_points, unsigned int n_areal, unsigned int n_dofs, 
                          const sparse_matrix_t& D_matrix, const sparse_matrix_t& Psi, 
                          const sparse_matrix_t& R1, const sparse_matrix_t& R0, 
-                         const vector_t& y, const vector_t& u, double lambda, unsigned int random_seed){
+                         const vector_t& y, const vector_t& u, double lambda, unsigned int random_seed, bool verbose = true) {
 
-        // set W = I 
-        std::vector<Eigen::Triplet<double>> triplets_W;
-        for (int i = 0; i < n_points; ++i) {
-            triplets_W.push_back(Eigen::Triplet<double>(i, i, 1.0));
-        }
-        for (int i = 0; i < n_areal; ++i) {
-            triplets_W.push_back(Eigen::Triplet<double>(i + n_points, i + n_points, 1.0));
-        }
-        sparse_matrix_t W(n_points + n_areal, n_points + n_areal);
-        W.setFromTriplets(triplets_W.begin(), triplets_W.end());
+    // set W = I 
+    std::vector<Eigen::Triplet<double>> triplets_W;
+    for (int i = 0; i < n_points; ++i) {
+        triplets_W.push_back(Eigen::Triplet<double>(i, i, 1.0));
+    }
+    for (int i = 0; i < n_areal; ++i) {
+        triplets_W.push_back(Eigen::Triplet<double>(i + n_points, i + n_points, 1.0));
+    }
+    sparse_matrix_t W(n_points + n_areal, n_points + n_areal);
+    W.setFromTriplets(triplets_W.begin(), triplets_W.end());
 
 
-        // store room for results 
-        double sigma_sq_p, sigma_sq_A;  
-        vector_t f, g, fitted;
+    // store room for results 
+    double sigma_sq_p, sigma_sq_A;  
+    vector_t f, g, fitted;
 
-        // solve weighted SRPDE
-        SparseBlockMatrix<double, 2, 2> A(-Psi.transpose() * D_matrix * W * Psi, lambda * R1.transpose(), lambda * R1, lambda * R0);
-        Eigen::SparseLU<sparse_matrix_t> invA(A);
+    // solve weighted SRPDE
+    SparseBlockMatrix<double, 2, 2> A(-Psi.transpose() * D_matrix * W * Psi, lambda * R1.transpose(), lambda * R1, lambda * R0);
+    Eigen::SparseLU<sparse_matrix_t> invA(A);
 
-        vector_t rhs = vector_t::Zero(2 * n_dofs, 1);
-        rhs.topRows(n_dofs) = -Psi.transpose() * D_matrix * W * y;
-        rhs.bottomRows(n_dofs) = lambda * u;
+    vector_t rhs = vector_t::Zero(2 * n_dofs, 1);
+    rhs.topRows(n_dofs) = -Psi.transpose() * D_matrix * W * y;
+    rhs.bottomRows(n_dofs) = lambda * u;
 
-        vector_t x = invA.solve(rhs); // expansion coefficient vector
-        f = x.topRows(n_dofs);
-        g = x.bottomRows(n_dofs);
-        fitted = Psi * f;
+    vector_t x = invA.solve(rhs); // expansion coefficient vector
+    f = x.topRows(n_dofs);
+    g = x.bottomRows(n_dofs);
+    fitted = Psi * f;
 
-        double edfs = edf(D_matrix, W, Psi, n_dofs, invA, EdfTarget::Global, n_points, 100, random_seed); 
+    double edfs = edf(D_matrix, W, Psi, n_dofs, invA, EdfTarget::Global, n_points, 100, random_seed); 
 
-        // estimated variance
-        double sigma_sq = (fitted - y).squaredNorm() / (n_points + n_areal - edfs);
+    // estimated variance
+    double sigma_sq = (fitted - y).squaredNorm() / (n_points + n_areal - edfs);
 
-        // return results
-        return {f, g, fitted, sigma_sq, edfs};
+    // return results
+    return {f, g, fitted, sigma_sq, edfs};
 
 }
 
@@ -239,7 +252,7 @@ double gcv_score_fun(bool run_hetero, unsigned int n_points, unsigned int n_area
                                 const sparse_matrix_t& D_matrix, const sparse_matrix_t& Psi, 
                                 const sparse_matrix_t& R1, const sparse_matrix_t& R0, 
                                 const vector_t& y, const vector_t& u, double lambda,
-                                unsigned int random_seed_p, unsigned int random_seed_A, unsigned int random_seed){ 
+                                unsigned int random_seed_p, unsigned int random_seed_A, unsigned int random_seed, bool verbose = true){ 
 
     // store room for results 
     double sigma_sq_p, sigma_sq_A;  
@@ -252,23 +265,18 @@ double gcv_score_fun(bool run_hetero, unsigned int n_points, unsigned int n_area
 
         auto hetero_results = run_hetero_srpde(n_points, n_areal, n_dofs, 
                                         D_matrix, Psi, R1, R0, y, u, lambda, 
-                                        random_seed_p, random_seed_A, random_seed); 
+                                        random_seed_p, random_seed_A, random_seed, verbose); 
 
-        std::cout << "hetero run IS ENDED" << std::endl;
 
         edfs = hetero_results.edfs;   
         fitted = hetero_results.fitted;
-
-        std::cout << "edfs=" << edfs << std::endl;
-        
-        std::cout << "extraction from stuct IS ENDED" << std::endl;
-
+   
 
     } else{
 
         auto naive_results = run_naive_srpde(n_points, n_areal, n_dofs, 
                                             D_matrix, Psi, R1, R0, y, u, lambda, 
-                                            random_seed); 
+                                            random_seed, verbose); 
 
         edfs = naive_results.edfs; 
         fitted = naive_results.fitted;

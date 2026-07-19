@@ -29,11 +29,11 @@ using sparse_matrix_t = Eigen::SparseMatrix<double>;
 using fdapde::GridSearch; 
 
 
-int test_20(); 
+int test_1(); 
 
 
 int main(){
-    test_20();
+    test_1();
     return 0; 
 }
 
@@ -49,18 +49,56 @@ int main(){
 //    GCV optimization: grid stochastic 
 
 
-int test_20() {
+int test_1() {
+
+    const bool verbose = false; 
 
     const unsigned int sim_start = 1; 
     const unsigned int n_sim = 50; 
 
     const std::string R_path = "../../OneDrive - Politecnico di Milano/Corsi/PhD/Codice/models/COSP/space-only/Test_1/";
 
-    const bool naive_fit = true;    // caso sigma_p = sigma_A (=> W=I)
     const bool hetero_fit = true;
+    const bool naive_fit = false;    // caso sigma_p = sigma_A (=> W=I)
     // NOTA: il naive fit corrisponde all'inizializzazione del caso etero
-    const bool only_point_fit = true; 
-    const bool only_area_fit = true; 
+    const bool only_point_fit = false; 
+    const bool only_area_fit = false; 
+
+
+    // define lambda sequences 
+    std::vector<double> lambdas_hetero;
+    std::vector<double> lambdas_naive;
+    std::vector<double> lambdas_only_point;
+    std::vector<double> lambdas_only_area;
+
+
+    // // sequenze lasche 
+    // for(double xs = -9.0; xs <= -2.0; xs += 0.50)   
+    //     lambdas_hetero.push_back(std::pow(10,xs));
+
+    // for(double xs = -9.0; xs <= -2.0; xs += 0.50)   
+    //     lambdas_naive.push_back(std::pow(10,xs));
+
+    // for(double xs = -9.0; xs <= -2.0; xs += 0.50)   
+    //     lambdas_only_point.push_back(std::pow(10,xs));
+
+    // for(double xs = -9.0; xs <= -2.0; xs += 0.50)   
+    //     lambdas_only_area.push_back(std::pow(10,xs));
+
+
+    // sequenze fini
+    for(double xs = -5.0; xs <= -2.0; xs += 0.10)   
+        lambdas_hetero.push_back(std::pow(10,xs));
+
+    for(double xs = -5.0; xs <= -2.0; xs += 0.10)   
+        lambdas_naive.push_back(std::pow(10,xs));
+
+    for(double xs = -7.0; xs <= -4.0; xs += 0.10)   
+        lambdas_only_point.push_back(std::pow(10,xs));
+
+    for(double xs = -7.0; xs <= -4.0; xs += 0.10)   
+        lambdas_only_area.push_back(std::pow(10,xs));
+
 
     // geometry
     std::string mesh_path = "../my_data/mesh/unit_square_21/";
@@ -173,28 +211,24 @@ int test_20() {
 
             std::cout << "Running hetero fit..." << std::endl;
 
-            // define the lambda grid to search over
-            std::vector<double> lambdas_std;
-            for(double xs = -9.0; xs <= -5.0; xs += 0.10) {
-                lambdas_std.push_back(std::pow(10, xs));
-            }
-            Eigen::Map<vector_t> lambdas(lambdas_std.data(), lambdas_std.size());
-
             // loop over lambdas: store GCV values 
-            vector_t gcv_values(lambdas.size());
-            for (int i = 0; i < lambdas.size(); ++i) {
+            vector_t gcv_values(lambdas_hetero.size());
+            for (int i = 0; i < lambdas_hetero.size(); ++i) {
 
-                gcv_values[i] = gcv_score_fun(true, n_points, n_areal, n_dofs, D_matrix, Psi, R1, R0, y, u, lambdas[i], 
-                                            random_seed_p, random_seed_A, random_seed);
+                gcv_values[i] = gcv_score_fun(true, n_points, n_areal, n_dofs, D_matrix, Psi, R1, R0, y, u, lambdas_hetero[i], 
+                                            random_seed_p, random_seed_A, random_seed, verbose);
 
-                std::cout << "Lambda: " << lambdas[i] << ", GCV score: " << gcv_values[i] << std::endl;
+                if(verbose){
+                    std::cout << "Lambda: " << lambdas_hetero[i] << ", GCV score: " << gcv_values[i] << std::endl;
+                }
+                    
             }
             Eigen::Index min_index;
             gcv_values.minCoeff(&min_index);
-            double lambda_optimum = lambdas[min_index];
+            double lambda_optimum = lambdas_hetero[min_index];
             
             // save
-            write_csv(solution_path + "lambdas_seq.csv", lambdas_std);
+            write_csv(solution_path + "lambdas_seq.csv", lambdas_hetero);
             std::ofstream file_lambda_opt(solution_path + "lambda_opt.csv");
             if(file_lambda_opt.is_open()){
                 file_lambda_opt << lambda_optimum << "\n"; 
@@ -205,30 +239,26 @@ int test_20() {
 
         // run GCV naive
         if(naive_fit){
+
             std::cout << "Running naive fit..." << std::endl;
 
-            // define the lambda grid to search over
-            std::vector<double> lambdas_std;
-            for(double xs = -9.0; xs <= -5.0; xs += 0.10) {
-                lambdas_std.push_back(std::pow(10, xs));
-            }
-            Eigen::Map<vector_t> lambdas(lambdas_std.data(), lambdas_std.size());
-
             // loop over lambdas: store GCV values 
-            vector_t gcv_values(lambdas.size());
-            for (int i = 0; i < lambdas.size(); ++i) {
+            vector_t gcv_values(lambdas_naive.size());
+            for (int i = 0; i < lambdas_naive.size(); ++i) {
 
-                gcv_values[i] = gcv_score_fun(false, n_points, n_areal, n_dofs, D_matrix, Psi, R1, R0, y, u, lambdas[i], 
-                                            random_seed_p, random_seed_A, random_seed);
+                gcv_values[i] = gcv_score_fun(false, n_points, n_areal, n_dofs, D_matrix, Psi, R1, R0, y, u, lambdas_naive[i], 
+                                            random_seed_p, random_seed_A, random_seed, verbose);
 
-                std::cout << "Lambda: " << lambdas[i] << ", GCV score: " << gcv_values[i] << std::endl;
+                if(verbose){
+                    std::cout << "Lambda: " << lambdas_naive[i] << ", GCV score: " << gcv_values[i] << std::endl;
+                }
             }
             Eigen::Index min_index;
             gcv_values.minCoeff(&min_index);
-            double lambda_optimum = lambdas[min_index];
+            double lambda_optimum = lambdas_naive[min_index];
 
             // save
-            write_csv(solution_path_naive + "lambdas_seq.csv", lambdas_std);
+            write_csv(solution_path_naive + "lambdas_seq.csv", lambdas_naive);
             std::ofstream file_lambda_opt(solution_path_naive + "lambda_opt.csv");
             if(file_lambda_opt.is_open()){
                 file_lambda_opt << lambda_optimum << "\n"; 
@@ -239,37 +269,25 @@ int test_20() {
 
         // run GCV only-point
         if(only_point_fit){
+
             std::cout << "Running only-point fit..." << std::endl;
 
             // data
-            std::cout << "Define the only-point data structure..." << std::endl;
             GeoFrame geo_data_only_point(D);
             // pointwise layer
             auto& l_only_point = geo_data_only_point.insert_scalar_layer<POINT>("l1", R_path + "locs.csv");
             l_only_point.load_csv<double>(R_path + "results/sim_" + std::to_string(sim) + "/response_point.csv");
 
-            std::cout << "Printing layers:" << std::endl;
-            std::cout << l_only_point << std::endl;
-
-            // define the lambda grid to search over
-            std::vector<double> lambdas_std;
-            for(double xs = -9.0; xs <= -5.0; xs += 0.10) {
-                lambdas_std.push_back(std::pow(10, xs));
-            }
-            Eigen::Map<vector_t> lambdas(lambdas_std.data(), lambdas_std.size());
 
             GridSearch<1> optimizer;
-            std::cout << "Defining model only-point" << std::endl;
             SRPDE model_only_point("y ~ f", geo_data_only_point, fe_ls_elliptic(a, F));
-            std::cout << "Starting optimization..." << std::endl;
-            optimizer.optimize(model_only_point.gcv(100, random_seed_p), lambdas_std);
-            std::cout << "End optimization..." << std::endl;
+            optimizer.optimize(model_only_point.gcv(100, random_seed_p), lambdas_only_point);
 
             Eigen::Matrix<double, Dynamic, 1> best_lambda = optimizer.optimum();
             std::cout << "Best lambdas is: " << std::setprecision(16) << best_lambda << std::endl; 
 
             // save 
-            write_csv(solution_path_only_point + "lambdas_seq.csv", lambdas_std);
+            write_csv(solution_path_only_point + "lambdas_seq.csv", lambdas_only_point);
             std::ofstream fileLambdaoptS(solution_path_only_point + "lambda_opt.csv");
             if(fileLambdaoptS.is_open()){
                 fileLambdaoptS << std::setprecision(16) << best_lambda(0,0);
@@ -280,31 +298,24 @@ int test_20() {
 
         // run GCV only-area
         if(only_area_fit){
+
             std::cout << "Running only-area fit..." << std::endl;
 
             // data
-            std::cout << "Define the only-area data structure..." << std::endl;
             GeoFrame geo_data_only_area(D);
             // areal layer
             auto& l_only_area = geo_data_only_area.insert_scalar_layer<POLYGON>("l2", R_path + "incidence_mat.csv");
             l_only_area.load_csv<double>(R_path + "results/sim_" + std::to_string(sim) + "/response_areal.csv");
 
-            // define the lambda grid to search over
-            std::vector<double> lambdas_std;
-            for(double xs = -9.0; xs <= -5.0; xs += 0.10) {
-                lambdas_std.push_back(std::pow(10, xs));
-            }
-            Eigen::Map<vector_t> lambdas(lambdas_std.data(), lambdas_std.size());
-
             GridSearch<1> optimizer;
             SRPDE model_only_area("y ~ f", geo_data_only_area, fe_ls_elliptic(a, F));
-            optimizer.optimize(model_only_area.gcv(100, random_seed_A), lambdas_std);
+            optimizer.optimize(model_only_area.gcv(100, random_seed_A), lambdas_only_area);
 
             Eigen::Matrix<double, Dynamic, 1> best_lambda = optimizer.optimum();
             std::cout << "Best lambdas is: " << std::setprecision(16) << best_lambda << std::endl; 
 
             // save 
-            write_csv(solution_path_only_area + "lambdas_seq.csv", lambdas_std);
+            write_csv(solution_path_only_area + "lambdas_seq.csv", lambdas_only_area);
             std::ofstream fileLambdaoptS(solution_path_only_area + "lambda_opt.csv");
             if(fileLambdaoptS.is_open()){
                 fileLambdaoptS << std::setprecision(16) << best_lambda(0,0);
