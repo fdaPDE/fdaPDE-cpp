@@ -212,23 +212,71 @@ public:
             set_h_(component_index);
 
             BoolMatrix C_active = C_;
+            const BoolMatrix C_initial = C_active;
             const int eligible_connection_count = count_active_connections_(C_active);
+            ModelSelectionResult selection;
+            const bool automatic_weight_lambda = weight_lambda_selection_requested_();
 
             // bootstrap model selection
             if (run_model_selection && count_active_connections_(C_active) > 0) {
-                auto selection = bootstrap_model_selection_(C_active);
+                selection = bootstrap_model_selection_(C_initial);
                 C_active = std::move(selection.C_active);
                 if (selection.lambda_selected)
                     set_lambda_weights_all(selection.lambda);
             }
 
-            // final fit
-            auto step_start = log_step_start_("Final component fit");
-            auto blocks = main_blocks_();
-            const auto active_blocks = active_blocks_from_C_(C_active);
-            init_comp_(blocks, InitStrategy::None, true, &active_blocks);
-            Result component_result = fit_component_(blocks, C_active);
-            log_step_end_(step_start);
+            // Final fitting may expose an NN KKT failure that did not occur in
+            // the warm-start/bootstrap fits. Treat it as a failed smoothing
+            // candidate and rerun selection on strictly lower lambdas.
+            BlockRefList blocks;
+            Result component_result(n_blocks());
+            for (;;) {
+                auto step_start = log_step_start_("Final component fit");
+                blocks = main_blocks_();
+                const auto active_blocks = active_blocks_from_C_(C_active);
+                init_comp_(blocks, InitStrategy::None, true, &active_blocks);
+                try {
+                    component_result = fit_component_(blocks, C_active);
+                    log_step_end_(step_start);
+                    break;
+                } catch (const std::runtime_error& error) {
+                    log_step_end_(step_start);
+                    if (
+                        !automatic_weight_lambda || !selection.lambda_selected ||
+                        !is_nonnegative_coordinate_descent_failure_(error)
+                    ) throw;
+
+                    const double failed_lambda = selection.lambda;
+                    const auto configured_grid = lambda_grid_weights_[h_];
+                    std::vector<double> lower_grid;
+                    for (const double lambda : configured_grid) {
+                        if (lambda < failed_lambda) lower_grid.push_back(lambda);
+                    }
+                    if (lower_grid.empty()) {
+                        throw std::runtime_error(
+                            "No lower lambda candidate after final nonnegative weight-solver failure"
+                        );
+                    }
+
+                    fdapde::cout << "  Final fit failed at lambda " << failed_lambda
+                                 << "; retrying lower lambda candidates\n";
+                    bootstrap_selection_results_.pop_back();
+                    lambda_grid_weights_[h_] = std::move(lower_grid);
+                    try {
+                        // A lower lambda may reactivate connections, but a fully
+                        // deactivated block remains inactive across the retry.
+                        selection = bootstrap_model_selection_(
+                            reset_connections_keep_inactive_blocks_(C_initial, C_active), false
+                        );
+                    } catch (...) {
+                        lambda_grid_weights_[h_] = configured_grid;
+                        throw;
+                    }
+                    lambda_grid_weights_[h_] = configured_grid;
+                    C_active = std::move(selection.C_active);
+                    set_lambda_weights_all(selection.lambda);
+                }
+            }
             const auto block_variance_before = current_block_variance;
             const auto observed_correlation = rho_tot_maxvar_(blocks, C_active);
             component_result.rho_tot = observed_correlation.normalized;
@@ -284,7 +332,7 @@ public:
             results.push_back(std::move(component_result));
 
             // deflation
-            step_start = log_step_start_("Deflate blocks");
+            auto step_start = log_step_start_("Deflate blocks");
             deflate_all_();
             log_step_end_(step_start);
             current_block_variance = block_variance_trace_(blocks);
