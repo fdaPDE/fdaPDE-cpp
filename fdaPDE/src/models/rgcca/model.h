@@ -727,6 +727,10 @@ private:
     // bootstrap model selection
     ModelSelectionResult bootstrap_model_selection_(const BoolMatrix& C_initial) {
         log_bootstrap_model_selection_header_();
+        const auto elapsed_seconds = [](const auto& start) {
+            return std::chrono::duration<double>(
+                std::chrono::high_resolution_clock::now() - start).count();
+        };
 
         // lambda selection
         const bool select_lambda = weight_lambda_selection_requested_();
@@ -748,6 +752,7 @@ private:
             h_, bootstrap_state.B_max, lambda_grid,
             block_names_(blocks), block_dims, bootstrap_config_.ci_level
         );
+        const double init_bootstrap_seconds = elapsed_seconds(step_start);
         log_step_end_(step_start);
 
         // preliminary fit
@@ -757,6 +762,7 @@ private:
         init_comp_(blocks, InitStrategy::None, true, &preliminary_active_blocks);
         fit_component_(blocks, C_active);
         auto preliminary_w_fit = snapshot_weights_(blocks);
+        const double preliminary_fit_seconds = elapsed_seconds(step_start);
         log_step_end_(step_start);
 
         // clone blocks for bootstrap workers
@@ -765,6 +771,7 @@ private:
         for (int t = 0; t < n_threads; ++t) {
             thread_boot_worker[t] = clone_blocks_();
         }
+        const double clone_worker_seconds = elapsed_seconds(step_start);
         log_step_end_(step_start);
 
         // model selection loop
@@ -801,6 +808,7 @@ private:
             auto w_min = w_fit;
             if (opt_.block_deactivation)
                 threshold_inactive_blocks_(w_min, C_active);
+            const double warm_start_seconds = elapsed_seconds(step_start);
             log_step_end_(step_start);
 
             // start bootstrap timer
@@ -825,9 +833,7 @@ private:
             const int n_active_blocks = count_active_blocks_(C_lambda);
 
             // end bootstrap timer
-            auto end = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-            const double elapsed_sec = duration.count() / 1000.0;
+            const double elapsed_sec = elapsed_seconds(start);
 
             // save results
             boot_results.w_fit_by_lambda[lambda_i] = w_fit;
@@ -836,6 +842,7 @@ private:
             correlation_matrix_(blocks, w_min, boot_results.corr_min_by_lambda[lambda_i]);
             boot_results.corr_min_by_lambda[lambda_i].array() *=
                 (C_lambda.cast<double>() + Matrix::Identity(n_blocks(), n_blocks())).array();
+            const double final_correlation_seconds = elapsed_seconds(step_start);
             log_step_end_(step_start);
             if (!std::isfinite(bootstrap_state.crit))
                 bootstrap_state.crit = criterion_score_with_weights_(blocks, w_min, C_initial);
@@ -847,6 +854,19 @@ private:
             boot_results.B_cancelled_by_lambda[lambda_i] = bootstrap_state.B_cancelled;
             boot_results.B_final_capped_by_lambda[lambda_i] = bootstrap_state.B_final_capped;
             boot_results.design_epochs_by_lambda[lambda_i] = bootstrap_state.design_epoch + 1;
+            if (reuse_preliminary_fit) {
+                boot_results.init_bootstrap_seconds_by_lambda[lambda_i] = init_bootstrap_seconds;
+                boot_results.preliminary_fit_seconds_by_lambda[lambda_i] = preliminary_fit_seconds;
+                boot_results.clone_worker_seconds_by_lambda[lambda_i] = clone_worker_seconds;
+            }
+            boot_results.warm_start_seconds_by_lambda[lambda_i] = warm_start_seconds;
+            boot_results.bootstrap_wall_seconds_by_lambda[lambda_i] = elapsed_sec;
+            boot_results.final_correlation_seconds_by_lambda[lambda_i] = final_correlation_seconds;
+            boot_results.bootstrap_fit_seconds_by_lambda[lambda_i] = bootstrap_timing_summary.fit_time;
+            boot_results.bootstrap_avg_fit_seconds_by_lambda[lambda_i] = bootstrap_timing_summary.avg_fit_time();
+            boot_results.bootstrap_avg_iters_by_lambda[lambda_i] = bootstrap_timing_summary.avg_iters();
+            boot_results.bootstrap_max_iters_by_lambda[lambda_i] = bootstrap_timing_summary.max_iters;
+            boot_results.bootstrap_fit_count_by_lambda[lambda_i] = bootstrap_timing_summary.n_fits;
 
             // Release unused B_max columns before allocating the next lambda.
             resize_bootstrap_lambda_results_(boot_results, lambda_i, n_blocks(), block_dims);
@@ -879,6 +899,8 @@ private:
         // compute correlation matrices CI
         step_start = log_step_start_("Compute bootstrap correlation CIs");
         compute_bootstrap_corr_cis_(boot_results, n_blocks());
+        if (!boot_results.correlation_ci_seconds_by_lambda.empty())
+            boot_results.correlation_ci_seconds_by_lambda.front() = elapsed_seconds(step_start);
         log_step_end_(step_start);
 
         // save optimal design

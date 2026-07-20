@@ -352,6 +352,20 @@ const RGCCA<IndependentSampling>::BootstrapResult* find_bootstrap_result(
 }
 
 void check_compact_bootstrap_storage(const RGCCA<IndependentSampling>::BootstrapResult& component) {
+    const std::size_t n_lambda = component.lambda_grid.size();
+    EXPECT_EQ(component.bootstrap_wall_seconds_by_lambda.size(), n_lambda);
+    EXPECT_EQ(component.bootstrap_avg_iters_by_lambda.size(), n_lambda);
+    EXPECT_EQ(component.bootstrap_fit_count_by_lambda.size(), n_lambda);
+    EXPECT_TRUE(std::any_of(
+        component.bootstrap_wall_seconds_by_lambda.begin(),
+        component.bootstrap_wall_seconds_by_lambda.end(),
+        [](const double seconds) { return seconds > 0.0; }
+    ));
+    EXPECT_TRUE(std::any_of(
+        component.bootstrap_fit_count_by_lambda.begin(),
+        component.bootstrap_fit_count_by_lambda.end(),
+        [](const int count) { return count > 0; }
+    ));
     for (std::size_t i = 0; i < component.lambda_grid.size(); ++i) {
         const int B_used = component.B_used_by_lambda[i];
         EXPECT_EQ(component.corr_boot_by_lambda[i].cols(), B_used);

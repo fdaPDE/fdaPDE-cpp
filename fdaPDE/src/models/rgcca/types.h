@@ -381,6 +381,21 @@ struct BootstrapResult {
     std::vector<int> B_final_capped_by_lambda;
     std::vector<int> design_epochs_by_lambda;
 
+    // Reporting telemetry. Wall-clock phases are disjoint within a candidate;
+    // aggregate fit time is worker CPU time and is reported separately.
+    std::vector<double> init_bootstrap_seconds_by_lambda;
+    std::vector<double> preliminary_fit_seconds_by_lambda;
+    std::vector<double> clone_worker_seconds_by_lambda;
+    std::vector<double> warm_start_seconds_by_lambda;
+    std::vector<double> bootstrap_wall_seconds_by_lambda;
+    std::vector<double> final_correlation_seconds_by_lambda;
+    std::vector<double> correlation_ci_seconds_by_lambda;
+    std::vector<double> bootstrap_fit_seconds_by_lambda;
+    std::vector<double> bootstrap_avg_fit_seconds_by_lambda;
+    std::vector<double> bootstrap_avg_iters_by_lambda;
+    std::vector<int> bootstrap_max_iters_by_lambda;
+    std::vector<int> bootstrap_fit_count_by_lambda;
+
     // [lambda] -> matrix
     std::vector<Matrix> corr_boot_by_lambda;
     std::vector<Matrix> corr_min_by_lambda;
@@ -420,6 +435,18 @@ struct BootstrapResult {
         B_cancelled_by_lambda.resize(n_lambda, 0);
         B_final_capped_by_lambda.resize(n_lambda, 0);
         design_epochs_by_lambda.resize(n_lambda, 0);
+        init_bootstrap_seconds_by_lambda.resize(n_lambda, 0.0);
+        preliminary_fit_seconds_by_lambda.resize(n_lambda, 0.0);
+        clone_worker_seconds_by_lambda.resize(n_lambda, 0.0);
+        warm_start_seconds_by_lambda.resize(n_lambda, 0.0);
+        bootstrap_wall_seconds_by_lambda.resize(n_lambda, 0.0);
+        final_correlation_seconds_by_lambda.resize(n_lambda, 0.0);
+        correlation_ci_seconds_by_lambda.resize(n_lambda, 0.0);
+        bootstrap_fit_seconds_by_lambda.resize(n_lambda, 0.0);
+        bootstrap_avg_fit_seconds_by_lambda.resize(n_lambda, 0.0);
+        bootstrap_avg_iters_by_lambda.resize(n_lambda, 0.0);
+        bootstrap_max_iters_by_lambda.resize(n_lambda, 0);
+        bootstrap_fit_count_by_lambda.resize(n_lambda, 0);
 
         active_blocks.resize(n_blocks);
 
