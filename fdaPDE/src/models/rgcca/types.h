@@ -279,6 +279,7 @@ struct BootstrapConfig {
 
     double ci_level = 0.95;
     int patience = 1;
+    bool extend_lambda_grid_at_boundary = false;
 
     ResamplingStrategy resampling_strategy = ResamplingStrategy::Ordinary;
     double stationary_block_length = 10.0;
@@ -382,6 +383,7 @@ struct BootstrapResult {
     std::vector<int> B_stale_by_lambda;
     std::vector<int> B_cancelled_by_lambda;
     std::vector<int> B_final_capped_by_lambda;
+    std::vector<bool> nn_solver_failed_by_lambda;
     std::vector<int> design_epochs_by_lambda;
 
     // Reporting telemetry. Wall-clock phases are disjoint within a candidate;
@@ -437,6 +439,7 @@ struct BootstrapResult {
         B_stale_by_lambda.resize(n_lambda, 0);
         B_cancelled_by_lambda.resize(n_lambda, 0);
         B_final_capped_by_lambda.resize(n_lambda, 0);
+        nn_solver_failed_by_lambda.resize(n_lambda, false);
         design_epochs_by_lambda.resize(n_lambda, 0);
         init_bootstrap_seconds_by_lambda.resize(n_lambda, 0.0);
         preliminary_fit_seconds_by_lambda.resize(n_lambda, 0.0);

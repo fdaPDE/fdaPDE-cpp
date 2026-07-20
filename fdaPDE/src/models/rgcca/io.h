@@ -64,6 +64,7 @@ inline std::ostream& operator<<(std::ostream& os, const BootstrapConfig& config)
        << "  active_connection_min_abs_corr     = " << config.active_connection_min_abs_corr << '\n'
        << "  ci_level                           = " << config.ci_level << '\n'
        << "  patience                           = " << config.patience << '\n'
+       << "  extend_lambda_grid_at_boundary     = " << bool_text_(config.extend_lambda_grid_at_boundary) << '\n'
        << "  resampling_strategy                = " << to_string(config.resampling_strategy) << '\n'
        << "  stationary_block_length            = " << config.stationary_block_length << '\n'
        << "  resampling_segment_lengths         = [";

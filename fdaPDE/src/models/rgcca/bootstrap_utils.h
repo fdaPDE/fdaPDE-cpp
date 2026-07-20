@@ -352,6 +352,14 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
                 auto committed = std::move(completed_it->second);
                 completed.erase(completed_it);
 
+                if (committed.nn_solver_failed) {
+                    bootstrap_state.nn_solver_failed = true;
+                    bootstrap_state.stop = true;
+                    stop.store(true, std::memory_order_release);
+                    completed.clear();
+                    break;
+                }
+
                 // Acceptance depends only on the final fit at the ordered
                 // frontier. Speculative or stale capped work never reaches
                 // this branch and therefore cannot poison a later replay.
@@ -530,17 +538,28 @@ auto RGCCA<SamplingStrategy>::fit_bootstrap_sample_(
     const auto nn_stats_before = ::fdapde::internals::NonNegativeWeightSolver::thread_stats();
     const auto fit_start = std::chrono::high_resolution_clock::now();
     out.fit_started = true;
-    const Result fit_result = fit_component_(
-        boot_blocks.refs, C_active, true, fit_max_iter, cancelled, false
-    );
+    std::optional<Result> fit_result;
+    try {
+        fit_result.emplace(fit_component_(
+            boot_blocks.refs, C_active, true, fit_max_iter, cancelled, false
+        ));
+    } catch (const std::runtime_error& error) {
+        const auto fit_end = std::chrono::high_resolution_clock::now();
+        out.fit_time = std::chrono::duration<double>(fit_end - fit_start).count();
+        out.nn_stats = ::fdapde::internals::NonNegativeWeightSolver::thread_stats() - nn_stats_before;
+        if (!is_nonnegative_coordinate_descent_failure_(error)) throw;
+        out.nn_solver_failed = true;
+        clear_row_index_all_(boot_blocks.refs);
+        return out;
+    }
     const auto fit_end = std::chrono::high_resolution_clock::now();
 
     // save fit info
     out.fit_time = std::chrono::duration<double>(fit_end - fit_start).count();
     out.nn_stats = ::fdapde::internals::NonNegativeWeightSolver::thread_stats() - nn_stats_before;
-    out.fit_iters = fit_result.iters;
-    out.capped = fit_result.iters >= fit_max_iter;
-    out.cancelled = fit_result.cancelled;
+    out.fit_iters = fit_result->iters;
+    out.capped = fit_result->iters >= fit_max_iter;
+    out.cancelled = fit_result->cancelled;
 
     // Cancelled and final-capped fits are never accepted by the ordered
     // stream, so avoid computing weight/correlation summaries for them.
