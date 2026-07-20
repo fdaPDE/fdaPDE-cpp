@@ -314,6 +314,9 @@ struct Result {
     double rho_tot = std::numeric_limits<double>::quiet_NaN();
     double rho_tot_raw = std::numeric_limits<double>::quiet_NaN();
     double inner_ave = std::numeric_limits<double>::quiet_NaN();
+    double inner_ssq = std::numeric_limits<double>::quiet_NaN();
+    double inner_ssq_normalized = std::numeric_limits<double>::quiet_NaN();
+    int eligible_connection_count = 0;
     double rho_tot_p_value = std::numeric_limits<double>::quiet_NaN();
     double rho_tot_null_mean = std::numeric_limits<double>::quiet_NaN();
     double rho_tot_null_q95 = std::numeric_limits<double>::quiet_NaN();
