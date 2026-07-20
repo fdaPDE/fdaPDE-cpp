@@ -896,6 +896,9 @@ TEST(rgcca, component_diagnostics_track_correlation_and_deflated_variance) {
         EXPECT_TRUE(std::isfinite(result.inner_ave));
         EXPECT_NEAR(result.rho_tot_raw, result.rho_tot, 1e-12);
         EXPECT_NEAR(result.inner_ave, result.rho_tot * result.rho_tot, 1e-12);
+        EXPECT_EQ(result.eligible_connection_count, 1);
+        EXPECT_NEAR(result.inner_ssq, result.inner_ave, 1e-12);
+        EXPECT_NEAR(result.inner_ssq_normalized, result.inner_ave, 1e-12);
         EXPECT_GE(result.inner_ave, 0.0);
         EXPECT_LE(result.inner_ave, 1.0);
 

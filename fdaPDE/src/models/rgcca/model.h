@@ -211,6 +211,7 @@ public:
             set_h_(component_index);
 
             BoolMatrix C_active = C_;
+            const int eligible_connection_count = count_active_connections_(C_active);
 
             // bootstrap model selection
             if (run_model_selection && count_active_connections_(C_active) > 0) {
@@ -232,6 +233,13 @@ public:
             component_result.rho_tot = observed_correlation.normalized;
             component_result.rho_tot_raw = observed_correlation.raw;
             component_result.inner_ave = observed_correlation.inner_ave;
+            component_result.eligible_connection_count = eligible_connection_count;
+            const int active_connection_count = count_active_connections_(C_active);
+            component_result.inner_ssq =
+                observed_correlation.inner_ave * static_cast<double>(active_connection_count);
+            component_result.inner_ssq_normalized = eligible_connection_count > 0 ?
+                component_result.inner_ssq / static_cast<double>(eligible_connection_count) :
+                std::numeric_limits<double>::quiet_NaN();
 
             // structural stop: no active design left
             if (count_active_connections_(C_active) == 0) {
