@@ -814,6 +814,40 @@ TEST(rgcca, GCCA_bootstrap_model_selection_without_lambda_grid) {
     check_multivariate_model_selection_without_lambda_grid();
 }
 
+TEST(rgcca, bootstrap_lambda_selection_probes_an_upper_boundary_once) {
+    constexpr int n = 8;
+
+    RGCCA<IndependentSampling>::Options options;
+    options.mode = Mode::CovMax;
+    options.lambda_selection_weights = LambdaSelection::Automatic;
+
+    RGCCA<IndependentSampling> rgcca(n, options, 1);
+    Eigen::Matrix<double, Dynamic, Dynamic> X1(n, 1);
+    Eigen::Matrix<double, Dynamic, Dynamic> X2(n, 1);
+    X1 << -4.0, -3.0, -2.0, -1.0, 1.0, 2.0, 3.0, 4.0;
+    X2 << -3.5, -2.5, -1.5, -0.5, 0.5, 1.5, 2.5, 3.5;
+    rgcca.add_multivariate_block("X1", std::move(X1));
+    rgcca.add_multivariate_block("X2", std::move(X2));
+    rgcca.connect(0, 1);
+    rgcca.set_lambda_grid_weights(std::vector<double>{1.0});
+
+    RGCCA<IndependentSampling>::BootstrapConfig bootstrap_config;
+    bootstrap_config.max_threads = 1;
+    bootstrap_config.B_min = 2;
+    bootstrap_config.B_max = 2;
+    bootstrap_config.check_every = 2;
+    bootstrap_config.adaptive = false;
+    bootstrap_config.extend_lambda_grid_at_boundary = true;
+    rgcca.set_bootstrap_config(bootstrap_config);
+
+    rgcca.fit();
+    const auto& bootstrap = rgcca.bootstrap_selection_results();
+    ASSERT_EQ(bootstrap.size(), 1);
+    ASSERT_EQ(bootstrap.front().lambda_grid.size(), 2);
+    EXPECT_DOUBLE_EQ(bootstrap.front().lambda_grid[0], 1.0);
+    EXPECT_DOUBLE_EQ(bootstrap.front().lambda_grid[1], 10.0);
+}
+
 TEST(rgcca, inactive_design_stops_remaining_components_without_significance) {
     constexpr int n = 4;
     constexpr int n_comp_local = 3;

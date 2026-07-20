@@ -27,6 +27,7 @@
 #include <condition_variable>
 #include <map>
 #include <numeric>
+#include <string_view>
 
 namespace fdapde {
 
@@ -395,6 +396,7 @@ private:
             B_final_capped = 0;
             design_epoch = 0;
             stop = false;
+            nn_solver_failed = false;
             reset_accepted_samples();
         }
 
@@ -435,6 +437,7 @@ private:
         int last_block_deactivation_check_B_done = 0;
         int last_connection_deactivation_check_B_done = 0;
         bool stop = false;
+        bool nn_solver_failed = false;
 
         Eigen::MatrixXi corr_pos_count;
         Eigen::MatrixXi corr_neg_count;
@@ -559,6 +562,7 @@ private:
         int fit_iters = 0;
         bool capped = false;
         bool cancelled = false;
+        bool nn_solver_failed = false;
         bool fit_started = false;
         ::fdapde::internals::NonNegativeWeightSolveStats nn_stats;
     };
@@ -733,7 +737,10 @@ private:
     }
 
     // bootstrap model selection
-    ModelSelectionResult bootstrap_model_selection_(const BoolMatrix& C_initial) {
+    ModelSelectionResult bootstrap_model_selection_(
+        const BoolMatrix& C_initial,
+        const bool extend_lambda_grid_at_boundary = true
+    ) {
         log_bootstrap_model_selection_header_();
         const auto elapsed_seconds = [](const auto& start) {
             return std::chrono::duration<double>(
@@ -763,15 +770,35 @@ private:
         const double init_bootstrap_seconds = elapsed_seconds(step_start);
         log_step_end_(step_start);
 
-        // preliminary fit
-        step_start = log_step_start_("Preliminary fit");
-        if (select_lambda) set_lambda_weights_all(lambda_grid.back());
-        const auto preliminary_active_blocks = active_blocks_from_C_(C_active);
-        init_comp_(blocks, InitStrategy::None, true, &preliminary_active_blocks);
-        fit_component_(blocks, C_active);
-        auto preliminary_w_fit = snapshot_weights_(blocks);
-        const double preliminary_fit_seconds = elapsed_seconds(step_start);
-        log_step_end_(step_start);
+        // Start at the largest viable lambda. An NN coordinate-descent failure
+        // at excessive smoothing invalidates that candidate, not the component.
+        int preliminary_lambda_i = static_cast<int>(lambda_grid.size()) - 1;
+        std::vector<Vector> preliminary_w_fit;
+        double preliminary_fit_seconds = 0.0;
+        for (; preliminary_lambda_i >= 0; --preliminary_lambda_i) {
+            if (select_lambda) set_lambda_weights_all(lambda_grid[preliminary_lambda_i]);
+            step_start = log_step_start_("Preliminary fit");
+            const auto preliminary_active_blocks = active_blocks_from_C_(C_active);
+            init_comp_(blocks, InitStrategy::None, true, &preliminary_active_blocks);
+            try {
+                fit_component_(blocks, C_active);
+            } catch (const std::runtime_error& error) {
+                preliminary_fit_seconds = elapsed_seconds(step_start);
+                log_step_end_(step_start);
+                if (!select_lambda || !is_nonnegative_coordinate_descent_failure_(error)) throw;
+                boot_results.nn_solver_failed_by_lambda[preliminary_lambda_i] = true;
+                fdapde::cout << "  Skip lambda " << lambda_grid[preliminary_lambda_i]
+                             << ": nonnegative coordinate descent did not converge\n";
+                continue;
+            }
+            preliminary_w_fit = snapshot_weights_(blocks);
+            preliminary_fit_seconds = elapsed_seconds(step_start);
+            log_step_end_(step_start);
+            break;
+        }
+        if (preliminary_lambda_i < 0)
+            throw std::runtime_error("No viable lambda candidate for bootstrap selection");
+        std::vector<Vector> last_viable_w_fit = preliminary_w_fit;
 
         // clone blocks for bootstrap workers
         step_start = log_step_start_("Clone worker blocks");
@@ -783,10 +810,10 @@ private:
         log_step_end_(step_start);
 
         // model selection loop
-        int n_lambda = static_cast<int>(lambda_grid.size());
-        for (int lambda_i = n_lambda - 1; lambda_i >= 0; --lambda_i) {
+        const int n_lambda = static_cast<int>(lambda_grid.size());
+        for (int lambda_i = preliminary_lambda_i; lambda_i >= 0; --lambda_i) {
             ensure_bootstrap_lambda_storage_(boot_results, lambda_i, block_dims, n_blocks());
-            const bool reuse_preliminary_fit = lambda_i == n_lambda - 1;
+            const bool reuse_preliminary_fit = lambda_i == preliminary_lambda_i;
 
             // set the current lambda (if needed)
             if (select_lambda) {
@@ -810,9 +837,23 @@ private:
                 step_start = log_step_start_("  Warm-start fit");
                 const auto active_blocks = active_blocks_from_C_(C_active);
                 init_comp_(blocks, InitStrategy::WarmStart, true, &active_blocks);
-                fit_component_(blocks, C_active);
+                try {
+                    fit_component_(blocks, C_active);
+                } catch (const std::runtime_error& error) {
+                    const double warm_start_seconds = elapsed_seconds(step_start);
+                    log_step_end_(step_start);
+                    if (!is_nonnegative_coordinate_descent_failure_(error)) throw;
+                    boot_results.nn_solver_failed_by_lambda[lambda_i] = true;
+                    boot_results.warm_start_seconds_by_lambda[lambda_i] = warm_start_seconds;
+                    copy_weights_snapshot_(blocks, last_viable_w_fit);
+                    fdapde::cout << "  Skip lambda " << lambda_grid[lambda_i]
+                                 << ": nonnegative coordinate descent did not converge\n";
+                    C_active = reset_connections_keep_inactive_blocks_(C_initial, C_active);
+                    continue;
+                }
                 w_fit = snapshot_weights_(blocks);
             }
+            last_viable_w_fit = w_fit;
             auto w_min = w_fit;
             if (opt_.block_deactivation)
                 threshold_inactive_blocks_(w_min, C_active);
@@ -836,6 +877,19 @@ private:
                 blocks,
                 bootstrap_timing_summary
             );
+            if (bootstrap_state.nn_solver_failed) {
+                boot_results.nn_solver_failed_by_lambda[lambda_i] = true;
+                boot_results.bootstrap_wall_seconds_by_lambda[lambda_i] = elapsed_seconds(start);
+                boot_results.bootstrap_fit_seconds_by_lambda[lambda_i] = bootstrap_timing_summary.fit_time;
+                boot_results.bootstrap_avg_fit_seconds_by_lambda[lambda_i] = bootstrap_timing_summary.avg_fit_time();
+                boot_results.bootstrap_avg_iters_by_lambda[lambda_i] = bootstrap_timing_summary.avg_iters();
+                boot_results.bootstrap_max_iters_by_lambda[lambda_i] = bootstrap_timing_summary.max_iters;
+                boot_results.bootstrap_fit_count_by_lambda[lambda_i] = bootstrap_timing_summary.n_fits;
+                fdapde::cout << "  Skip lambda " << lambda_grid[lambda_i]
+                             << ": nonnegative coordinate descent did not converge\n";
+                C_active = reset_connections_keep_inactive_blocks_(C_initial, C_active);
+                continue;
+            }
             BoolMatrix C_lambda = C_active;
             int n_active_connections = count_active_connections_(C_lambda);
             const int n_active_blocks = count_active_blocks_(C_lambda);
@@ -914,6 +968,27 @@ private:
         // save optimal design
         if (bootstrap_state.best_i < 0)
             throw std::runtime_error("No model candidate was evaluated during bootstrap selection");
+        if (
+            select_lambda && extend_lambda_grid_at_boundary &&
+            bootstrap_config_.extend_lambda_grid_at_boundary &&
+            bootstrap_state.best_i == n_lambda - 1
+        ) {
+            const double upper_lambda = lambda_grid.back() * 10.0;
+            if (std::isfinite(upper_lambda) && upper_lambda > lambda_grid.back()) {
+                fdapde::cout << "  Lambda upper bound selected; retrying with lambda "
+                             << upper_lambda << "\n";
+                auto& configured_grid = lambda_grid_weights_[h_];
+                configured_grid.push_back(upper_lambda);
+                try {
+                    auto extended = bootstrap_model_selection_(C_initial, false);
+                    configured_grid.pop_back();
+                    return extended;
+                } catch (...) {
+                    configured_grid.pop_back();
+                    throw;
+                }
+            }
+        }
         boot_results.lambda_opt_index = bootstrap_state.best_i;
         if (select_lambda)
             boot_results.lambda_opt = lambda_grid[bootstrap_state.best_i];
@@ -1199,6 +1274,11 @@ private:
     }
     bool weight_lambda_selection_requested_() const {
         return opt_.lambda_selection_weights == LambdaSelection::Automatic;
+    }
+    static bool is_nonnegative_coordinate_descent_failure_(const std::runtime_error& error) {
+        return std::string_view(error.what()).starts_with(
+            "NonNegativeWeightSolver: fallback disabled; coordinate descent did not"
+        );
     }
     std::vector<double> model_selection_lambda_grid_() const {
         if (weight_lambda_selection_requested_())
