@@ -15,10 +15,12 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <cstdlib>
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <random>
 
 using namespace fdapde;
 using namespace fdapde::rgcca;
@@ -30,6 +32,7 @@ constexpr int n_comp = 3;
 constexpr int n_obs = 200;
 constexpr int n_locs = 101;
 constexpr double lambda_weights = 1e-3;
+using DenseMatrix = Eigen::Matrix<double, Dynamic, Dynamic>;
 
 enum class FunctionalDiscretization { MV, FEM, Splines };
 
@@ -111,6 +114,62 @@ Eigen::Matrix<double, Dynamic, Dynamic> two_column_block(
     out.col(0) = first;
     out.col(1) = second;
     return out;
+}
+
+std::vector<DenseMatrix> component_two_nn_failure_blocks() {
+    constexpr int n = 80;
+    constexpr int p = 40;
+
+    DenseMatrix scale = DenseMatrix::Identity(12, 12);
+    DenseMatrix corr = DenseMatrix::Identity(12, 12);
+    for (int i = 0; i < 4; ++i) scale(i, i) = 1.5;
+    for (int i = 4; i < 8; ++i) scale(i, i) = 1.2;
+    corr(0, 2) = corr(2, 0) = 0.9;
+    corr(1, 3) = corr(3, 1) = -0.9;
+    corr(4, 5) = corr(5, 4) = -0.81;
+    corr(6, 7) = corr(7, 6) = 0.81;
+    corr(8, 11) = corr(11, 8) = 0.72;
+
+    Eigen::LLT<DenseMatrix> llt(scale * corr * scale);
+    std::mt19937_64 rng(0);
+    std::normal_distribution<double> normal(0.0, 1.0);
+    DenseMatrix Z(n, 12);
+    for (int i = 0; i < Z.rows(); ++i)
+        for (int j = 0; j < Z.cols(); ++j)
+            Z(i, j) = normal(rng);
+    DenseMatrix latent = Z * DenseMatrix(llt.matrixL()).transpose();
+    latent.rowwise() -= latent.colwise().mean();
+    latent.col(9).setZero();
+    latent.col(10).setZero();
+
+    const std::array<std::array<int, 3>, 4> loading_ids {{
+        {{1, 2, 3}}, {{2, 1, 0}}, {{1, 3, 0}}, {{1, 3, 2}}
+    }};
+    std::mt19937_64 noise_rng(1000);
+    std::normal_distribution<double> noise(0.0, 2.0);
+    std::vector<DenseMatrix> blocks;
+    blocks.reserve(4);
+    for (int g = 0; g < 4; ++g) {
+        DenseMatrix loadings(p, 3);
+        for (int r = 0; r < p; ++r) {
+            const double x = static_cast<double>(r) / static_cast<double>(p - 1);
+            for (int h = 0; h < 3; ++h) {
+                const int id = loading_ids[g][h];
+                const double center = id == 1 ? 0.25 : id == 2 ? 0.75 : 0.50;
+                loadings(r, h) = id == 0 ? 0.0 : std::exp(-80.0 * std::pow(x - center, 2));
+            }
+        }
+        DenseMatrix error(n, p);
+        for (int i = 0; i < n; ++i)
+            for (int j = 0; j < p; ++j)
+                error(i, j) = noise(noise_rng);
+        error.rowwise() -= error.colwise().mean();
+
+        DenseMatrix scores(n, 3);
+        for (int h = 0; h < 3; ++h) scores.col(h) = latent.col(4 * h + g);
+        blocks.push_back(scores * loadings.transpose() + error);
+    }
+    return blocks;
 }
 
 void check_tau(
@@ -846,6 +905,66 @@ TEST(rgcca, bootstrap_lambda_selection_probes_an_upper_boundary_once) {
     ASSERT_EQ(bootstrap.front().lambda_grid.size(), 2);
     EXPECT_DOUBLE_EQ(bootstrap.front().lambda_grid[0], 1.0);
     EXPECT_DOUBLE_EQ(bootstrap.front().lambda_grid[1], 10.0);
+}
+
+TEST(rgcca, automatic_nn_lambda_selection_recovers_from_component_two_initialization_failure) {
+    constexpr int n = 80;
+    constexpr int p = 40;
+    RGCCA<IndependentSampling>::Options options;
+    options.mode = Mode::CovMax;
+    options.max_iter = 5;
+    options.tol = 1e-6;
+    options.init_strategy = InitStrategy::Uniform;
+    options.weight_sign_constraint = WeightSignConstraint::NonNegative;
+    options.lambda_selection_weights = LambdaSelection::Automatic;
+    options.block_importance = true;
+
+    RGCCA<IndependentSampling> rgcca(n, options, 2);
+    auto blocks = component_two_nn_failure_blocks();
+    for (int j = 0; j < static_cast<int>(blocks.size()); ++j) {
+        const std::string name = "X" + std::to_string(j + 1);
+        Triangulation<1, 1> D = Triangulation<1, 1>::UnitInterval(p);
+        GeoFrame data(D);
+        data.insert_scalar_layer<POINT>("data", MESH_NODES).load_blk(name, blocks[j].transpose());
+        FeSpace Vh(D, P1<1>);
+        TrialFunction f(Vh);
+        TestFunction v(Vh);
+        ZeroField<1> u;
+        rgcca.add_functional_block(
+            name,
+            data,
+            std::move(blocks[j]),
+            fe_normcovmax_elliptic(integral(D)(dot(grad(f), grad(v))), integral(D)(u * v))
+        );
+    }
+    connect_reference_design(rgcca);
+    rgcca.set_lambda_grid_weights(std::vector<std::vector<double>>{{1e5}, {1e-3, 1e5}});
+
+    RGCCA<IndependentSampling>::BootstrapConfig bootstrap_config;
+    bootstrap_config.max_threads = 1;
+    bootstrap_config.B_min = 2;
+    bootstrap_config.B_max = 2;
+    bootstrap_config.check_every = 2;
+    bootstrap_config.fit_max_iter = 100;
+    bootstrap_config.adaptive = false;
+    bootstrap_config.block_importance_resamples = 2;
+    rgcca.set_bootstrap_config(bootstrap_config);
+
+    const auto results = rgcca.fit();
+    const auto& bootstrap = rgcca.bootstrap_selection_results();
+
+    ASSERT_EQ(results.size(), 2);
+    ASSERT_EQ(bootstrap.size(), 2);
+    EXPECT_DOUBLE_EQ(bootstrap[0].lambda_opt, 1e5);
+    EXPECT_EQ(bootstrap[1].h, 1);
+    EXPECT_TRUE(bootstrap[1].nn_solver_failed_by_lambda[1]);
+    EXPECT_DOUBLE_EQ(bootstrap[1].lambda_opt, 1e-3);
+    bool nn_importance_failure_was_invalidated = false;
+    for (std::size_t j = 0; j < results[0].block_importance.size(); ++j) {
+        nn_importance_failure_was_invalidated |= std::isfinite(results[0].block_importance[j]) &&
+            std::isnan(results[0].block_importance_p_values[j]);
+    }
+    EXPECT_TRUE(nn_importance_failure_was_invalidated);
 }
 
 TEST(rgcca, inactive_design_stops_remaining_components_without_significance) {

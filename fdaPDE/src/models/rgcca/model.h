@@ -234,8 +234,8 @@ public:
                 auto step_start = log_step_start_("Final component fit");
                 blocks = main_blocks_();
                 const auto active_blocks = active_blocks_from_C_(C_active);
-                init_comp_(blocks, InitStrategy::None, true, &active_blocks);
                 try {
+                    init_comp_(blocks, InitStrategy::None, true, &active_blocks);
                     component_result = fit_component_(blocks, C_active);
                     log_step_end_(step_start);
                     break;
@@ -827,8 +827,8 @@ private:
             if (select_lambda) set_lambda_weights_all(lambda_grid[preliminary_lambda_i]);
             step_start = log_step_start_("Preliminary fit");
             const auto preliminary_active_blocks = active_blocks_from_C_(C_active);
-            init_comp_(blocks, InitStrategy::None, true, &preliminary_active_blocks);
             try {
+                init_comp_(blocks, InitStrategy::None, true, &preliminary_active_blocks);
                 fit_component_(blocks, C_active);
             } catch (const std::runtime_error& error) {
                 preliminary_fit_seconds = elapsed_seconds(step_start);
@@ -884,8 +884,8 @@ private:
             } else {
                 step_start = log_step_start_("  Warm-start fit");
                 const auto active_blocks = active_blocks_from_C_(C_active);
-                init_comp_(blocks, InitStrategy::WarmStart, true, &active_blocks);
                 try {
+                    init_comp_(blocks, InitStrategy::WarmStart, true, &active_blocks);
                     fit_component_(blocks, C_active);
                 } catch (const std::runtime_error& error) {
                     const double warm_start_seconds = elapsed_seconds(step_start);
@@ -1101,8 +1101,8 @@ private:
                 seed + static_cast<unsigned>(7919 * (b + 1))
             );
 
-            init_comp_(boot_blocks.refs, InitStrategy::WarmStart, false, &active_blocks);
             try {
+                init_comp_(boot_blocks.refs, InitStrategy::WarmStart, false, &active_blocks);
                 fit_component_(boot_blocks.refs, C_active, false, bootstrap_fit_max_iter_());
 
                 // Count null statistics at least as extreme as the observed one.
@@ -1196,14 +1196,28 @@ private:
             );
 
             int ge_count = 0;
+            bool null_test_valid = true;
             for (int b = 0; b < B; ++b) {
                 block->set_row_index(single_block_null_indices_(block->n_raw(), rng));
-                block->compute(targets[j]);
+                try {
+                    block->compute(targets[j]);
+                } catch (const std::runtime_error& error) {
+                    if (!is_nonnegative_coordinate_descent_failure_(error)) {
+                        block->clear_row_index();
+                        throw;
+                    }
+                    null_test_valid = false;
+                    break;
+                } catch (...) {
+                    block->clear_row_index();
+                    throw;
+                }
                 const double rho_star = block_importance_rho_(eta_(*block), targets[j]);
                 if (std::isfinite(rho_star) && rho_star >= out.rho[j])
                     ++ge_count;
             }
             block->clear_row_index();
+            if (!null_test_valid) return;
 
             out.p_value[j] = static_cast<double>(ge_count + 1) / static_cast<double>(B + 1);
             significant[j] = out.p_value[j] <= bootstrap_config_.block_importance_alpha ? 1 : 0;

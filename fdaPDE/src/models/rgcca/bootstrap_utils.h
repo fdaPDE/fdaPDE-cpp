@@ -526,20 +526,19 @@ auto RGCCA<SamplingStrategy>::fit_bootstrap_sample_(
     copy_weights_snapshot_(boot_blocks.refs, w_fit);
     set_row_index_all_(boot_blocks.refs, bootstrap_index_(n_, seed + static_cast<unsigned>(b)));
 
-    // warm-start the resampled fit from the current full-sample solution
-    init_comp_(boot_blocks.refs, rgcca::InitStrategy::WarmStart, true, &active_blocks);
-    if (cancelled && cancelled()) {
-        out.cancelled = true;
-        clear_row_index_all_(boot_blocks.refs);
-        return out;
-    }
-
-    // fit the bootstrap component on the resampled rows
+    // Warm-start and fit the resampled component from the full-sample solution.
+    // Initialization can invoke the NN solver too, so it belongs in this guard.
     const auto nn_stats_before = ::fdapde::internals::NonNegativeWeightSolver::thread_stats();
     const auto fit_start = std::chrono::high_resolution_clock::now();
-    out.fit_started = true;
     std::optional<Result> fit_result;
     try {
+        init_comp_(boot_blocks.refs, rgcca::InitStrategy::WarmStart, true, &active_blocks);
+        if (cancelled && cancelled()) {
+            out.cancelled = true;
+            clear_row_index_all_(boot_blocks.refs);
+            return out;
+        }
+        out.fit_started = true;
         fit_result.emplace(fit_component_(
             boot_blocks.refs, C_active, true, fit_max_iter, cancelled, false
         ));
