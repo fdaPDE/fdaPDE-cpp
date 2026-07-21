@@ -1102,10 +1102,21 @@ private:
             );
 
             init_comp_(boot_blocks.refs, InitStrategy::WarmStart, false, &active_blocks);
-            fit_component_(boot_blocks.refs, C_active, false, bootstrap_fit_max_iter_());
+            try {
+                fit_component_(boot_blocks.refs, C_active, false, bootstrap_fit_max_iter_());
 
-            // count null statistics at least as extreme as the observed one
-            rho_null[b] = rho_tot_maxvar_(boot_blocks.refs, C_active).normalized;
+                // Count null statistics at least as extreme as the observed one.
+                rho_null[b] = rho_tot_maxvar_(boot_blocks.refs, C_active).normalized;
+            } catch (const std::runtime_error& error) {
+                clear_row_index_all_(boot_blocks.refs);
+                // A failed NN null refit is not a valid null draw. Leave its
+                // entry as NaN; the reported valid-null count makes this explicit.
+                if (is_nonnegative_coordinate_descent_failure_(error)) return;
+                throw;
+            } catch (...) {
+                clear_row_index_all_(boot_blocks.refs);
+                throw;
+            }
 
             clear_row_index_all_(boot_blocks.refs);
         });
