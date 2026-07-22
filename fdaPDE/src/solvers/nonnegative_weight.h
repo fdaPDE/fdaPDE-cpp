@@ -22,6 +22,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
@@ -34,6 +35,103 @@ namespace internals {
 using Vector = Eigen::VectorXd;
 using SparseMatrix = Eigen::SparseMatrix<double, Eigen::ColMajor, int>;
 
+// Carries the exact convex NNQP state needed to reproduce a KKT failure.
+class NonNegativeWeightKKTFailure : public std::runtime_error {
+public:
+    NonNegativeWeightKKTFailure(
+        const int sweeps,
+        const int max_sweeps,
+        const int accelerated_iterations,
+        const int max_accelerated_iterations,
+        const int accelerated_restarts,
+        const double violation,
+        const double tolerance,
+        const double relaxation,
+        const double accelerated_lipschitz,
+        const Vector& c,
+        const Vector& warm_start,
+        const Vector& final_iterate,
+        const SparseMatrix& omega
+    ) : std::runtime_error(message_(
+            sweeps, accelerated_iterations, violation, tolerance
+        )),
+        sweeps_(sweeps),
+        max_sweeps_(max_sweeps),
+        accelerated_iterations_(accelerated_iterations),
+        max_accelerated_iterations_(max_accelerated_iterations),
+        accelerated_restarts_(accelerated_restarts),
+        violation_(violation),
+        tolerance_(tolerance),
+        relaxation_(relaxation),
+        accelerated_lipschitz_(accelerated_lipschitz),
+        c_(c),
+        warm_start_(warm_start),
+        final_iterate_(final_iterate),
+        omega_(omega) {}
+
+    void set_block_context(
+        const int component,
+        std::string block_name,
+        const double lambda
+    ) {
+        component_ = component;
+        block_name_ = std::move(block_name);
+        lambda_ = lambda;
+    }
+
+    [[nodiscard]] int sweeps() const { return sweeps_; }
+    [[nodiscard]] int max_sweeps() const { return max_sweeps_; }
+    [[nodiscard]] int accelerated_iterations() const { return accelerated_iterations_; }
+    [[nodiscard]] int max_accelerated_iterations() const { return max_accelerated_iterations_; }
+    [[nodiscard]] int accelerated_restarts() const { return accelerated_restarts_; }
+    [[nodiscard]] double violation() const { return violation_; }
+    [[nodiscard]] double tolerance() const { return tolerance_; }
+    [[nodiscard]] double relaxation() const { return relaxation_; }
+    [[nodiscard]] double accelerated_lipschitz() const { return accelerated_lipschitz_; }
+    [[nodiscard]] int component() const { return component_; }
+    [[nodiscard]] const std::string& block_name() const { return block_name_; }
+    [[nodiscard]] double lambda() const { return lambda_; }
+    [[nodiscard]] const char* method() const { return "projected_fista"; }
+    [[nodiscard]] const Vector& c() const { return c_; }
+    [[nodiscard]] const Vector& warm_start() const { return warm_start_; }
+    [[nodiscard]] const Vector& final_iterate() const { return final_iterate_; }
+    [[nodiscard]] const SparseMatrix& omega() const { return omega_; }
+
+private:
+    static std::string message_(
+        const int sweeps,
+        const int accelerated_iterations,
+        const double violation,
+        const double tolerance
+    ) {
+        std::ostringstream message;
+        message << "NonNegativeWeightSolver: projected FISTA did not satisfy KKT after "
+                << accelerated_iterations << " iterations";
+        if (sweeps > 0) message << " following " << sweeps << " PSOR sweeps";
+        message << " (violation="
+                << std::scientific << std::setprecision(3)
+                << violation << ", tolerance=" << tolerance << ')';
+        return message.str();
+    }
+
+    int sweeps_;
+    int max_sweeps_;
+    int accelerated_iterations_;
+    int max_accelerated_iterations_;
+    int accelerated_restarts_;
+    double violation_;
+    double tolerance_;
+    double relaxation_;
+    double accelerated_lipschitz_;
+    int component_ = -1;
+    std::string block_name_;
+    double lambda_ = std::numeric_limits<double>::quiet_NaN();
+    Vector c_;
+    Vector warm_start_;
+    Vector final_iterate_;
+    SparseMatrix omega_;
+};
+
 struct NonNegativeWeightSolveStats {
     std::uint64_t calls = 0;
     std::uint64_t zero_signals = 0;
@@ -42,6 +140,10 @@ struct NonNegativeWeightSolveStats {
     std::uint64_t coordinate_attempts = 0;
     std::uint64_t coordinate_converged = 0;
     std::uint64_t coordinate_sweeps = 0;
+    std::uint64_t accelerated_attempts = 0;
+    std::uint64_t accelerated_converged = 0;
+    std::uint64_t accelerated_iterations = 0;
+    std::uint64_t accelerated_restarts = 0;
     std::uint64_t horst_boundaries = 0;
     std::uint64_t would_fallback = 0;
 
@@ -53,6 +155,10 @@ struct NonNegativeWeightSolveStats {
         coordinate_attempts += other.coordinate_attempts;
         coordinate_converged += other.coordinate_converged;
         coordinate_sweeps += other.coordinate_sweeps;
+        accelerated_attempts += other.accelerated_attempts;
+        accelerated_converged += other.accelerated_converged;
+        accelerated_iterations += other.accelerated_iterations;
+        accelerated_restarts += other.accelerated_restarts;
         horst_boundaries += other.horst_boundaries;
         would_fallback += other.would_fallback;
         return *this;
@@ -71,6 +177,10 @@ inline NonNegativeWeightSolveStats operator-(
         lhs.coordinate_attempts - rhs.coordinate_attempts,
         lhs.coordinate_converged - rhs.coordinate_converged,
         lhs.coordinate_sweeps - rhs.coordinate_sweeps,
+        lhs.accelerated_attempts - rhs.accelerated_attempts,
+        lhs.accelerated_converged - rhs.accelerated_converged,
+        lhs.accelerated_iterations - rhs.accelerated_iterations,
+        lhs.accelerated_restarts - rhs.accelerated_restarts,
         lhs.horst_boundaries - rhs.horst_boundaries,
         lhs.would_fallback - rhs.would_fallback
     };
@@ -209,26 +319,47 @@ public:
 
             ++thread_stats_.coordinate_attempts;
             int sweeps = 0;
+            int accelerated_iterations = 0;
+            int accelerated_restarts = 0;
             double violation = std::numeric_limits<double>::infinity();
             double tolerance = 0.0;
             const Vector& warm_start = projected_direct_valid &&
                 c.dot(projected_direct_) > c.dot(solution) ? projected_direct_ : solution;
             const bool converged = try_coordinate_solution_(
-                c, warm_start, &solution, sweeps, violation, tolerance
+                c, warm_start, &solution, sweeps, accelerated_iterations,
+                accelerated_restarts, violation, tolerance
             );
             thread_stats_.coordinate_sweeps += static_cast<std::uint64_t>(sweeps);
+            if (accelerated_iterations > 0) {
+                ++thread_stats_.accelerated_attempts;
+                thread_stats_.accelerated_iterations +=
+                    static_cast<std::uint64_t>(accelerated_iterations);
+                thread_stats_.accelerated_restarts +=
+                    static_cast<std::uint64_t>(accelerated_restarts);
+            }
             if (converged) {
                 ++thread_stats_.coordinate_converged;
+                if (accelerated_iterations > 0)
+                    ++thread_stats_.accelerated_converged;
                 return true;
             }
 
             ++thread_stats_.would_fallback;
-            std::ostringstream message;
-            message << "NonNegativeWeightSolver: fallback disabled; coordinate descent did not "
-                    << "satisfy KKT after "
-                    << sweeps << " sweeps (violation=" << std::scientific << std::setprecision(3)
-                    << violation << ", tolerance=" << tolerance << ')';
-            throw std::runtime_error(message.str());
+            throw NonNegativeWeightKKTFailure(
+                sweeps,
+                coordinate_max_sweeps_,
+                accelerated_iterations,
+                accelerated_max_iterations_,
+                accelerated_restarts,
+                violation,
+                tolerance,
+                coordinate_relaxation_,
+                accelerated_lipschitz_,
+                c,
+                warm_start,
+                coordinate_x_,
+                Omega_
+            );
         };
 
         const bool positive_side_only = p.minCoeff() >= 0.0;
@@ -286,9 +417,23 @@ private:
         coordinate_x_.resize(n);
         coordinate_u_.resize(n);
         coordinate_gradient_.resize(n);
+        accelerated_y_.resize(n);
+        accelerated_next_.resize(n);
         scaled_c_.resize(n);
         bound_c_.resize(n);
         bound_solution_.resize(n);
+
+        Vector scaled_absolute_row_sum = Vector::Zero(n);
+        for (int j = 0; j < Omega_.outerSize(); ++j) {
+            for (SparseMatrix::InnerIterator it(Omega_, j); it; ++it) {
+                scaled_absolute_row_sum[it.row()] += std::abs(it.value()) *
+                    inv_sqrt_diagonal_[it.row()] * inv_sqrt_diagonal_[j];
+            }
+        }
+        accelerated_lipschitz_ = scaled_absolute_row_sum.maxCoeff() *
+            (1.0 + std::sqrt(std::numeric_limits<double>::epsilon()));
+        if (!(accelerated_lipschitz_ > 0.0) || !std::isfinite(accelerated_lipschitz_))
+            throw std::invalid_argument("NonNegativeWeightSolver: invalid accelerated Lipschitz bound");
     }
 
     void validate_omega_() const {
@@ -376,6 +521,8 @@ private:
         const Vector& warm_start,
         Vector* out,
         int& sweeps,
+        int& accelerated_iterations,
+        int& accelerated_restarts,
         double& violation,
         double& tolerance
     ) {
@@ -387,19 +534,36 @@ private:
         coordinate_u_ = sqrt_diagonal_.cwiseProduct(coordinate_x_) * warm_scale;
         coordinate_x_ = inv_sqrt_diagonal_.cwiseProduct(coordinate_u_);
 
-        coordinate_gradient_.noalias() = Omega_ * coordinate_x_;
-        coordinate_gradient_ -= c;
+        if constexpr (coordinate_max_sweeps_ > 0) {
+            coordinate_gradient_.noalias() = Omega_ * coordinate_x_;
+            coordinate_gradient_ -= c;
+        }
         scaled_c_ = inv_sqrt_diagonal_.cwiseProduct(c);
         tolerance = 1e-8 * std::max(1.0, scaled_c_.lpNorm<Eigen::Infinity>());
-        constexpr int max_sweeps = 20000;
-        constexpr int violation_check_every = 5;
-        constexpr double relaxation = 1.8;
+        constexpr int coordinate_violation_check_every = 5;
+        constexpr int accelerated_violation_check_every = 20;
+        const auto accept_solution = [&]() {
+            coordinate_x_ = inv_sqrt_diagonal_.cwiseProduct(coordinate_u_);
+            const double norm2 = coordinate_x_.dot(Omega_ * coordinate_x_);
+            if (!(norm2 > 0.0) || !std::isfinite(norm2)) return false;
+            *out = coordinate_x_ / std::sqrt(norm2);
+            return true;
+        };
+        const auto accept_solution_from_exact_gradient = [&]() {
+            const double norm2 = coordinate_x_.dot(coordinate_gradient_) +
+                coordinate_x_.dot(c);
+            if (!(norm2 > 0.0) || !std::isfinite(norm2)) return false;
+            *out = coordinate_x_ / std::sqrt(norm2);
+            return true;
+        };
 
-        for (sweeps = 1; sweeps <= max_sweeps; ++sweeps) {
+        for (sweeps = 1; sweeps <= coordinate_max_sweeps_; ++sweeps) {
             for (int i = 0; i < n; ++i) {
                 const double old_value = coordinate_u_[i];
                 const double gradient_i = coordinate_gradient_[i] * inv_sqrt_diagonal_[i];
-                const double new_value = std::max(0.0, old_value - relaxation * gradient_i);
+                const double new_value = std::max(
+                    0.0, old_value - coordinate_relaxation_ * gradient_i
+                );
                 const double delta = new_value - old_value;
                 if (delta == 0.0) continue;
 
@@ -414,7 +578,7 @@ private:
                 coordinate_gradient_.noalias() = Omega_ * coordinate_x_;
                 coordinate_gradient_ -= c;
             }
-            if (sweeps % violation_check_every != 0) continue;
+            if (sweeps % coordinate_violation_check_every != 0) continue;
 
             violation = 0.0;
             for (int i = 0; i < n; ++i) {
@@ -424,14 +588,72 @@ private:
                 violation = std::max(violation, current);
             }
             if (violation > tolerance) continue;
-
-            coordinate_x_ = inv_sqrt_diagonal_.cwiseProduct(coordinate_u_);
-            const double norm2 = coordinate_x_.dot(Omega_ * coordinate_x_);
-            if (!(norm2 > 0.0) || !std::isfinite(norm2)) return false;
-            *out = coordinate_x_ / std::sqrt(norm2);
-            return true;
+            return accept_solution();
         }
         --sweeps;
+
+        // Projected FISTA acts on the diagonally scaled NNQP, with a Gershgorin
+        // upper bound on its Lipschitz constant and deterministic gradient restart.
+        accelerated_y_ = coordinate_u_;
+        double momentum = 1.0;
+        const auto accelerated_kkt_satisfied = [&]() {
+            coordinate_x_ = inv_sqrt_diagonal_.cwiseProduct(coordinate_u_);
+            coordinate_gradient_.noalias() = Omega_ * coordinate_x_;
+            coordinate_gradient_ -= c;
+            violation = 0.0;
+            for (int i = 0; i < n; ++i) {
+                const double gradient_i = coordinate_gradient_[i] * inv_sqrt_diagonal_[i];
+                const double current = coordinate_u_[i] > 1e-14 ?
+                    std::abs(gradient_i) : std::max(0.0, -gradient_i);
+                violation = std::max(violation, current);
+            }
+            return violation <= tolerance;
+        };
+        for (accelerated_iterations = 1;
+             accelerated_iterations <= accelerated_max_iterations_;
+             ++accelerated_iterations) {
+            coordinate_x_ = inv_sqrt_diagonal_.cwiseProduct(accelerated_y_);
+            coordinate_gradient_.noalias() = Omega_ * coordinate_x_;
+            coordinate_gradient_ -= c;
+            accelerated_next_ = accelerated_y_ -
+                inv_sqrt_diagonal_.cwiseProduct(coordinate_gradient_) /
+                    accelerated_lipschitz_;
+            accelerated_next_ = accelerated_next_.cwiseMax(0.0);
+            if (!accelerated_next_.allFinite()) {
+                violation = std::numeric_limits<double>::infinity();
+                coordinate_x_ = inv_sqrt_diagonal_.cwiseProduct(coordinate_u_);
+                return false;
+            }
+
+            const double next_momentum =
+                0.5 * (1.0 + std::sqrt(1.0 + 4.0 * momentum * momentum));
+            const bool restart = (accelerated_y_ - accelerated_next_)
+                .dot(accelerated_next_ - coordinate_u_) > 0.0;
+            if (restart) {
+                ++accelerated_restarts;
+                accelerated_y_ = accelerated_next_;
+                momentum = 1.0;
+            } else {
+                accelerated_y_ = accelerated_next_ +
+                    ((momentum - 1.0) / next_momentum) *
+                        (accelerated_next_ - coordinate_u_);
+                momentum = next_momentum;
+            }
+            coordinate_u_.swap(accelerated_next_);
+            if (!accelerated_y_.allFinite()) {
+                violation = std::numeric_limits<double>::infinity();
+                coordinate_x_ = inv_sqrt_diagonal_.cwiseProduct(coordinate_u_);
+                return false;
+            }
+
+            if (accelerated_iterations % accelerated_violation_check_every != 0) continue;
+            if (accelerated_kkt_satisfied()) return accept_solution_from_exact_gradient();
+        }
+        --accelerated_iterations;
+        if (accelerated_iterations % accelerated_violation_check_every != 0 &&
+            accelerated_kkt_satisfied())
+            return accept_solution_from_exact_gradient();
+        coordinate_x_ = inv_sqrt_diagonal_.cwiseProduct(coordinate_u_);
         return false;
     }
 
@@ -464,9 +686,18 @@ private:
     Vector coordinate_x_;
     Vector coordinate_u_;
     Vector coordinate_gradient_;
+    Vector accelerated_y_;
+    Vector accelerated_next_;
     Vector scaled_c_;
     Vector bound_c_;
     Vector bound_solution_;
+
+    // Projected FISTA is the primary bounded solve; retaining PSOR sweeps here
+    // is useful only as a measured compatibility/performance trade-off.
+    static constexpr int coordinate_max_sweeps_ = 0;
+    static constexpr double coordinate_relaxation_ = 1.8;
+    static constexpr int accelerated_max_iterations_ = 25000;
+    double accelerated_lipschitz_ = 0.0;
 
     Vector x_init_;
     Vector last_solution_pos_;

@@ -758,6 +758,9 @@ TEST(rgcca, nonnegative_weight_solver_finds_active_boundary_optimum) {
     EXPECT_NEAR(weights.dot(Omega * weights), 1.0, 1e-10);
     EXPECT_NEAR(z.dot(weights), 1.0 / std::sqrt(2.0), 1e-9);
     EXPECT_EQ(stats.coordinate_attempts, 1);
+    EXPECT_EQ(stats.accelerated_attempts, 1);
+    EXPECT_EQ(stats.accelerated_converged, 1);
+    EXPECT_GT(stats.accelerated_iterations, 0);
     EXPECT_EQ(stats.coordinate_converged, 1);
     EXPECT_EQ(stats.would_fallback, 0);
 }
@@ -907,7 +910,7 @@ TEST(rgcca, bootstrap_lambda_selection_probes_an_upper_boundary_once) {
     EXPECT_DOUBLE_EQ(bootstrap.front().lambda_grid[1], 10.0);
 }
 
-TEST(rgcca, automatic_nn_lambda_selection_recovers_from_component_two_initialization_failure) {
+TEST(rgcca, projected_fista_nn_solver_accepts_large_lambda_and_records_later_failure) {
     constexpr int n = 80;
     constexpr int p = 40;
     RGCCA<IndependentSampling>::Options options;
@@ -950,15 +953,72 @@ TEST(rgcca, automatic_nn_lambda_selection_recovers_from_component_two_initializa
     bootstrap_config.block_importance_resamples = 2;
     rgcca.set_bootstrap_config(bootstrap_config);
 
+    const auto stats_before = ::fdapde::internals::NonNegativeWeightSolver::thread_stats();
     const auto results = rgcca.fit();
+    const auto stats = ::fdapde::internals::NonNegativeWeightSolver::thread_stats() - stats_before;
     const auto& bootstrap = rgcca.bootstrap_selection_results();
 
     ASSERT_EQ(results.size(), 2);
     ASSERT_EQ(bootstrap.size(), 2);
     EXPECT_DOUBLE_EQ(bootstrap[0].lambda_opt, 1e5);
     EXPECT_EQ(bootstrap[1].h, 1);
-    EXPECT_TRUE(bootstrap[1].nn_solver_failed_by_lambda[1]);
+    EXPECT_FALSE(bootstrap[1].nn_solver_failed_by_lambda[1]);
+    EXPECT_TRUE(bootstrap[1].nn_solver_failure_stage_by_lambda[1].empty());
+    EXPECT_TRUE(bootstrap[1].nn_solver_failure_message_by_lambda[1].empty());
     EXPECT_DOUBLE_EQ(bootstrap[1].lambda_opt, 1e-3);
+    EXPECT_GT(stats.accelerated_attempts, 0);
+    EXPECT_GT(stats.accelerated_converged, 0);
+
+    const auto& capsule = rgcca.first_nonnegative_weight_failure();
+    ASSERT_TRUE(capsule.has_value());
+    EXPECT_EQ(capsule->stage, "block_importance");
+    EXPECT_EQ(capsule->component, 1);
+    EXPECT_EQ(capsule->lambda_index, -1);
+    EXPECT_DOUBLE_EQ(capsule->lambda, 1e5);
+    EXPECT_EQ(capsule->candidate_id, 1);
+    EXPECT_FALSE(capsule->solver.block_name().empty());
+    EXPECT_EQ(capsule->solver.component(), 1);
+    EXPECT_DOUBLE_EQ(capsule->solver.lambda(), 1e5);
+    EXPECT_STREQ(capsule->solver.method(), "projected_fista");
+    EXPECT_EQ(capsule->solver.sweeps(), 0);
+    EXPECT_EQ(capsule->solver.max_sweeps(), 0);
+    EXPECT_EQ(capsule->solver.accelerated_iterations(), 25000);
+    EXPECT_EQ(capsule->solver.max_accelerated_iterations(), 25000);
+    EXPECT_GT(capsule->solver.violation(), capsule->solver.tolerance());
+    EXPECT_GT(capsule->solver.accelerated_lipschitz(), 0.0);
+    EXPECT_TRUE(capsule->solver.c().allFinite());
+    EXPECT_TRUE(capsule->solver.warm_start().allFinite());
+    EXPECT_TRUE(capsule->solver.final_iterate().allFinite());
+    EXPECT_EQ(capsule->solver.omega().rows(), capsule->solver.c().size());
+    EXPECT_EQ(capsule->solver.omega().cols(), capsule->solver.c().size());
+    EXPECT_EQ(capsule->solver.warm_start().size(), capsule->solver.c().size());
+    EXPECT_EQ(capsule->solver.final_iterate().size(), capsule->solver.c().size());
+
+    ::fdapde::internals::SparseMatrix identity(
+        capsule->solver.c().size(), capsule->solver.c().size()
+    );
+    identity.setIdentity();
+    ::fdapde::internals::NonNegativeWeightSolver replay(
+        identity, capsule->solver.omega(), false
+    );
+    replay.reset_warm_start(capsule->solver.warm_start());
+    try {
+        (void)replay.solve(capsule->solver.c());
+        FAIL() << "Stored NNQP unexpectedly converged";
+    } catch (const ::fdapde::internals::NonNegativeWeightKKTFailure& replay_error) {
+        EXPECT_EQ(replay_error.sweeps(), capsule->solver.sweeps());
+        EXPECT_EQ(
+            replay_error.accelerated_iterations(),
+            capsule->solver.accelerated_iterations()
+        );
+        EXPECT_EQ(
+            replay_error.accelerated_restarts(),
+            capsule->solver.accelerated_restarts()
+        );
+        EXPECT_DOUBLE_EQ(replay_error.violation(), capsule->solver.violation());
+        EXPECT_DOUBLE_EQ(replay_error.tolerance(), capsule->solver.tolerance());
+    }
+
     bool nn_importance_failure_was_invalidated = false;
     for (std::size_t j = 0; j < results[0].block_importance.size(); ++j) {
         nn_importance_failure_was_invalidated |= std::isfinite(results[0].block_importance[j]) &&

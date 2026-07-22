@@ -235,13 +235,27 @@ void RGCCA<SamplingStrategy>::log_bootstrap_lambda_summary_(
                 static_cast<double>(timing_summary.nn_stats.coordinate_attempts) : 0.0;
         fdapde::cout << "  NN solves: calls=" << timing_summary.nn_stats.calls
                      << ", direct=" << timing_summary.nn_stats.direct_sides
-                     << ", coordinate=" << timing_summary.nn_stats.coordinate_converged
+                     << ", constrained=" << timing_summary.nn_stats.coordinate_converged
                      << "/" << timing_summary.nn_stats.coordinate_attempts
-                     << ", closed_form=" << timing_summary.nn_stats.closed_form_sides << '\n';
-        fdapde::cout << "  NN coordinate: avg_sweeps=" << std::fixed << std::setprecision(1)
-                     << avg_sweeps << std::defaultfloat
+                     << ", closed_form=" << timing_summary.nn_stats.closed_form_sides
                      << ", Horst_boundary=" << timing_summary.nn_stats.horst_boundaries
                      << ", would_fallback=" << timing_summary.nn_stats.would_fallback << '\n';
+        if (timing_summary.nn_stats.coordinate_sweeps > 0) {
+            fdapde::cout << "  NN PSOR prefix: avg_sweeps=" << std::fixed
+                         << std::setprecision(1) << avg_sweeps << std::defaultfloat << '\n';
+        }
+        if (timing_summary.nn_stats.accelerated_attempts > 0) {
+            const double avg_accelerated_iterations =
+                static_cast<double>(timing_summary.nn_stats.accelerated_iterations) /
+                static_cast<double>(timing_summary.nn_stats.accelerated_attempts);
+            fdapde::cout << "  NN projected FISTA: converged="
+                         << timing_summary.nn_stats.accelerated_converged << "/"
+                         << timing_summary.nn_stats.accelerated_attempts
+                         << ", avg_iterations=" << std::fixed << std::setprecision(1)
+                         << avg_accelerated_iterations << std::defaultfloat
+                         << ", restarts=" << timing_summary.nn_stats.accelerated_restarts
+                         << '\n';
+        }
     }
 
     // design and criterion recap

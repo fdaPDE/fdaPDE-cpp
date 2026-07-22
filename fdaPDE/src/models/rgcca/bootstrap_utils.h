@@ -354,6 +354,10 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
 
                 if (committed.nn_solver_failed) {
                     bootstrap_state.nn_solver_failed = true;
+                    bootstrap_state.nn_solver_failure = std::move(committed.nn_solver_failure);
+                    bootstrap_state.nn_solver_failure_candidate_id = committed_id;
+                    bootstrap_state.nn_solver_failure_design_epoch =
+                        bootstrap_state.design_epoch;
                     bootstrap_state.stop = true;
                     stop.store(true, std::memory_order_release);
                     completed.clear();
@@ -542,12 +546,12 @@ auto RGCCA<SamplingStrategy>::fit_bootstrap_sample_(
         fit_result.emplace(fit_component_(
             boot_blocks.refs, C_active, true, fit_max_iter, cancelled, false
         ));
-    } catch (const std::runtime_error& error) {
+    } catch (const ::fdapde::internals::NonNegativeWeightKKTFailure& error) {
         const auto fit_end = std::chrono::high_resolution_clock::now();
         out.fit_time = std::chrono::duration<double>(fit_end - fit_start).count();
         out.nn_stats = ::fdapde::internals::NonNegativeWeightSolver::thread_stats() - nn_stats_before;
-        if (!is_nonnegative_coordinate_descent_failure_(error)) throw;
         out.nn_solver_failed = true;
+        out.nn_solver_failure = error;
         clear_row_index_all_(boot_blocks.refs);
         return out;
     }

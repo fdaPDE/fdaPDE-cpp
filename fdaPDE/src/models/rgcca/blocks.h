@@ -609,7 +609,12 @@ protected:
                 nn_weights_pending_warm_start_.reset();
             }
         }
-        return nn_weights_solver_->solve(z);
+        try {
+            return nn_weights_solver_->solve(z);
+        } catch (::fdapde::internals::NonNegativeWeightKKTFailure& error) {
+            error.set_block_context(h() + 1, name(), lambda_weights());
+            throw;
+        }
     }
     void reset_nonnegative_weight_solver_() {
         nn_weights_solver_.reset();

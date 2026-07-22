@@ -384,6 +384,10 @@ struct BootstrapResult {
     std::vector<int> B_cancelled_by_lambda;
     std::vector<int> B_final_capped_by_lambda;
     std::vector<bool> nn_solver_failed_by_lambda;
+    std::vector<std::string> nn_solver_failure_stage_by_lambda;
+    std::vector<std::string> nn_solver_failure_message_by_lambda;
+    std::vector<int> nn_solver_failure_candidate_id_by_lambda;
+    std::vector<int> nn_solver_failure_design_epoch_by_lambda;
     std::vector<int> design_epochs_by_lambda;
 
     // Reporting telemetry. Wall-clock phases are disjoint within a candidate;
@@ -440,6 +444,10 @@ struct BootstrapResult {
         B_cancelled_by_lambda.resize(n_lambda, 0);
         B_final_capped_by_lambda.resize(n_lambda, 0);
         nn_solver_failed_by_lambda.resize(n_lambda, false);
+        nn_solver_failure_stage_by_lambda.resize(n_lambda);
+        nn_solver_failure_message_by_lambda.resize(n_lambda);
+        nn_solver_failure_candidate_id_by_lambda.resize(n_lambda, -1);
+        nn_solver_failure_design_epoch_by_lambda.resize(n_lambda, -1);
         design_epochs_by_lambda.resize(n_lambda, 0);
         init_bootstrap_seconds_by_lambda.resize(n_lambda, 0.0);
         preliminary_fit_seconds_by_lambda.resize(n_lambda, 0.0);

@@ -63,6 +63,38 @@ public:
     using SamplingDomain = std::conditional_t<std::same_as<SamplingStrategy, TimeDependentSampling>, Triangulation<1, 1>, internals::empty_t>;
     using ComponentCallback = std::function<void(RGCCA&, const Result&)>;
 
+    struct NonNegativeWeightFailureCapsule {
+        std::string stage;
+        int component = -1;
+        int lambda_index = -1;
+        double lambda = std::numeric_limits<double>::quiet_NaN();
+        int candidate_id = -1;
+        unsigned seed = 0;
+        int design_epoch = -1;
+        BoolMatrix active_design;
+        ::fdapde::internals::NonNegativeWeightKKTFailure solver;
+
+        NonNegativeWeightFailureCapsule(
+            std::string stage_,
+            const int component_,
+            const int lambda_index_,
+            const double lambda_,
+            const int candidate_id_,
+            const unsigned seed_,
+            const int design_epoch_,
+            const BoolMatrix& active_design_,
+            const ::fdapde::internals::NonNegativeWeightKKTFailure& solver_
+        ) : stage(std::move(stage_)),
+            component(component_),
+            lambda_index(lambda_index_),
+            lambda(lambda_),
+            candidate_id(candidate_id_),
+            seed(seed_),
+            design_epoch(design_epoch_),
+            active_design(active_design_),
+            solver(solver_) {}
+    };
+
     // constructors
     template <typename S = SamplingStrategy>
     requires std::same_as<S, IndependentSampling>
@@ -199,6 +231,7 @@ public:
         // room for results
         std::vector<Result> results;
         results.reserve(n_comp());
+        first_nonnegative_weight_failure_.reset();
         bootstrap_selection_results_.clear();
         bootstrap_selection_results_.reserve(n_comp());
         const auto initial_block_variance = block_variance_trace_(main_blocks_());
@@ -239,15 +272,29 @@ public:
                     component_result = fit_component_(blocks, C_active);
                     log_step_end_(step_start);
                     break;
-                } catch (const std::runtime_error& error) {
+                } catch (const ::fdapde::internals::NonNegativeWeightKKTFailure& error) {
                     log_step_end_(step_start);
                     if (
-                        !automatic_weight_lambda || !selection.lambda_selected ||
-                        !is_nonnegative_coordinate_descent_failure_(error)
+                        !automatic_weight_lambda || !selection.lambda_selected
                     ) throw;
 
                     const double failed_lambda = selection.lambda;
                     const auto configured_grid = lambda_grid_weights_[h_];
+                    const auto failed_it = std::find(
+                        configured_grid.begin(), configured_grid.end(), failed_lambda
+                    );
+                    const int failed_lambda_i = failed_it == configured_grid.end() ? -1 :
+                        static_cast<int>(std::distance(configured_grid.begin(), failed_it));
+                    record_nonnegative_weight_failure_(
+                        "final_fit",
+                        error,
+                        failed_lambda_i,
+                        failed_lambda,
+                        -1,
+                        bootstrap_config_.seed + h_,
+                        -1,
+                        C_active
+                    );
                     std::vector<double> lower_grid;
                     for (const double lambda : configured_grid) {
                         if (lambda < failed_lambda) lower_grid.push_back(lambda);
@@ -259,6 +306,7 @@ public:
                     }
 
                     fdapde::cout << "  Final fit failed at lambda " << failed_lambda
+                                 << ": " << error.what()
                                  << "; retrying lower lambda candidates\n";
                     bootstrap_selection_results_.pop_back();
                     lambda_grid_weights_[h_] = std::move(lower_grid);
@@ -375,6 +423,10 @@ public:
 
     // bootstrap results
     [[nodiscard]] const std::vector<BootstrapResult>& bootstrap_selection_results() const { return bootstrap_selection_results_; }
+    [[nodiscard]] const std::optional<NonNegativeWeightFailureCapsule>&
+    first_nonnegative_weight_failure() const {
+        return first_nonnegative_weight_failure_;
+    }
     void clear_bootstrap_selection_results() {
         bootstrap_selection_results_.clear();
         bootstrap_selection_results_.shrink_to_fit();
@@ -445,6 +497,9 @@ private:
             design_epoch = 0;
             stop = false;
             nn_solver_failed = false;
+            nn_solver_failure.reset();
+            nn_solver_failure_candidate_id = -1;
+            nn_solver_failure_design_epoch = -1;
             reset_accepted_samples();
         }
 
@@ -486,6 +541,9 @@ private:
         int last_connection_deactivation_check_B_done = 0;
         bool stop = false;
         bool nn_solver_failed = false;
+        std::optional<::fdapde::internals::NonNegativeWeightKKTFailure> nn_solver_failure;
+        int nn_solver_failure_candidate_id = -1;
+        int nn_solver_failure_design_epoch = -1;
 
         Eigen::MatrixXi corr_pos_count;
         Eigen::MatrixXi corr_neg_count;
@@ -611,6 +669,7 @@ private:
         bool capped = false;
         bool cancelled = false;
         bool nn_solver_failed = false;
+        std::optional<::fdapde::internals::NonNegativeWeightKKTFailure> nn_solver_failure;
         bool fit_started = false;
         ::fdapde::internals::NonNegativeWeightSolveStats nn_stats;
     };
@@ -830,13 +889,26 @@ private:
             try {
                 init_comp_(blocks, InitStrategy::None, true, &preliminary_active_blocks);
                 fit_component_(blocks, C_active);
-            } catch (const std::runtime_error& error) {
+            } catch (const ::fdapde::internals::NonNegativeWeightKKTFailure& error) {
                 preliminary_fit_seconds = elapsed_seconds(step_start);
                 log_step_end_(step_start);
-                if (!select_lambda || !is_nonnegative_coordinate_descent_failure_(error)) throw;
+                if (!select_lambda) throw;
                 boot_results.nn_solver_failed_by_lambda[preliminary_lambda_i] = true;
+                boot_results.nn_solver_failure_stage_by_lambda[preliminary_lambda_i] =
+                    "preliminary_fit";
+                boot_results.nn_solver_failure_message_by_lambda[preliminary_lambda_i] = error.what();
+                record_nonnegative_weight_failure_(
+                    "preliminary_fit",
+                    error,
+                    preliminary_lambda_i,
+                    lambda_grid[preliminary_lambda_i],
+                    -1,
+                    bootstrap_state.seed,
+                    0,
+                    C_active
+                );
                 fdapde::cout << "  Skip lambda " << lambda_grid[preliminary_lambda_i]
-                             << ": nonnegative coordinate descent did not converge\n";
+                             << ": " << error.what() << '\n';
                 continue;
             }
             preliminary_w_fit = snapshot_weights_(blocks);
@@ -887,15 +959,26 @@ private:
                 try {
                     init_comp_(blocks, InitStrategy::WarmStart, true, &active_blocks);
                     fit_component_(blocks, C_active);
-                } catch (const std::runtime_error& error) {
+                } catch (const ::fdapde::internals::NonNegativeWeightKKTFailure& error) {
                     const double warm_start_seconds = elapsed_seconds(step_start);
                     log_step_end_(step_start);
-                    if (!is_nonnegative_coordinate_descent_failure_(error)) throw;
                     boot_results.nn_solver_failed_by_lambda[lambda_i] = true;
+                    boot_results.nn_solver_failure_stage_by_lambda[lambda_i] = "warm_start_fit";
+                    boot_results.nn_solver_failure_message_by_lambda[lambda_i] = error.what();
                     boot_results.warm_start_seconds_by_lambda[lambda_i] = warm_start_seconds;
+                    record_nonnegative_weight_failure_(
+                        "warm_start_fit",
+                        error,
+                        lambda_i,
+                        lambda_grid[lambda_i],
+                        -1,
+                        bootstrap_state.seed,
+                        0,
+                        C_active
+                    );
                     copy_weights_snapshot_(blocks, last_viable_w_fit);
                     fdapde::cout << "  Skip lambda " << lambda_grid[lambda_i]
-                                 << ": nonnegative coordinate descent did not converge\n";
+                                 << ": " << error.what() << '\n';
                     C_active = reset_connections_keep_inactive_blocks_(C_initial, C_active);
                     continue;
                 }
@@ -927,6 +1010,25 @@ private:
             );
             if (bootstrap_state.nn_solver_failed) {
                 boot_results.nn_solver_failed_by_lambda[lambda_i] = true;
+                boot_results.nn_solver_failure_stage_by_lambda[lambda_i] = "bootstrap_fit";
+                boot_results.nn_solver_failure_candidate_id_by_lambda[lambda_i] =
+                    bootstrap_state.nn_solver_failure_candidate_id;
+                boot_results.nn_solver_failure_design_epoch_by_lambda[lambda_i] =
+                    bootstrap_state.nn_solver_failure_design_epoch;
+                if (bootstrap_state.nn_solver_failure) {
+                    boot_results.nn_solver_failure_message_by_lambda[lambda_i] =
+                        bootstrap_state.nn_solver_failure->what();
+                    record_nonnegative_weight_failure_(
+                        "bootstrap_fit",
+                        *bootstrap_state.nn_solver_failure,
+                        lambda_i,
+                        lambda_grid[lambda_i],
+                        bootstrap_state.nn_solver_failure_candidate_id,
+                        bootstrap_state.seed,
+                        bootstrap_state.nn_solver_failure_design_epoch,
+                        C_active
+                    );
+                }
                 boot_results.bootstrap_wall_seconds_by_lambda[lambda_i] = elapsed_seconds(start);
                 boot_results.bootstrap_fit_seconds_by_lambda[lambda_i] = bootstrap_timing_summary.fit_time;
                 boot_results.bootstrap_avg_fit_seconds_by_lambda[lambda_i] = bootstrap_timing_summary.avg_fit_time();
@@ -934,7 +1036,9 @@ private:
                 boot_results.bootstrap_max_iters_by_lambda[lambda_i] = bootstrap_timing_summary.max_iters;
                 boot_results.bootstrap_fit_count_by_lambda[lambda_i] = bootstrap_timing_summary.n_fits;
                 fdapde::cout << "  Skip lambda " << lambda_grid[lambda_i]
-                             << ": nonnegative coordinate descent did not converge\n";
+                             << ": "
+                             << boot_results.nn_solver_failure_message_by_lambda[lambda_i]
+                             << '\n';
                 C_active = reset_connections_keep_inactive_blocks_(C_initial, C_active);
                 continue;
             }
@@ -1084,6 +1188,9 @@ private:
         log_step_end_(step_start);
 
         std::vector<double> rho_null(B, std::numeric_limits<double>::quiet_NaN());
+        std::vector<std::optional<::fdapde::internals::NonNegativeWeightKKTFailure>>
+            nn_failures(n_threads);
+        std::vector<int> nn_failure_candidate_ids(n_threads, -1);
         const unsigned seed = bootstrap_config_.seed + static_cast<unsigned>(1000003 * (h_ + 1));
         const auto active_blocks = active_blocks_from_C_(C_active);
 
@@ -1107,12 +1214,15 @@ private:
 
                 // Count null statistics at least as extreme as the observed one.
                 rho_null[b] = rho_tot_maxvar_(boot_blocks.refs, C_active).normalized;
-            } catch (const std::runtime_error& error) {
+            } catch (const ::fdapde::internals::NonNegativeWeightKKTFailure& error) {
                 clear_row_index_all_(boot_blocks.refs);
+                if (!nn_failures[tid] || b < nn_failure_candidate_ids[tid]) {
+                    nn_failures[tid] = error;
+                    nn_failure_candidate_ids[tid] = b;
+                }
                 // A failed NN null refit is not a valid null draw. Leave its
                 // entry as NaN; the reported valid-null count makes this explicit.
-                if (is_nonnegative_coordinate_descent_failure_(error)) return;
-                throw;
+                return;
             } catch (...) {
                 clear_row_index_all_(boot_blocks.refs);
                 throw;
@@ -1121,6 +1231,27 @@ private:
             clear_row_index_all_(boot_blocks.refs);
         });
         log_step_end_(step_start);
+
+        int nn_failure_tid = -1;
+        int nn_failure_candidate_id = B;
+        for (int t = 0; t < n_threads; ++t) {
+            if (nn_failures[t] && nn_failure_candidate_ids[t] < nn_failure_candidate_id) {
+                nn_failure_tid = t;
+                nn_failure_candidate_id = nn_failure_candidate_ids[t];
+            }
+        }
+        if (nn_failure_tid >= 0) {
+            record_nonnegative_weight_failure_(
+                "component_significance",
+                *nn_failures[nn_failure_tid],
+                -1,
+                fixed_weight_lambda_(blocks),
+                nn_failure_candidate_id,
+                seed,
+                -1,
+                C_active
+            );
+        }
 
         std::vector<double> valid_null;
         valid_null.reserve(B);
@@ -1184,9 +1315,15 @@ private:
         }
 
         std::vector<int> significant(n_blocks(), 0);
+        const int n_threads = bootstrap_n_threads_();
+        std::vector<std::optional<::fdapde::internals::NonNegativeWeightKKTFailure>>
+            nn_failures(n_threads);
+        std::vector<int> nn_failure_block_ids(n_threads, -1);
+        std::vector<int> nn_failure_candidate_ids(n_threads, -1);
         parallel_for(0, n_blocks(), 1, [&](int j) {
             if (!testable[j]) return;
 
+            const int tid = this_thread_id();
             auto boot_blocks = clone_blocks_();
             auto* block = boot_blocks.refs[j];
             std::mt19937_64 rng(
@@ -1201,10 +1338,11 @@ private:
                 block->set_row_index(single_block_null_indices_(block->n_raw(), rng));
                 try {
                     block->compute(targets[j]);
-                } catch (const std::runtime_error& error) {
-                    if (!is_nonnegative_coordinate_descent_failure_(error)) {
-                        block->clear_row_index();
-                        throw;
+                } catch (const ::fdapde::internals::NonNegativeWeightKKTFailure& error) {
+                    if (!nn_failures[tid] || j < nn_failure_block_ids[tid]) {
+                        nn_failures[tid] = error;
+                        nn_failure_block_ids[tid] = j;
+                        nn_failure_candidate_ids[tid] = b;
                     }
                     null_test_valid = false;
                     break;
@@ -1225,6 +1363,30 @@ private:
 
         for (int j = 0; j < n_blocks(); ++j)
             out.significant[j] = significant[j] != 0;
+
+        int nn_failure_tid = -1;
+        int nn_failure_block_id = n_blocks();
+        for (int t = 0; t < n_threads; ++t) {
+            if (nn_failures[t] && nn_failure_block_ids[t] < nn_failure_block_id) {
+                nn_failure_tid = t;
+                nn_failure_block_id = nn_failure_block_ids[t];
+            }
+        }
+        if (nn_failure_tid >= 0) {
+            const unsigned seed = bootstrap_config_.seed +
+                static_cast<unsigned>(1000003 * (h_ + 1)) +
+                static_cast<unsigned>(9176 * (nn_failure_block_id + 1));
+            record_nonnegative_weight_failure_(
+                "block_importance",
+                *nn_failures[nn_failure_tid],
+                -1,
+                fixed_weight_lambda_(blocks),
+                nn_failure_candidate_ids[nn_failure_tid],
+                seed,
+                -1,
+                C_active
+            );
+        }
 
         log_block_importance_(out);
         return out;
@@ -1347,11 +1509,6 @@ private:
     }
     bool weight_lambda_selection_requested_() const {
         return opt_.lambda_selection_weights == LambdaSelection::Automatic;
-    }
-    static bool is_nonnegative_coordinate_descent_failure_(const std::runtime_error& error) {
-        return std::string_view(error.what()).starts_with(
-            "NonNegativeWeightSolver: fallback disabled; coordinate descent did not"
-        );
     }
     std::vector<double> model_selection_lambda_grid_() const {
         if (weight_lambda_selection_requested_())
@@ -1769,6 +1926,35 @@ private:
         return f;
     }
 private:
+    void record_nonnegative_weight_failure_(
+        const std::string& stage,
+        const ::fdapde::internals::NonNegativeWeightKKTFailure& error,
+        const int lambda_index,
+        const double lambda,
+        const int candidate_id,
+        const unsigned seed,
+        const int design_epoch,
+        const BoolMatrix& active_design
+    ) {
+        const auto diagnostic_stage = [](const std::string& value) {
+            return value == "component_significance" || value == "block_importance";
+        };
+        if (first_nonnegative_weight_failure_ &&
+            (!diagnostic_stage(first_nonnegative_weight_failure_->stage) || diagnostic_stage(stage)))
+            return;
+        first_nonnegative_weight_failure_.emplace(
+            stage,
+            h_ + 1,
+            lambda_index,
+            lambda,
+            candidate_id,
+            seed,
+            design_epoch,
+            active_design,
+            error
+        );
+    }
+
     Options opt_;
     DesignMode design_mode_ {DesignMode::Empty};
 
@@ -1790,6 +1976,7 @@ private:
     BootstrapConfig bootstrap_config_;
     std::vector<BootstrapResult> bootstrap_selection_results_;
     std::vector<std::vector<double>> lambda_grid_weights_;
+    std::optional<NonNegativeWeightFailureCapsule> first_nonnegative_weight_failure_;
 
     bool initialized_ {false};
     BoolMatrix C_;
