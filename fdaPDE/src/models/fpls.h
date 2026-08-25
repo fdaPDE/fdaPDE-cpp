@@ -104,6 +104,8 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
         direction_objective_history_.resize(n_comp_);
         direction_iterations_.assign(n_comp_, 0);
         direction_monotone_.assign(n_comp_, true);
+        direction_gcv_values_.assign(n_comp_, {});
+        loading_gcv_values_.assign(n_comp_, {});
         direction_lambda_.resize(n_comp_, direction_n_lambda);
         loading_lambda_.resize(n_comp_, loading_n_lambda);
 
@@ -130,6 +132,7 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
                 };
                 GridSearch<direction_n_lambda> direction_optimizer;
                 direction_lambda = direction_optimizer.optimize(direction_gcv, direction_lambda_grid);
+                direction_gcv_values_[h] = direction_optimizer.values();
 
                 fit_direction_(M_h, direction_lambda, f0, max_iter, tol, h);
                 project_(X_h, Y_h, h);
@@ -140,6 +143,7 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
                 if constexpr (Mode == fPLSMode::Regression || Mode == fPLSMode::ModeA) {
                     GridSearch<loading_n_lambda> loading_optimizer;
                     loading_lambda = loading_optimizer.optimize(loading_gcv, loading_lambda_grid);
+                    loading_gcv_values_[h] = loading_optimizer.values();
                 }
             } break;
             default: {
@@ -170,6 +174,12 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
     const matrix_t& Y_latent_scores() const { return U_; }
     const matrix_t& X_loadings() const { return C_; }
     const matrix_t& Y_loadings() const { return D_; }
+    const std::vector<std::vector<double>>& direction_gcv_values() const {
+        return direction_gcv_values_;
+    }
+    const std::vector<std::vector<double>>& loading_gcv_values() const {
+        return loading_gcv_values_;
+    }
     matrix_t fitted() const { return fitted(n_comp_); }
     matrix_t fitted(int h) const {
         h = components_(h);
@@ -359,6 +369,8 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
     matrix_t direction_lambda_;
     matrix_t loading_lambda_;
     std::vector<std::vector<double>> direction_objective_history_;
+    std::vector<std::vector<double>> direction_gcv_values_;
+    std::vector<std::vector<double>> loading_gcv_values_;
     std::vector<int> direction_iterations_;
     std::vector<bool> direction_monotone_;
 };
