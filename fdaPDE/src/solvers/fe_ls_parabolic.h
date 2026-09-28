@@ -410,14 +410,14 @@ class fe_ls_parabolic_mono {
         return f_;
     }
 
-    // hutchinson approximation for Tr[S]
+    /// @brief estimates the smoother trace, reusing random probes until their count changes
     double edf(int r = 100, int seed = random_seed) {
         fdapde_assert(lambda_saved_.has_value());
-        if (!Ys_.has_value() || !Bs_.has_value() || r != Us_->rows()) {   // force reconstruction if r differs from old
+        if (!Ys_.has_value() || !Bs_.has_value() || r != Us_->cols()) {   // rebuild probes when their count changes
             int seed_ = (seed == random_seed) ? std::random_device()() : seed;
             std::mt19937 rng(seed_);
             rademacher_distribution rademacher;
-            Us_->resize(n_locs_, r);
+            Us_.emplace(n_locs_, r);
             for (int i = 0; i < n_locs_; ++i) {
                 for (int j = 0; j < r; ++j) { Us_->operator()(i, j) = rademacher(rng); }
             }

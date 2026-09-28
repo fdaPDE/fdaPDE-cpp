@@ -61,3 +61,38 @@ TEST(fpca, test_01) {
     EXPECT_EQ(m.iterations().size(), 3);
     EXPECT_EQ(m.monotone().size(), 3);
 }
+
+// check vector-valued GCV grids for every fPCA solver policy
+TEST(fpca, vector_grid_all_solvers) {
+    auto D = Triangulation<2, 2>::Rectangle(0, 1, 0, 1, 4, 4);
+    GeoFrame data(D);
+    auto& layer = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
+    Eigen::MatrixXd X(D.n_nodes(), 8);
+    for (int i = 0; i < X.rows(); ++i) {
+        for (int j = 0; j < X.cols(); ++j) { X(i, j) = std::sin(0.3 * i + 0.5 * j) + std::cos(0.2 * i - 0.7 * j); }
+    }
+    X = (X.colwise() - X.rowwise().mean()).eval();
+    layer.load_blk("X", X);
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction v(Vh);
+    auto a = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u;
+    auto F = integral(D)(u * v);
+    const std::vector<double> grid {0.01, 0.1};
+    auto check_policy = [&](auto policy) {
+        fPCA model("X", data, fe_ls_elliptic(a, F));
+        model.fit(2, grid, ComputeXactSVD | OptimizeGCV, policy);
+        // every loading must be finite after searching the vector grid
+        EXPECT_TRUE(model.F().array().isFinite().all());
+        // every score must be finite after fitting the selected penalties
+        EXPECT_TRUE(model.S().array().isFinite().all());
+        for (int i = 0; i < model.lambda().size(); ++i) {
+            // the selected penalty for each component must belong to the supplied grid
+            EXPECT_TRUE(std::find(grid.begin(), grid.end(), model.lambda().data()[i]) != grid.end());
+        }
+    };
+    check_policy(fpca_power_solver());
+    check_policy(fpca_subspace_solver());
+    check_policy(fpca_direct_solver());
+}

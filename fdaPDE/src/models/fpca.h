@@ -203,6 +203,7 @@ template <typename VariationalSolver> class fpca_subspace_iteration_impl {
     fpca_subspace_iteration_impl(VariationalSolver& smoother, int max_iter, double tol) noexcept :
         smoother_(std::addressof(smoother)), n_dofs_(smoother.n_dofs()), max_iter_(max_iter), tol_(tol) { }
 
+    /// @brief jointly estimates the requested components with fixed or GCV-selected penalties
     template <typename DataT> auto fit(const DataT& data, int rank, const std::vector<double>& lambda_grid, int flag) {
         fdapde_assert(lambda_grid.size() > 0 && lambda_grid.size() % n_lambda == 0);
         matrix_t X = data.transpose();
@@ -214,7 +215,7 @@ template <typename VariationalSolver> class fpca_subspace_iteration_impl {
             V = std::move(svd.matrixV());
         } else {
             Eigen::JacobiSVD<matrix_t> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
-	    V = std::move(svd.matrixV());
+            V = svd.matrixV().leftCols(rank);
         }
         // allocate memory
         f_.resize(n_dofs_, rank);
