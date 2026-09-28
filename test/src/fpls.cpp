@@ -19,16 +19,25 @@ using fdapde::test::almost_equal;
 
 namespace {
 
+/// @brief estimates the predictor mean with a fixed smoothing penalty
 Eigen::RowVectorXd smooth_mean(
-  const Eigen::Matrix<double, Dynamic, Dynamic>& X, fdapde::internals::fe_ls_elliptic& smoother, double lambda) {
+  const Eigen::Matrix<double, Dynamic, Dynamic>& X,   // predictors with statistical units in rows
+  fdapde::internals::fe_ls_elliptic& smoother,        // discretized smoother bound to the observation locations
+  double lambda                                       // fixed mean smoothing parameter
+) {
     smoother.update_response(X.transpose() * Eigen::VectorXd::Ones(X.rows()) / X.rows());
     smoother.fit(lambda);
     return smoother.fn().transpose();
 }
 
+/// @brief estimates the predictor mean with a GCV-selected smoothing penalty
 Eigen::RowVectorXd smooth_mean(
-  const Eigen::Matrix<double, Dynamic, Dynamic>& X, fdapde::internals::fe_ls_elliptic& smoother,
-  const std::vector<double>& lambda_grid, int edf_r, int seed) {
+  const Eigen::Matrix<double, Dynamic, Dynamic>& X,   // predictors with statistical units in rows
+  fdapde::internals::fe_ls_elliptic& smoother,        // discretized smoother bound to the observation locations
+  const std::vector<double>& lambda_grid,             // candidate mean smoothing parameters
+  int edf_r,                                          // number of random probes for effective degrees of freedom
+  int seed                                            // seed for the effective degrees of freedom estimate
+) {
     auto gcv = [&](auto lambda) {
         smoother.update_response(X.transpose() * Eigen::VectorXd::Ones(X.rows()) / X.rows());
         smoother.fit(lambda);
@@ -42,10 +51,13 @@ Eigen::RowVectorXd smooth_mean(
     return smoother.fn().transpose();
 }
 
-// compare the sequential score fit with predictions from coefficients for every prefix
-// the oracle uses the original centered data, independently of the coefficient conversion
+/// @brief checks coefficient predictions against the independent sequential score reconstruction
 template <typename Model>
-void check_coefficient_predictions(const Model& model, const Eigen::MatrixXd& X_Psi, int n_comp) {
+void check_coefficient_predictions(
+  const Model& model,             // fitted regression model
+  const Eigen::MatrixXd& X_Psi,   // original centered predictors multiplied by the direction evaluation matrix
+  int n_comp                      // number of fitted component prefixes to check
+) {
     for (int h = 1; h <= n_comp; ++h) {
         SCOPED_TRACE(h);
         // each prefix must predict the same response as sequential score regression
@@ -61,7 +73,11 @@ void check_coefficient_predictions(const Model& model, const Eigen::MatrixXd& X_
     EXPECT_TRUE(model.B().isApprox(model.Beta(), 1e-12));
 }
 
-void check_fpls_case(const std::string& data_path, double lambda) {
+/// @brief checks fixed-penalty fits against reference predictions and verifies component penalty schedules
+void check_fpls_case(
+  const std::string& data_path,   // directory containing input data and reference fit outputs
+  double lambda                   // smoothing parameter for centering, directions, and loadings
+) {
     std::string mesh_path = "../data/mesh/unit_square_60/";
     Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
 
@@ -93,25 +109,43 @@ void check_fpls_case(const std::string& data_path, double lambda) {
     lambda_vec << lambda;
     m.fit(3, lambda_vec, lambda_vec, 20, 1e-2);
 
+    // compare every coefficient prefix with the independent score-based predictions
     check_coefficient_predictions(m, X_centered * x_centering.Psi(), 3);
 
+    // compare uncentered response predictions with the stored reference using the test tolerance
     EXPECT_TRUE(almost_equal<double>(m.fitted().rowwise() + Y_mean, data_path + "Y_hat.csv"));
+    // compare uncentered predictor reconstructions with the stored reference using the test tolerance
     EXPECT_TRUE(almost_equal<double>(m.reconstructed().rowwise() + X_mean, data_path + "X_hat.csv"));
+    // compare uncentered response predictions with the stored reference using the test tolerance
     EXPECT_TRUE(almost_equal<double>(m.fitted(3).rowwise() + Y_mean, data_path + "Y_hat.csv"));
+    // compare uncentered predictor reconstructions with the stored reference using the test tolerance
     EXPECT_TRUE(almost_equal<double>(m.reconstructed(3).rowwise() + X_mean, data_path + "X_hat.csv"));
+    // match output rows to the number of input statistical units
     EXPECT_EQ(m.X_latent_scores().rows(), Y.rows());
+    // require one score column for each of the three requested components
     EXPECT_EQ(m.X_latent_scores().cols(), 3);
+    // match output rows to the number of input statistical units
     EXPECT_EQ(m.Y_latent_scores().rows(), Y.rows());
+    // require one score column for each of the three requested components
     EXPECT_EQ(m.Y_latent_scores().cols(), 3);
+    // match output columns to the number of response variables
     EXPECT_EQ(m.fitted(1).cols(), Y.cols());
+    // match output rows to the number of input statistical units
     EXPECT_EQ(m.reconstructed(1).rows(), Y.rows());
+    // match output columns to the number of response variables
     EXPECT_EQ(m.B(1).cols(), Y.cols());
+    // match the iteration diagnostic count to the requested component count
     EXPECT_EQ(m.direction_iterations().size(), 3);
+    // match the objective history count to the requested component count
     EXPECT_EQ(m.direction_objective_history().size(), 3);
+    // match the monotonicity diagnostic count to the requested component count
     EXPECT_EQ(m.direction_monotone().size(), 3);
     for (int h = 0; h < 3; ++h) {
+        // require at least one completed direction update for each component
         EXPECT_GT(m.direction_iterations()[h], 0);
+        // match the number of recorded objectives to the completed direction updates
         EXPECT_EQ(m.direction_objective_history()[h].size(), m.direction_iterations()[h]);
+        // require the fit diagnostic to report no objective increase beyond tolerance
         EXPECT_TRUE(m.direction_monotone()[h]);
     }
 
@@ -128,7 +162,10 @@ void check_fpls_case(const std::string& data_path, double lambda) {
     check_coefficient_predictions(m, X_centered * x_centering.Psi(), 3);
 }
 
-void check_fpls_gcv_case(const std::string& data_path) {
+/// @brief checks GCV-selected fits against reference predictions and convergence diagnostics
+void check_fpls_gcv_case(
+  const std::string& data_path   // directory containing input data and reference GCV-fit outputs
+) {
     std::string mesh_path = "../data/mesh/unit_square_60/";
     Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
 
@@ -162,30 +199,52 @@ void check_fpls_gcv_case(const std::string& data_path) {
     fPLS m("X", Y_centered, data, fe_ls_elliptic(a, F), fe_ls_elliptic(a, F));
     m.fit(3, lambda_grid, lambda_grid, OptimizeGCV, 20, 1e-2, 1000, seed);
 
+    // compare every coefficient prefix with the independent score-based predictions
     check_coefficient_predictions(m, X_centered * x_centering.Psi(), 3);
 
+    // compare uncentered response predictions with the stored reference using the test tolerance
     EXPECT_TRUE(almost_equal<double>(m.fitted().rowwise() + Y_mean, data_path + "Y_hat.csv"));
+    // compare uncentered predictor reconstructions with the stored reference using the test tolerance
     EXPECT_TRUE(almost_equal<double>(m.reconstructed().rowwise() + X_mean, data_path + "X_hat.csv"));
+    // compare uncentered response predictions with the stored reference using the test tolerance
     EXPECT_TRUE(almost_equal<double>(m.fitted(3).rowwise() + Y_mean, data_path + "Y_hat.csv"));
+    // compare uncentered predictor reconstructions with the stored reference using the test tolerance
     EXPECT_TRUE(almost_equal<double>(m.reconstructed(3).rowwise() + X_mean, data_path + "X_hat.csv"));
+    // match output rows to the number of input statistical units
     EXPECT_EQ(m.X_latent_scores().rows(), Y.rows());
+    // require one score column for each of the three requested components
     EXPECT_EQ(m.X_latent_scores().cols(), 3);
+    // match output rows to the number of input statistical units
     EXPECT_EQ(m.Y_latent_scores().rows(), Y.rows());
+    // require one score column for each of the three requested components
     EXPECT_EQ(m.Y_latent_scores().cols(), 3);
+    // match output columns to the number of response variables
     EXPECT_EQ(m.fitted(1).cols(), Y.cols());
+    // match output rows to the number of input statistical units
     EXPECT_EQ(m.reconstructed(1).rows(), Y.rows());
+    // match output columns to the number of response variables
     EXPECT_EQ(m.B(1).cols(), Y.cols());
+    // match the iteration diagnostic count to the requested component count
     EXPECT_EQ(m.direction_iterations().size(), 3);
+    // match the objective history count to the requested component count
     EXPECT_EQ(m.direction_objective_history().size(), 3);
+    // match the monotonicity diagnostic count to the requested component count
     EXPECT_EQ(m.direction_monotone().size(), 3);
     for (int h = 0; h < 3; ++h) {
+        // require at least one completed direction update for each component
         EXPECT_GT(m.direction_iterations()[h], 0);
+        // match the number of recorded objectives to the completed direction updates
         EXPECT_EQ(m.direction_objective_history()[h].size(), m.direction_iterations()[h]);
+        // require the fit diagnostic to report no objective increase beyond tolerance
         EXPECT_TRUE(m.direction_monotone()[h]);
     }
 }
 
-void check_restored_modes_smoke(const std::string& data_path, double lambda) {
+/// @brief checks that mode A and symmetric block fits produce finite outputs with the expected dimensions
+void check_restored_modes_smoke(
+  const std::string& data_path,   // directory containing predictor and response data
+  double lambda                   // fixed smoothing parameter for centering and both component solvers
+) {
     std::string mesh_path = "../data/mesh/unit_square_60/";
     Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
 
@@ -217,25 +276,40 @@ void check_restored_modes_smoke(const std::string& data_path, double lambda) {
 
     fPLS mode_a("X", Y_centered, data, fe_ls_elliptic(a, F), fe_ls_elliptic(a, F), fPLS_A);
     mode_a.fit(3, lambda_vec, lambda_vec, 20, 1e-2);
+    // verify that the constructor tag selects the expected deflation mode
     EXPECT_EQ(mode_a.mode(), fPLSMode::ModeA);
+    // match output rows to the number of input statistical units
     EXPECT_EQ(mode_a.fitted().rows(), Y.rows());
+    // match output columns to the number of response variables
     EXPECT_EQ(mode_a.fitted().cols(), Y.cols());
+    // match output rows to the number of input statistical units
     EXPECT_EQ(mode_a.reconstructed().rows(), X.rows());
+    // require one score column for each of the three requested components
     EXPECT_EQ(mode_a.Y_latent_scores().cols(), 3);
+    // check every entry of the response predictions for NaN or infinity
     EXPECT_TRUE(mode_a.fitted().array().isFinite().all());
+    // check every entry of the predictor reconstructions for NaN or infinity
     EXPECT_TRUE(mode_a.reconstructed().array().isFinite().all());
 
     fPLS mode_sb("X", Y_centered, data, fe_ls_elliptic(a, F), fe_ls_elliptic(a, F), fPLS_SB);
     mode_sb.fit(3, lambda_vec, lambda_vec, 20, 1e-2);
+    // verify that the constructor tag selects the expected deflation mode
     EXPECT_EQ(mode_sb.mode(), fPLSMode::SymmetricBlock);
+    // match output rows to the number of input statistical units
     EXPECT_EQ(mode_sb.fitted().rows(), Y.rows());
+    // match output columns to the number of response variables
     EXPECT_EQ(mode_sb.fitted().cols(), Y.cols());
+    // match output rows to the number of input statistical units
     EXPECT_EQ(mode_sb.reconstructed().rows(), X.rows());
+    // require one score column for each of the three requested components
     EXPECT_EQ(mode_sb.Y_latent_scores().cols(), 3);
+    // check every entry of the response predictions for NaN or infinity
     EXPECT_TRUE(mode_sb.fitted().array().isFinite().all());
+    // check every entry of the predictor reconstructions for NaN or infinity
     EXPECT_TRUE(mode_sb.reconstructed().array().isFinite().all());
 }
 
+/// @brief checks spline-based regression predictions, coefficient equivalence, and finite outputs
 void check_spline_smoke() {
     Triangulation<1, 1> T = Triangulation<1, 1>::Interval(0, 1, 21);
     GeoFrame data(T);
@@ -272,18 +346,28 @@ void check_spline_smoke() {
     lambda_vec << 1e-3;
     m.fit(2, lambda_vec, lambda_vec, 20, 1e-6);
 
+    // compare every coefficient prefix with the independent score-based predictions
     check_coefficient_predictions(m, X_centered * internals::point_basis_eval(Bh, T.nodes()), 2);
 
+    // match output rows to the number of input statistical units
     EXPECT_EQ(m.fitted().rows(), Y.rows());
+    // match output columns to the number of response variables
     EXPECT_EQ(m.fitted().cols(), Y.cols());
+    // check every entry of the response predictions for NaN or infinity
     EXPECT_TRUE(m.fitted().array().isFinite().all());
+    // check every entry of the predictor reconstructions for NaN or infinity
     EXPECT_TRUE(m.reconstructed().array().isFinite().all());
+    // check every entry of the regression coefficients for NaN or infinity
     EXPECT_TRUE(m.Beta().array().isFinite().all());
+    // match the iteration diagnostic count to the requested component count
     EXPECT_EQ(m.direction_iterations().size(), 2);
+    // match the objective history count to the requested component count
     EXPECT_EQ(m.direction_objective_history().size(), 2);
+    // match the monotonicity diagnostic count to the requested component count
     EXPECT_EQ(m.direction_monotone().size(), 2);
 }
 
+/// @brief checks that a zero predictor block fails with an exception during direction estimation
 void check_singular_direction_failure() {
     Triangulation<1, 1> T = Triangulation<1, 1>::Interval(0, 1, 11);
     GeoFrame data(T);
@@ -303,26 +387,23 @@ void check_singular_direction_failure() {
     fPLS m("X", Y, data, bs_ls_elliptic(a, F), bs_ls_elliptic(a, F));
     Eigen::Matrix<double, 1, 1> lambda;
     lambda << 1e-9;
+    // require direction estimation on zero predictors to throw a runtime error
     EXPECT_THROW(m.fit(1, lambda, lambda), std::runtime_error);
 }
 
 }   // namespace
 
 // check fixed-penalty predictions and component-specific penalty schedules on the reference data
-TEST(fpls, test_01) {
-    check_fpls_case("../data/models/fpls/2D_test1/", 10.0);
-}
+TEST(fpls, test_01) { check_fpls_case("../data/models/fpls/2D_test1/", 10.0); }
 
-TEST(fpls, test_02) {
-    check_fpls_gcv_case("../data/models/fpls/2D_test2/");
-}
+// check GCV-selected predictions against the reference data and verify component diagnostics
+TEST(fpls, test_02) { check_fpls_gcv_case("../data/models/fpls/2D_test2/"); }
 
-TEST(fpls, restored_modes_smoke) {
-    check_restored_modes_smoke("../data/models/fpls/2D_test1/", 10.0);
-}
+// check mode A and symmetric block selection, output dimensions, and finite reconstructions
+TEST(fpls, restored_modes_smoke) { check_restored_modes_smoke("../data/models/fpls/2D_test1/", 10.0); }
 
-TEST(fpls, spline_smoke) {
-    check_spline_smoke();
-}
+// check the spline solver path and coefficient prediction identity on synthetic centered data
+TEST(fpls, spline_smoke) { check_spline_smoke(); }
 
+// check that zero predictors trigger a runtime error instead of non-finite directions
 TEST(fpls, singular_direction_failure) { check_singular_direction_failure(); }
