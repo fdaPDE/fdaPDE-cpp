@@ -78,8 +78,8 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
       int n_comp,                                // number of components to extract
       const DirectionLambda& direction_lambda,   // fixed direction smoothing parameters shared by all components
       const LoadingLambda& loading_lambda,       // fixed loading smoothing parameters shared by all components
-      int max_iter = 20,                         // maximum number of alternating direction updates per component
-      double tol = 1e-6                          // objective tolerance for stopping and relative increase diagnostics
+      int max_iter = 1000,                       // maximum number of alternating direction updates per component
+      double tol = 1e-8                          // objective tolerance for stopping and relative increase diagnostics
     ) {
         fdapde_assert(direction_lambda.size() == direction_n_lambda);
         fdapde_assert(loading_lambda.size() == loading_n_lambda);
@@ -119,8 +119,8 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
       const std::vector<double>& direction_lambda_grid,   // candidate tuples or fixed penalty schedule
       const std::vector<double>& loading_lambda_grid,     // candidate tuples or fixed penalty schedule
       int flag,                // calibration bits: zero for fixed penalties or OptimizeGCV for grid search
-      int max_iter = 20,       // maximum number of alternating direction updates per component
-      double tol = 1e-6,       // objective tolerance for stopping and relative increase diagnostics
+      int max_iter = 1000,     // maximum number of alternating direction updates per component
+      double tol = 1e-8,       // objective tolerance for stopping and relative increase diagnostics
       int edf_r = 100,         // number of random probes for the effective degrees of freedom estimate
       int seed = random_seed   // seed for the effective degrees of freedom estimate
     ) {
