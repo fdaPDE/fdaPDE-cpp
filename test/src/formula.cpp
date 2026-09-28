@@ -16,17 +16,15 @@
 
 using namespace fdapde;
 
-// preserve the legacy covariate accessor while retaining separate pipe effects
-TEST(formula, legacy_rhs) {
+// separate covariate terms from pipe effects without changing their order
+TEST(formula, covariates_and_effects) {
     const Formula basic("y ~ x1 + x2 + f");
     const std::vector<std::string> expected {"x1", "x2", "f"};
     // ordinary formulas must retain every right-hand-side token in its original order
-    EXPECT_EQ(basic.rhs(), expected);
-    // the legacy and current accessors must refer to the same covariate collection
-    EXPECT_EQ(&basic.rhs(), &basic.covs());
+    EXPECT_EQ(basic.covs(), expected);
     const Formula grouped("y ~ x1 + x2|group");
     // a pipe effect must remain separate from the ordinary covariate collection
-    EXPECT_EQ(grouped.rhs(), std::vector<std::string> {"x1"});
+    EXPECT_EQ(grouped.covs(), std::vector<std::string> {"x1"});
     // parsing a single pipe token must produce exactly one effect
     ASSERT_EQ(grouped.efxs().size(), 1);
     // the effect covariate must preserve the token to the left of the pipe

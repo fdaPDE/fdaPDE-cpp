@@ -81,8 +81,6 @@ class Formula {
     // observers
     const std::string& lhs() const { return lhs_; }
     const std::vector<std::string>& covs() const { return covs_; }
-    /// @brief exposes covariate terms through the legacy right-hand-side accessor
-    const std::vector<std::string>& rhs() const { return covs_; }
     const std::vector<efx_token>& efxs() const { return efxs_; }
 };
 
