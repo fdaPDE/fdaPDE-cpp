@@ -151,7 +151,7 @@ void check_fpls_case(
 
     const std::vector<double> direction_schedule {lambda, lambda / 2, lambda / 4};
     const std::vector<double> loading_schedule {lambda / 4, lambda / 2, lambda};
-    m.fit(3, direction_schedule, loading_schedule, 0, 20, 1e-2);
+    m.fit(3, direction_schedule, loading_schedule, NoCalibration, 20, 1e-2);
     for (int h = 0; h < 3; ++h) {
         // each component receives its own direction penalty from the input schedule
         EXPECT_DOUBLE_EQ(m.direction_lambda()(h, 0), direction_schedule[h]);
@@ -292,7 +292,8 @@ void check_restored_modes_smoke(
     EXPECT_TRUE(mode_a.reconstructed().array().isFinite().all());
 
     fPLS mode_sb("X", Y_centered, data, fe_ls_elliptic(a, F), fe_ls_elliptic(a, F), fPLS_SB);
-    mode_sb.fit(3, lambda_vec, lambda_vec, 20, 1e-2);
+    const std::vector<double> loading_grid {};
+    mode_sb.fit(3, lambda_vec, loading_grid, 20, 1e-2);
     // verify that the constructor tag selects the expected deflation mode
     EXPECT_EQ(mode_sb.mode(), fPLSMode::SymmetricBlock);
     // match output rows to the number of input statistical units
@@ -307,9 +308,25 @@ void check_restored_modes_smoke(
     EXPECT_TRUE(mode_sb.fitted().array().isFinite().all());
     // check every entry of the predictor reconstructions for NaN or infinity
     EXPECT_TRUE(mode_sb.reconstructed().array().isFinite().all());
+
+    const Eigen::MatrixXd fixed_fitted = mode_sb.fitted();
+    const std::vector<double> direction_grid {lambda};
+    for (int calibration : {NoCalibration, OptimizeGCV}) {
+        mode_sb.fit(3, direction_grid, loading_grid, calibration, 20, 1e-2, 10, 476813);
+        // symmetric block fits must not report unused loading penalties for either calibration strategy
+        EXPECT_EQ(mode_sb.loading_lambda().size(), 0);
+        // reusing directions as loadings requires no loading GCV curve
+        EXPECT_TRUE(mode_sb.loading_gcv_values().empty());
+        // the common loading update must copy the predictor directions exactly
+        EXPECT_TRUE(mode_sb.X_loadings().isApprox(mode_sb.X_space_directions(), 1e-12));
+        // the common loading update must copy the response directions exactly
+        EXPECT_TRUE(mode_sb.Y_loadings().isApprox(mode_sb.Y_space_directions(), 1e-12));
+        // one direction candidate reproduces the fixed fit without any loading penalty
+        EXPECT_TRUE(mode_sb.fitted().isApprox(fixed_fitted, 1e-12));
+    }
 }
 
-/// @brief checks spline-based regression predictions, coefficient equivalence, and finite outputs
+/// @brief checks spline regression outputs, coefficient equivalence, and GCV curve reset on fixed-penalty refits
 void check_spline_smoke() {
     Triangulation<1, 1> T = Triangulation<1, 1>::Interval(0, 1, 21);
     GeoFrame data(T);
@@ -365,6 +382,30 @@ void check_spline_smoke() {
     EXPECT_EQ(m.direction_objective_history().size(), 2);
     // match the monotonicity diagnostic count to the requested component count
     EXPECT_EQ(m.direction_monotone().size(), 2);
+
+    const std::vector<double> lambda_grid {1e-3};
+    for (bool use_schedule : {false, true}) {
+        m.fit(2, lambda_grid, lambda_grid, OptimizeGCV, 20, 1e-6, 10, 476813);
+        // both components must retain a direction curve after GCV calibration
+        ASSERT_EQ(m.direction_gcv_values().size(), 2);
+        // both components must retain a loading curve after GCV calibration
+        ASSERT_EQ(m.loading_gcv_values().size(), 2);
+        for (int h = 0; h < 2; ++h) {
+            // a single candidate produces exactly one direction GCV value per component
+            EXPECT_EQ(m.direction_gcv_values()[h].size(), 1);
+            // a single candidate produces exactly one loading GCV value per component
+            EXPECT_EQ(m.loading_gcv_values()[h].size(), 1);
+        }
+        if (use_schedule) {
+            m.fit(2, lambda_grid, lambda_grid, NoCalibration, 20, 1e-6);
+        } else {
+            m.fit(2, lambda_vec, lambda_vec, 20, 1e-6);
+        }
+        // either fixed-penalty overload must discard direction curves from the preceding GCV fit
+        EXPECT_TRUE(m.direction_gcv_values().empty());
+        // either fixed-penalty overload must discard loading curves from the preceding GCV fit
+        EXPECT_TRUE(m.loading_gcv_values().empty());
+    }
 }
 
 /// @brief checks that a zero predictor block fails with an exception during direction estimation
@@ -402,7 +443,7 @@ TEST(fpls, test_02) { check_fpls_gcv_case("../data/models/fpls/2D_test2/"); }
 // check mode A and symmetric block selection, output dimensions, and finite reconstructions
 TEST(fpls, restored_modes_smoke) { check_restored_modes_smoke("../data/models/fpls/2D_test1/", 10.0); }
 
-// check the spline solver path and coefficient prediction identity on synthetic centered data
+// check spline regression and ensure both fixed-penalty overloads clear curves from preceding GCV fits
 TEST(fpls, spline_smoke) { check_spline_smoke(); }
 
 // check that zero predictors trigger a runtime error instead of non-finite directions

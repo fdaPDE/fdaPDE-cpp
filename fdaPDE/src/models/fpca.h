@@ -25,6 +25,7 @@ namespace fdapde {
 [[maybe_unused]] constexpr int ComputeXactSVD = 0x0;
 
 // bits 1 - 5 reserved to calibration strategies
+[[maybe_unused]] constexpr int NoCalibration = 0x0;
 [[maybe_unused]] constexpr int OptimizeGCV  = 0x1 << 1;
 [[maybe_unused]] constexpr int OptimizeMSRE = 0x2 << 1;
   
