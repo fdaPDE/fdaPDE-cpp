@@ -116,10 +116,19 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
             Eigen::Matrix<double, loading_n_lambda, 1> loading_lambda;
             switch (calibration) {
             case 0: {
-                fdapde_assert(direction_lambda_grid.size() == direction_n_lambda);
-                fdapde_assert(loading_lambda_grid.size() == loading_n_lambda);
-                std::copy(direction_lambda_grid.begin(), direction_lambda_grid.end(), direction_lambda.begin());
-                std::copy(loading_lambda_grid.begin(), loading_lambda_grid.end(), loading_lambda.begin());
+                fdapde_assert(
+                  direction_lambda_grid.size() == direction_n_lambda ||
+                  direction_lambda_grid.size() == n_comp_ * direction_n_lambda);
+                fdapde_assert(
+                  loading_lambda_grid.size() == loading_n_lambda ||
+                  loading_lambda_grid.size() == n_comp_ * loading_n_lambda);
+                const auto direction_begin =
+                  direction_lambda_grid.begin() +
+                  (direction_lambda_grid.size() == direction_n_lambda ? 0 : h * direction_n_lambda);
+                const auto loading_begin = loading_lambda_grid.begin() +
+                                           (loading_lambda_grid.size() == loading_n_lambda ? 0 : h * loading_n_lambda);
+                std::copy(direction_begin, direction_begin + direction_n_lambda, direction_lambda.begin());
+                std::copy(loading_begin, loading_begin + loading_n_lambda, loading_lambda.begin());
             } break;
             case OptimizeGCV: {
                 Eigen::JacobiSVD<matrix_t> svd(M_h, Eigen::ComputeThinU | Eigen::ComputeThinV);
@@ -215,14 +224,15 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
         fdapde_assert(h > 0 && h <= n_comp_);
         return h;
     }
+    /// @brief converts sequential score regression to coefficients on the original predictors
     matrix_t coefficient_(int h) const {
         static_assert(Mode == fPLSMode::Regression);
         const auto W_h = W_.leftCols(h);
         const auto C_h = C_.leftCols(h);
         const auto D_h = D_.leftCols(h);
-        return W_h * (C_h.transpose() * loading_solver_.Psi().transpose() * loading_solver_.Psi() * W_h)
-                       .partialPivLu()
-                       .solve(D_h.transpose());
+        // sequential deflation couples each score only to preceding scores, with unit diagonal
+        const matrix_t coupling = C_h.transpose() * loading_solver_.Psi().transpose() * direction_solver_.Psi() * W_h;
+        return W_h * coupling.template triangularView<Eigen::UnitUpper>().solve(D_h.transpose());
     }
     template <typename Lambda>
         requires(internals::is_subscriptable<Lambda, int>)

@@ -42,6 +42,25 @@ Eigen::RowVectorXd smooth_mean(
     return smoother.fn().transpose();
 }
 
+// compare the sequential score fit with predictions from coefficients for every prefix
+// the oracle uses the original centered data, independently of the coefficient conversion
+template <typename Model>
+void check_coefficient_predictions(const Model& model, const Eigen::MatrixXd& X_Psi, int n_comp) {
+    for (int h = 1; h <= n_comp; ++h) {
+        SCOPED_TRACE(h);
+        // each prefix must predict the same response as sequential score regression
+        EXPECT_TRUE((X_Psi * model.Beta(h)).isApprox(model.fitted(h), 1e-10));
+        // both coefficient accessors must expose the same operator
+        EXPECT_TRUE(model.B(h).isApprox(model.Beta(h), 1e-12));
+    }
+    // the cached full fit must agree with predictions from the cached coefficients
+    EXPECT_TRUE((X_Psi * model.Beta()).isApprox(model.fitted(), 1e-10));
+    // zero selects the full fit in the explicit component overload
+    EXPECT_TRUE(model.Beta(0).isApprox(model.Beta(), 1e-12));
+    // the default B accessor must expose the cached full coefficient matrix
+    EXPECT_TRUE(model.B().isApprox(model.Beta(), 1e-12));
+}
+
 void check_fpls_case(const std::string& data_path, double lambda) {
     std::string mesh_path = "../data/mesh/unit_square_60/";
     Triangulation<2, 2> D(mesh_path + "points.csv", mesh_path + "elements.csv", mesh_path + "boundary.csv", true, true);
@@ -74,14 +93,12 @@ void check_fpls_case(const std::string& data_path, double lambda) {
     lambda_vec << lambda;
     m.fit(3, lambda_vec, lambda_vec, 20, 1e-2);
 
+    check_coefficient_predictions(m, X_centered * x_centering.Psi(), 3);
+
     EXPECT_TRUE(almost_equal<double>(m.fitted().rowwise() + Y_mean, data_path + "Y_hat.csv"));
     EXPECT_TRUE(almost_equal<double>(m.reconstructed().rowwise() + X_mean, data_path + "X_hat.csv"));
-    EXPECT_TRUE(almost_equal<double>(m.B(), data_path + "B_hat.csv"));
     EXPECT_TRUE(almost_equal<double>(m.fitted(3).rowwise() + Y_mean, data_path + "Y_hat.csv"));
     EXPECT_TRUE(almost_equal<double>(m.reconstructed(3).rowwise() + X_mean, data_path + "X_hat.csv"));
-    EXPECT_TRUE(almost_equal<double>(m.B(3), data_path + "B_hat.csv"));
-    EXPECT_TRUE(almost_equal<double>(m.Beta(), data_path + "B_hat.csv"));
-    EXPECT_TRUE(almost_equal<double>(m.Beta(3), data_path + "B_hat.csv"));
     EXPECT_EQ(m.X_latent_scores().rows(), Y.rows());
     EXPECT_EQ(m.X_latent_scores().cols(), 3);
     EXPECT_EQ(m.Y_latent_scores().rows(), Y.rows());
@@ -97,6 +114,18 @@ void check_fpls_case(const std::string& data_path, double lambda) {
         EXPECT_EQ(m.direction_objective_history()[h].size(), m.direction_iterations()[h]);
         EXPECT_TRUE(m.direction_monotone()[h]);
     }
+
+    const std::vector<double> direction_schedule {lambda, lambda / 2, lambda / 4};
+    const std::vector<double> loading_schedule {lambda / 4, lambda / 2, lambda};
+    m.fit(3, direction_schedule, loading_schedule, 0, 20, 1e-2);
+    for (int h = 0; h < 3; ++h) {
+        // each component receives its own direction penalty from the input schedule
+        EXPECT_DOUBLE_EQ(m.direction_lambda()(h, 0), direction_schedule[h]);
+        // the loading schedule is indexed independently from the direction schedule
+        EXPECT_DOUBLE_EQ(m.loading_lambda()(h, 0), loading_schedule[h]);
+    }
+    // component-specific penalties preserve the coefficient prediction identity
+    check_coefficient_predictions(m, X_centered * x_centering.Psi(), 3);
 }
 
 void check_fpls_gcv_case(const std::string& data_path) {
@@ -133,14 +162,12 @@ void check_fpls_gcv_case(const std::string& data_path) {
     fPLS m("X", Y_centered, data, fe_ls_elliptic(a, F), fe_ls_elliptic(a, F));
     m.fit(3, lambda_grid, lambda_grid, OptimizeGCV, 20, 1e-2, 1000, seed);
 
+    check_coefficient_predictions(m, X_centered * x_centering.Psi(), 3);
+
     EXPECT_TRUE(almost_equal<double>(m.fitted().rowwise() + Y_mean, data_path + "Y_hat.csv"));
     EXPECT_TRUE(almost_equal<double>(m.reconstructed().rowwise() + X_mean, data_path + "X_hat.csv"));
-    EXPECT_TRUE(almost_equal<double>(m.B(), data_path + "B_hat.csv"));
     EXPECT_TRUE(almost_equal<double>(m.fitted(3).rowwise() + Y_mean, data_path + "Y_hat.csv"));
     EXPECT_TRUE(almost_equal<double>(m.reconstructed(3).rowwise() + X_mean, data_path + "X_hat.csv"));
-    EXPECT_TRUE(almost_equal<double>(m.B(3), data_path + "B_hat.csv"));
-    EXPECT_TRUE(almost_equal<double>(m.Beta(), data_path + "B_hat.csv"));
-    EXPECT_TRUE(almost_equal<double>(m.Beta(3), data_path + "B_hat.csv"));
     EXPECT_EQ(m.X_latent_scores().rows(), Y.rows());
     EXPECT_EQ(m.X_latent_scores().cols(), 3);
     EXPECT_EQ(m.Y_latent_scores().rows(), Y.rows());
@@ -245,6 +272,8 @@ void check_spline_smoke() {
     lambda_vec << 1e-3;
     m.fit(2, lambda_vec, lambda_vec, 20, 1e-6);
 
+    check_coefficient_predictions(m, X_centered * internals::point_basis_eval(Bh, T.nodes()), 2);
+
     EXPECT_EQ(m.fitted().rows(), Y.rows());
     EXPECT_EQ(m.fitted().cols(), Y.cols());
     EXPECT_TRUE(m.fitted().array().isFinite().all());
@@ -279,6 +308,7 @@ void check_singular_direction_failure() {
 
 }   // namespace
 
+// check fixed-penalty predictions and component-specific penalty schedules on the reference data
 TEST(fpls, test_01) {
     check_fpls_case("../data/models/fpls/2D_test1/", 10.0);
 }
