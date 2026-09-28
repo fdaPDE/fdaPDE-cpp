@@ -89,7 +89,8 @@ template <typename VariationalSolver> class fpca_power_iteration_impl {
             case OptimizeGCV: {
                 auto gcv_functor = [&](auto lambda) { return gcv_(X, lambda, V.col(i)); };
                 GridSearch<n_lambda> optimizer;
-                opt_lambda = optimizer.optimize(gcv_functor, lambda_grid);
+                auto opt_ = optimizer.optimize(gcv_functor, lambda_grid);
+                for (int i = 0; i < n_lambda; ++i) { opt_lambda[i] = opt_[i]; }
             } break;
             case OptimizeMSRE: {
             } break;
@@ -163,7 +164,7 @@ template <typename VariationalSolver> class fpca_power_iteration_impl {
         const auto result = solve_(X, lambda, f0);
         // evaluate GCV index at convergence
         std::array<double, n_lambda> lambda_vec;
-        std::copy(lambda.data(), lambda.data() + n_lambda, lambda_vec.begin());
+        for (int i = 0; i < n_lambda; ++i) { lambda_vec[i] = lambda[i]; }
         if (edf_map_.find(lambda_vec) == edf_map_.end()) {   // cache Tr[S]
             edf_map_[lambda_vec] = smoother_->edf();
         }
@@ -231,7 +232,8 @@ template <typename VariationalSolver> class fpca_subspace_iteration_impl {
         case OptimizeGCV: {
             auto gcv_functor = [&](auto lambda) { return gcv_(X, rank, lambda, V); };
             GridSearch<n_lambda> optimizer;
-            opt_lambda = optimizer.optimize(gcv_functor, lambda_grid);
+            auto opt_ = optimizer.optimize(gcv_functor, lambda_grid);
+            for (int i = 0; i < n_lambda; ++i) { opt_lambda[i] = opt_[i]; }
         } break;
         case OptimizeMSRE: {
         } break;
@@ -345,7 +347,8 @@ template <typename VariationalSolver> class fpca_direct_impl {
         case OptimizeGCV: {
             auto gcv_functor = [&](auto lambda) { return gcv_(X, rank, lambda, flag); };
             GridSearch<n_lambda> optimizer;
-            opt_lambda = optimizer.optimize(gcv_functor, lambda_grid);
+            auto opt_ = optimizer.optimize(gcv_functor, lambda_grid);
+            for (int i = 0; i < n_lambda; ++i) { opt_lambda[i] = opt_[i]; }
         } break;
         case OptimizeMSRE: {
         } break;
