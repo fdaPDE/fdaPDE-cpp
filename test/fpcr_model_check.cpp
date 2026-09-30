@@ -169,6 +169,18 @@ int main() {
     zero_layer.load_blk("X", Eigen::MatrixXd::Zero(X.cols(), X.rows()));
     fPCR zero("X", Y, zero_data, smoother_penalty);
     assert(rejects([&] { zero.fit(1, std::vector<double> {0.1}); }));
+    // native fPCA imputation must reject EDF settings that its missing-data solver cannot apply
+    GeoFrame incomplete_data(domain);
+    auto& incomplete_layer = incomplete_data.insert_scalar_layer<POINT>("observations", MESH_NODES);
+    Eigen::MatrixXd incomplete_X = X.transpose();
+    incomplete_X(0, 0) = NAN;
+    incomplete_layer.load_blk("X", incomplete_X);
+    fPCA incomplete("X", incomplete_data, fe_ls_elliptic(penalty, load));
+    // an explicit seed cannot be silently discarded by the missing-data dispatch
+    assert(
+      rejects([&] { incomplete.fit(1, std::vector<double> {0.1}, ComputeXactSVD, fpca_power_solver(), 100, 42); }));
+    // a nondefault EDF probe count also cannot be silently discarded by the missing-data dispatch
+    assert(rejects([&] { incomplete.fit(1, std::vector<double> {0.1}, ComputeXactSVD, fpca_power_solver(), 7); }));
     // EDF probe counts must be positive even when supplied to fixed calibration
     assert(rejects([&] { model.fit(1, std::vector<double> {0.1}, ComputeXactSVD, 2, 1e-9, 0, 42); }));
     std::cout << "fPCR model checks passed\n";

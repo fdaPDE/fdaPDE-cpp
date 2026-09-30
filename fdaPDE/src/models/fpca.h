@@ -651,6 +651,7 @@ template <typename VariationalSolver> class fPCA {
     }
 
     /// @brief fits components, retaining actual power-solver GCV curves and explicitly controlled EDF estimates
+    /// explicit EDF controls require complete data and the power solver
     template <typename LambdaT, typename Policy = fpca_power_solver>
         requires(internals::is_vector_like_v<LambdaT>)
     auto fit(
@@ -677,6 +678,10 @@ template <typename VariationalSolver> class fPCA {
         lambda_.resize(n_lambda, rank);
         // dispatch to processing logic
         if (has_nan_) {
+            // the imputation solver cannot apply explicit stochastic EDF controls
+            if (edf_r != 100 || seed != random_seed) {
+                throw std::invalid_argument("explicit fPCA EDF controls require complete observations");
+            }
             // default to OptimMSRE calibration, if no calibration provided
             if (lambda_grid.size() > n_lambda && (flag & 0b11110) == 0) { flag = flag | OptimizeMSRE; }
             internals::fpca_na_impl mm_scheme(solver_);

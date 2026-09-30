@@ -36,12 +36,14 @@ results. Beta maps the original centered predictors through the functional basis
 including all preceding deflations: `X * Psi * Beta(h) == fitted(h)`. Prefix zero
 selects all fitted components. `gcv_values()`, `gcv_edf()`, `lambda_grid()` and
 `selected_indices()` expose the evaluations used by its fPCA calibration.
+The supported bindings are single-parameter elliptic FEM and spline smoothers.
 
 Power-solver GCV now uses floating-point residual degrees of freedom (`m - edf`)
 rather than truncating them to an integer. Explicit seeds and probe counts are
 honored on repeated elliptic fits. These corrections can change GCV selections
 relative to callers that previously used default random probes. Explicit EDF
 controls are supported by the fPCA power policy; other policies reject nondefault
-controls. This branch's pinned core still provides the legacy one-argument assertion
+controls; the missing-data path also rejects nondefault EDF controls rather than
+ignoring them. This branch's pinned core still provides the legacy one-argument assertion
 macro, so new permanent public validation uses exceptions pending the core assertion
 API migration.

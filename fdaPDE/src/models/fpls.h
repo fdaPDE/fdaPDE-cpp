@@ -563,7 +563,7 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
       double tol,             // objective tolerance for stopping and relative increase diagnostics
       int edf_r,              // number of random probes for the effective degrees of freedom estimate
       int seed,               // seed for the effective degrees of freedom estimate
-      double& edf             // EDF estimate retained from this GCV evaluation
+      double& edf             // effective degrees of freedom retained from this GCV evaluation
     ) {
         const auto result = solve_direction_(M, lambda, f0, max_iter, tol);
         edf = direction_solver_.edf(lambda, edf_r, seed);
@@ -580,7 +580,7 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
       const Lambda& lambda,   // smoothing parameters for the current solver
       int edf_r,              // number of random probes for the effective degrees of freedom estimate
       int seed,               // seed for the effective degrees of freedom estimate
-      double& edf             // EDF estimate retained from this GCV evaluation
+      double& edf             // effective degrees of freedom retained from this GCV evaluation
     ) {
         loading_solver_.update_response(X.transpose() * t / t.squaredNorm());
         loading_solver_.fit(lambda);
