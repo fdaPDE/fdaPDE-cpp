@@ -24,6 +24,7 @@ namespace fdapde {
 /// @brief regresses centered scalar or multivariate responses on sequential smooth principal component scores
 /// predictor data is bound through GeoFrame with locations in rows and statistical units in columns
 /// each component prefix refits OLS; beta coefficients map the original centered predictors after sequential deflation
+/// supported bindings are single-parameter elliptic finite-element and spline smoothers
 /// calibration uses the native fPCA power solver with fixed penalties or explicitly controlled stochastic EDF estimates
 ///
 /// @code
@@ -37,6 +38,7 @@ template <typename VariationalSolver> class fPCR {
     using smoother_t = std::decay_t<VariationalSolver>;
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
     static constexpr int n_lambda = smoother_t::n_lambda;
+    static_assert(n_lambda == 1, "fPCR requires a single-parameter elliptic finite-element or spline smoother");
 
     fPCA<smoother_t> fpca_;
     matrix_t X_, Y_;
