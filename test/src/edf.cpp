@@ -29,8 +29,8 @@ void check_edf_probes(
     const double first = model.edf(3, seed);
     // the first EDF call must initialize its probe storage and yield a finite estimate
     ASSERT_TRUE(std::isfinite(first));
-    // an unchanged probe count must reuse the existing sample, even with a different seed argument
-    EXPECT_DOUBLE_EQ(model.edf(3, 123), first);
+    // an unchanged probe count and seed must reuse the existing sample
+    EXPECT_DOUBLE_EQ(model.edf(3, seed), first);
     for (int r : {model.n_obs(), 2}) {
         SRPDE reference("y ~ f", data, penalty);
         reference.fit(lambda...);
@@ -39,7 +39,21 @@ void check_edf_probes(
         // increasing to n_locs or shrinking must reproduce a fresh smoother with the requested sample
         EXPECT_NEAR(actual, expected, 1e-12);
         // the resized sample must also survive repeated EDF calls without being regenerated
-        EXPECT_DOUBLE_EQ(model.edf(r, 123), actual);
+        EXPECT_DOUBLE_EQ(model.edf(r, seed), actual);
+    }
+}
+
+/// @brief checks that explicit elliptic seeds replace cached samples without changing the probe count
+template <typename GeoFrame, typename Penalty>
+void check_elliptic_edf_seeds(const GeoFrame& data, const Penalty& penalty) {
+    SRPDE model("y ~ f", data, penalty);
+    model.fit(0.01);
+    for (int seed : {0, 42, 0}) {
+        SRPDE reference("y ~ f", data, penalty);
+        reference.fit(0.01);
+        const double expected = reference.edf(3, seed);
+        // switching the seed at fixed probe count must agree with a newly initialized smoother
+        EXPECT_DOUBLE_EQ(model.edf(3, seed), expected);
     }
 }
 
@@ -57,6 +71,24 @@ TEST(edf, elliptic_probe_cache) {
     ZeroField<2> u;
     auto F = integral(D)(u * v);
     check_edf_probes(data, fe_ls_elliptic(a, F), 0.01);
+    check_elliptic_edf_seeds(data, fe_ls_elliptic(a, F));
+}
+
+// check spline probe count and seed refresh against independently initialized public regression models
+TEST(edf, spline_probe_cache) {
+    auto D = Triangulation<1, 1>::Interval(0, 1, 21);
+    GeoFrame data(D);
+    auto& layer = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
+    const Eigen::MatrixXd y = Eigen::VectorXd::LinSpaced(D.n_nodes(), 0, 1);
+    layer.load_blk("y", y);
+    BsSpace Vh(D, 3);
+    TrialFunction f(Vh);
+    TestFunction v(Vh);
+    auto a = integral(D)(dxx(f) * dxx(v));
+    ZeroField<1> u;
+    auto F = integral(D)(u * v);
+    check_edf_probes(data, bs_ls_elliptic(a, F), 0.01);
+    check_elliptic_edf_seeds(data, bs_ls_elliptic(a, F));
 }
 
 // check both monolithic space-time solvers and the iterative separable solver against fresh EDF samples

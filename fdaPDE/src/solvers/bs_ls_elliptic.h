@@ -330,12 +330,12 @@ struct bs_ls_elliptic {
         // TODO covs_ > 0
         return f_;
     }
-    // hutchinson approximation for Tr[S]
+    /// @brief computes the exact trace or estimates it with probes cached by count and seed
     double edf(int r = 100, int seed = random_seed) {
         fdapde_assert(lambda_saved_.has_value());
 
         if (trace_mode_ == TraceMode::Hutchinson) {
-            if (!Ys_.has_value() || !Bs_.has_value()) {
+            if (!Ys_.has_value() || !Bs_.has_value() || r != Us_->cols() || seed != edf_seed_) {
                 int seed_ = (seed == random_seed) ? std::random_device()() : seed;
                 std::mt19937 rng(seed_);
                 rademacher_distribution rademacher;
@@ -345,6 +345,7 @@ struct bs_ls_elliptic {
                 }
                 Ys_ = Us_->transpose() * Psi_;
                 Bs_ = matrix_t::Zero(n_dofs_, r);   // implicitly enforce homogeneous forcing
+                edf_seed_ = seed;
             }
             if (n_covs_ == 0) {
                 Bs_ = PsiNA().transpose() * D_ * W_ * (*Us_);
@@ -359,7 +360,6 @@ struct bs_ls_elliptic {
             const matrix_t S = PsiNA() * invA_.solve(PsiNA().transpose() * D_ * W_);
             return S.trace();
         }
-
     }
     template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT> || std::is_floating_point_v<LambdaT>)
@@ -437,6 +437,7 @@ struct bs_ls_elliptic {
     matrix_t b_;
     // matrices for Hutchinson stochastic estimation of Tr[S]
     std::optional<matrix_t> Ys_, Bs_, Us_;
+    int edf_seed_ = random_seed;
 
     int n_dofs_ = 0, n_locs_ = 0, n_obs_ = 0, n_covs_ = 0;
     sparse_matrix_t R0_;    // n_dofs x n_dofs matrix [R0]_{ij} = \int_D \psi_i * \psi_j

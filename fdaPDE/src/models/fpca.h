@@ -26,18 +26,18 @@ namespace fdapde {
 
 // bits 1 - 5 reserved to calibration strategies
 [[maybe_unused]] constexpr int NoCalibration = 0x0;
-[[maybe_unused]] constexpr int OptimizeGCV  = 0x1 << 1;
+[[maybe_unused]] constexpr int OptimizeGCV = 0x1 << 1;
 [[maybe_unused]] constexpr int OptimizeMSRE = 0x2 << 1;
-  
+
 namespace internals {
 
-// power iteration based fPCA
-// finds vectors s, f minimizing \norm{X - s * f^\top}_F^2 + P_{\lambda}(f)
+/// @brief estimates sequential smooth principal components by alternating scores and loading smoothing
 template <typename VariationalSolver> class fpca_power_iteration_impl {
    private:
     using vector_t = Eigen::Matrix<double, Dynamic, 1>;
     using matrix_t = Eigen::Matrix<double, Dynamic, Dynamic>;
 
+    /// @brief retains a converged component and its objective diagnostics
     struct fit_result {
         vector_t f;
         vector_t s;
@@ -48,15 +48,28 @@ template <typename VariationalSolver> class fpca_power_iteration_impl {
    public:
     using smoother_t = std::decay_t<VariationalSolver>;
     static constexpr int n_lambda = smoother_t::n_lambda;
-  
+
+    /// @brief creates an unbound power iteration solver
     fpca_power_iteration_impl() noexcept = default;
+    /// @brief binds the smoother with default iteration controls
     fpca_power_iteration_impl(VariationalSolver& smoother) noexcept :
         smoother_(std::addressof(smoother)), n_dofs_(smoother.n_dofs()) { }
+    /// @brief binds the smoother and explicit objective stopping controls
     fpca_power_iteration_impl(VariationalSolver& smoother, int max_iter, double tol) noexcept :
         smoother_(std::addressof(smoother)), n_dofs_(smoother.n_dofs()), max_iter_(max_iter), tol_(tol) { }
 
-    template <typename DataT> auto fit(const DataT& data, int rank, const std::vector<double>& lambda_grid, int flag) {
+    /// @brief estimates sequential components with fixed penalties or explicit-probe GCV calibration
+    template <typename DataT>
+    auto fit(
+      const DataT& data, int rank, const std::vector<double>& lambda_grid, int flag, int edf_r = 100,
+      int seed = random_seed) {
         fdapde_assert(lambda_grid.size() > 0 && lambda_grid.size() % n_lambda == 0);
+        edf_r_ = edf_r;
+        seed_ = seed;
+        edf_map_.clear();
+        gcv_values_.clear();
+        gcv_edf_.clear();
+        selected_indices_.clear();
         matrix_t X = data.transpose();
         n_locs_ = X.cols(), n_units_ = X.rows();
         // first guess of PCs set to a multivariate PCA (SVD)
@@ -78,6 +91,11 @@ template <typename VariationalSolver> class fpca_power_iteration_impl {
         monotone_.assign(rank, true);
 
         int calibration = (flag & 0b11110);   // detect calibration strategy
+        if (calibration == OptimizeGCV) {
+            gcv_values_.resize(rank);
+            gcv_edf_.resize(rank);
+            selected_indices_.resize(rank);
+        }
         for (int i = 0; i < rank; ++i) {
             // select optimal smoothing level for i-th component
             Eigen::Matrix<double, n_lambda, 1> opt_lambda;
@@ -87,10 +105,16 @@ template <typename VariationalSolver> class fpca_power_iteration_impl {
                 std::copy(lambda_grid.begin(), lambda_grid.end(), opt_lambda.begin());
             } break;
             case OptimizeGCV: {
-                auto gcv_functor = [&](auto lambda) { return gcv_(X, lambda, V.col(i)); };
+                auto gcv_functor = [&](auto lambda) {
+                    const double value = gcv_(X, lambda, V.col(i));
+                    gcv_edf_[i].push_back(last_edf_);
+                    return value;
+                };
                 GridSearch<n_lambda> optimizer;
-                auto opt_ = optimizer.optimize(gcv_functor, lambda_grid);
-                for (int i = 0; i < n_lambda; ++i) { opt_lambda[i] = opt_[i]; }
+                opt_lambda = optimizer.optimize(gcv_functor, lambda_grid);
+                gcv_values_[i] = optimizer.values();
+                selected_indices_[i] =
+                  std::distance(gcv_values_[i].begin(), std::min_element(gcv_values_[i].begin(), gcv_values_[i].end()));
             } break;
             case OptimizeMSRE: {
             } break;
@@ -103,6 +127,9 @@ template <typename VariationalSolver> class fpca_power_iteration_impl {
             for (int j = 0; j < n_lambda; ++j) { lambda_(i, j) = opt_lambda[j]; }
             // store results
             f_norm_[i] = std::sqrt(result.f.dot(smoother_->mass() * result.f));
+            if (!std::isfinite(f_norm_[i]) || f_norm_[i] <= 0) {
+                throw std::runtime_error("fPCA loading has zero or non-finite functional norm");
+            }
             f_.col(i) = result.f / f_norm_[i];
             s_.col(i) = result.s * f_norm_[i];
             objective_history_[i] = std::move(result.objective_history);
@@ -113,17 +140,30 @@ template <typename VariationalSolver> class fpca_power_iteration_impl {
         }
         return std::tie(f_, s_);
     }
-    // observers
+    /// @brief returns normalized subject scores
     const matrix_t& scores() const { return s_; }
+    /// @brief returns functional L2-normalized loading coefficients
     const matrix_t& loading() const { return f_; }
+    /// @brief returns loading norms transferred to the scores
     const std::vector<double>& loadings_norm() const { return f_norm_; }
+    /// @brief returns the fitted penalty tuple for each component
     const matrix_t& lambda() const { return lambda_; }
+    /// @brief returns the bound smoother
     const smoother_t* smoother() const { return smoother_; }
+    /// @brief returns objective traces for the retained component fits
     const std::vector<std::vector<double>>& objective_history() const { return objective_history_; }
+    /// @brief returns completed power updates per component
     const std::vector<int>& iterations() const { return iterations_; }
+    /// @brief reports whether each objective trace avoided relative increases beyond tolerance
     const std::vector<bool>& monotone() const { return monotone_; }
+    /// @brief returns actual GCV evaluations per component in candidate order
+    const std::vector<std::vector<double>>& gcv_values() const { return gcv_values_; }
+    /// @brief returns the EDF estimates used by each recorded GCV evaluation
+    const std::vector<std::vector<double>>& gcv_edf() const { return gcv_edf_; }
+    /// @brief returns the zero-based first minimizing candidate for each component
+    const std::vector<int>& selected_indices() const { return selected_indices_; }
    private:
-    // finds vectors s, f minimizing \norm{X - s * f^\top}_F^2 + P_{\lambda}(f)
+    /// @brief alternates a unit score with a smoothed loading while monitoring the penalized objective
     template <typename LambdaT, typename InitT>
         requires(internals::is_subscriptable<LambdaT, int>)
     auto solve_(const matrix_t& X, const LambdaT& lambda, const InitT& f0) {
@@ -135,21 +175,28 @@ template <typename VariationalSolver> class fpca_power_iteration_impl {
         fit_result result;
         result.objective_history.reserve(max_iter_);
         while (!almost_equal(Jnew, Jold, tol_) && n_iter < max_iter_) {
-            // s = X * fn / \norm(X * fn)
+            // project the current loading and normalize its subject score
             s = X * fn;
-            s = s / s.norm();
-            // f = \argmin_f \sum_i (y_i - f(p_i))^2 + \int_D (\Delta f)^2, with y = X^\top * s
+            const double score_norm = s.norm();
+            if (!s.allFinite() || !std::isfinite(score_norm) || score_norm <= 0) {
+                throw std::runtime_error("fPCA score update is zero or non-finite");
+            }
+            s /= score_norm;
+            // smooth the conditional loading response for the current unit score
             smoother_->update_response(X.transpose() * s);
             smoother_->fit(lambda);
             // prepare for next iteration
             n_iter++;
             fn = smoother_->Psi() * smoother_->f();
+            if (!fn.allFinite() || !smoother_->f().allFinite()) {
+                throw std::runtime_error("fPCA smoother produced a non-finite loading");
+            }
             Jold = Jnew;
             Jnew = (X - s * fn.transpose()).squaredNorm() + smoother_->ftPf(lambda);
+            if (!std::isfinite(Jnew)) throw std::runtime_error("fPCA objective is non-finite");
             result.objective_history.push_back(Jnew);
             result.iterations = n_iter;
-            if (!std::isfinite(Jnew) ||
-                (n_iter > 1 && (Jnew - Jold) / (1.0 + std::abs(Jold)) > tol_)) {
+            if (!std::isfinite(Jnew) || (n_iter > 1 && (Jnew - Jold) / (1.0 + std::abs(Jold)) > tol_)) {
                 result.monotone = false;
             }
         }
@@ -157,7 +204,7 @@ template <typename VariationalSolver> class fpca_power_iteration_impl {
         result.s = std::move(s);
         return result;
     }
-    // finds vectors s, f minimizing \norm{X - s * f^\top}_F^2 + P_{\lambda}(f) and returns the GCV index
+    /// @brief evaluates a candidate and retains its single cached EDF estimate
     template <typename LambdaT, typename InitT>
         requires(internals::is_subscriptable<LambdaT, int>)
     double gcv_(const matrix_t& X, const LambdaT lambda, const InitT& f0) {
@@ -166,13 +213,23 @@ template <typename VariationalSolver> class fpca_power_iteration_impl {
         std::array<double, n_lambda> lambda_vec;
         for (int i = 0; i < n_lambda; ++i) { lambda_vec[i] = lambda[i]; }
         if (edf_map_.find(lambda_vec) == edf_map_.end()) {   // cache Tr[S]
-            edf_map_[lambda_vec] = smoother_->edf();
+            edf_map_[lambda_vec] = smoother_->edf(edf_r_, seed_);
         }
-        int dor = n_locs_ - edf_map_.at(lambda_vec);
-        return (n_locs_ / std::pow(dor, 2)) *
-               ((smoother_->Psi() * result.f) - smoother_->response()).squaredNorm();
+        last_edf_ = edf_map_.at(lambda_vec);
+        const double dor = n_locs_ - last_edf_;
+        if (!std::isfinite(last_edf_) || !std::isfinite(dor) || dor <= 0) {
+            throw std::runtime_error("fPCA GCV has no positive residual degrees of freedom");
+        }
+        const double value =
+          (n_locs_ / std::pow(dor, 2)) * ((smoother_->Psi() * result.f) - smoother_->response()).squaredNorm();
+        if (!std::isfinite(value)) throw std::runtime_error("fPCA GCV evaluation is non-finite");
+        return value;
     }
     std::unordered_map<std::array<double, n_lambda>, double, internals::std_array_hash<double, n_lambda>> edf_map_;
+    std::vector<std::vector<double>> gcv_values_, gcv_edf_;
+    std::vector<int> selected_indices_;
+    int edf_r_ = 100, seed_ = random_seed;
+    double last_edf_ = 0;
     int n_locs_ = 0, n_units_ = 0, n_dofs_ = 0;
     smoother_t* smoother_;         // smoothing variational solver
     matrix_t f_;                   // PCs expansion coefficient vector
@@ -182,7 +239,7 @@ template <typename VariationalSolver> class fpca_power_iteration_impl {
     std::vector<std::vector<double>> objective_history_;
     std::vector<int> iterations_;
     std::vector<bool> monotone_;
-  
+
     // power iteration algorithm parameters
     double tol_ = 1e-6;
     int max_iter_ = 20;
@@ -549,7 +606,8 @@ class fpca_direct_solver {
     fpca_direct_solver() noexcept = default;
     template <typename Smoother> [[nodiscard]] auto get(Smoother&& solver) const { return impl_t<Smoother>(solver); }
 };
-  
+
+/// @brief estimates smooth principal components through a variational smoother and a solver policy
 template <typename VariationalSolver> class fPCA {
    private:
     using smoother_t = std::decay_t<VariationalSolver>;
@@ -558,23 +616,27 @@ template <typename VariationalSolver> class fPCA {
     using binary_t = BinaryMatrix<Dynamic, Dynamic>;
     static constexpr int n_lambda = smoother_t::n_lambda;
    public:
+    /// @brief creates an uninitialized principal component model
     fPCA() noexcept = default;
+    /// @brief discretizes the supplied penalty and binds functional observations
     template <typename GeoFrame, typename Penalty>
     fPCA(const std::string& colname, const GeoFrame& gf, Penalty&& penalty) noexcept : smoother_(), data_() {
         discretize(penalty.get());
         analyze_data(colname, gf);
     }
+    /// @brief discretizes the variational penalty and records its coefficient-space size
     template <typename... Args> void discretize(Args&&... args) {
         smoother_.discretize(std::forward<Args>(args)...);
         n_dofs_ = smoother_.n_dofs();
-	return;
+        return;
     }
+    /// @brief binds locations-by-subjects observations and configures equal observation weights
     template <typename GeoFrame> void analyze_data(const std::string& colname, const GeoFrame& gf) {
         fdapde_assert(gf.n_layers() == 1);
         data_ = gf[0].data().template col<double>(colname).as_matrix();
         n_locs_ = data_.rows();
         n_units_ = data_.cols();
-	smoother_.analyze_data(gf, vector_t::Ones(gf[0].rows()).asDiagonal());
+        smoother_.analyze_data(gf, vector_t::Ones(gf[0].rows()).asDiagonal());
         // detect if data_ has at least one missing value
         has_nan_ = false;
         for (int i = 0; i < n_locs_; ++i) {
@@ -585,13 +647,29 @@ template <typename VariationalSolver> class fPCA {
                 }
             }
         }
-	return;
+        return;
     }
 
+    /// @brief fits components, retaining actual power-solver GCV curves and explicitly controlled EDF estimates
     template <typename LambdaT, typename Policy = fpca_power_solver>
         requires(internals::is_vector_like_v<LambdaT>)
-    auto fit(int rank, const LambdaT& lambda_grid, int flag = ComputeRandSVD, Policy policy = Policy()) {
-        fdapde_assert(lambda_grid.size() % n_lambda == 0);
+    auto fit(
+      int rank, const LambdaT& lambda_grid, int flag = ComputeRandSVD, Policy policy = Policy(), int edf_r = 100,
+      int seed = random_seed) {
+        if (
+          rank < 1 || rank > std::min(n_locs_, n_units_) || lambda_grid.size() == 0 ||
+          lambda_grid.size() % n_lambda != 0 || edf_r < 1) {
+            throw std::invalid_argument("invalid fPCA component count, lambda grid or EDF probe count");
+        }
+        for (int i = 0; i < lambda_grid.size(); ++i) {
+            if (!std::isfinite(lambda_grid[i]) || lambda_grid[i] <= 0) {
+                throw std::invalid_argument("fPCA smoothing parameters must be finite and positive");
+            }
+        }
+        lambda_grid_.resize(0, n_lambda);
+        gcv_values_.clear();
+        gcv_edf_.clear();
+        selected_indices_.clear();
         auto solver_ = policy.get(smoother_);   // instantiate solver implementation
         f_.resize(n_dofs_, rank);
         s_.resize(n_units_, rank);
@@ -610,10 +688,35 @@ template <typename VariationalSolver> class fPCA {
             // default to OptimGCV calibration, if no calibration provided
             if (lambda_grid.size() > n_lambda && (flag & 0b11110) == 0) { flag = flag | OptimizeGCV; }
 
-            const auto& [f, s] = solver_.fit(data_, rank, lambda_grid, flag);
+            auto fit_solver = [&]() {
+                if constexpr (requires { solver_.fit(data_, rank, lambda_grid, flag, edf_r, seed); }) {
+                    return solver_.fit(data_, rank, lambda_grid, flag, edf_r, seed);
+                } else {
+                    if (edf_r != 100 || seed != random_seed) {
+                        throw std::invalid_argument("explicit fPCA EDF controls require the power solver");
+                    }
+                    return solver_.fit(data_, rank, lambda_grid, flag);
+                }
+            };
+            const auto& [f, s] = fit_solver();
             f_ = std::move(f);
             s_ = std::move(s);
             f_norm_ = solver_.loadings_norm();
+            if constexpr (requires {
+                              solver_.gcv_values();
+                              solver_.gcv_edf();
+                              solver_.selected_indices();
+                          }) {
+                gcv_values_ = solver_.gcv_values();
+                gcv_edf_ = solver_.gcv_edf();
+                selected_indices_ = solver_.selected_indices();
+                if (!gcv_values_.empty()) {
+                    lambda_grid_.resize(lambda_grid.size() / n_lambda, n_lambda);
+                    for (int i = 0; i < lambda_grid_.rows(); ++i) {
+                        for (int j = 0; j < n_lambda; ++j) { lambda_grid_(i, j) = lambda_grid[i * n_lambda + j]; }
+                    }
+                }
+            }
         }
         lambda_ = solver_.lambda();
         if constexpr (requires {
@@ -631,25 +734,43 @@ template <typename VariationalSolver> class fPCA {
         }
         return std::tie(f_, s_);
     }
-    // observers
-    const matrix_t& S() const { return s_; }   // scoring matrix
-    const matrix_t& F() const { return f_; }   // loading matrix
+    /// @brief returns fitted subject scores
+    const matrix_t& S() const { return s_; }
+    /// @brief returns functional loading coefficients
+    const matrix_t& F() const { return f_; }
+    /// @brief evaluates loadings at the bound observation locations
     matrix_t Fn() const { return smoother_.Psi() * f_; }
+    /// @brief returns loading norms transferred to subject scores
     const std::vector<double>& loadings_norm() const { return f_norm_; }
+    /// @brief returns the selected penalty tuple per component
     const matrix_t& lambda() const { return lambda_; }
+    /// @brief returns actual power-solver GCV evaluations in candidate order; empty without a power GCV fit
+    const std::vector<std::vector<double>>& gcv_values() const { return gcv_values_; }
+    /// @brief returns the EDF estimates used by the recorded power-solver GCV evaluations
+    const std::vector<std::vector<double>>& gcv_edf() const { return gcv_edf_; }
+    /// @brief returns candidate penalty tuples in evaluation order; empty without a power GCV fit
+    const matrix_t& lambda_grid() const { return lambda_grid_; }
+    /// @brief returns the zero-based first minimizing candidate per component
+    const std::vector<int>& selected_indices() const { return selected_indices_; }
+    /// @brief returns the objective trace for each retained component
     const std::vector<std::vector<double>>& objective_history() const { return objective_history_; }
+    /// @brief returns the completed power updates per component, or zero for other policies
     const std::vector<int>& iterations() const { return iterations_; }
+    /// @brief reports whether each retained power objective avoided relative increases beyond tolerance
     const std::vector<bool>& monotone() const { return monotone_; }
    private:
     matrix_t data_;         // mapped geoframe data
     smoother_t smoother_;   // variational solver used in the smoothing step
-    bool has_nan_;
+    bool has_nan_ = false;
 
     int n_locs_ = 0, n_units_ = 0, n_dofs_ = 0;
     matrix_t f_;                   // PCs expansion coefficient vector
     matrix_t s_;                   // PCs scores
     std::vector<double> f_norm_;   // L^2 norm of estimated components
     matrix_t lambda_;              // selected level of smoothing for each component
+    matrix_t lambda_grid_;
+    std::vector<std::vector<double>> gcv_values_, gcv_edf_;
+    std::vector<int> selected_indices_;
     std::vector<std::vector<double>> objective_history_;
     std::vector<int> iterations_;
     std::vector<bool> monotone_;

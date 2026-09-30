@@ -40,13 +40,13 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
     int n_locs_ = 0, n_units_ = 0, n_comp_ = 0;
 
     // component directions, scores, loadings, and regression operator
-    matrix_t W_;   // predictor direction coefficients
-    matrix_t V_;   // response directions
-    matrix_t T_;   // predictor scores
-    matrix_t U_;   // response scores
-    matrix_t C_;   // predictor loading coefficients
-    matrix_t D_;   // response loadings
-    matrix_t B_;   // regression operator
+    matrix_t W_;       // predictor direction coefficients
+    matrix_t V_;       // response directions
+    matrix_t T_;       // predictor scores
+    matrix_t U_;       // response scores
+    matrix_t C_;       // predictor loading coefficients
+    matrix_t D_;       // response loadings
+    matrix_t B_;       // regression operator
     vector_t sigma_;   // direction normalization scales used in symmetric block deflation
 
     // smoothing parameters
@@ -57,6 +57,10 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
     std::vector<std::vector<double>> direction_objective_history_;
     std::vector<std::vector<double>> direction_gcv_values_;
     std::vector<std::vector<double>> loading_gcv_values_;
+    std::vector<std::vector<double>> direction_gcv_edfs_;
+    std::vector<std::vector<double>> loading_gcv_edfs_;
+    matrix_t direction_lambda_grid_, loading_lambda_grid_;
+    std::vector<int> direction_selected_indices_, loading_selected_indices_;
     std::vector<int> direction_iterations_;
     std::vector<bool> direction_monotone_;
 
@@ -132,6 +136,10 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
             project_(X_h, Y_h, h);
             fit_loadings_(X_h, Y_h, loading_lambda, h);
             deflate_(X_h, Y_h, M_h, h);
+            for (int j = 0; j < direction_n_lambda; ++j) { direction_lambda_(h, j) = direction_lambda[j]; }
+            if constexpr (Mode != fPLSMode::SymmetricBlock) {
+                for (int j = 0; j < loading_n_lambda; ++j) { loading_lambda_(h, j) = loading_lambda[j]; }
+            }
         }
         if constexpr (Mode == fPLSMode::Regression) { B_ = coefficient_(n_comp_); }
     }
@@ -179,7 +187,17 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
         // allocate curves only for the searches performed by this fit
         if (calibration == OptimizeGCV) {
             direction_gcv_values_.resize(n_comp_);
-            if constexpr (Mode != fPLSMode::SymmetricBlock) { loading_gcv_values_.resize(n_comp_); }
+            direction_gcv_edfs_.resize(n_comp_);
+            direction_selected_indices_.assign(n_comp_, -1);
+            direction_lambda_grid_ = Eigen::Map<const Eigen::Matrix<double, Dynamic, Dynamic, Eigen::RowMajor>>(
+              direction_lambda_grid.data(), direction_lambda_grid.size() / direction_n_lambda, direction_n_lambda);
+            if constexpr (Mode != fPLSMode::SymmetricBlock) {
+                loading_gcv_values_.resize(n_comp_);
+                loading_gcv_edfs_.resize(n_comp_);
+                loading_selected_indices_.assign(n_comp_, -1);
+                loading_lambda_grid_ = Eigen::Map<const Eigen::Matrix<double, Dynamic, Dynamic, Eigen::RowMajor>>(
+                  loading_lambda_grid.data(), loading_lambda_grid.size() / loading_n_lambda, loading_n_lambda);
+            }
         }
 
         // extract each component from the current cross-product before mode-specific deflation
@@ -203,12 +221,23 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
             } break;
             case OptimizeGCV: {
                 // compare all direction candidates from the same leading-SVD initialization
+                double minimum = std::numeric_limits<double>::max();
                 auto direction_gcv = [&](auto lambda) {
-                    return direction_gcv_(M_h, lambda, f0, max_iter, tol, edf_r, seed);
+                    double edf;
+                    const double value = direction_gcv_(M_h, lambda, f0, max_iter, tol, edf_r, seed, edf);
+                    direction_gcv_edfs_[h].push_back(edf);
+                    if (value < minimum) {
+                        minimum = value;
+                        direction_selected_indices_[h] = direction_gcv_edfs_[h].size() - 1;
+                    }
+                    return value;
                 };
                 GridSearch<direction_n_lambda> direction_optimizer;
                 direction_lambda = direction_optimizer.optimize(direction_gcv, direction_lambda_grid);
                 direction_gcv_values_[h] = direction_optimizer.values();
+                if (direction_selected_indices_[h] < 0) {
+                    throw std::runtime_error("fPLS direction GCV has no finite minimum");
+                }
             } break;
             default: {
                 throw std::runtime_error("Unrecognized calibration option.");
@@ -233,10 +262,23 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
                 } break;
                 case OptimizeGCV: {
                     // compare loading candidates using the predictor scores computed in the direction block
-                    auto loading_gcv = [&](auto lambda) { return loading_gcv_(X_h, T_.col(h), lambda, edf_r, seed); };
+                    double minimum = std::numeric_limits<double>::max();
+                    auto loading_gcv = [&](auto lambda) {
+                        double edf;
+                        const double value = loading_gcv_(X_h, T_.col(h), lambda, edf_r, seed, edf);
+                        loading_gcv_edfs_[h].push_back(edf);
+                        if (value < minimum) {
+                            minimum = value;
+                            loading_selected_indices_[h] = loading_gcv_edfs_[h].size() - 1;
+                        }
+                        return value;
+                    };
                     GridSearch<loading_n_lambda> loading_optimizer;
                     loading_lambda = loading_optimizer.optimize(loading_gcv, loading_lambda_grid);
                     loading_gcv_values_[h] = loading_optimizer.values();
+                    if (loading_selected_indices_[h] < 0) {
+                        throw std::runtime_error("fPLS loading GCV has no finite minimum");
+                    }
                 } break;
                 }
             }
@@ -271,6 +313,18 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
     const std::vector<std::vector<double>>& direction_gcv_values() const { return direction_gcv_values_; }
     /// @brief returns per-component loading GCV curves; empty without GCV or in symmetric mode
     const std::vector<std::vector<double>>& loading_gcv_values() const { return loading_gcv_values_; }
+    /// @brief returns direction EDF estimates from the actual GCV evaluations, in candidate order
+    const std::vector<std::vector<double>>& direction_gcv_edfs() const { return direction_gcv_edfs_; }
+    /// @brief returns loading EDF estimates from the actual GCV evaluations, in candidate order
+    const std::vector<std::vector<double>>& loading_gcv_edfs() const { return loading_gcv_edfs_; }
+    /// @brief returns direction candidate tuples in rows; empty without GCV
+    const matrix_t& direction_lambda_grid() const { return direction_lambda_grid_; }
+    /// @brief returns loading candidate tuples in rows; empty without GCV or in symmetric mode
+    const matrix_t& loading_lambda_grid() const { return loading_lambda_grid_; }
+    /// @brief returns zero-based direction candidate selections per component; empty without GCV
+    const std::vector<int>& direction_selected_indices() const { return direction_selected_indices_; }
+    /// @brief returns zero-based loading candidate selections; empty without GCV or in symmetric mode
+    const std::vector<int>& loading_selected_indices() const { return loading_selected_indices_; }
     /// @brief reconstructs centered responses using all fitted components
     matrix_t fitted() const { return fitted(n_comp_); }
     /// @brief reconstructs responses from a prefix of the fitted components
@@ -314,9 +368,9 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
     {
         return B(h);
     }
-    /// @brief returns direction penalties recorded by the grid or schedule overload, one row per component
+    /// @brief returns direction penalties from the last fit, one row per component
     const matrix_t& direction_lambda() const { return direction_lambda_; }
-    /// @brief returns loading penalties recorded by the grid or schedule overload; empty in symmetric block mode
+    /// @brief returns loading penalties from the last fit; empty in symmetric block mode
     const matrix_t& loading_lambda() const { return loading_lambda_; }
     /// @brief returns penalized direction objectives after each update, grouped by component
     const std::vector<std::vector<double>>& direction_objective_history() const { return direction_objective_history_; }
@@ -325,7 +379,7 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
     /// @brief reports whether each direction objective avoided increases beyond the relative tolerance
     const std::vector<bool>& direction_monotone() const { return direction_monotone_; }
    private:
-    /// @brief resizes component storage, resets convergence flags, and clears previous GCV curves
+    /// @brief resizes component storage and clears calibration and convergence diagnostics from the preceding fit
     void initialize_components_() {
         W_.resize(direction_solver_.n_dofs(), n_comp_);
         C_.resize(loading_solver_.n_dofs(), n_comp_);
@@ -339,6 +393,14 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
         direction_monotone_.assign(n_comp_, true);
         direction_gcv_values_.clear();
         loading_gcv_values_.clear();
+        direction_gcv_edfs_.clear();
+        loading_gcv_edfs_.clear();
+        direction_selected_indices_.clear();
+        loading_selected_indices_.clear();
+        direction_lambda_grid_.resize(0, direction_n_lambda);
+        loading_lambda_grid_.resize(0, loading_n_lambda);
+        direction_lambda_.resize(n_comp_, direction_n_lambda);
+        if constexpr (Mode != fPLSMode::SymmetricBlock) { loading_lambda_.resize(n_comp_, loading_n_lambda); }
     }
     /// @brief resolves zero to the full component count and checks the requested prefix
     int components_(int h) const {
@@ -500,10 +562,12 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
       int max_iter,           // maximum number of alternating direction updates per component
       double tol,             // objective tolerance for stopping and relative increase diagnostics
       int edf_r,              // number of random probes for the effective degrees of freedom estimate
-      int seed                // seed for the effective degrees of freedom estimate
+      int seed,               // seed for the effective degrees of freedom estimate
+      double& edf             // EDF estimate retained from this GCV evaluation
     ) {
         const auto result = solve_direction_(M, lambda, f0, max_iter, tol);
-        double dor = n_locs_ - direction_solver_.edf(lambda, edf_r, seed);
+        edf = direction_solver_.edf(lambda, edf_r, seed);
+        double dor = n_locs_ - edf;
         return (n_locs_ / std::pow(dor, 2)) *
                ((direction_solver_.Psi() * result.f) - direction_solver_.response()).squaredNorm();
     }
@@ -515,11 +579,13 @@ template <typename DirectionSolver, typename LoadingSolver, fPLSMode Mode = fPLS
       const vector_t& t,      // predictor scores for the current component
       const Lambda& lambda,   // smoothing parameters for the current solver
       int edf_r,              // number of random probes for the effective degrees of freedom estimate
-      int seed                // seed for the effective degrees of freedom estimate
+      int seed,               // seed for the effective degrees of freedom estimate
+      double& edf             // EDF estimate retained from this GCV evaluation
     ) {
         loading_solver_.update_response(X.transpose() * t / t.squaredNorm());
         loading_solver_.fit(lambda);
-        double dor = n_locs_ - loading_solver_.edf(lambda, edf_r, seed);
+        edf = loading_solver_.edf(lambda, edf_r, seed);
+        double dor = n_locs_ - edf;
         return (n_locs_ / std::pow(dor, 2)) * (loading_solver_.fn() - loading_solver_.response()).squaredNorm();
     }
 };
