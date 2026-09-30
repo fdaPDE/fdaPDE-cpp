@@ -358,10 +358,10 @@ struct fe_ls_elliptic {
         return f_;
     }
 
-    /// @brief estimates the smoother trace, reusing random probes until their count changes
+    /// @brief estimates the smoother trace, reusing probes with the same count and seed
     double edf(int r = 100, int seed = random_seed) {
         fdapde_assert(lambda_saved_.has_value());
-        if (!Ys_.has_value() || !Bs_.has_value() || r != Us_->cols()) {   // rebuild probes when their count changes
+        if (!Ys_.has_value() || !Bs_.has_value() || r != Us_->cols() || seed != edf_seed_) {
             int seed_ = (seed == random_seed) ? std::random_device()() : seed;
             std::mt19937 rng(seed_);
             rademacher_distribution rademacher;
@@ -371,6 +371,7 @@ struct fe_ls_elliptic {
             }
             Ys_ = Us_->transpose() * Psi_;
             Bs_ = matrix_t::Zero(2 * n_dofs_, r);   // implicitly enforce homogeneous forcing
+            edf_seed_ = seed;
         }
         if (n_covs_ == 0) {
             Bs_->topRows(n_dofs_) = -PsiNA().transpose() * D_ * W_ * (*Us_);
@@ -460,7 +461,8 @@ struct fe_ls_elliptic {
     matrix_t b_;
     // matrices for Hutchinson stochastic estimation of Tr[S]
     std::optional<matrix_t> Ys_, Bs_, Us_;
-  
+    int edf_seed_ = random_seed;
+
     int n_dofs_ = 0, n_locs_ = 0, n_obs_ = 0, n_covs_ = 0;
     sparse_matrix_t R0_;    // n_dofs x n_dofs matrix [R0]_{ij} = \int_D \psi_i * \psi_j
     sparse_matrix_t R1_;    // n_dofs x n_dofs matrix [R1]_{ij} = \int_D a(\psi_i, \psi_j)

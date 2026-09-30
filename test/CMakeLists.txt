@@ -37,3 +37,8 @@ add_test(NAME fdapde_test
 
 include(GoogleTest)
 gtest_discover_tests(fdapde_test)
+
+add_executable(fpcr_model_check fpcr_model_check.cpp)
+target_link_libraries(fpcr_model_check Eigen3::Eigen)
+target_compile_options(fpcr_model_check PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-UNDEBUG>)
+add_test(NAME fpcr_model_check COMMAND fpcr_model_check)
