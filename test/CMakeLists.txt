@@ -42,3 +42,9 @@ add_executable(fpcr_model_check fpcr_model_check.cpp)
 target_link_libraries(fpcr_model_check Eigen3::Eigen)
 target_compile_options(fpcr_model_check PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-UNDEBUG>)
 add_test(NAME fpcr_model_check COMMAND fpcr_model_check)
+
+# check areal basis evaluation against analytic averages
+add_executable(areal_basis_check areal_basis_check.cpp)
+target_link_libraries(areal_basis_check Eigen3::Eigen)
+target_compile_options(areal_basis_check PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-UNDEBUG>)
+add_test(NAME areal_basis_check COMMAND areal_basis_check)
