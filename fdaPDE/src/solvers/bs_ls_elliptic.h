@@ -492,4 +492,4 @@ private:
 };
 } // namespace fdapde
 
-#endif // BS_LS_ELLIPTIC_H
+#endif   // BS_LS_ELLIPTIC_H
