@@ -24,8 +24,9 @@
 
 #include "solvers.h"
 #include "src/models/fpca.h"
+#include "src/models/fpcr.h"
 #include "src/models/fpls.h"
 
 // clang-format on
 
-#endif // __FDAPDE_FUNCTIONAL_H__
+#endif   // __FDAPDE_FUNCTIONAL_H__

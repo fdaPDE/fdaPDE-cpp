@@ -161,7 +161,7 @@ std::pair<Eigen::SparseMatrix<double>, Eigen::Matrix<double, Dynamic, 1>> areal_
     using BasisType = typename cell_dof_descriptor::BasisType;
     using Quadrature = typename FeType::template cell_quadrature_t<local_dim>;
     static constexpr int n_quadrature_nodes = Quadrature::order;
-    static constexpr int n_shape_functions = fe_space.n_shape_functions();
+    static constexpr int n_shape_functions = FeSpace_::n_components * BasisType::n_basis;
     // compile time evaluation of \int_{\hat K} \psi_i on reference element \hat K
     static constexpr Matrix<double, n_shape_functions, 1> int_table_ {[]() {
         std::array<double, n_shape_functions> int_table_ {};

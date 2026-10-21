@@ -16,61 +16,119 @@
 
 using namespace fdapde;
 using fdapde::test::almost_equal;
+using fdapde::test::check_coefficient_predictions;
+using fdapde::test::smooth_mean;
 
 namespace {
 
-/// @brief estimates the predictor mean with a fixed smoothing penalty
-Eigen::RowVectorXd smooth_mean(
-  const Eigen::Matrix<double, Dynamic, Dynamic>& X,   // predictors with statistical units in rows
-  fdapde::internals::fe_ls_elliptic& smoother,        // discretized smoother bound to the observation locations
-  double lambda                                       // fixed mean smoothing parameter
-) {
-    smoother.update_response(X.transpose() * Eigen::VectorXd::Ones(X.rows()) / X.rows());
-    smoother.fit(lambda);
-    return smoother.fn().transpose();
-}
-
-/// @brief estimates the predictor mean with a GCV-selected smoothing penalty
-Eigen::RowVectorXd smooth_mean(
-  const Eigen::Matrix<double, Dynamic, Dynamic>& X,   // predictors with statistical units in rows
-  fdapde::internals::fe_ls_elliptic& smoother,        // discretized smoother bound to the observation locations
-  const std::vector<double>& lambda_grid,             // candidate mean smoothing parameters
-  int edf_r,                                          // number of random probes for effective degrees of freedom
-  int seed                                            // seed for the effective degrees of freedom estimate
-) {
-    auto gcv = [&](auto lambda) {
-        smoother.update_response(X.transpose() * Eigen::VectorXd::Ones(X.rows()) / X.rows());
-        smoother.fit(lambda);
-        double dor = X.cols() - smoother.edf(lambda, edf_r, seed);
-        return (X.cols() / std::pow(dor, 2)) * (smoother.fn() - smoother.response()).squaredNorm();
-    };
-    GridSearch<1> optimizer;
-    Eigen::Matrix<double, 1, 1> lambda = optimizer.optimize(gcv, lambda_grid);
-    smoother.update_response(X.transpose() * Eigen::VectorXd::Ones(X.rows()) / X.rows());
-    smoother.fit(lambda);
-    return smoother.fn().transpose();
-}
-
-/// @brief checks coefficient predictions against the independent sequential score reconstruction
-template <typename Model>
-void check_coefficient_predictions(
-  const Model& model,             // fitted regression model
-  const Eigen::MatrixXd& X_Psi,   // original centered predictors multiplied by the direction evaluation matrix
-  int n_comp                      // number of fitted component prefixes to check
-) {
-    for (int h = 1; h <= n_comp; ++h) {
-        SCOPED_TRACE(h);
-        // each prefix must predict the same response as sequential score regression
-        EXPECT_TRUE((X_Psi * model.Beta(h)).isApprox(model.fitted(h), 1e-10));
-        // both coefficient accessors must expose the same operator
-        EXPECT_TRUE(model.B(h).isApprox(model.Beta(h), 1e-12));
+/// @brief counts solver evaluations independently for direction and loading calibration
+template <typename Solver, int Block> struct counted_fpls_solver : Solver {
+    inline static int edf_calls = 0, fit_calls = 0;
+    /// @brief delegates fitting while recording each solve requested by the model
+    template <typename... Args> decltype(auto) fit(Args&&... args) {
+        ++fit_calls;
+        return Solver::fit(std::forward<Args>(args)...);
     }
-    // the cached full fit must agree with predictions from the cached coefficients
-    EXPECT_TRUE((X_Psi * model.Beta()).isApprox(model.fitted(), 1e-10));
-    // zero selects the full fit in the explicit component overload
-    EXPECT_TRUE(model.Beta(0).isApprox(model.Beta(), 1e-12));
-    // the default B accessor must expose the cached full coefficient matrix
-    EXPECT_TRUE(model.B().isApprox(model.Beta(), 1e-12));
+    /// @brief delegates EDF estimation while recording each trace evaluation
+    template <typename... Args> double edf(Args&&... args) {
+        ++edf_calls;
+        return Solver::edf(std::forward<Args>(args)...);
+    }
+};
+
+/// @brief decorates an existing penalty packet with calibration evaluation counters
+template <typename Penalty, int Block> struct counted_fpls_penalty {
+    using solver_t = counted_fpls_solver<typename Penalty::solver_t, Block>;
+    const Penalty& penalty;
+    /// @brief forwards the existing discretization packet without duplicating its assembly
+    decltype(auto) get() const { return penalty.get(); }
+};
+
+// check saved calibration values against independent EDF and residual oracles, with no observer evaluations
+TEST(fpls, calibration_snapshot) {
+    auto D = Triangulation<2, 2>::Rectangle(0, 1, 0, 1, 4, 4);
+    GeoFrame data(D);
+    auto& layer = data.insert_scalar_layer<POINT>("l1", MESH_NODES);
+    Eigen::MatrixXd X(8, D.n_nodes()), Y(8, 2);
+    for (int i = 0; i < X.rows(); ++i) {
+        for (int j = 0; j < X.cols(); ++j) {
+            X(i, j) = std::sin((i + 1) * D.nodes()(j, 0)) + std::cos((i + 2) * D.nodes()(j, 1));
+        }
+        Y(i, 0) = std::sin(i + 1);
+        Y(i, 1) = std::cos(i + 1);
+    }
+    layer.load_blk("X", X.transpose());
+    FeSpace Vh(D, P1<1>);
+    TrialFunction f(Vh);
+    TestFunction v(Vh);
+    auto a = integral(D)(dot(grad(f), grad(v)));
+    ZeroField<2> u;
+    auto F = integral(D)(u * v);
+    const auto penalty = fe_ls_elliptic(a, F);
+    counted_fpls_penalty<decltype(penalty), 0> direction {penalty};
+    counted_fpls_penalty<decltype(penalty), 1> loading {penalty};
+    using direction_t = decltype(direction)::solver_t;
+    using loading_t = decltype(loading)::solver_t;
+    fPLS<direction_t, loading_t> model("X", Y, data, direction, loading);
+    const std::vector<double> grid {0.001, 0.1, 10.0};
+    for (int seed : {0, 42, 0}) {
+        direction_t::edf_calls = loading_t::edf_calls = loading_t::fit_calls = 0;
+        model.fit(2, grid, grid, OptimizeGCV, 15, 1e-8, 12, seed);
+        // every component and candidate must trigger exactly one direction EDF evaluation
+        EXPECT_EQ(direction_t::edf_calls, 6);
+        // every component and candidate must trigger exactly one loading EDF evaluation
+        EXPECT_EQ(loading_t::edf_calls, 6);
+        // loading solves consist only of candidate evaluation and the selected fit per component
+        EXPECT_EQ(loading_t::fit_calls, 8);
+        Eigen::MatrixXd residual = X;
+        for (int h = 0; h < 2; ++h) {
+            const auto& curve = model.loading_gcv_values()[h];
+            const int selected = model.loading_selected_indices()[h];
+            // stored selection must use the first minimum in the actual evaluated curve
+            EXPECT_EQ(selected, std::min_element(curve.begin(), curve.end()) - curve.begin());
+            // selected lambda must correspond to the saved candidate row
+            EXPECT_DOUBLE_EQ(model.loading_lambda()(h, 0), model.loading_lambda_grid()(selected, 0));
+            auto reference = penalty.get();
+            internals::fe_ls_elliptic smoother;
+            smoother.discretize(reference);
+            smoother.analyze_data(data, Eigen::VectorXd::Ones(X.cols()).asDiagonal());
+            const Eigen::VectorXd response =
+              residual.transpose() * model.X_latent().col(h) / model.X_latent().col(h).squaredNorm();
+            smoother.update_response(response);
+            for (int j = 0; j < int(grid.size()); ++j) {
+                smoother.fit(grid[j]);
+                const double edf = smoother.edf(grid[j], 12, seed);
+                const double gcv = X.cols() * (smoother.fn() - response).squaredNorm() / std::pow(X.cols() - edf, 2);
+                // saved loading EDF must equal an independent same-seed solver evaluation
+                EXPECT_DOUBLE_EQ(model.loading_gcv_edfs()[h][j], edf);
+                // saved direction EDF uses the same smoother operator and explicit probe sample
+                EXPECT_DOUBLE_EQ(model.direction_gcv_edfs()[h][j], edf);
+                // saved loading GCV must use the actual component residual and the saved EDF
+                EXPECT_NEAR(curve[j], gcv, 1e-12);
+            }
+            residual -= model.X_latent().col(h) * model.X_loadings().col(h).transpose();
+        }
+        // observing all diagnostics must leave the model's EDF evaluation count unchanged
+        EXPECT_EQ(direction_t::edf_calls + loading_t::edf_calls, 12);
+    }
+    const Eigen::Matrix<double, 1, 1> fixed = Eigen::Matrix<double, 1, 1>::Constant(0.1);
+    for (bool schedule : {false, true}) {
+        if (schedule) model.fit(1, grid, grid, OptimizeGCV, 15, 1e-8, 12, 42);
+        if (schedule)
+            model.fit(1, std::vector<double> {0.1}, std::vector<double> {0.1}, NoCalibration, 15, 1e-8);
+        else
+            model.fit(1, fixed, fixed, 15, 1e-8);
+        // fixed fits must clear both EDF curves and candidate grids from preceding calibration
+        EXPECT_TRUE(
+          model.direction_gcv_edfs().empty() && model.loading_gcv_edfs().empty() &&
+          model.direction_lambda_grid().rows() == 0 && model.loading_lambda_grid().rows() == 0);
+        // fixed fits must clear both candidate selections from preceding calibration
+        EXPECT_TRUE(model.direction_selected_indices().empty() && model.loading_selected_indices().empty());
+        // fixed overloads must refresh selected penalty matrices to the new component count and values
+        EXPECT_TRUE(
+          model.direction_lambda().rows() == 1 && model.loading_lambda().rows() == 1 &&
+          model.direction_lambda()(0, 0) == 0.1 && model.loading_lambda()(0, 0) == 0.1);
+    }
 }
 
 /// @brief checks fixed-penalty fits against reference predictions and verifies component penalty schedules
