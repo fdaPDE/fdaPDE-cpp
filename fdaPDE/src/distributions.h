@@ -153,7 +153,7 @@ struct bernoulli_distribution : public internals::distribution_base<std::bernoul
     constexpr result_type mean() const { return p_; }
     constexpr result_type variance() const { return p_ * (1 - p_); }
     constexpr result_type quantile(double alpha) const {
-        fdapde_assert(alpha >= 0 && alpha <= 1);
+        fdapde_assert(alpha >= 0 && alpha <= 1, std::invalid_argument, "quantile level must lie between zero and one");
         return alpha <= 1 - p_ ? 0 : 1;
     }
     // random sampling
@@ -184,7 +184,9 @@ struct bernoulli_distribution : public internals::distribution_base<std::bernoul
     matrix_t inv_link(const matrix_t& x) const override { return (1 + ((-x).array().exp())).inverse(); }
     matrix_t der_link(const matrix_t& x) const override { return (x.array() * (1 - x.array())).inverse(); }
     double deviance(const matrix_t& x, const matrix_t& y) const override {
-        fdapde_assert(x.cols() == 1 && y.cols() == 1 && x.rows() == y.rows());
+        fdapde_assert(
+          x.cols() == 1 && y.cols() == 1 && x.rows() == y.rows(), std::invalid_argument,
+          "responses and predictions must be column vectors of equal length");
         double dev_ = 0;
         for (int i = 0, n = x.rows(); i < n; ++i) { dev_ += deviance(x(i, 0), y(i, 0)); }
         return dev_;
@@ -245,7 +247,7 @@ struct poisson_distribution : public internals::distribution_base<std::poisson_d
     constexpr result_type mean() const { return l_; }
     constexpr result_type variance() const { return l_; }
     constexpr result_type quantile(double alpha) const {
-        fdapde_assert(alpha >= 0 && alpha <= 1);
+        fdapde_assert(alpha >= 0 && alpha <= 1, std::invalid_argument, "quantile level must lie between zero and one");
         int x = 0;
         double cdf_ = 0;
         while (cdf_ < alpha) {
@@ -280,7 +282,9 @@ struct poisson_distribution : public internals::distribution_base<std::poisson_d
     matrix_t inv_link(const matrix_t& x) const override { return x.array().exp(); }
     matrix_t der_link(const matrix_t& x) const override { return x.array().inverse(); }
     double deviance(const matrix_t& x, const matrix_t& y) const override {
-        fdapde_assert(x.cols() == 1 && y.cols() == 1 && x.rows() == y.rows());
+        fdapde_assert(
+          x.cols() == 1 && y.cols() == 1 && x.rows() == y.rows(), std::invalid_argument,
+          "responses and predictions must be column vectors of equal length");
         return ((y.array() > 0).select(y.array() * ((y.array() / x.array()).log() - 1) + x.array(), x.array()))
           .sum();
     }
@@ -347,7 +351,9 @@ struct exponential_distribution : public internals::distribution_base<std::expon
     matrix_t inv_link(const matrix_t& x) const override { return (-x).array().inverse(); }
     matrix_t der_link(const matrix_t& x) const override { return x.array().pow(2).inverse(); }
     double deviance(const matrix_t& x, const matrix_t& y) const override {
-        fdapde_assert(x.cols() == 1 && y.cols() == 1 && x.rows() == y.rows());
+        fdapde_assert(
+          x.cols() == 1 && y.cols() == 1 && x.rows() == y.rows(), std::invalid_argument,
+          "responses and predictions must be column vectors of equal length");
         return (2 * ((y.array() - x.array()) / x.array() - (y.array() / x.array()).log())).sum();
     }
 #endif
@@ -404,7 +410,9 @@ class gamma_distribution : public internals::distribution_base<std::gamma_distri
     matrix_t inv_link(const matrix_t& x) const override { return (-x).array().inverse(); }
     matrix_t der_link(const matrix_t& x) const override { return x.array().pow(2).inverse(); }
     double deviance(const matrix_t& x, const matrix_t& y) const override {
-        fdapde_assert(x.cols() == 1 && y.cols() == 1 && x.rows() == y.rows());
+        fdapde_assert(
+          x.cols() == 1 && y.cols() == 1 && x.rows() == y.rows(), std::invalid_argument,
+          "responses and predictions must be column vectors of equal length");
         return (2 * ((y.array() - x.array()) / x.array() - (y.array() / x.array()).log())).sum();
     }
 #endif
@@ -464,7 +472,9 @@ class normal_distribution : public internals::distribution_base<std::normal_dist
     matrix_t inv_link(const matrix_t& x) const override { return x; }
     matrix_t der_link(const matrix_t& x) const override { return matrix_t::Ones(x.rows()); }
     double deviance(const matrix_t& x, const matrix_t& y) const override {
-        fdapde_assert(x.cols() == 1 && y.cols() == 1 && x.rows() == y.rows());
+        fdapde_assert(
+          x.cols() == 1 && y.cols() == 1 && x.rows() == y.rows(), std::invalid_argument,
+          "responses and predictions must be column vectors of equal length");
         return (x - y).squaredNorm();
     }
 #endif

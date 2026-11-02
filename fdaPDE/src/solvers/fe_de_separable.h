@@ -206,7 +206,9 @@ struct fe_de_separable {
 	// function spaces
         const FeSpace& fe_space = std::get<0>(bilinear_form).trial_space();
         const BsSpace& bs_space = std::get<1>(bilinear_form).trial_space();
-        fdapde_assert(bs_space.sobolev_regularity() > 1);
+        fdapde_assert(
+          bs_space.sobolev_regularity() > 1, std::invalid_argument,
+          "the spline basis must admit the derivatives required by the penalty");
         // discretization
         auto assemble_ = [&, this]<int Index>() {
             auto& func_space = std::get<Index>(bilinear_form).trial_space();
@@ -291,7 +293,9 @@ struct fe_de_separable {
     // fit from geoframe
     template <typename GeoFrame> void analyze_data(const GeoFrame& gf) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
-        fdapde_assert(gf.n_layers() == 1 && gf[0].category()[0] == ltype::point && gf[0].category()[1] == ltype::point);
+        fdapde_assert(
+          gf.n_layers() == 1 && gf[0].category()[0] == ltype::point && gf[0].category()[1] == ltype::point,
+          std::invalid_argument, "data layers do not match the model sampling structure");
         n_obs_ = gf[0].rows();
 
         std::array<sparse_matrix_t, 2> Psi__;
@@ -331,7 +335,9 @@ struct fe_de_separable {
     template <typename Optimizer, typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
     const vector_t& fit(LambdaT&& lambda, const vector_t& g_init, Optimizer&& opt) {
-        fdapde_assert(lambda.size() == n_lambda);
+        fdapde_assert(
+          lambda.size() == n_lambda, std::invalid_argument,
+          "smoothing parameters have an invalid dimension or nonpositive value");
         return fit(lambda[0], lambda[1]);
     }
     // modifiers

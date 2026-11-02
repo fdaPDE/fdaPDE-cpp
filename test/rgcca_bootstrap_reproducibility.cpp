@@ -44,10 +44,11 @@ void print_vector(const std::vector<T>& values) {
 } // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 2)
-        throw std::invalid_argument("usage: rgcca_bootstrap_reproducibility THREADS");
+    if (argc < 2 || argc > 3)
+        throw std::invalid_argument("usage: rgcca_bootstrap_reproducibility THREADS [block-importance]");
 
     const int threads = std::stoi(argv[1]);
+    const bool importance_only = argc == 3 && std::string(argv[2]) == "block-importance";
     constexpr int n = 64;
 
     RGCCA<IndependentSampling>::Options options;
@@ -60,6 +61,11 @@ int main(int argc, char** argv) {
     options.block_importance = true;
     options.max_iter = 40;
     options.tol = 1e-6;
+    if (importance_only) {
+        options.block_deactivation = false;
+        options.connection_deactivation = false;
+        options.component_significance = false;
+    }
 
     RGCCA<IndependentSampling> model(n, options, 1);
     model.add_multivariate_block("signal_1", make_block(n, 0.1, 0.08));
@@ -90,6 +96,13 @@ int main(int argc, char** argv) {
     model.set_bootstrap_config(bootstrap);
 
     const auto results = model.fit();
+    if (importance_only) {
+        // a cold importance-only fit must initialize within its cap and still compute every null resample
+        if (fdapde::parallel_get_num_threads() > threads || results.size() != 1 ||
+            results.front().block_importance_bootstrap_count != bootstrap.block_importance_resamples)
+            throw std::runtime_error("importance-only fit did not respect its executor budget");
+        return 0;
+    }
     const auto& selections = model.bootstrap_selection_results();
     if (results.size() != 1 || selections.size() != 1)
         throw std::runtime_error("unexpected RGCCA result count");

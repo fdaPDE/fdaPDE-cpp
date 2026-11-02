@@ -1052,7 +1052,7 @@ private:
         return out;
     }
 
-    // bootstrap component significance
+    /// @brief estimates component significance with reusable workspaces for serial and parallel execution
     ComponentSignificanceResult bootstrap_test_component_significance_(
         const BoolMatrix& C_active,
         const MaxvarCorrelationResult& observed
@@ -1090,7 +1090,7 @@ private:
         // null: break cross-block row alignment within each block, then refit
         step_start = log_step_start_("Significance bootstrap");
         parallel_for(0, B, 1, [&](int b) {
-            const int tid = this_thread_id();
+            const int tid = std::max(0, this_thread_id());
             auto& boot_blocks = thread_boot_worker[tid];
 
             for (std::size_t j = 0; j < boot_blocks.refs.size(); ++j)
@@ -1152,7 +1152,7 @@ private:
         return out;
     }
 
-    // bootstrap block importance for the fitted component
+    /// @brief tests fitted blocks within the configured executor budget even without model selection
     BlockImportanceResult bootstrap_test_block_importance_(const BoolMatrix& C_active) {
         log_bootstrap_block_importance_header_();
 
@@ -1184,6 +1184,7 @@ private:
         }
 
         std::vector<int> significant(n_blocks(), 0);
+        static_cast<void>(bootstrap_n_threads_());
         parallel_for(0, n_blocks(), 1, [&](int j) {
             if (!testable[j]) return;
 

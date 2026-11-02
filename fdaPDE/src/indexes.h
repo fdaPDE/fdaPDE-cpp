@@ -24,7 +24,7 @@ namespace fdapde {
 template <typename Lhs, typename Rhs>
     requires(internals::is_vector_like_v<Lhs> && internals::is_vector_like_v<Rhs>)
 double RMSE(const Lhs& lhs, const Rhs& rhs) {
-    fdapde_assert(lhs.size() == rhs.size());
+    fdapde_assert(lhs.size() == rhs.size(), std::invalid_argument, "index vectors must have equal lengths");
     int n = lhs.size();
     double sse = 0;
     for (int i = 0; i < n; ++i) { sse += std::pow(lhs[i] - rhs[i], 2); }

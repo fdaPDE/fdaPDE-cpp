@@ -44,7 +44,8 @@ template <typename VariationalSolver> class QSRPDE {
     template <typename... Args> void discretize(Args&&... args) { solver_.discretize(std::forward<Args>(args)...); }
     template <typename GeoFrame, typename WeightMatrix>
     void analyze_data(const std::string& formula, const GeoFrame& gf, const WeightMatrix& W) {
-        fdapde_assert(gf.n_layers() == 1);
+        fdapde_assert(
+          gf.n_layers() == 1, std::invalid_argument, "data layers do not match the model sampling structure");
         Formula formula_(formula);
         n_obs_ = gf[0].rows();
         n_covs_ = 0;

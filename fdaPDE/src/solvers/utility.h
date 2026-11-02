@@ -67,7 +67,9 @@ template <typename Triangulation_, typename FeType_, typename CoordsMatrix_>
     requires(internals::is_eigen_dense_xpr_v<CoordsMatrix_>)
 Eigen::SparseMatrix<double> point_basis_eval(const FeSpace<Triangulation_, FeType_>& fe_space, CoordsMatrix_&& coords) {
     static constexpr int embed_dim = Triangulation_::embed_dim;
-    fdapde_assert(coords.rows() > 0 && coords.cols() == embed_dim);
+    fdapde_assert(
+      coords.rows() > 0 && coords.cols() == embed_dim, std::invalid_argument,
+      "locations must be nonempty and match the embedding dimension");
 
     int n_shape_functions = fe_space.n_shape_functions();
     int n_dofs = fe_space.n_dofs();
@@ -115,7 +117,9 @@ template <typename Triangulation_, typename CoordsMatrix_>
     requires(internals::is_eigen_dense_xpr_v<CoordsMatrix_>)
 Eigen::SparseMatrix<double> point_basis_eval(const BsSpace<Triangulation_>& bs_space, CoordsMatrix_&& coords) {
     static constexpr int embed_dim = Triangulation_::embed_dim;
-    fdapde_assert(coords.rows() > 0 && coords.cols() == embed_dim);
+    fdapde_assert(
+      coords.rows() > 0 && coords.cols() == embed_dim, std::invalid_argument,
+      "locations must be nonempty and match the embedding dimension");
 
     int n_shape_functions = bs_space.n_shape_functions();
     int n_dofs = bs_space.n_dofs();
@@ -154,7 +158,9 @@ template <typename Triangulation_, typename FeType_>
 std::pair<Eigen::SparseMatrix<double>, Eigen::Matrix<double, Dynamic, 1>> areal_basis_eval(
   const FeSpace<Triangulation_, FeType_>& fe_space, const BinaryMatrix<Dynamic, Dynamic>& incidence_mat) {
     using FeSpace_ = FeSpace<Triangulation_, FeType_>;
-    fdapde_assert(incidence_mat.rows() > 0 && incidence_mat.cols() == fe_space.triangulation().n_cells());
+    fdapde_assert(
+      incidence_mat.rows() > 0 && incidence_mat.cols() == fe_space.triangulation().n_cells(), std::invalid_argument,
+      "incidence matrix must have one column per mesh cell");
     static constexpr int local_dim = Triangulation_::local_dim;
     using FeType = typename FeSpace_::FeType;
     using cell_dof_descriptor = typename FeSpace_::cell_dof_descriptor;

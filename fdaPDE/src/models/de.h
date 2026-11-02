@@ -38,7 +38,8 @@ class DEPDE {
     template <typename... Args> const vector_t& fit(Args&&... args) { return solver_.fit(std::forward<Args>(args)...); }
     template <typename... Args> void discretize(Args&&... args) { solver_.discretize(std::forward<Args>(args)...); }
     template <typename GeoFrame> void analyze_data(const GeoFrame& gf) {
-        fdapde_assert(gf.n_layers() == 1);
+        fdapde_assert(
+          gf.n_layers() == 1, std::invalid_argument, "data layers do not match the model sampling structure");
         n_obs_ = gf[0].rows();
         solver_.analyze_data(gf);
     }

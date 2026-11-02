@@ -50,7 +50,9 @@ struct bs_normcovmax_elliptic {
     template <typename DataLocs>
         requires(is_valid_data_locs_descriptor_v<DataLocs>)
     void eval_basis_at_(const DataLocs& locs) {
-        fdapde_assert(n_locs_ == locs.rows());
+        fdapde_assert(
+          n_locs_ == locs.rows(), std::invalid_argument,
+          "observations, weights and sampling locations must have compatible dimensions");
         if constexpr (std::is_same_v<DataLocs, matrix_t>) {
             Psi_ = point_eval_(locs);
             D_ = vector_t::Ones(n_locs_).asDiagonal();
@@ -234,12 +236,9 @@ struct bs_normcovmax_elliptic {
         requires(is_valid_data_locs_descriptor_v<DataLocs>)
     void analyze_data(const DataLocs& locs, const matrix_t& z, const WeightMatrix& W) {
         fdapde_assert(
-            locs.rows() > 0 &&
-            z.rows() == locs.rows() &&
-            z.cols() == 1 &&
-            W.rows() == locs.rows() &&
-            W.rows() == W.cols()
-        );
+          locs.rows() > 0 && z.rows() == locs.rows() && z.cols() == 1 && W.rows() == locs.rows() &&
+            W.rows() == W.cols(),
+          std::invalid_argument, "sampling operators and model data must have compatible dimensions");
 
         n_obs_ = locs.rows();
         n_locs_ = n_obs_;
@@ -251,7 +250,8 @@ struct bs_normcovmax_elliptic {
     // analyze data (geoframe only)
     template <typename GeoFrame, typename WeightMatrix> void analyze_data(const GeoFrame& gf, const WeightMatrix& W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
-        fdapde_assert(gf.n_layers() == 1);
+        fdapde_assert(
+          gf.n_layers() == 1, std::invalid_argument, "data layers do not match the model sampling structure");
 
         n_obs_ = gf[0].rows();
         n_locs_ = n_obs_;
@@ -264,7 +264,9 @@ struct bs_normcovmax_elliptic {
 
     // modifiers
     void update_z(const vector_t& z) {
-        fdapde_assert(Psi_.rows() > 0 && z.rows() == n_locs_ && z.cols() == 1);
+        fdapde_assert(
+          Psi_.rows() > 0 && z.rows() == n_locs_ && z.cols() == 1, std::invalid_argument,
+          "observations, weights and sampling locations must have compatible dimensions");
 
         const bool pattern_changed = update_missing_pattern_(z);
 
@@ -284,7 +286,9 @@ struct bs_normcovmax_elliptic {
 
     template <typename WeightMatrix>
     void update_weights(const WeightMatrix& W) {
-        fdapde_assert(Psi_.rows() > 0 && W.rows() == n_locs_ && W.rows() == W.cols());
+        fdapde_assert(
+          Psi_.rows() > 0 && W.rows() == n_locs_ && W.rows() == W.cols(), std::invalid_argument,
+          "observations, weights and sampling locations must have compatible dimensions");
 
         W_ = W;
         Omega_changed_ = true;
@@ -294,12 +298,8 @@ struct bs_normcovmax_elliptic {
     template <typename WeightMatrix>
     void update_z_and_weights(const vector_t& z, const WeightMatrix& W) {
         fdapde_assert(
-            Psi_.rows() > 0 &&
-            z.rows() == n_locs_ &&
-            z.cols() == 1 &&
-            W.rows() == W.cols() &&
-            W.rows() == n_locs_
-        );
+          Psi_.rows() > 0 && z.rows() == n_locs_ && z.cols() == 1 && W.rows() == W.cols() && W.rows() == n_locs_,
+          std::invalid_argument, "observations, weights and sampling locations must have compatible dimensions");
 
         const bool pattern_changed = update_missing_pattern_(z);
 
@@ -332,7 +332,9 @@ struct bs_normcovmax_elliptic {
     const vector_t& c() const { return c_; }
 
     vector_t fit(double lambda) {
-        fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
+        fdapde_assert(
+          lambda > 0 && n_dofs_ > 0 && n_obs_ > 0, std::invalid_argument,
+          "smoothing parameters and discretization dimensions must be positive");
 
         const auto& A = Omega(lambda);
         vector_t rhs = c();
@@ -354,7 +356,9 @@ struct bs_normcovmax_elliptic {
     template <typename LambdaT>
     requires(internals::is_vector_like_v<LambdaT>)
     vector_t fit(LambdaT&& lambda) {
-        fdapde_assert(lambda.size() == n_lambda);
+        fdapde_assert(
+          lambda.size() == n_lambda, std::invalid_argument,
+          "smoothing parameters have an invalid dimension or nonpositive value");
         return fit(lambda[0]);
     }
 

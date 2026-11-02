@@ -52,12 +52,16 @@ class fe_ls_parabolic_mono {
         if constexpr (std::is_same_v<DataLocs, matrix_t>) {   // pointwise sampling
             Psi_ = point_eval_(locs);
             D_ = vector_t::Ones(n_locs_).asDiagonal();
-	    fdapde_assert(n_locs_ == Psi_.rows());
+            fdapde_assert(
+              n_locs_ == Psi_.rows(), std::invalid_argument,
+              "observations, weights and sampling locations must have compatible dimensions");
         } else {   // areal sampling
             const auto& [psi, measure_vec] = areal_eval_(locs);
             Psi_ = psi;
             D_ = measure_vec.asDiagonal();
-	    fdapde_assert(n_locs_ == Psi_.rows());
+            fdapde_assert(
+              n_locs_ == Psi_.rows(), std::invalid_argument,
+              "observations, weights and sampling locations must have compatible dimensions");
         }
         return;
     }
@@ -127,7 +131,8 @@ class fe_ls_parabolic_mono {
         requires(is_valid_penalty_v<Penalty>)
     fe_ls_parabolic_mono(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
-	fdapde_assert(gf.n_layers() == 1);
+        fdapde_assert(
+          gf.n_layers() == 1, std::invalid_argument, "data layers do not match the model sampling structure");
         n_obs_ = gf[0].rows();
         n_locs_ = n_obs_;
 
@@ -143,7 +148,8 @@ class fe_ls_parabolic_mono {
         requires(is_valid_penalty_v<Penalty>)
     fe_ls_parabolic_mono(const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) : W_(W) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
-	fdapde_assert(gf.n_layers() == 1);
+        fdapde_assert(
+          gf.n_layers() == 1, std::invalid_argument, "data layers do not match the model sampling structure");
         n_obs_ = gf[0].rows();
         n_locs_ = n_obs_;
 
@@ -151,11 +157,15 @@ class fe_ls_parabolic_mono {
         const auto& time_index = geo_index_cast<1, POINT>(gf[0]);
         const auto& time_coords = time_index.coordinates();
         m_ = time_coords.rows();
-        fdapde_assert(m_ > 0 && time_coords.cols() == 1);
+        fdapde_assert(
+          m_ > 0 && time_coords.cols() == 1, std::invalid_argument,
+          "time coordinates must form a nonempty column vector");
         DeltaT_ = time_coords(1, 0) - time_coords(0, 0);
         for (int i = 1; i < m_ - 1; ++i) {
             double lag_i = time_coords(i + 1, 0) - time_coords(i, 0);
-            fdapde_assert(DeltaT_ > 0 && lag_i > 0 && almost_equal(DeltaT_ FDAPDE_COMMA lag_i));
+            fdapde_assert(
+              DeltaT_ > 0 && lag_i > 0 && almost_equal(DeltaT_ FDAPDE_COMMA lag_i), std::invalid_argument,
+              "time coordinates must have the same positive spacing");
         }
         discretize(penalty);
         // basis system evaluation
@@ -200,7 +210,8 @@ class fe_ls_parabolic_mono {
     void analyze_data(const DataLocs1& locs1, const DataLocs2& locs2, const matrix_t& y, const WeightMatrix& W) {
         fdapde_assert(
           locs1.rows() > 0 && locs2.rows() > 0 && y.rows() == locs1.rows() * locs2.rows() && y.cols() == 1 &&
-          W.rows() == locs1.rows() * locs2.rows() && W.rows() == W.cols());
+            W.rows() == locs1.rows() * locs2.rows() && W.rows() == W.cols(),
+          std::invalid_argument, "sampling operators and model data must have compatible dimensions");
         n_obs_ = y.rows();
         n_locs_ = n_obs_;
         n_covs_ = 0;
@@ -226,7 +237,8 @@ class fe_ls_parabolic_mono {
       const DataLocs1& locs1, const DataLocs2& locs2, const matrix_t& y, const matrix_t& X, const WeightMatrix& W) {
         fdapde_assert(
           locs1.rows() > 0 && locs2.rows() > 0 && y.rows() == locs1.rows() * locs2.rows() && y.cols() == 1 &&
-          X.rows() == locs1.rows() * locs2.rows() && W.rows() == locs1.rows() * locs2.rows() && W.rows() == W.cols());
+            X.rows() == locs1.rows() * locs2.rows() && W.rows() == locs1.rows() * locs2.rows() && W.rows() == W.cols(),
+          std::invalid_argument, "sampling operators and model data must have compatible dimensions");
 
         n_obs_ = y.rows();
         n_locs_ = n_obs_;
@@ -252,19 +264,24 @@ class fe_ls_parabolic_mono {
     template <typename GeoFrame, typename WeightMatrix>
     void analyze_data(const std::string& formula, const GeoFrame& gf, const WeightMatrix& W) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
-        fdapde_assert(gf.n_layers() == 1);
-	n_obs_ = gf[0].rows();
-	n_locs_ = n_obs_;
-	// extract temporal mesh
+        fdapde_assert(
+          gf.n_layers() == 1, std::invalid_argument, "data layers do not match the model sampling structure");
+        n_obs_ = gf[0].rows();
+        n_locs_ = n_obs_;
+        // extract temporal mesh
         const auto& time_index = geo_index_cast<1, POINT>(gf[0]);
         const auto& time_coords = time_index.coordinates();
 	bool require_full_tensorization = std::cmp_not_equal(m_, time_coords.rows());
         m_ = time_coords.rows();
-        fdapde_assert(m_ > 0 && time_coords.cols() == 1);
+        fdapde_assert(
+          m_ > 0 && time_coords.cols() == 1, std::invalid_argument,
+          "time coordinates must form a nonempty column vector");
         DeltaT_ = time_coords(1, 0) - time_coords(0, 0);
         for (int i = 1; i < m_ - 1; ++i) {
             double lag_i = time_coords(i + 1, 0) - time_coords(i, 0);
-            fdapde_assert(DeltaT_ > 0 && lag_i > 0 && almost_equal(DeltaT_ FDAPDE_COMMA lag_i));
+            fdapde_assert(
+              DeltaT_ > 0 && lag_i > 0 && almost_equal(DeltaT_ FDAPDE_COMMA lag_i), std::invalid_argument,
+              "time coordinates must have the same positive spacing");
         }
         // basis system evaluation
 	eval_basis_at_(gf);
@@ -300,7 +317,9 @@ class fe_ls_parabolic_mono {
 
     // modifiers
     void update_response(const vector_t& y) {
-        fdapde_assert(Psi_.rows() > 0 && y.rows() == Psi_.rows() && y.cols() == 1);
+        fdapde_assert(
+          Psi_.rows() > 0 && y.rows() == Psi_.rows() && y.cols() == 1, std::invalid_argument,
+          "sampling operators and model data must have compatible dimensions");
         y_ = y;
         // correct \Psi for missing observations
         auto nan_pattern = na_matrix(y);
@@ -315,7 +334,9 @@ class fe_ls_parabolic_mono {
         return;
     }
     template <typename WeightMatrix> void update_weights(const WeightMatrix& W) {
-        fdapde_assert(Psi_.rows() > 0 && W.rows() == n_locs_ && W.rows() == W.cols());
+        fdapde_assert(
+          Psi_.rows() > 0 && W.rows() == n_locs_ && W.rows() == W.cols(), std::invalid_argument,
+          "observations, weights and sampling locations must have compatible dimensions");
         W_ = W;
         W_ /= n_obs_;
         if (n_covs_ == 0) {
@@ -334,7 +355,8 @@ class fe_ls_parabolic_mono {
     }
     template <typename WeightMatrix> void update_response_and_weights(const vector_t& y, const WeightMatrix& W) {
         fdapde_assert(
-          Psi_.rows() > 0 && y.rows() == n_locs_ && y.cols() == 1 && W.rows() == W.cols() && W.rows() == n_locs_);
+          Psi_.rows() > 0 && y.rows() == n_locs_ && y.cols() == 1 && W.rows() == W.cols() && W.rows() == n_locs_,
+          std::invalid_argument, "observations, weights and sampling locations must have compatible dimensions");
         y_ = y;
         // correct \Psi for missing observations
         auto nan_pattern = na_matrix(y);
@@ -349,7 +371,9 @@ class fe_ls_parabolic_mono {
 
     // main fit entry point
     std::pair<vector_t, vector_t> fit(double lambda_D, double lambda_T) {
-        fdapde_assert(lambda_D > 0 && lambda_T > 0 && n_dofs_ > 0 && n_obs_ > 0);
+        fdapde_assert(
+          lambda_D > 0 && lambda_T > 0 && n_dofs_ > 0 && n_obs_ > 0, std::invalid_argument,
+          "smoothing parameters and discretization dimensions must be positive");
         std::array<double, n_lambda> lambda {lambda_D, lambda_T};
         if (lambda_saved_.value() != lambda || W_changed_) {
             // assemble system matrix for the nonparameteric part
@@ -379,12 +403,16 @@ class fe_ls_parabolic_mono {
     template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
     std::pair<vector_t, vector_t> fit(LambdaT&& lambda) {
-        fdapde_assert(lambda.size() == n_lambda);
+        fdapde_assert(
+          lambda.size() == n_lambda, std::invalid_argument,
+          "smoothing parameters have an invalid dimension or nonpositive value");
         return fit(lambda[0], lambda[1]);
     }
     // perform a nonparametric fit, e.g. discarding possible covariates
     vector_t nonparametric_fit(double lambda_D, double lambda_T) {
-        fdapde_assert(lambda_D > 0 && lambda_T > 0 && n_dofs_ > 0 && n_obs_ > 0);
+        fdapde_assert(
+          lambda_D > 0 && lambda_T > 0 && n_dofs_ > 0 && n_obs_ > 0, std::invalid_argument,
+          "smoothing parameters and discretization dimensions must be positive");
         std::array<double, n_lambda> lambda {lambda_D, lambda_T};
         if (lambda_saved_.value() != lambda) {
             // assemble system matrix for the nonparameteric part
@@ -412,7 +440,7 @@ class fe_ls_parabolic_mono {
 
     // hutchinson approximation for Tr[S]
     double edf(int r = 100, int seed = random_seed) {
-        fdapde_assert(lambda_saved_.has_value());
+        fdapde_assert(lambda_saved_.has_value(), std::logic_error, "no previous smoothing parameter is available");
         if (!Ys_.has_value() || !Bs_.has_value() || r != Us_->rows()) {   // force reconstruction if r differs from old
             int seed_ = (seed == random_seed) ? std::random_device()() : seed;
             std::mt19937 rng(seed_);
@@ -442,13 +470,17 @@ class fe_ls_parabolic_mono {
         std::array<double, n_lambda> lambda_;
         if constexpr (sizeof...(LambdaT) == 1) {
             internals::for_each_index_and_args<sizeof...(LambdaT)>([&]<int Ns_, typename Ts_>(const Ts_& ts) {
-                fdapde_assert(ts.size() == n_lambda && ts[0] > 0 && ts[1] > 0);
+                fdapde_assert(
+                  ts.size() == n_lambda && ts[0] > 0 && ts[1] > 0, std::invalid_argument,
+                  "smoothing parameters have an invalid dimension or nonpositive value");
                 lambda_[0] = ts[0];
                 lambda_[1] = ts[1];
             });
         } else {
             std::array<double, n_lambda> lambda__ {static_cast<double>(lambda)...};
-            fdapde_assert(lambda__[0] > 0 && lambda__[1] > 0);
+            fdapde_assert(
+              lambda__[0] > 0 && lambda__[1] > 0, std::invalid_argument,
+              "smoothing parameters and discretization dimensions must be positive");
             lambda_[0] = lambda__[0];
 	    lambda_[1] = lambda__[1];
         }
@@ -471,7 +503,9 @@ class fe_ls_parabolic_mono {
     template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
     matrix_t P(const LambdaT& lambda) const {
-        fdapde_assert(lambda.size() == n_lambda);
+        fdapde_assert(
+          lambda.size() == n_lambda, std::invalid_argument,
+          "smoothing parameters have an invalid dimension or nonpositive value");
         return P(lambda[0], lambda[1]);
     }
     matrix_t P() const { return P(1.0, 1.0); }
@@ -485,7 +519,9 @@ class fe_ls_parabolic_mono {
     template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
     double ftPf(const LambdaT& lambda) {
-        fdapde_assert(lambda.size() == n_lambda);
+        fdapde_assert(
+          lambda.size() == n_lambda, std::invalid_argument,
+          "smoothing parameters have an invalid dimension or nonpositive value");
         return internals::apply_index_pack<n_lambda>([&]<int... Ns>() { return ftPf(lambda[Ns]...); });
     }
     vector_t lmbPsi(const vector_t& rhs) const { return Psi_ * rhs; }
@@ -591,7 +627,9 @@ struct fe_ls_parabolic_ieul {
             cols_(data.cols()),
             blk_rows_(blk_rows),
             blk_cols_(blk_cols) {
-            fdapde_assert(data.rows() % rows == 0 && rows % blk_rows == 0 && data.cols() % blk_cols == 0);
+            fdapde_assert(
+              data.rows() % rows == 0 && rows % blk_rows == 0 && data.cols() % blk_cols == 0, std::invalid_argument,
+              "data dimensions must contain complete tensor blocks");
         }
         template <typename DataT>
             requires(internals::is_eigen_dense_xpr_v<DataT> &&
@@ -602,7 +640,8 @@ struct fe_ls_parabolic_ieul {
             cols_(data.cols()),
             blk_rows_(rows),
             blk_cols_(data.cols()) {
-            fdapde_assert(data.rows() % rows == 0);
+            fdapde_assert(
+              data.rows() % rows == 0, std::invalid_argument, "data dimensions must contain complete tensor blocks");
         }
         block_map_t(const block_map_t& other) :
             rows_(other.rows_), cols_(other.cols_), blk_rows_(other.blk_rows_), blk_cols_(other.blk_cols_) {
@@ -642,7 +681,9 @@ struct fe_ls_parabolic_ieul {
             Psi_ = psi;
             D_ = measure_vect.asDiagonal();
         }
-        fdapde_assert(n_ == Psi_.rows());
+        fdapde_assert(
+          n_ == Psi_.rows(), std::invalid_argument,
+          "sampling operators and model data must have compatible dimensions");
         return;
     }
     template <typename GeoFrame> void eval_spatial_basis_at_(const GeoFrame& gf) {
@@ -687,7 +728,8 @@ struct fe_ls_parabolic_ieul {
         requires(is_valid_penalty_v<Penalty>)
     fe_ls_parabolic_ieul(const std::string& formula, const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
-	fdapde_assert(gf.n_layers() == 1);
+        fdapde_assert(
+          gf.n_layers() == 1, std::invalid_argument, "data layers do not match the model sampling structure");
         n_obs_ = gf[0].rows();
 	n_locs_ = n_obs_;
 
@@ -703,7 +745,8 @@ struct fe_ls_parabolic_ieul {
         requires(is_valid_penalty_v<Penalty>)
     fe_ls_parabolic_ieul(const GeoFrame& gf, Penalty&& penalty, const WeightMatrix& W) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
-	fdapde_assert(gf.n_layers() == 1);
+        fdapde_assert(
+          gf.n_layers() == 1, std::invalid_argument, "data layers do not match the model sampling structure");
         n_obs_ = gf[0].rows();
 	n_locs_ = n_obs_;
 
@@ -711,11 +754,15 @@ struct fe_ls_parabolic_ieul {
         const auto& time_index = geo_index_cast<1, POINT>(gf[0]);
         const auto& time_coords = time_index.coordinates();
         m_ = time_coords.rows();
-        fdapde_assert(m_ > 0 && time_coords.cols() == 1);
+        fdapde_assert(
+          m_ > 0 && time_coords.cols() == 1, std::invalid_argument,
+          "time coordinates must form a nonempty column vector");
         DeltaT_ = time_coords(1, 0) - time_coords(0, 0);
         for (int i = 1; i < m_ - 1; ++i) {
             double lag_i = time_coords(i + 1, 0) - time_coords(i, 0);
-            fdapde_assert(DeltaT_ > 0 && lag_i > 0 && almost_equal(DeltaT_ FDAPDE_COMMA lag_i));
+            fdapde_assert(
+              DeltaT_ > 0 && lag_i > 0 && almost_equal(DeltaT_ FDAPDE_COMMA lag_i), std::invalid_argument,
+              "time coordinates must have the same positive spacing");
         }
 	discretize(penalty);
 	eval_spatial_basis_at_(gf);
@@ -763,18 +810,22 @@ struct fe_ls_parabolic_ieul {
           ITERATIVE_SEPARABLE_PENALIZATION_REQUIRES_POINT_TEMPORAL_EVALUATIONS_ONLY);
         fdapde_assert(
           locs1.rows() > 0 && locs2.rows() > 0 && y.rows() == locs1.rows() * locs2.rows() && y.cols() == 1 &&
-          W.rows() == locs1.rows() * locs2.rows() && W.rows() == W.cols());
+            W.rows() == locs1.rows() * locs2.rows() && W.rows() == W.cols(),
+          std::invalid_argument, "sampling operators and model data must have compatible dimensions");
         n_obs_ = y.rows();
         n_locs_ = n_obs_;
         n_covs_ = 0;
         eval_spatial_basis_at_(locs1);
 
         m_ = locs2.rows();
-        fdapde_assert(m_ > 0 && locs2.cols() == 1);
+        fdapde_assert(
+          m_ > 0 && locs2.cols() == 1, std::invalid_argument, "time coordinates must form a nonempty column vector");
         DeltaT_ = locs2(1, 0) - locs2(0, 0);
         for (int i = 1; i < m_ - 1; ++i) {
             double lag_i = locs2(i + 1, 0) - locs2(i, 0);
-            fdapde_assert(DeltaT_ > 0 && lag_i > 0 && almost_equal(DeltaT_ FDAPDE_COMMA lag_i));
+            fdapde_assert(
+              DeltaT_ > 0 && lag_i > 0 && almost_equal(DeltaT_ FDAPDE_COMMA lag_i), std::invalid_argument,
+              "time coordinates must have the same positive spacing");
         }
         // update forcing
 	u0_ = u_ + (1.0 / DeltaT_) * (R0_ * s_);
@@ -785,7 +836,9 @@ struct fe_ls_parabolic_ieul {
     template <typename GeoFrame, typename WeightMatrix>
     void analyze_data(const std::string& formula, const GeoFrame& gf, const WeightMatrix& W) {
         fdapde_static_assert(GeoFrame::Order == 2, THIS_CLASS_IS_FOR_ORDER_TWO_GEOFRAMES_ONLY);
-        fdapde_assert(gf.n_layers() == 1 && gf[0].category()[1] == ltype::point);
+        fdapde_assert(
+          gf.n_layers() == 1 && gf[0].category()[1] == ltype::point, std::invalid_argument,
+          "data layers do not match the model sampling structure");
         n_obs_ = gf[0].rows();
         n_locs_ = n_obs_;
 
@@ -793,11 +846,15 @@ struct fe_ls_parabolic_ieul {
         const auto& time_index = geo_index_cast<1, POINT>(gf[0]);
         const auto& time_coords = time_index.coordinates();
         m_ = time_coords.rows();
-        fdapde_assert(m_ > 0 && time_coords.cols() == 1);
+        fdapde_assert(
+          m_ > 0 && time_coords.cols() == 1, std::invalid_argument,
+          "time coordinates must form a nonempty column vector");
         DeltaT_ = time_coords(1, 0) - time_coords(0, 0);
         for (int i = 1; i < m_ - 1; ++i) {
             double lag_i = time_coords(i + 1, 0) - time_coords(i, 0);
-            fdapde_assert(DeltaT_ > 0 && lag_i > 0 && almost_equal(DeltaT_ FDAPDE_COMMA lag_i));
+            fdapde_assert(
+              DeltaT_ > 0 && lag_i > 0 && almost_equal(DeltaT_ FDAPDE_COMMA lag_i), std::invalid_argument,
+              "time coordinates must have the same positive spacing");
         }
         // update forcing
 	u0_ = u_ + (1.0 / DeltaT_) * (R0_ * s_);
@@ -814,7 +871,9 @@ struct fe_ls_parabolic_ieul {
 
     // modifiers
     void update_response(const vector_t& y) {
-        fdapde_assert(Psi_.rows() > 0 && y.rows() == n_locs_ && y.cols() == 1);
+        fdapde_assert(
+          Psi_.rows() > 0 && y.rows() == n_locs_ && y.cols() == 1, std::invalid_argument,
+          "observations, weights and sampling locations must have compatible dimensions");
         y_ = y;
 	// correct \Psi for missing observations
         auto nan_pattern = na_matrix(y);
@@ -828,7 +887,9 @@ struct fe_ls_parabolic_ieul {
         }	
     }
     template <typename WeightMatrix> void update_weights(const WeightMatrix& W) {
-        fdapde_assert(Psi_.rows() > 0 && W.rows() == n_locs_ && W.rows() == W.cols());
+        fdapde_assert(
+          Psi_.rows() > 0 && W.rows() == n_locs_ && W.rows() == W.cols(), std::invalid_argument,
+          "observations, weights and sampling locations must have compatible dimensions");
         W_ = W;
         // check if W_ is time-wise block-constant
         W_const_ = true;
@@ -944,7 +1005,9 @@ struct fe_ls_parabolic_ieul {
     template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
     const vector_t& fit(LambdaT&& lambda) {
-        fdapde_assert(lambda.size() == n_lambda);
+        fdapde_assert(
+          lambda.size() == n_lambda, std::invalid_argument,
+          "smoothing parameters have an invalid dimension or nonpositive value");
         return fit(lambda[0], lambda[1]);
     }
 

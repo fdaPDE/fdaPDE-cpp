@@ -166,28 +166,13 @@ int RGCCA<SamplingStrategy>::bootstrap_fit_max_iter_() const {
     return bootstrap_config_.fit_max_iter > 0 ? bootstrap_config_.fit_max_iter : opt_.max_iter;
 }
 
-// configures and returns the number of bootstrap worker threads
+/// @brief reuses the process-wide executor within this model's positive concurrency cap
 template <typename SamplingStrategy>
 int RGCCA<SamplingStrategy>::bootstrap_n_threads_() const {
     const int max_threads = bootstrap_config_.max_threads;
-    if (max_threads <= 0) {
-        throw std::invalid_argument("RGCCA: bootstrap max_threads must be positive");
-    }
+    fdapde_strong_assert(max_threads > 0, std::invalid_argument, "RGCCA: bootstrap max_threads must be positive");
 
-    const int available_threads = std::max(1, static_cast<int>(fdapde::available_concurrency()));
-    const int requested_threads = std::min(max_threads, available_threads);
-    parallel_set_num_threads(requested_threads);
-    const int actual_threads = static_cast<int>(internals::threaded_executor::instance().size());
-
-    if (actual_threads > max_threads) {
-        throw std::runtime_error(
-            "RGCCA: bootstrap allows at most " + std::to_string(max_threads) +
-            " threads, but the executor is already initialized with " +
-            std::to_string(actual_threads) + " threads"
-        );
-    }
-
-    return actual_threads;
+    return parallel_initialize(max_threads);
 }
 
 // -----------------------------------------------------------------------------
@@ -238,7 +223,7 @@ bool RGCCA<SamplingStrategy>::early_stop_lambda_(
 // bootstrap stream and design pruning
 // -----------------------------------------------------------------------------
 
-// runs adaptive bootstrap resampling for one lambda value
+/// @brief fits an ordered bootstrap stream using one reusable workspace per logical worker
 template <typename SamplingStrategy>
 void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
     int lambda_i,
@@ -305,15 +290,12 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
                 C_snapshot = C_active;
             }
 
-            const int tid = this_thread_id();
             auto cancelled = [&]() {
                 return stop.load(std::memory_order_acquire) ||
                     epoch != epoch_signal.load(std::memory_order_acquire);
             };
             const auto worker_start = std::chrono::high_resolution_clock::now();
-            auto sample = fit_bootstrap_sample_(
-                thread_boot_worker[tid], b, seed, C_snapshot, w_fit, cancelled
-            );
+            auto sample = fit_bootstrap_sample_(thread_boot_worker[worker_i], b, seed, C_snapshot, w_fit, cancelled);
             const double worker_elapsed = std::chrono::duration<double>(
                 std::chrono::high_resolution_clock::now() - worker_start
             ).count();

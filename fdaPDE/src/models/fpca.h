@@ -47,7 +47,9 @@ template <typename VariationalSolver> class fpca_power_iteration_impl {
         smoother_(std::addressof(smoother)), n_dofs_(smoother.n_dofs()), max_iter_(max_iter), tol_(tol) { }
 
     template <typename DataT> auto fit(const DataT& data, int rank, const std::vector<double>& lambda_grid, int flag) {
-        fdapde_assert(lambda_grid.size() > 0 && lambda_grid.size() % n_lambda == 0);
+        fdapde_assert(
+          lambda_grid.size() > 0 && lambda_grid.size() % n_lambda == 0, std::invalid_argument,
+          "smoothing grid must contain complete parameter tuples");
         matrix_t X = data.transpose();
         n_locs_ = X.cols(), n_units_ = X.rows();
         // first guess of PCs set to a multivariate PCA (SVD)
@@ -71,7 +73,9 @@ template <typename VariationalSolver> class fpca_power_iteration_impl {
             Eigen::Matrix<double, n_lambda, 1> opt_lambda;
             switch (calibration) {
             case 0: {   // no calibration
-                fdapde_assert(lambda_grid.size() == n_lambda);
+                fdapde_assert(
+                  lambda_grid.size() == n_lambda, std::invalid_argument,
+                  "smoothing grid must contain complete parameter tuples");
                 std::copy(lambda_grid.begin(), lambda_grid.end(), opt_lambda.begin());
             } break;
             case OptimizeGCV: {
@@ -171,7 +175,9 @@ template <typename VariationalSolver> class fpca_subspace_iteration_impl {
         smoother_(std::addressof(smoother)), n_dofs_(smoother.n_dofs()), max_iter_(max_iter), tol_(tol) { }
 
     template <typename DataT> auto fit(const DataT& data, int rank, const std::vector<double>& lambda_grid, int flag) {
-        fdapde_assert(lambda_grid.size() > 0 && lambda_grid.size() % n_lambda == 0);
+        fdapde_assert(
+          lambda_grid.size() > 0 && lambda_grid.size() % n_lambda == 0, std::invalid_argument,
+          "smoothing grid must contain complete parameter tuples");
         matrix_t X = data.transpose();
         n_locs_ = X.cols(), n_units_ = X.rows();
         // first guess of PCs set to a multivariate PCA (SVD)
@@ -193,7 +199,9 @@ template <typename VariationalSolver> class fpca_subspace_iteration_impl {
         Eigen::Matrix<double, n_lambda, 1> opt_lambda;
         switch (calibration) {
         case 0: {   // no calibration
-            fdapde_assert(lambda_grid.size() == n_lambda);
+            fdapde_assert(
+              lambda_grid.size() == n_lambda, std::invalid_argument,
+              "smoothing grid must contain complete parameter tuples");
             std::copy(lambda_grid.begin(), lambda_grid.end(), opt_lambda.begin());
         } break;
         case OptimizeGCV: {
@@ -294,7 +302,9 @@ template <typename VariationalSolver> class fpca_direct_impl {
         smoother_(std::addressof(smoother)), n_dofs_(smoother.n_dofs()) { }
 
     template <typename DataT> auto fit(const DataT& data, int rank, const std::vector<double>& lambda_grid, int flag) {
-        fdapde_assert(lambda_grid.size() > 0 && lambda_grid.size() % n_lambda == 0);
+        fdapde_assert(
+          lambda_grid.size() > 0 && lambda_grid.size() % n_lambda == 0, std::invalid_argument,
+          "smoothing grid must contain complete parameter tuples");
         matrix_t X = data.transpose();
         n_locs_ = X.cols(), n_units_ = X.rows();
         // allocate memory
@@ -307,7 +317,9 @@ template <typename VariationalSolver> class fpca_direct_impl {
         Eigen::Matrix<double, n_lambda, 1> opt_lambda;
         switch (calibration) {
         case 0: {   // no calibration
-            fdapde_assert(lambda_grid.size() == n_lambda);
+            fdapde_assert(
+              lambda_grid.size() == n_lambda, std::invalid_argument,
+              "smoothing grid must contain complete parameter tuples");
             std::copy(lambda_grid.begin(), lambda_grid.end(), opt_lambda.begin());
         } break;
         case OptimizeGCV: {
@@ -343,7 +355,11 @@ template <typename VariationalSolver> class fpca_direct_impl {
     template <typename LambdaT>
         requires(internals::is_subscriptable<LambdaT, int>)
     auto solve_(const matrix_t& X, int rank, const LambdaT& lambda, int flag) {
-        for (int i = 0; i < lambda.size(); ++i) { fdapde_assert(lambda[i] > 0); }
+        for (int i = 0; i < lambda.size(); ++i) {
+            fdapde_assert(
+              lambda[i] > 0, std::invalid_argument,
+              "smoothing parameters and discretization dimensions must be positive");
+        }
         matrix_t C = smoother_->Psi().transpose() * smoother_->Psi() + smoother_->P(lambda);
         // given the cholesky decomposition of C as C = D * D^\top, compute D^{-1}
         Eigen::LLT<matrix_t> chol(C);
@@ -413,7 +429,9 @@ template <typename fPCASolver> class fpca_na_impl {
         std::vector<double> opt_lambda(n_lambda);
         switch (calibration) {
         case 0: {   // no calibration
-            fdapde_assert(lambda_grid.size() == n_lambda);
+            fdapde_assert(
+              lambda_grid.size() == n_lambda, std::invalid_argument,
+              "smoothing grid must contain complete parameter tuples");
             std::copy(lambda_grid.begin(), lambda_grid.end(), opt_lambda.begin());
         } break;
         case OptimizeMSRE: {
@@ -440,8 +458,12 @@ template <typename fPCASolver> class fpca_na_impl {
     template <typename LambdaT>
         requires(internals::is_subscriptable<LambdaT, int>)
     auto solve_(const matrix_t& X, const binary_t& nan, int rank, const LambdaT& lambda, int flag) {
-        for (int i = 0; i < lambda.size(); ++i) { fdapde_assert(lambda[i] > 0); }
-	matrix_t F(n_dofs_ , rank);
+        for (int i = 0; i < lambda.size(); ++i) {
+            fdapde_assert(
+              lambda[i] > 0, std::invalid_argument,
+              "smoothing parameters and discretization dimensions must be positive");
+        }
+    matrix_t F(n_dofs_ , rank);
 	matrix_t S(n_units_, rank);
         matrix_t U  = matrix_t::Zero(n_units_, n_dofs_);
 	matrix_t Un = matrix_t::Zero(n_units_, n_dofs_);
@@ -534,7 +556,8 @@ template <typename VariationalSolver> class fPCA {
 	return;
     }
     template <typename GeoFrame> void analyze_data(const std::string& colname, const GeoFrame& gf) {
-        fdapde_assert(gf.n_layers() == 1);
+        fdapde_assert(
+          gf.n_layers() == 1, std::invalid_argument, "data layers do not match the model sampling structure");
         data_ = gf[0].data().template col<double>(colname).as_matrix();
         n_locs_ = data_.rows();
         n_units_ = data_.cols();
@@ -555,7 +578,9 @@ template <typename VariationalSolver> class fPCA {
     template <typename LambdaT, typename Policy = fpca_power_solver>
         requires(internals::is_vector_like_v<LambdaT>)
     auto fit(int rank, const LambdaT& lambda_grid, int flag = ComputeRandSVD, Policy policy = Policy()) {
-        fdapde_assert(lambda_grid.size() % n_lambda == 0);
+        fdapde_assert(
+          lambda_grid.size() % n_lambda == 0, std::invalid_argument,
+          "smoothing grid must contain complete parameter tuples");
         auto solver_ = policy.get(smoother_);   // instantiate solver implementation
         f_.resize(n_dofs_, rank);
         s_.resize(n_units_, rank);

@@ -157,7 +157,9 @@ struct fe_de_elliptic {
     // fit from geoframe
     template <typename GeoFrame> void analyze_data(const GeoFrame& gf) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
-        fdapde_assert(gf.n_layers() == 1 && gf[0].category()[0] == ltype::point);
+        fdapde_assert(
+          gf.n_layers() == 1 && gf[0].category()[0] == ltype::point, std::invalid_argument,
+          "data layers do not match the model sampling structure");
         n_obs_ = gf[0].rows();
         // eval physical basis at spatial locations
         const auto& spatial_index = geo_index_cast<0, POINT>(gf[0]);
@@ -178,7 +180,9 @@ struct fe_de_elliptic {
     template <typename Optimizer, typename LambdaT, typename... Callbacks>
         requires(internals::is_vector_like_v<LambdaT>)
     const vector_t& fit(LambdaT&& lambda, const vector_t& g_init, Optimizer&& opt, Callbacks&&... callbacks) {
-        fdapde_assert(lambda.size() == n_lambda);
+        fdapde_assert(
+          lambda.size() == n_lambda, std::invalid_argument,
+          "smoothing parameters have an invalid dimension or nonpositive value");
         return fit(lambda[0], g_init, opt, std::forward<Callbacks>(callbacks)...);
     }
     // modifiers

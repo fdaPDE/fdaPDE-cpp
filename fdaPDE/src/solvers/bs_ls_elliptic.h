@@ -49,7 +49,9 @@ struct bs_ls_elliptic {
     template <typename DataLocs>
         requires(is_valid_data_locs_descriptor_v<DataLocs>)
     void eval_basis_at_(const DataLocs& locs) {
-        fdapde_assert(n_locs_ == locs.rows());
+        fdapde_assert(
+          n_locs_ == locs.rows(), std::invalid_argument,
+          "observations, weights and sampling locations must have compatible dimensions");
         if constexpr (std::is_same_v<DataLocs, matrix_t>) {
             Psi_ = point_eval_(locs);
             D_ = vector_t::Ones(n_locs_).asDiagonal();
@@ -153,7 +155,10 @@ struct bs_ls_elliptic {
     template <typename DataLocs, typename WeightMatrix>
         requires(is_valid_data_locs_descriptor_v<DataLocs>)
     void analyze_data(const DataLocs& locs, const matrix_t& y, const WeightMatrix& W) {
-        fdapde_assert(locs.rows() > 0 && y.rows() == locs.rows() && y.cols() == 1 && W.rows() == locs.rows() && W.rows() == W.cols());
+        fdapde_assert(
+          locs.rows() > 0 && y.rows() == locs.rows() && y.cols() == 1 && W.rows() == locs.rows() &&
+            W.rows() == W.cols(),
+          std::invalid_argument, "sampling operators and model data must have compatible dimensions");
         n_obs_ = locs.rows();
         n_locs_ = n_obs_;
         n_covs_ = 0;
@@ -175,14 +180,10 @@ struct bs_ls_elliptic {
     void analyze_data(const DataLocs& locs, const matrix_t& y, const matrix_t& X, const WeightMatrix& W) {
         fdapde_assert(
           locs.rows() > 0 && y.rows() == locs.rows() && y.cols() == 1 && X.rows() == locs.rows() &&
-          W.rows() == locs.rows() && W.rows() == W.cols());
-        n_obs_  = locs.rows();
-        n_locs_ = n_obs_;
-        bool require_woodbury_realloc = n_covs_ != X.cols();
-        n_covs_ = X.cols();
-        eval_basis_at_(locs);   // update \Psi matrix
-        if (require_woodbury_realloc) { U_ = matrix_t::Zero(n_dofs_, n_covs_); }
-        if (require_woodbury_realloc) { V_ = matrix_t::Zero(n_covs_, n_dofs_); }
+          W.rows() == locs.rows() && W.rows() == W.cols(), std::invalid_argument, "sampling operators and model data
+    must have compatible dimensions"); n_obs_  = locs.rows(); n_locs_ = n_obs_; bool require_woodbury_realloc = n_covs_
+    != X.cols(); n_covs_ = X.cols(); eval_basis_at_(locs);   // update \Psi matrix if (require_woodbury_realloc) { U_ =
+    matrix_t::Zero(n_dofs_, n_covs_); } if (require_woodbury_realloc) { V_ = matrix_t::Zero(n_covs_, n_dofs_); }
         update_response_and_weights(y, X, W);
         return;
     }
@@ -191,7 +192,8 @@ struct bs_ls_elliptic {
     template <typename GeoFrame, typename WeightMatrix>
     void analyze_data(const std::string& formula, const GeoFrame& gf, const WeightMatrix& W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
-        fdapde_assert(gf.n_layers() == 1);
+        fdapde_assert(
+          gf.n_layers() == 1, std::invalid_argument, "data layers do not match the model sampling structure");
         n_obs_  = gf[0].rows();
         n_locs_ = n_obs_;
         eval_basis_at_(gf);   // update \Psi matrix
@@ -223,7 +225,8 @@ struct bs_ls_elliptic {
     // analyze data (geoframe only)
     template <typename GeoFrame, typename WeightMatrix> void analyze_data(const GeoFrame& gf, const WeightMatrix& W) {
         fdapde_static_assert(GeoFrame::Order == 1, THIS_CLASS_IS_FOR_ORDER_ONE_GEOFRAMES_ONLY);
-        fdapde_assert(gf.n_layers() == 1);
+        fdapde_assert(
+          gf.n_layers() == 1, std::invalid_argument, "data layers do not match the model sampling structure");
         n_obs_ = gf[0].rows();
         n_locs_ = n_obs_;
         eval_basis_at_(gf);   // update \Psi matrix
@@ -233,7 +236,9 @@ struct bs_ls_elliptic {
 
     // modifiers
     void update_response(const vector_t& y) {
-        fdapde_assert(Psi_.rows() > 0 && y.rows() == n_locs_ && y.cols() == 1);
+        fdapde_assert(
+          Psi_.rows() > 0 && y.rows() == n_locs_ && y.cols() == 1, std::invalid_argument,
+          "observations, weights and sampling locations must have compatible dimensions");
         y_ = y;
         // correct \Psi for missing observations
         nan_pattern_ = na_matrix(y);
@@ -248,7 +253,9 @@ struct bs_ls_elliptic {
         return;
     }
     template <typename WeightMatrix> void update_weights(const WeightMatrix& W) {
-        fdapde_assert(Psi_.rows() > 0 && W.rows() == n_locs_ && W.rows() == W.cols());
+        fdapde_assert(
+          Psi_.rows() > 0 && W.rows() == n_locs_ && W.rows() == W.cols(), std::invalid_argument,
+          "observations, weights and sampling locations must have compatible dimensions");
         W_ = W;
         W_ /= n_obs_;
         b_ = PsiNA().transpose() * D_ * W_ * y_;
@@ -269,7 +276,9 @@ struct bs_ls_elliptic {
     // update response and weights
     template <typename WeightMatrix>
     void update_response_and_weights(const vector_t& y, const WeightMatrix& W) {
-        fdapde_assert(Psi_.rows() > 0 && y.rows() == n_locs_ && y.cols() == 1 && W.rows() == W.cols() && W.rows() == n_locs_);
+        fdapde_assert(
+          Psi_.rows() > 0 && y.rows() == n_locs_ && y.cols() == 1 && W.rows() == W.cols() && W.rows() == n_locs_,
+          std::invalid_argument, "observations, weights and sampling locations must have compatible dimensions");
         y_ = y;
         nan_pattern_ = na_matrix(y_);
         if (nan_pattern_.any()) {
@@ -282,7 +291,9 @@ struct bs_ls_elliptic {
     }
     // fit: solve (Psi^T W Psi + lambda R1) f = Psi^T W y
     std::pair<vector_t, vector_t> fit(double lambda) {
-        fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
+        fdapde_assert(
+          lambda > 0 && n_dofs_ > 0 && n_obs_ > 0, std::invalid_argument,
+          "smoothing parameters and discretization dimensions must be positive");
         if ( lambda_saved_.value() != lambda || W_changed_) {
             // assemble spline system: A = Psi^T W Psi + lambda * R1
             const sparse_matrix_t A = PsiNA().transpose() * D_ * W_ * PsiNA() + lambda * R1_;
@@ -312,12 +323,16 @@ struct bs_ls_elliptic {
     template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
     std::pair<vector_t, vector_t> fit(LambdaT&& lambda) {
-        fdapde_assert(lambda.size() == n_lambda);
+        fdapde_assert(
+          lambda.size() == n_lambda, std::invalid_argument,
+          "smoothing parameters have an invalid dimension or nonpositive value");
         return fit(lambda[0]);
     }
     // perform a nonparametric_fit, e.g. discarding possible covariates
     vector_t nonparametric_fit(double lambda) {
-        fdapde_assert(lambda > 0 && n_dofs_ > 0 && n_obs_ > 0);
+        fdapde_assert(
+          lambda > 0 && n_dofs_ > 0 && n_obs_ > 0, std::invalid_argument,
+          "smoothing parameters and discretization dimensions must be positive");
         if (lambda_saved_.value() != lambda) {
             // assemble and factorize system matrix for nonparameteric part
             const sparse_matrix_t A = PsiNA().transpose() * D_ * W_ * PsiNA() + lambda * R1_;
@@ -332,7 +347,7 @@ struct bs_ls_elliptic {
     }
     // hutchinson approximation for Tr[S]
     double edf(int r = 100, int seed = random_seed) {
-        fdapde_assert(lambda_saved_.has_value());
+        fdapde_assert(lambda_saved_.has_value(), std::logic_error, "no previous smoothing parameter is available");
 
         if (trace_mode_ == TraceMode::Hutchinson) {
             if (!Ys_.has_value() || !Bs_.has_value()) {
@@ -366,10 +381,13 @@ struct bs_ls_elliptic {
     double edf(const LambdaT& lambda, int r = 100, int seed = random_seed) {
         double lambda_;
         if constexpr (internals::is_vector_like_v<LambdaT>) {
-            fdapde_assert(lambda.size() == n_lambda && lambda[0] > 0);
+            fdapde_assert(
+              lambda.size() == n_lambda && lambda[0] > 0, std::invalid_argument,
+              "smoothing parameters have an invalid dimension or nonpositive value");
             lambda_ = lambda[0];
         } else {
-            fdapde_assert(lambda > 0);
+            fdapde_assert(
+              lambda > 0, std::invalid_argument, "smoothing parameters and discretization dimensions must be positive");
             lambda_ = lambda;
         }
         if (lambda_saved_.value() != lambda_) {
@@ -387,7 +405,9 @@ struct bs_ls_elliptic {
     template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
     sparse_matrix_t P(const LambdaT& lambda) const {
-        fdapde_assert(lambda.size() == n_lambda);
+        fdapde_assert(
+          lambda.size() == n_lambda, std::invalid_argument,
+          "smoothing parameters have an invalid dimension or nonpositive value");
         return P(lambda[0]);
     }
     sparse_matrix_t P() const { return P(1.0); }
@@ -399,7 +419,9 @@ struct bs_ls_elliptic {
     template <typename LambdaT>
         requires(internals::is_vector_like_v<LambdaT>)
     double ftPf(const LambdaT& lambda) {
-        fdapde_assert(lambda.size() == n_lambda);
+        fdapde_assert(
+          lambda.size() == n_lambda, std::invalid_argument,
+          "smoothing parameters have an invalid dimension or nonpositive value");
         return ftPf(lambda[0]);
     }
     // left multiplication by \Psi

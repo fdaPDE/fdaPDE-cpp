@@ -58,5 +58,9 @@ add_test(NAME rgcca_bootstrap_worker_reproducibility
         -P ${CMAKE_CURRENT_SOURCE_DIR}/compare_rgcca_bootstrap_reproducibility.cmake.in
 )
 
+add_test(NAME rgcca_block_importance_thread_budget
+    COMMAND $<TARGET_FILE:rgcca_bootstrap_reproducibility> 1 block-importance
+)
+
 include(GoogleTest)
 gtest_discover_tests(fdapde_test)

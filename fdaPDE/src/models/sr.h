@@ -44,7 +44,8 @@ class SRPDE {
     template <typename... Args> void discretize(Args&&... args) { solver_.discretize(std::forward<Args>(args)...); }
     template <typename GeoFrame, typename WeightMatrix>
     void analyze_data(const std::string& formula, const GeoFrame& gf, const WeightMatrix& W) {
-        fdapde_assert(gf.n_layers() == 1);
+        fdapde_assert(
+          gf.n_layers() == 1, std::invalid_argument, "data layers do not match the model sampling structure");
         Formula formula_(formula);
 	n_obs_  = gf[0].rows();
 	n_covs_ = 0;
@@ -154,7 +155,7 @@ class SRPDE {
         }
         template <typename Distribution>
         std::pair<vector_t, vector_t> confint_beta_(double alpha, const matrix_t& C, Distribution&& distr) const {
-            fdapde_assert(C.cols() == q_);
+            fdapde_assert(C.cols() == q_, std::invalid_argument, "contrast matrix must match the covariate count");
             if (!Vbeta_.has_value()) { compute_Vbeta_(); }
             int p = C.rows();
             double q = distr.quantile(alpha);
@@ -174,7 +175,9 @@ class SRPDE {
         template <typename Distribution>
         std::pair<vector_t, vector_t> confint_f_(double alpha, const sparse_matrix_t& Psi, Distribution&& distr) const {
             const auto& s = m_->solver_;
-            fdapde_assert(Psi.rows() > 0 && Psi.cols() == s.n_dofs());
+            fdapde_assert(
+              Psi.rows() > 0 && Psi.cols() == s.n_dofs(), std::invalid_argument,
+              "sampling operators and model data must have compatible dimensions");
             if (!Vf_.has_value()) { compute_Vf_(); }
 	    sparse_matrix_t Vf__ = Psi * (*Vf_) * Psi.transpose();
 	    double q = distr.quantile(alpha);
@@ -236,7 +239,9 @@ class SRPDE {
         template <typename BetaT>
             requires(internals::is_vector_like_v<BetaT>)
         double test_sim_beta(const BetaT& beta0, const matrix_t& C) const {
-            fdapde_assert(beta0.size() == q_);
+            fdapde_assert(
+              beta0.size() == q_, std::invalid_argument,
+              "initial regression coefficients must match the covariate count");
             if (!Vbeta_.has_value()) { compute_Vbeta_(); }
             vector_t beta0_(q_);
             for (int i = 0; i < q_; ++i) { beta0_[i] = beta0[i]; }
@@ -258,7 +263,9 @@ class SRPDE {
         template <typename BetaT>
             requires(internals::is_vector_like_v<BetaT>)
         vector_t test_oat_beta(const BetaT& beta0, const matrix_t& C) const {
-            fdapde_assert(beta0.size() == q_);
+            fdapde_assert(
+              beta0.size() == q_, std::invalid_argument,
+              "initial regression coefficients must match the covariate count");
             if (!Vbeta_.has_value()) { compute_Vbeta_(); }
             vector_t pvalue(q_);
             for (int i = 0; i < q_; ++i) {
@@ -282,13 +289,13 @@ class SRPDE {
         template <typename... DataLocs>
         std::pair<vector_t, vector_t> confint_oat_f(double alpha, const DataLocs&... locs) const {
             fdapde_assert(
-		std::all_of(m_->geo_category_.begin() FDAPDE_COMMA m_->geo_category_.end() FDAPDE_COMMA
-		    [&](auto t) { return t == ltype::point; })
-	    );
+              std::all_of(m_->geo_category_.begin() FDAPDE_COMMA m_->geo_category_.end()
+                            FDAPDE_COMMA[&](auto t) { return t == ltype::point; }),
+              std::invalid_argument, "prediction requires point sampling in every geometric dimension");
 
-	    // eval_basis_at must be made public
-	    // what if more than one layer and just one matrix of joint space-time points?
-	    // what in case of parabolic penalty?
+            // eval_basis_at must be made public
+            // what if more than one layer and just one matrix of joint space-time points?
+            // what in case of parabolic penalty?
 	    
             sparse_matrix_t Psi_p = m_->solver_.eval_basis_at(locs...);
 
@@ -301,7 +308,9 @@ class SRPDE {
         // non-parametric testing
         double test_sim_f(const vector_t& f0, const sparse_matrix_t& Psi, double tol = 1e-4) const {
             const auto& s = m_->solver_;
-            fdapde_assert(f0.rows() == Psi.rows() && Psi.cols() == s.n_dofs());
+            fdapde_assert(
+              f0.rows() == Psi.rows() && Psi.cols() == s.n_dofs(), std::invalid_argument,
+              "sampling operators and model data must have compatible dimensions");
             // compute pseudoinverse of matrix Vf_
             if (!Vf_.has_value()) { compute_Vf_(); }
             if (!invVf_.has_value()) {   // compute Vf pseudoinverse

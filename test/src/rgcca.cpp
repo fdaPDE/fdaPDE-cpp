@@ -323,7 +323,8 @@ void add_spline_functional_blocks(RGCCA<IndependentSampling>& rgcca, const std::
 }
 
 void check_rgcca_against_cran(const std::string& reference_case, Mode mode) {
-    const std::string data_path = "../data/models/rgcca/";
+    const std::string data_path =
+      (std::filesystem::path(__FILE__).parent_path().parent_path() / "data/models/rgcca").string() + "/";
     const std::string reference_path = data_path + reference_case + "/";
 
     RGCCA<IndependentSampling>::Options options;
@@ -351,7 +352,8 @@ void check_rgcca_against_cran(const std::string& reference_case, Mode mode) {
 void check_rgcca_against_first_run(
   const std::string& reference_case, FunctionalDiscretization discretization,
   WeightSignConstraint weight_sign_constraint = WeightSignConstraint::None) {
-    const std::string data_path = "../data/models/rgcca/";
+    const std::string data_path =
+      (std::filesystem::path(__FILE__).parent_path().parent_path() / "data/models/rgcca").string() + "/";
     const std::string reference_path = data_path + "functional/" + reference_case + "/";
 
     RGCCA<IndependentSampling>::Options options;
@@ -598,7 +600,8 @@ void check_multivariate_bootstrap_references(
 }
 
 void check_fem_bootstrap_rgcca_against_first_run() {
-    const std::string data_path = "../data/models/rgcca/";
+    const std::string data_path =
+      (std::filesystem::path(__FILE__).parent_path().parent_path() / "data/models/rgcca").string() + "/";
     const std::string reference_path = data_path + "functional/fem_bootstrap_cov/";
 
     RGCCA<IndependentSampling>::Options options;
@@ -639,7 +642,8 @@ void check_fem_bootstrap_rgcca_against_first_run() {
 }
 
 void check_multivariate_model_selection_without_lambda_grid() {
-    const std::string data_path = "../data/models/rgcca/";
+    const std::string data_path =
+      (std::filesystem::path(__FILE__).parent_path().parent_path() / "data/models/rgcca").string() + "/";
     const std::string reference_path = data_path + "bootstrap/mv_deactivation_cov/";
 
     RGCCA<IndependentSampling>::Options options;
@@ -667,7 +671,8 @@ void check_multivariate_model_selection_without_lambda_grid() {
 }
 
 void check_fem_cov_component_significance() {
-    const std::string data_path = "../data/models/rgcca/";
+    const std::string data_path =
+      (std::filesystem::path(__FILE__).parent_path().parent_path() / "data/models/rgcca").string() + "/";
     const std::string reference_path = data_path + "functional/fem_cov_component_significance/";
 
     RGCCA<IndependentSampling>::Options options;
@@ -1198,7 +1203,8 @@ TEST(rgcca, block_importance_tests_each_disconnected_design_component) {
 }
 
 TEST(rgcca, component_callback_can_release_bootstrap_results) {
-    const std::string data_path = "../data/models/rgcca/";
+    const std::string data_path =
+      (std::filesystem::path(__FILE__).parent_path().parent_path() / "data/models/rgcca").string() + "/";
     constexpr int n_comp_local = 2;
 
     RGCCA<IndependentSampling>::Options options;
