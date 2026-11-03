@@ -15,6 +15,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <cstdlib>
+#include <cstring>
 #include <array>
 #include <cmath>
 #include <filesystem>
@@ -1338,6 +1339,73 @@ TEST(rgcca, stationary_segment_lengths_must_match_observations) {
 
 TEST(rgcca, F_GCCA_fem_cov_component_significance) {
     check_fem_cov_component_significance();
+}
+
+namespace {
+/// @brief records the weight matrix actually copied into a functional bootstrap solver
+struct CovmaxWeightCopyProbe : fdapde::internals::fe_normcovmax_elliptic {
+    using Base = fdapde::internals::fe_normcovmax_elliptic;
+    inline static Eigen::Index copied_nonzeros = 0;
+    inline static int updates = 0;
+    /// @brief creates a solver with the production discretization path
+    CovmaxWeightCopyProbe() = default;
+    /// @brief observes copied coefficients without changing the solver state
+    CovmaxWeightCopyProbe(const CovmaxWeightCopyProbe& other) : Base(other) { copied_nonzeros = weights().nonZeros(); }
+    /// @brief counts synchronization with the block normalization matrix
+    template <typename WeightMatrix> void update_weights(const WeightMatrix& weights) {
+        ++updates;
+        Base::update_weights(weights);
+    }
+};
+/// @brief substitutes only a copy observer for the production finite element weight solver
+template <typename Penalty> struct CovmaxWeightCopyPenalty : Penalty {
+    using solver_t = CovmaxWeightCopyProbe;
+    /// @brief retains the original penalty and its assembly expressions
+    explicit CovmaxWeightCopyPenalty(Penalty penalty) : Penalty(std::move(penalty)) { }
+};
+}   // namespace
+
+// covmax clones copy an identity metric rather than the obsolete construction-time covariance
+TEST(rgcca, covmax_functional_clones_discard_obsolete_weight_covariance) {
+    constexpr int observations = 24;
+    constexpr int locations = 8;
+    auto mesh = Triangulation<1, 1>::UnitInterval(locations);
+    GeoFrame frame(mesh);
+    frame.insert_scalar_layer<POINT>("data", MESH_NODES);
+    FeSpace space(mesh, P1<1>);
+    TrialFunction f(space);
+    TestFunction v(space);
+    ZeroField<1> forcing;
+    auto penalty = fe_normcovmax_elliptic(integral(mesh)(dot(grad(f), grad(v))), integral(mesh)(forcing * v));
+    RGCCA<IndependentSampling>::Options options;
+    options.mode = Mode::CorMax;
+    options.weight_sign_constraint = WeightSignConstraint::NonNegative;
+    RGCCA<IndependentSampling> model(observations, options, 1);
+    DenseMatrix data(observations, locations);
+    for (int i = 0; i < observations; ++i)
+        for (int j = 0; j < locations; ++j) data(i, j) = std::sin(0.13 * i + 0.27 * j) + 0.03 * i * (j + 1);
+    model.add_functional_block("source", frame, std::move(data), CovmaxWeightCopyPenalty(penalty));
+    auto& block = *model.blocks().front();
+    auto before = block.clone();
+    // the control sees the dense covariance retained from construction before covmax normalization
+    EXPECT_GT(CovmaxWeightCopyProbe::copied_nonzeros, locations);
+    block.set_mode(Mode::CovMax);
+    CovmaxWeightCopyProbe::updates = 0;
+    block.init_weight_uniform();
+    auto after = block.clone();
+    // the production copy constructor now copies exactly one identity entry per location
+    EXPECT_EQ(CovmaxWeightCopyProbe::copied_nonzeros, locations);
+    // the first omega construction synchronizes the solver exactly once
+    EXPECT_EQ(CovmaxWeightCopyProbe::updates, 1);
+    const DenseMatrix expected(block.Omega());
+    static_cast<void>(block.Omega());
+    // repeated omega access retains the ready metric without additional updates
+    EXPECT_EQ(CovmaxWeightCopyProbe::updates, 1);
+    const DenseMatrix actual(after->Omega());
+    // matching dimensions make the byte comparison safe and preserve the operator shape
+    ASSERT_EQ(std::make_pair(actual.rows(), actual.cols()), std::make_pair(expected.rows(), expected.cols()));
+    // cloning and rebuilding omega preserves every coefficient of the original covmax system
+    EXPECT_EQ(std::memcmp(actual.data(), expected.data(), actual.size() * sizeof(double)), 0);
 }
 
 // immutable bootstrap sources have clone-local ownership and cannot leak into the original model

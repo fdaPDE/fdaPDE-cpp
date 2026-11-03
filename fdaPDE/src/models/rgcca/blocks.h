@@ -861,9 +861,14 @@ public:
         return lambda_weights_;
     }
 
-    // Omega matrix
+    /// @brief assembles the normalization system and synchronizes covmax state before solver copies
     [[nodiscard]] const SparseMatrix& Omega() override {
         if (!Omega_ready_) {
+            if (this->mode() == ::fdapde::rgcca::Mode::CovMax && !weights_solver_weights_ready_) {
+                // discard the construction-time covariance before bootstrap clones copy solver state
+                weights_solver_.update_weights(M());
+                weights_solver_weights_ready_ = true;
+            }
             Omega_ = Psi_D().transpose() * M() * Psi_D();
             Omega_ += lambda_weights_ * weights_solver_.P();
             Omega_ready_ = true;
