@@ -18,20 +18,21 @@
 #ifndef __FDAPDE_RGCCA_MODEL_H__
 #define __FDAPDE_RGCCA_MODEL_H__
 
-#include "blocks.h"
-#include "logging.h"
-#include "statistics.h"
-#include "fdaPDE/execution.h"
-
 #include <algorithm>
 #include <condition_variable>
 #include <map>
 #include <numeric>
 #include <string_view>
 
+#include "blocks.h"
+#include "bootstrap_numa.h"
+#include "fdaPDE/execution.h"
+#include "logging.h"
+#include "statistics.h"
+
 namespace fdapde {
 
-// rgcca owns block wiring, component fitting, bootstrap selection, and result storage
+/// @brief owns block wiring, component fitting, bootstrap selection and result storage
 template <typename SamplingStrategy>
 class RGCCA {
 public:
@@ -784,7 +785,7 @@ private:
         return fit_component_(blocks, C_);
     }
 
-    // bootstrap model selection
+    /// @brief selects weights and design using immutable worker inputs scoped before the next deflation
     ModelSelectionResult bootstrap_model_selection_(
         const BoolMatrix& C_initial,
         const bool extend_lambda_grid_at_boundary = true
@@ -850,9 +851,17 @@ private:
 
         // clone blocks for bootstrap workers
         step_start = log_step_start_("Clone worker blocks");
+        std::vector<const Matrix*> bootstrap_sources;
+        for (const auto* block : blocks) bootstrap_sources.push_back(&block->raw_data());
+        const rgcca::internals::BootstrapNumaCache numa_cache(
+          bootstrap_sources, n_threads, bootstrap_config_.numa_cache);
+        fdapde::cout << "  Bootstrap NUMA replica bytes: " << numa_cache.bytes() << '\n';
         std::vector<BootstrapBlocks> thread_boot_worker(n_threads);
         for (int t = 0; t < n_threads; ++t) {
             thread_boot_worker[t] = clone_blocks_();
+            for (int j = 0; j < static_cast<int>(blocks.size()); ++j)
+                if (auto source = numa_cache.source(t, j))
+                    thread_boot_worker[t].refs[j]->set_bootstrap_data(std::move(source));
         }
         const double clone_worker_seconds = elapsed_seconds(step_start);
         log_step_end_(step_start);
@@ -915,16 +924,8 @@ private:
             bootstrap_state.reset_for_lambda();
             BootstrapTimingSummary bootstrap_timing_summary;
             run_bootstrap_stream_(
-                lambda_i,
-                bootstrap_state,
-                thread_boot_worker,
-                C_active,
-                w_fit,
-                w_min,
-                boot_results,
-                blocks,
-                bootstrap_timing_summary
-            );
+              lambda_i, bootstrap_state, thread_boot_worker, C_active, w_fit, w_min, boot_results, blocks,
+              bootstrap_timing_summary, numa_cache);
             if (bootstrap_state.nn_solver_failed) {
                 boot_results.nn_solver_failed_by_lambda[lambda_i] = true;
                 boot_results.bootstrap_wall_seconds_by_lambda[lambda_i] = elapsed_seconds(start);
@@ -1409,16 +1410,10 @@ private:
         const std::function<bool()>& cancelled = {}
     );
     void run_bootstrap_stream_(
-        int lambda_i,
-        AdaptiveBootstrapState& bootstrap_state,
-        std::vector<BootstrapBlocks>& thread_boot_worker,
-        BoolMatrix& C_active,
-        const std::vector<Vector>& w_fit,
-        std::vector<Vector>& w_min,
-        BootstrapResult& boot_results,
-        const BlockRefList& blocks,
-        BootstrapTimingSummary& timing_summary
-    );
+      int lambda_i, AdaptiveBootstrapState& bootstrap_state, std::vector<BootstrapBlocks>& thread_boot_worker,
+      BoolMatrix& C_active, const std::vector<Vector>& w_fit, std::vector<Vector>& w_min, BootstrapResult& boot_results,
+      const BlockRefList& blocks, BootstrapTimingSummary& timing_summary,
+      const rgcca::internals::BootstrapNumaCache& numa_cache);
 
     // bootstrap state helpers
     bool same_design_(const BoolMatrix& lhs, const BoolMatrix& rhs) const;

@@ -29,7 +29,7 @@ namespace fdapde {
 namespace rgcca {
 namespace internals {
 
-// blocks adapt raw data matrices to the rgcca weight/component update api
+/// @brief adapts raw data matrices to the rgcca weight and component update api
 template <typename SamplingStrategy>
 class BaseBlock {
 public:
@@ -63,6 +63,7 @@ public:
         components_solver_.analyze_data(Matrix{times}, Vector::Zero(n()), I_);
     }
 
+    /// @brief copies block state and retains immutable bootstrap storage without permitting raw-data mutation
     BaseBlock(const BaseBlock& other) :
         n_dofs_weights_(other.n_dofs_weights_),
         n_comp_(other.n_comp_),
@@ -70,6 +71,7 @@ public:
         block_name_(other.block_name_),
         h_(other.h_),
         data_ptr_(other.data_ptr_),
+        bootstrap_data_(other.bootstrap_data_),
         row_index_(other.row_index_),
         identity_row_index_(other.identity_row_index_),
         components_solver_(other.components_solver_),
@@ -88,7 +90,6 @@ public:
         lambda_components_selection_(other.lambda_components_selection_),
         weights_ready_(other.weights_ready_),
         components_ready_(other.components_ready_) {
-
         M_ready_ = false;
         invM_ready_ = false;
         ginvM_ready_ = false;
@@ -107,9 +108,17 @@ public:
 
     // data
     [[nodiscard]] const std::string& name() const { return block_name_; }
+    /// @brief returns this block's immutable input, including any bootstrap-owned replica
     [[nodiscard]] const Matrix& raw_data() const {
-        if (!data_ptr_) throw std::logic_error("BaseBlock: Block has no data pointer");
-        return *data_ptr_;
+        fdapde_assert(data_ptr_, std::logic_error, "BaseBlock: block has no data pointer");
+        return bootstrap_data_ ? *bootstrap_data_ : *data_ptr_;
+    }
+    /// @brief retains an immutable bitwise copy exclusively for a bootstrap clone
+    void set_bootstrap_data(std::shared_ptr<const Matrix> source) {
+        fdapde_strong_assert(
+          !raw_data_mutable_ && source && source->rows() == raw_data().rows() && source->cols() == raw_data().cols(),
+          std::invalid_argument, "bootstrap data requires an immutable clone with matching dimensions");
+        bootstrap_data_ = std::move(source);
     }
     bool raw_score_cache_for_weight(const Vector& w, Vector& out) const {
         if (!raw_score_cache_ready_ || !weights_ready_ || w.size() != weights_.rows())
@@ -138,7 +147,11 @@ public:
         const double centered_ss = X.squaredNorm() - n_d * X.colwise().mean().squaredNorm();
         return std::max(0.0, centered_ss) / den;
     }
-    void set_raw_data_mutable(const bool value) { raw_data_mutable_ = value; }
+    /// @brief rejects mutable access to an immutable bootstrap replica
+    void set_raw_data_mutable(const bool value) {
+        fdapde_strong_assert(!value || !bootstrap_data_, std::logic_error, "bootstrap replicas are immutable");
+        raw_data_mutable_ = value;
+    }
 
     // dimensions
     [[nodiscard]] int n() const { return static_cast<int>(row_index_.size()); }
@@ -655,6 +668,7 @@ protected:
 
     // data
     Matrix* data_ptr_ = nullptr;
+    std::shared_ptr<const Matrix> bootstrap_data_;
     IndexVector row_index_;
     mutable Vector raw_score_cache_;
     mutable Vector raw_x_cache_;

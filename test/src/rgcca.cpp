@@ -1339,3 +1339,101 @@ TEST(rgcca, stationary_segment_lengths_must_match_observations) {
 TEST(rgcca, F_GCCA_fem_cov_component_significance) {
     check_fem_cov_component_significance();
 }
+
+// immutable bootstrap sources have clone-local ownership and cannot leak into the original model
+TEST(rgcca, bootstrap_replica_ownership_and_mutability) {
+    constexpr int n = 24;
+    RGCCA<IndependentSampling> model(n, RGCCA<IndependentSampling>::Options {}, 1);
+    DenseMatrix data(n, 2);
+    for (int i = 0; i < n; ++i) {
+        data(i, 0) = i;
+        data(i, 1) = i % 3;
+    }
+    model.add_multivariate_block("source", DenseMatrix(data));
+    auto* original = model.blocks().front().get();
+    auto clone = original->clone();
+    auto owner = std::make_shared<const DenseMatrix>(data);
+    std::weak_ptr<const DenseMatrix> observer = owner;
+    clone->set_bootstrap_data(owner);
+    owner.reset();
+    // the worker retains its matrix after the creator releases its owner
+    EXPECT_FALSE(observer.expired());
+    // the original model still references its own allocation
+    EXPECT_NE(clone->raw_data().data(), original->raw_data().data());
+    // cloning retains every coefficient exactly
+    EXPECT_TRUE((clone->raw_data().array() == original->raw_data().array()).all());
+    // an immutable replica cannot become a deflation target
+    EXPECT_THROW(clone->set_raw_data_mutable(true), std::logic_error);
+    // mutable model blocks cannot be redirected to bootstrap storage
+    EXPECT_THROW(original->set_bootstrap_data(std::make_shared<const DenseMatrix>(data)), std::invalid_argument);
+    auto second_clone = clone->clone();
+    clone.reset();
+    // a copied workspace retains ownership independently of the first clone
+    EXPECT_FALSE(observer.expired());
+    second_clone.reset();
+    // the final workspace releases its copy without retaining global matrix aliases
+    EXPECT_TRUE(observer.expired());
+}
+
+// disabling numa storage and unsupported topology preserve the original source and executor affinity
+TEST(rgcca, bootstrap_numa_disabled_and_affinity_cleanup) {
+    DenseMatrix data = DenseMatrix::Identity(16, 2);
+    std::vector<const DenseMatrix*> sources {&data};
+    fdapde::rgcca::internals::BootstrapNumaCache disabled(sources, 4, false);
+    // explicitly disabled caching allocates no matrix bytes
+    EXPECT_EQ(disabled.bytes(), 0U);
+    // disabled caching preserves the original raw-data source
+    EXPECT_FALSE(disabled.source(0, 0));
+    // a disabled worker retains OS scheduling
+    EXPECT_EQ(disabled.cpu(0), -1);
+    fdapde::rgcca::internals::BootstrapNumaCache serial(sources, 1, true);
+    // serial fits never pay for a numa replica
+    EXPECT_EQ(serial.bytes(), 0U);
+#ifdef __linux__
+    cpu_set_t before, after;
+    // Linux exposes the caller mask needed for the cleanup oracle
+    ASSERT_EQ(sched_getaffinity(0, sizeof(before), &before), 0);
+    int cpu = 0;
+    while (cpu < CPU_SETSIZE && !CPU_ISSET(cpu, &before)) ++cpu;
+    try {
+        const fdapde::rgcca::internals::BootstrapAffinityScope affinity(cpu);
+        throw std::runtime_error("exercise exception cleanup");
+    } catch (const std::runtime_error&) { }
+    // the mask can still be queried after the exceptional worker exit
+    ASSERT_EQ(sched_getaffinity(0, sizeof(after), &after), 0);
+    // every allowed cpu is restored rather than retaining the temporary worker pin
+    EXPECT_TRUE(CPU_EQUAL(&before, &after));
+#else
+    fdapde::rgcca::internals::BootstrapNumaCache unsupported(sources, 4, true);
+    // unsupported platforms fall back without allocating replicas
+    EXPECT_EQ(unsupported.bytes(), 0U);
+#endif
+}
+
+// replicas are immutable snapshots and a new bootstrap selection reads data after deflation
+TEST(rgcca, bootstrap_numa_refreshes_immutable_inputs) {
+    DenseMatrix data(1024, 32);
+    for (int j = 0; j < data.cols(); ++j)
+        for (int i = 0; i < data.rows(); ++i) data(i, j) = i + 0.25 * j;
+    std::vector<const DenseMatrix*> sources {&data};
+    std::shared_ptr<const DenseMatrix> retained;
+    {
+        fdapde::rgcca::internals::BootstrapNumaCache first(sources, 4, true);
+        if (first.bytes() == 0) GTEST_SKIP() << "node-local allocation is unavailable on this host";
+        for (int worker = 0; worker < 4 && !retained; ++worker) retained = first.source(worker, 0);
+        // an active multi-node cache must expose at least one owning replica
+        ASSERT_TRUE(retained);
+        // each replicated coefficient equals the original snapshot exactly
+        EXPECT_TRUE((retained->array() == data.array()).all());
+    }
+    data.array() += 3.0;
+    fdapde::rgcca::internals::BootstrapNumaCache next(sources, 4, true);
+    std::shared_ptr<const DenseMatrix> refreshed;
+    for (int worker = 0; worker < 4 && !refreshed; ++worker) refreshed = next.source(worker, 0);
+    // the following selection builds a new owner even while a previous snapshot is retained
+    ASSERT_TRUE(refreshed);
+    // the new cache reads the updated source rather than reusing a stale copy
+    EXPECT_TRUE((refreshed->array() == data.array()).all());
+    // old clones retain their original immutable values independently of later deflation
+    EXPECT_TRUE(((retained->array() + 3.0) == data.array()).all());
+}

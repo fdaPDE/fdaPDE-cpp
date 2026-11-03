@@ -257,9 +257,11 @@ struct Options {
         scheme(scheme_) { }
 };
 
+/// @brief configures bootstrap resampling, stopping rules and optional node-local input replicas
 struct BootstrapConfig {
     unsigned seed = 12345;
     int max_threads = 12;
+    bool numa_cache = false;   // linux node-local input replicas; additional nodes each retain one copy of X
 
     int B_min = 500;
     int B_max = 1000;

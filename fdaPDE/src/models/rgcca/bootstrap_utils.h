@@ -226,16 +226,13 @@ bool RGCCA<SamplingStrategy>::early_stop_lambda_(
 /// @brief fits an ordered bootstrap stream using one reusable workspace per logical worker
 template <typename SamplingStrategy>
 void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
-    int lambda_i,
-    typename RGCCA<SamplingStrategy>::AdaptiveBootstrapState& bootstrap_state,
-    std::vector<typename RGCCA<SamplingStrategy>::BootstrapBlocks>& thread_boot_worker,
-    rgcca::BoolMatrix& C_active,
-    const std::vector<rgcca::Vector>& w_fit,
-    std::vector<rgcca::Vector>& w_min,
-    typename RGCCA<SamplingStrategy>::BootstrapResult& boot_results,
-    const typename RGCCA<SamplingStrategy>::BlockRefList& blocks,
-    typename RGCCA<SamplingStrategy>::BootstrapTimingSummary& timing_summary
-) {
+  int lambda_i, typename RGCCA<SamplingStrategy>::AdaptiveBootstrapState& bootstrap_state,
+  std::vector<typename RGCCA<SamplingStrategy>::BootstrapBlocks>& thread_boot_worker, rgcca::BoolMatrix& C_active,
+  const std::vector<rgcca::Vector>& w_fit, std::vector<rgcca::Vector>& w_min,
+  typename RGCCA<SamplingStrategy>::BootstrapResult& boot_results,
+  const typename RGCCA<SamplingStrategy>::BlockRefList& blocks,
+  typename RGCCA<SamplingStrategy>::BootstrapTimingSummary& timing_summary,
+  const rgcca::internals::BootstrapNumaCache& numa_cache) {
     const int n_threads = bootstrap_state.n_threads;
     const unsigned seed = static_cast<unsigned>(bootstrap_state.seed);
     const int lookahead = std::min(bootstrap_state.B_max, 2 * n_threads);
@@ -268,8 +265,9 @@ void RGCCA<SamplingStrategy>::run_bootstrap_stream_(
             next_candidate < next_commit + std::min(lookahead, remaining);
     };
 
-    // Workers fit ahead continuously; only this ordered commit frontier can change the design.
+    // workers fit ahead continuously; only the ordered commit frontier can change the design
     parallel_for(0, n_threads, /* grain_size */ 1, [&](int worker_i) {
+        const rgcca::internals::BootstrapAffinityScope affinity(numa_cache.cpu(worker_i));
         while (true) {
             int b = 0;
             int epoch = 0;

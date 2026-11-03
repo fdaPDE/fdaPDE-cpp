@@ -64,3 +64,7 @@ add_test(NAME rgcca_block_importance_thread_budget
 
 include(GoogleTest)
 gtest_discover_tests(fdapde_test)
+
+add_test(NAME rgcca_bootstrap_numa_deflation
+    COMMAND $<TARGET_FILE:rgcca_bootstrap_reproducibility> 4 numa-deflation
+)

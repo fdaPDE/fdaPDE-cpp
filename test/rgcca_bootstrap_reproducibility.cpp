@@ -41,13 +41,82 @@ void print_vector(const std::vector<T>& values) {
     std::cout << '\n';
 }
 
+/// @brief compares two complete selections across deflation with replicas disabled and enabled
+void check_numa_deflation(int threads) {
+    std::vector<DenseMatrix> reference;
+    for (bool cache : {false, true}) {
+        RGCCA<IndependentSampling>::Options options;
+        options.mode = Mode::CovMax;
+        options.init_strategy = InitStrategy::Uniform;
+        options.block_deactivation = true;
+        options.max_iter = 500;
+        options.tol = 1e-7;
+        RGCCA<IndependentSampling> model(64, options, 2);
+        Eigen::VectorXd signal(64), second(64);
+        for (int i = 0; i < 64; ++i) {
+            signal[i] = std::sin(0.17 * i);
+            second[i] = std::cos(0.71 * i);
+        }
+        signal.array() -= signal.mean();
+        signal.normalize();
+        second.array() -= second.mean();
+        second -= signal * signal.dot(second);
+        second.normalize();
+        for (int j = 0; j < 3; ++j) {
+            DenseMatrix block(64, 2);
+            block.col(0) = (4.0 - j) * signal;
+            block.col(1) = (1.0 + 0.3 * j) * second;
+            model.add_multivariate_block("block_" + std::to_string(j), std::move(block));
+        }
+        for (int j = 0; j < 3; ++j)
+            for (int k = j + 1; k < 3; ++k) model.connect(j, k);
+        RGCCA<IndependentSampling>::BootstrapConfig config;
+        config.max_threads = threads;
+        config.numa_cache = cache;
+        config.B_min = config.B_max = 4;
+        config.fit_max_iter = 500;
+        config.adaptive = false;
+        config.active_block_tol = 1e-12;
+        model.set_bootstrap_config(config);
+        const auto results = model.fit();
+        // both components must survive so the second cache is constructed after an actual deflation
+        fdapde_strong_assert(
+          results.size() == 2 && model.n_comp_effective() == 2, std::runtime_error,
+          "deflation fixture did not retain two components");
+        std::vector<DenseMatrix> actual;
+        for (const auto& result : results) {
+            actual.push_back(result.C.template cast<double>());
+            actual.push_back(result.correlation_matrix);
+        }
+        for (const auto& block : model.blocks()) actual.push_back(block->weights());
+        for (const auto& selection : model.bootstrap_selection_results()) {
+            for (const auto& weights : selection.w_min_by_lambda.front()) actual.push_back(weights);
+            actual.push_back(selection.corr_min_by_lambda.front());
+        }
+        if (!cache)
+            reference = std::move(actual);
+        else {
+            // every component design, weight and correlation must equal the uncached complete fit exactly
+            fdapde_strong_assert(actual.size() == reference.size(), std::runtime_error, "cache result size mismatch");
+            for (std::size_t j = 0; j < actual.size(); ++j)
+                fdapde_strong_assert(
+                  (actual[j].array() == reference[j].array()).all(), std::runtime_error,
+                  "cache changed a component after deflation");
+        }
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
     if (argc < 2 || argc > 3)
-        throw std::invalid_argument("usage: rgcca_bootstrap_reproducibility THREADS [block-importance]");
+        throw std::invalid_argument("usage: rgcca_bootstrap_reproducibility THREADS [block-importance|numa-deflation]");
 
     const int threads = std::stoi(argv[1]);
+    if (argc == 3 && std::string(argv[2]) == "numa-deflation") {
+        check_numa_deflation(threads);
+        return 0;
+    }
     const bool importance_only = argc == 3 && std::string(argv[2]) == "block-importance";
     constexpr int n = 64;
 
